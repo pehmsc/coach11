@@ -28,7 +28,9 @@ export default async function DashboardPage() {
       {/* Header */}
       <div className="mb-8">
         <p className="text-slate-500 text-sm capitalize">{today}</p>
-        <h1 className="text-2xl font-bold text-slate-900 mt-1">Bom dia! 👋</h1>
+        <h1 className="text-2xl font-bold text-slate-900 mt-1">
+          Seja bem-vindo! 👋
+        </h1>
       </div>
 
       {/* Se ainda não tem setup */}
@@ -60,8 +62,9 @@ export default async function DashboardPage() {
                 className="mx-auto mb-2 text-emerald-600"
                 size={28}
               />
-              <p className="font-semibold text-sm text-slate-700">Marcar</p>
-              <p className="font-semibold text-sm text-slate-700">Presenças</p>
+              <p className="font-semibold text-sm text-slate-700">
+                Marcar Presenças
+              </p>
             </CardContent>
           </Card>
         </Link>
