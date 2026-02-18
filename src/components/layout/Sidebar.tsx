@@ -12,7 +12,6 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { Profile } from "@/types/database";
-import Image from "next/image";
 
 const navItems = [
   { href: "/dashboard", icon: Home, label: "Dashboard" },
@@ -41,12 +40,10 @@ export function Sidebar({ profile }: SidebarProps) {
     <aside className="hidden md:flex fixed left-0 top-0 bottom-0 w-64 bg-slate-900 flex-col z-40">
       {/* Logo */}
       <div className="p-6 border-b border-slate-800">
-        <Image
-          src="/logotipo_white.png"
-          alt="Coach11 Logo"
-          width={120}
-          height={40}
-        />
+        <h1 className="text-2xl font-bold">
+          <span className="text-white">COACH</span>
+          <span className="text-emerald-400">11</span>
+        </h1>
         {profile && (
           <p className="text-slate-400 text-sm mt-1 truncate">
             {profile.full_name}
