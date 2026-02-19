@@ -20,7 +20,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, X, Mail, Check, Copy, Users } from "lucide-react";
+import {
+  Plus,
+  X,
+  Mail,
+  Check,
+  Copy,
+  Users,
+  Trash2,
+  Loader2,
+} from "lucide-react";
 
 const FOOTBALL_FORMATS = [
   { value: "5", label: "Futebol 5" },
@@ -64,6 +73,7 @@ interface StaffInvite {
   role: string;
   invite_code: string;
   accepted_at?: string;
+  accepted_by?: string;
   invite_sent_at: string;
 }
 
@@ -102,6 +112,7 @@ export default function TeamSetupPage() {
     name: string;
   } | null>(null);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -126,7 +137,6 @@ export default function TeamSetupPage() {
       setFootballFormat(ag.football_format);
       setSeason(ag.season);
 
-      // Buscar convites de treinadores
       const { data: invites } = await supabase
         .from("staff_invites")
         .select("*")
@@ -199,6 +209,7 @@ export default function TeamSetupPage() {
     e.preventDefault();
     setSendingInvite(true);
     setInviteResult(null);
+    setError(null);
 
     const res = await fetch("/api/invite/staff", {
       method: "POST",
@@ -221,12 +232,58 @@ export default function TeamSetupPage() {
         name: staffForm.firstName,
       });
       setStaffForm(EMPTY_STAFF_FORM);
-      loadData(); // Recarrega a lista
+      loadData();
     } else {
       setError(data.error || "Erro ao enviar convite");
     }
 
     setSendingInvite(false);
+  }
+
+  async function handleDeleteInvite(invite: StaffInvite) {
+    const label = `${invite.first_name} ${invite.last_name}`;
+    const isAccepted = !!invite.accepted_at;
+
+    const confirmMsg = isAccepted
+      ? `Remover ${label} da equipa técnica? O acesso será revogado.`
+      : `Cancelar o convite de ${label}?`;
+
+    if (!confirm(confirmMsg)) return;
+
+    setDeletingId(invite.id);
+
+    // Se o convite foi aceite, remover também da team_staff
+    if (isAccepted && invite.accepted_by) {
+      const { error: staffErr } = await supabase
+        .from("team_staff")
+        .delete()
+        .eq("profile_id", invite.accepted_by)
+        .eq("team_id", existingAgeGroup.id);
+
+      if (staffErr) {
+        console.error("Erro ao remover staff:", staffErr);
+        setError("Erro ao remover membro da equipa.");
+        setDeletingId(null);
+        return;
+      }
+    }
+
+    // Apagar o convite
+    const { error: inviteErr } = await supabase
+      .from("staff_invites")
+      .delete()
+      .eq("id", invite.id);
+
+    if (inviteErr) {
+      console.error("Erro ao apagar convite:", inviteErr);
+      setError("Erro ao cancelar convite.");
+      setDeletingId(null);
+      return;
+    }
+
+    // Atualizar lista localmente (sem recarregar tudo)
+    setStaffInvites((prev) => prev.filter((i) => i.id !== invite.id));
+    setDeletingId(null);
   }
 
   function copyCode(code: string) {
@@ -384,6 +441,7 @@ export default function TeamSetupPage() {
                   onClick={() => {
                     setShowStaffForm(true);
                     setInviteResult(null);
+                    setError(null);
                   }}
                   className="bg-emerald-600 hover:bg-emerald-700"
                 >
@@ -394,6 +452,13 @@ export default function TeamSetupPage() {
           </CardHeader>
 
           <CardContent className="space-y-4">
+            {/* Erro global */}
+            {error && (
+              <div className="bg-red-50 text-red-700 text-sm p-3 rounded-lg border border-red-200">
+                {error}
+              </div>
+            )}
+
             {/* Formulário de convite */}
             {showStaffForm && (
               <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
@@ -411,7 +476,6 @@ export default function TeamSetupPage() {
                   </button>
                 </div>
 
-                {/* Resultado do convite */}
                 {inviteResult && (
                   <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mb-4">
                     <p className="text-emerald-800 font-semibold text-sm mb-1">
@@ -543,7 +607,7 @@ export default function TeamSetupPage() {
               </div>
             )}
 
-            {/* Lista de convites enviados */}
+            {/* Lista de convites / staff */}
             {staffInvites.length > 0 ? (
               <div className="space-y-2">
                 {staffInvites.map((invite) => (
@@ -553,8 +617,8 @@ export default function TeamSetupPage() {
                   >
                     <div className="w-9 h-9 rounded-full bg-slate-200 flex items-center justify-center flex-shrink-0">
                       <span className="text-xs font-bold text-slate-500">
-                        {invite.first_name[0]}
-                        {invite.last_name[0]}
+                        {invite.first_name?.[0]}
+                        {invite.last_name?.[0]}
                       </span>
                     </div>
                     <div className="flex-1 min-w-0">
@@ -562,10 +626,11 @@ export default function TeamSetupPage() {
                         {invite.first_name} {invite.last_name}
                       </p>
                       <p className="text-xs text-slate-400 truncate">
-                        {ROLE_LABELS[invite.role]} · {invite.email}
+                        {ROLE_LABELS[invite.role] || invite.role} ·{" "}
+                        {invite.email}
                       </p>
                     </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
                       {invite.accepted_at ? (
                         <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium">
                           Activo
@@ -588,6 +653,29 @@ export default function TeamSetupPage() {
                           </button>
                         </>
                       )}
+                      {/* Botão de eliminar */}
+                      <button
+                        onClick={() => handleDeleteInvite(invite)}
+                        disabled={deletingId === invite.id}
+                        title={
+                          invite.accepted_at
+                            ? "Remover membro"
+                            : "Cancelar convite"
+                        }
+                        className="p-1.5 hover:bg-red-50 rounded-lg transition-colors group"
+                      >
+                        {deletingId === invite.id ? (
+                          <Loader2
+                            size={14}
+                            className="text-slate-300 animate-spin"
+                          />
+                        ) : (
+                          <Trash2
+                            size={14}
+                            className="text-slate-300 group-hover:text-red-500 transition-colors"
+                          />
+                        )}
+                      </button>
                     </div>
                   </div>
                 ))}
