@@ -25,25 +25,29 @@ export async function middleware(request: NextRequest) {
     },
   );
 
+  // IMPORTANTE: não usar getSession() — usar getUser() para segurança
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Rotas públicas (não precisam de login)
-  const publicRoutes = ["/login", "/register"];
-  const isPublicRoute = publicRoutes.some((route) =>
-    request.nextUrl.pathname.startsWith(route),
-  );
+  const path = request.nextUrl.pathname;
 
-  // Se não está autenticado e está a tentar aceder a rota privada
-  if (!user && !isPublicRoute) {
+  // Rotas que não precisam de autenticação
+  const isPublic =
+    path.startsWith("/login") ||
+    path.startsWith("/register") ||
+    path.startsWith("/auth") ||
+    path === "/";
+
+  // Não autenticado a tentar aceder a rota privada
+  if (!user && !isPublic) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
   }
 
-  // Se está autenticado e tenta aceder ao login/registo
-  if (user && isPublicRoute) {
+  // Autenticado a tentar aceder ao login/registo
+  if (user && (path.startsWith("/login") || path.startsWith("/register"))) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
     return NextResponse.redirect(url);

@@ -19,24 +19,27 @@ import {
   UserCircle,
   Pencil,
   ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
   Mail,
   Phone,
+  ChevronDown,
 } from "lucide-react";
 import type { Player, AgeGroup } from "@/types/database";
 
 const POSITIONS = ["GR", "DD", "DC", "DE", "MD", "MC", "ME", "AV", "EE", "ED"];
 
-const POSITION_GROUP: Record<string, string> = {
-  GR: "GR",
-  DD: "DEF",
-  DC: "DEF",
-  DE: "DEF",
-  MD: "MED",
-  MC: "MED",
-  ME: "MED",
-  AV: "AVA",
-  EE: "AVA",
-  ED: "AVA",
+const POSITION_ORDER: Record<string, number> = {
+  GR: 1,
+  DD: 2,
+  DC: 3,
+  DE: 4,
+  MD: 5,
+  MC: 6,
+  ME: 7,
+  AV: 8,
+  EE: 9,
+  ED: 10,
 };
 
 const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
@@ -47,6 +50,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
 };
 
 type SortKey = "name" | "jersey" | "age" | "position";
+type SortDir = "asc" | "desc";
 
 const EMPTY_FORM = {
   firstName: "",
@@ -68,10 +72,22 @@ export default function PlayersPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>("name");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [form, setForm] = useState(EMPTY_FORM);
+  // Estado local para o dropdown de cada card (não abre o formulário)
+  const [openStatusId, setOpenStatusId] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
+  }, []);
+
+  // Fechar dropdown ao clicar fora
+  useEffect(() => {
+    function handleClick() {
+      setOpenStatusId(null);
+    }
+    document.addEventListener("click", handleClick);
+    return () => document.removeEventListener("click", handleClick);
   }, []);
 
   async function loadData() {
@@ -89,11 +105,19 @@ export default function PlayersPage() {
       const { data } = await supabase
         .from("players")
         .select("*")
-        .eq("age_group_id", ag.id)
-        .order("first_name");
+        .eq("age_group_id", ag.id);
       setPlayers(data || []);
     }
     setLoading(false);
+  }
+
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
   }
 
   function openAdd() {
@@ -181,9 +205,13 @@ export default function PlayersPage() {
         p.id === playerId ? { ...p, status: status as any } : p,
       ),
     );
+    setOpenStatusId(null);
   }
 
-  async function sendInvite(player: Player, method: "email" | "phone") {
+  async function sendInvite(
+    player: Player,
+    method: "email" | "phone" | "code",
+  ) {
     const inviteCode = Math.random()
       .toString(36)
       .substring(2, 10)
@@ -197,24 +225,31 @@ export default function PlayersPage() {
       })
       .eq("id", player.id);
     alert(
-      `Código de convite gerado: ${inviteCode}\nPartilha este código com ${player.first_name}.`,
+      `Código de convite: ${inviteCode}\nPartilha com ${player.first_name}.`,
     );
     loadData();
   }
 
   const sorted = [...players].sort((a, b) => {
-    if (sortKey === "name") return a.first_name.localeCompare(b.first_name);
-    if (sortKey === "jersey")
-      return (a.jersey_number || 99) - (b.jersey_number || 99);
-    if (sortKey === "age")
-      return (a.birth_date || "").localeCompare(b.birth_date || "");
-    if (sortKey === "position") {
-      const ga = POSITION_GROUP[a.preferred_position || ""] || "ZZZ";
-      const gb = POSITION_GROUP[b.preferred_position || ""] || "ZZZ";
-      return ga.localeCompare(gb);
+    let result = 0;
+    if (sortKey === "name") {
+      result = a.first_name.localeCompare(b.first_name);
+    } else if (sortKey === "jersey") {
+      result = (a.jersey_number || 99) - (b.jersey_number || 99);
+    } else if (sortKey === "age") {
+      result = (a.birth_date || "9999").localeCompare(b.birth_date || "9999");
+    } else if (sortKey === "position") {
+      const pa = POSITION_ORDER[a.preferred_position || ""] || 99;
+      const pb = POSITION_ORDER[b.preferred_position || ""] || 99;
+      result = pa - pb;
     }
-    return 0;
+    return sortDir === "asc" ? result : -result;
   });
+
+  const SortIcon = ({ k }: { k: SortKey }) => {
+    if (sortKey !== k) return <ArrowUpDown size={10} className="opacity-40" />;
+    return sortDir === "asc" ? <ArrowUp size={10} /> : <ArrowDown size={10} />;
+  };
 
   if (loading)
     return (
@@ -222,7 +257,6 @@ export default function PlayersPage() {
         <p className="text-slate-500">A carregar...</p>
       </div>
     );
-
   if (!ageGroup)
     return (
       <div className="p-4 md:p-8 text-center py-16">
@@ -250,26 +284,29 @@ export default function PlayersPage() {
       </div>
 
       {/* Ordenação */}
-      <div className="flex items-center gap-2 mb-4 overflow-x-auto pb-1">
-        <ArrowUpDown size={14} className="text-slate-400 flex-shrink-0" />
-        {(["name", "jersey", "age", "position"] as SortKey[]).map((key) => (
+      <div className="flex items-center gap-1.5 mb-4 overflow-x-auto pb-1">
+        <span className="text-xs text-slate-400 flex-shrink-0 mr-1">
+          Ordenar:
+        </span>
+        {(
+          [
+            { key: "name", label: "Nome" },
+            { key: "jersey", label: "Camisola" },
+            { key: "age", label: "Idade" },
+            { key: "position", label: "Posição" },
+          ] as { key: SortKey; label: string }[]
+        ).map(({ key, label }) => (
           <button
             key={key}
-            onClick={() => setSortKey(key)}
-            className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
+            onClick={() => toggleSort(key)}
+            className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
               sortKey === key
                 ? "bg-emerald-600 text-white"
                 : "bg-slate-100 text-slate-600 hover:bg-slate-200"
             }`}
           >
-            {
-              {
-                name: "Nome",
-                jersey: "Camisola",
-                age: "Idade",
-                position: "Posição",
-              }[key]
-            }
+            {label}
+            <SortIcon k={key} />
           </button>
         ))}
       </div>
@@ -402,7 +439,7 @@ export default function PlayersPage() {
                 </Button>
               </div>
 
-              {/* Convite — só ao editar */}
+              {/* Convite */}
               {editingPlayer && !editingPlayer.invite_sent_at && (
                 <div className="border-t pt-4 mt-2">
                   <p className="text-sm text-slate-500 mb-3">
@@ -435,7 +472,7 @@ export default function PlayersPage() {
                       type="button"
                       variant="outline"
                       size="sm"
-                      onClick={() => sendInvite(editingPlayer, "phone")}
+                      onClick={() => sendInvite(editingPlayer, "code")}
                       className="flex-1"
                     >
                       Gerar código
@@ -464,7 +501,16 @@ export default function PlayersPage() {
       ) : (
         <div className="space-y-2">
           {sorted.map((player) => {
-            const sc = STATUS_CONFIG[player.status];
+            const sc = STATUS_CONFIG[player.status] || STATUS_CONFIG.active;
+
+            // Ciclo de estados ao clicar
+            const statusCycle: Record<string, string> = {
+              active: "injured",
+              injured: "inactive",
+              inactive: "suspended",
+              suspended: "active",
+            };
+
             return (
               <Card
                 key={player.id}
@@ -499,35 +545,36 @@ export default function PlayersPage() {
                       </div>
                     </div>
 
-                    {/* Estado dropdown */}
-                    <Select
-                      value={player.status}
-                      onValueChange={(v) => updateStatus(player.id, v)}
+                    {/* Estado — toca para avançar no ciclo */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        updateStatus(
+                          player.id,
+                          statusCycle[player.status] || "active",
+                        );
+                      }}
+                      title="Toca para mudar estado"
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all hover:opacity-80 active:scale-95 ${sc.color}`}
                     >
-                      <SelectTrigger className="w-32 h-8 border-0 p-0 focus:ring-0">
-                        <span
-                          className={`px-2 py-1 rounded-full text-xs font-medium ${sc.color}`}
-                        >
-                          {sc.label}
-                        </span>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Object.entries(STATUS_CONFIG).map(([val, cfg]) => (
-                          <SelectItem key={val} value={val}>
-                            <span
-                              className={`px-2 py-0.5 rounded-full text-xs font-medium ${cfg.color}`}
-                            >
-                              {cfg.label}
-                            </span>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full ${
+                          player.status === "active"
+                            ? "bg-emerald-500"
+                            : player.status === "injured"
+                              ? "bg-orange-500"
+                              : player.status === "suspended"
+                                ? "bg-red-500"
+                                : "bg-slate-400"
+                        }`}
+                      />
+                      {sc.label}
+                    </button>
 
                     {/* Editar */}
                     <button
                       onClick={() => openEdit(player)}
-                      className="text-slate-400 hover:text-emerald-600 transition-colors p-1"
+                      className="text-slate-400 hover:text-emerald-600 transition-colors p-1 flex-shrink-0"
                     >
                       <Pencil size={16} />
                     </button>

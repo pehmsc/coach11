@@ -206,7 +206,7 @@ export default async function DashboardPage() {
       <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">
         Atalhos
       </h2>
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 items-stretch">
         {navCards.map(({ href, icon: Icon, label, color }) => (
           <Link key={href} href={href}>
             <Card className="hover:shadow-md transition-all cursor-pointer border-2 hover:border-emerald-200 h-full">

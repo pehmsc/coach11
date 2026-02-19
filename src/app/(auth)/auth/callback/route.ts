@@ -1,4 +1,5 @@
-import { createClient } from "@/lib/supabase/server";
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
 export async function GET(request: Request) {
@@ -6,13 +7,57 @@ export async function GET(request: Request) {
   const code = searchParams.get("code");
   const next = searchParams.get("next") ?? "/dashboard";
 
-  if (code) {
-    const supabase = await createClient();
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
-    if (!error) {
-      return NextResponse.redirect(`${origin}${next}`);
-    }
+  if (!code) {
+    return NextResponse.redirect(`${origin}/login?error=no_code`);
   }
 
-  return NextResponse.redirect(`${origin}/login?error=auth`);
+  const cookieStore = await cookies();
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) => {
+            cookieStore.set(name, value, options);
+          });
+        },
+      },
+    },
+  );
+
+  const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+
+  if (error || !data.session) {
+    console.error("Auth callback error:", error);
+    return NextResponse.redirect(`${origin}/login?error=exchange_failed`);
+  }
+
+  // Garantir que o perfil existe (para Google OAuth)
+  const userId = data.session.user.id;
+  const { data: existingProfile } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("id", userId)
+    .single();
+
+  if (!existingProfile) {
+    const user = data.session.user;
+    await supabase.from("profiles").insert({
+      id: userId,
+      full_name:
+        user.user_metadata?.full_name ||
+        user.user_metadata?.name ||
+        user.email?.split("@")[0] ||
+        "Utilizador",
+      role: "coordinator",
+    });
+  }
+
+  // Redirect com sessão activa
+  return NextResponse.redirect(`${origin}${next}`);
 }
