@@ -105,8 +105,14 @@ export async function POST(request: Request) {
     }
 
     // 🔗 URL registo
-    const appUrl =
-      process.env.NEXT_PUBLIC_APP_URL || "https://coach11.vercel.app";
+    const proto = request.headers.get("x-forwarded-proto") ?? "https";
+    const host =
+      request.headers.get("x-forwarded-host") ?? request.headers.get("host");
+
+    const appUrl = host
+      ? `${proto}://${host}`
+      : process.env.NEXT_PUBLIC_APP_URL || "https://coach11.vercel.app";
+
     const registerUrl = `${appUrl}/signup?code=${inviteCode}&email=${encodeURIComponent(email)}`;
 
     // 📧 Configuração Resend
