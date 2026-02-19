@@ -20,6 +20,7 @@ import {
   Clock,
   ImageIcon,
   FileText,
+  AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,11 +39,8 @@ interface CalEvent {
   opponent_name?: string;
   location?: string;
   location_address?: string;
-  location_lat?: number;
-  location_lng?: number;
   is_home?: boolean;
   image_url?: string;
-  team_id?: string;
 }
 
 type ModalMode = "add_training" | "add_game" | "edit_training" | "edit_game";
@@ -82,6 +80,7 @@ export default function CalendarPage() {
   );
   const [events, setEvents] = useState<CalEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [ageGroupId, setAgeGroupId] = useState<string | null>(null);
   const [teamId, setTeamId] = useState<string | null>(null);
   const [ageGroupName, setAgeGroupName] = useState("");
 
@@ -90,53 +89,68 @@ export default function CalendarPage() {
   const [form, setForm] = useState<EventForm>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [opError, setOpError] = useState<string | null>(null);
 
   useEffect(() => {
     loadTeam();
   }, []);
   useEffect(() => {
-    if (teamId) loadEvents();
-  }, [teamId, weekStart]);
+    if (ageGroupId) loadEvents();
+  }, [ageGroupId, weekStart]);
 
   async function loadTeam() {
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user) return;
-    const { data: ag } = await supabase
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+
+    const { data: ag, error } = await supabase
       .from("age_groups")
       .select("*, teams(*)")
       .eq("coordinator_id", user.id)
       .single();
-    if (ag?.teams?.[0]) {
-      setTeamId(ag.teams[0].id);
-      setAgeGroupName(`${ag.club_name} · ${ag.name}`);
+
+    if (error || !ag) {
+      console.error("Erro ao carregar escalão:", error);
+      setLoading(false);
+      return;
     }
+
+    setAgeGroupId(ag.id);
+    setAgeGroupName(`${ag.club_name} · ${ag.name}`);
+    if (ag.teams?.[0]) setTeamId(ag.teams[0].id);
     setLoading(false);
   }
 
   async function loadEvents() {
-    if (!teamId) return;
+    if (!ageGroupId) return;
     const from = format(weekStart, "yyyy-MM-dd");
     const to = format(addDays(weekStart, 6), "yyyy-MM-dd");
 
-    const { data: sessions } = await supabase
+    const { data: sessions, error: sessErr } = await supabase
       .from("training_sessions")
       .select("*")
-      .eq("team_id", teamId)
+      .eq("age_group_id", ageGroupId)
       .gte("session_date", from)
       .lte("session_date", to);
 
-    const { data: games } = await supabase
+    if (sessErr) console.error("Erro training_sessions:", sessErr);
+
+    const { data: games, error: gamesErr } = await supabase
       .from("games")
       .select("*")
-      .eq("team_id", teamId)
+      .eq("age_group_id", ageGroupId)
       .gte("game_datetime", `${from}T00:00:00`)
       .lte("game_datetime", `${to}T23:59:59`);
 
+    if (gamesErr) console.error("Erro games:", gamesErr);
+
     const sessionEvents: CalEvent[] = (sessions || []).map((s) => ({
       id: s.id,
-      type: "training",
+      type: "training" as const,
       date: s.session_date,
       title: s.title || "Treino",
       start_time: s.start_time,
@@ -145,25 +159,21 @@ export default function CalendarPage() {
       location: s.location,
       location_address: s.location_address,
       image_url: s.image_url,
-      team_id: s.team_id,
     }));
 
     const gameEvents: CalEvent[] = (games || []).map((g) => ({
       id: g.id,
-      type: "game",
+      type: "game" as const,
       date: g.game_datetime?.split("T")[0] || "",
       title: g.title || (g.opponent_name ? `vs ${g.opponent_name}` : "Jogo"),
       start_time: g.game_datetime?.split("T")[1]?.substring(0, 5),
       opponent_name: g.opponent_name,
       location: g.location,
       location_address: g.location_address,
-      location_lat: g.location_lat,
-      location_lng: g.location_lng,
       is_home: g.is_home,
       status: g.status,
       image_url: g.image_url,
       notes: g.notes,
-      team_id: g.team_id,
     }));
 
     setEvents([...sessionEvents, ...gameEvents]);
@@ -171,6 +181,7 @@ export default function CalendarPage() {
 
   function openAdd(type: "training" | "game", date: string) {
     setSelectedEvent(null);
+    setOpError(null);
     setForm({
       ...EMPTY_FORM,
       date,
@@ -181,6 +192,7 @@ export default function CalendarPage() {
 
   function openEdit(event: CalEvent) {
     setSelectedEvent(event);
+    setOpError(null);
     setForm({
       title: event.title || "",
       date: event.date,
@@ -200,16 +212,16 @@ export default function CalendarPage() {
     setModalMode(null);
     setSelectedEvent(null);
     setForm(EMPTY_FORM);
+    setOpError(null);
   }
 
-  // Upload de imagem para o Supabase Storage
   async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (!file || !teamId) return;
+    if (!file || !ageGroupId) return;
     setUploading(true);
 
     const ext = file.name.split(".").pop();
-    const fileName = `${teamId}/${Date.now()}.${ext}`;
+    const fileName = `${ageGroupId}/${Date.now()}.${ext}`;
 
     const { data, error } = await supabase.storage
       .from("event-images")
@@ -220,21 +232,30 @@ export default function CalendarPage() {
         .from("event-images")
         .getPublicUrl(data.path);
       setForm((f) => ({ ...f, image_url: urlData.publicUrl }));
+    } else {
+      console.error("Erro upload imagem:", error);
+      setOpError(
+        "Erro ao carregar imagem. Verifica se o bucket 'event-images' existe no Supabase Storage.",
+      );
     }
     setUploading(false);
   }
 
   async function saveEvent() {
-    if (!teamId || !form.date) return;
+    if (!ageGroupId || !form.date) return;
     setSaving(true);
+    setOpError(null);
 
     const isTraining =
       modalMode === "add_training" || modalMode === "edit_training";
     const isEditing =
       modalMode === "edit_training" || modalMode === "edit_game";
 
+    let dbError: any = null;
+
     if (isTraining) {
       const payload = {
+        age_group_id: ageGroupId,
         team_id: teamId,
         title: form.title || "Treino",
         session_date: form.date,
@@ -246,17 +267,23 @@ export default function CalendarPage() {
         image_url: form.image_url || null,
         status: "scheduled",
       };
+
       if (isEditing && selectedEvent) {
-        await supabase
+        const { error } = await supabase
           .from("training_sessions")
           .update(payload)
           .eq("id", selectedEvent.id);
+        dbError = error;
       } else {
-        await supabase.from("training_sessions").insert(payload);
+        const { error } = await supabase
+          .from("training_sessions")
+          .insert(payload);
+        dbError = error;
       }
     } else {
-      const datetime = `${form.date}T${form.start_time}:00`;
+      const datetime = `${form.date}T${form.start_time || "00:00"}:00`;
       const payload = {
+        age_group_id: ageGroupId,
         team_id: teamId,
         title:
           form.title ||
@@ -271,11 +298,24 @@ export default function CalendarPage() {
         status: "scheduled",
         game_type: "league",
       };
+
       if (isEditing && selectedEvent) {
-        await supabase.from("games").update(payload).eq("id", selectedEvent.id);
+        const { error } = await supabase
+          .from("games")
+          .update(payload)
+          .eq("id", selectedEvent.id);
+        dbError = error;
       } else {
-        await supabase.from("games").insert(payload);
+        const { error } = await supabase.from("games").insert(payload);
+        dbError = error;
       }
+    }
+
+    if (dbError) {
+      console.error("Erro ao guardar:", dbError);
+      setOpError(`Erro ao guardar: ${dbError.message}`);
+      setSaving(false);
+      return;
     }
 
     await loadEvents();
@@ -286,22 +326,29 @@ export default function CalendarPage() {
   async function deleteEvent() {
     if (!selectedEvent) return;
     setSaving(true);
-    if (selectedEvent.type === "training") {
-      await supabase
-        .from("training_sessions")
-        .delete()
-        .eq("id", selectedEvent.id);
-    } else {
-      await supabase.from("games").delete().eq("id", selectedEvent.id);
+    setOpError(null);
+
+    const table =
+      selectedEvent.type === "training" ? "training_sessions" : "games";
+    const { error } = await supabase
+      .from(table)
+      .delete()
+      .eq("id", selectedEvent.id);
+
+    if (error) {
+      console.error("Erro ao apagar:", error);
+      setOpError(`Erro ao apagar: ${error.message}`);
+      setSaving(false);
+      return;
     }
-    await loadEvents();
+
+    // Remove imediatamente do estado local — UI responde sem esperar pela DB
+    setEvents((prev) => prev.filter((e) => e.id !== selectedEvent.id));
     closeModal();
     setSaving(false);
-  }
 
-  function getMapsUrl(event: CalEvent) {
-    const query = event.location_address || event.location || "";
-    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+    // Confirma sincronização com a DB em background
+    loadEvents();
   }
 
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
@@ -314,6 +361,27 @@ export default function CalendarPage() {
   const isEditing = modalMode === "edit_training" || modalMode === "edit_game";
   const isTrainingModal =
     modalMode === "add_training" || modalMode === "edit_training";
+
+  if (loading) {
+    return (
+      <div className="p-4 md:p-8 flex items-center justify-center min-h-[50vh]">
+        <p className="text-slate-500">A carregar...</p>
+      </div>
+    );
+  }
+
+  if (!ageGroupId) {
+    return (
+      <div className="p-4 md:p-8 text-center py-16">
+        <p className="text-slate-700 font-semibold mb-2">
+          Sem escalão configurado
+        </p>
+        <p className="text-slate-500 text-sm">
+          Configura o teu escalão em Configurações antes de usar o calendário.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 md:p-8 max-w-2xl mx-auto">
@@ -360,7 +428,7 @@ export default function CalendarPage() {
         </span>
       </div>
 
-      {/* Grelha */}
+      {/* Grelha da semana */}
       <div className="space-y-2">
         {days.map((day, i) => {
           const dayStr = format(day, "yyyy-MM-dd");
@@ -374,25 +442,17 @@ export default function CalendarPage() {
                 isCurrentDay ? "border-emerald-400" : "border-slate-100"
               }`}
             >
-              {/* Cabeçalho */}
+              {/* Cabeçalho do dia */}
               <div
-                className={`flex items-center gap-3 px-4 py-2 ${
-                  isCurrentDay ? "bg-emerald-50" : "bg-slate-50"
-                }`}
+                className={`flex items-center gap-3 px-4 py-2 ${isCurrentDay ? "bg-emerald-50" : "bg-slate-50"}`}
               >
                 <span
-                  className={`text-sm font-semibold w-8 ${
-                    isCurrentDay ? "text-emerald-700" : "text-slate-600"
-                  }`}
+                  className={`text-sm font-semibold w-8 ${isCurrentDay ? "text-emerald-700" : "text-slate-600"}`}
                 >
                   {DAY_NAMES[i]}
                 </span>
                 <span
-                  className={`text-sm ${
-                    isCurrentDay
-                      ? "text-emerald-600 font-bold"
-                      : "text-slate-500"
-                  }`}
+                  className={`text-sm ${isCurrentDay ? "text-emerald-600 font-bold" : "text-slate-500"}`}
                 >
                   {format(day, "d MMM", { locale: pt })}
                 </span>
@@ -417,7 +477,7 @@ export default function CalendarPage() {
                 </div>
               </div>
 
-              {/* Eventos */}
+              {/* Eventos do dia */}
               <div className="bg-white">
                 {dayEvents.length === 0 ? (
                   <p className="px-4 py-2.5 text-xs text-slate-300">
@@ -431,7 +491,6 @@ export default function CalendarPage() {
                         onClick={() => openEdit(event)}
                         className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors text-left"
                       >
-                        {/* Thumbnail */}
                         {event.image_url ? (
                           <img
                             src={event.image_url}
@@ -497,7 +556,7 @@ export default function CalendarPage() {
             className="bg-white rounded-2xl w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Header */}
+            {/* Header do modal */}
             <div className="flex justify-between items-center p-5 border-b sticky top-0 bg-white z-10">
               <h3 className="font-bold text-slate-900">
                 {modalMode === "add_training" && "🏃 Novo Treino"}
@@ -511,11 +570,22 @@ export default function CalendarPage() {
             </div>
 
             <div className="p-5 space-y-5">
-              {/* Imagem thumbnail */}
+              {/* Erro visível */}
+              {opError && (
+                <div className="flex items-start gap-2 bg-red-50 border border-red-200 text-red-700 text-sm p-3 rounded-xl">
+                  <AlertCircle size={16} className="flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-semibold">Erro</p>
+                    <p className="text-xs mt-0.5">{opError}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Imagem */}
               <div>
                 <Label className="mb-2 block">
-                  <ImageIcon size={14} className="inline mr-1" /> Imagem do
-                  evento
+                  <ImageIcon size={14} className="inline mr-1" />
+                  Imagem do evento
                 </Label>
                 {form.image_url ? (
                   <div className="relative">
@@ -568,7 +638,7 @@ export default function CalendarPage() {
                 />
               </div>
 
-              {/* Só para jogos: adversário + casa/fora */}
+              {/* Só jogos: adversário + casa/fora */}
               {!isTrainingModal && (
                 <>
                   <div className="space-y-1">
@@ -706,7 +776,7 @@ export default function CalendarPage() {
               <div className="flex gap-2 pt-2">
                 <Button
                   onClick={saveEvent}
-                  disabled={saving || !form.date}
+                  disabled={saving || uploading || !form.date}
                   className="flex-1 bg-emerald-600 hover:bg-emerald-700"
                 >
                   {saving

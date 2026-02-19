@@ -212,21 +212,43 @@ export default function PlayersPage() {
     player: Player,
     method: "email" | "phone" | "code",
   ) {
-    const inviteCode = Math.random()
-      .toString(36)
-      .substring(2, 10)
-      .toUpperCase();
-    await supabase
-      .from("players")
-      .update({
-        invite_code: inviteCode,
-        invite_method: method,
-        invite_sent_at: new Date().toISOString(),
-      })
-      .eq("id", player.id);
-    alert(
-      `Código de convite: ${inviteCode}\nPartilha com ${player.first_name}.`,
-    );
+    if (method === "email" && player.email) {
+      setSaving(true);
+      const res = await fetch("/api/invite/player", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ playerId: player.id }),
+      });
+      const data = await res.json();
+      setSaving(false);
+
+      if (data.success) {
+        alert(
+          data.emailSent
+            ? `✓ Email enviado para ${player.first_name}!\n\nCódigo: ${data.inviteCode}`
+            : `Código gerado: ${data.inviteCode}\n\n(Email não enviado — partilha manualmente)`,
+        );
+      } else {
+        alert("Erro ao gerar convite: " + (data.error || "Erro desconhecido"));
+      }
+    } else {
+      // Convite por código (sem email)
+      const inviteCode = Math.random()
+        .toString(36)
+        .substring(2, 10)
+        .toUpperCase();
+      await supabase
+        .from("players")
+        .update({
+          invite_code: inviteCode,
+          invite_method: method,
+          invite_sent_at: new Date().toISOString(),
+        })
+        .eq("id", player.id);
+      alert(
+        `Código de convite: ${inviteCode}\nPartilha com ${player.first_name}.`,
+      );
+    }
     loadData();
   }
 

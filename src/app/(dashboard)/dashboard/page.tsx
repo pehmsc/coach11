@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { format, addDays } from "date-fns";
+import { format, addDays, parseISO, isToday, isTomorrow } from "date-fns";
 import { pt } from "date-fns/locale";
 import {
   Users,
@@ -12,6 +12,13 @@ import {
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+
+function relativeDay(dateStr: string) {
+  const d = parseISO(dateStr);
+  if (isToday(d)) return "Hoje";
+  if (isTomorrow(d)) return "Amanhã";
+  return format(d, "EEEE, d 'de' MMM", { locale: pt });
+}
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -35,34 +42,43 @@ export default async function DashboardPage() {
   const firstTeam = ageGroups?.[0]?.teams?.[0];
 
   const todayDate = format(new Date(), "yyyy-MM-dd");
-  const in48h = format(addDays(new Date(), 2), "yyyy-MM-dd");
+  const in7days = format(addDays(new Date(), 7), "yyyy-MM-dd");
 
-  // Buscar sessão de hoje
-  let todaySession = null;
-  let todayAttendanceDone = false;
+  // Próximos treinos (7 dias) — mais recente primeiro
+  let upcomingTrainings: any[] = [];
   if (firstTeam) {
-    const { data: session } = await supabase
+    const { data } = await supabase
       .from("training_sessions")
       .select("*")
       .eq("team_id", firstTeam.id)
-      .eq("session_date", todayDate)
-      .maybeSingle();
-    todaySession = session;
-    todayAttendanceDone = session?.status === "completed";
+      .gte("session_date", todayDate)
+      .lte("session_date", in7days)
+      .neq("status", "completed")
+      .order("session_date", { ascending: true })
+      .limit(3);
+    upcomingTrainings = data || [];
   }
 
-  // Buscar jogos nas próximas 48h sem convocatória
-  let upcomingGame = null;
+  // Próximos jogos (7 dias)
+  let upcomingGames: any[] = [];
   if (firstTeam) {
-    const { data: game } = await supabase
+    const { data } = await supabase
       .from("games")
       .select("*")
       .eq("team_id", firstTeam.id)
       .gte("game_datetime", `${todayDate}T00:00:00`)
-      .lte("game_datetime", `${in48h}T23:59:59`)
-      .maybeSingle();
-    upcomingGame = game;
+      .lte("game_datetime", `${in7days}T23:59:59`)
+      .neq("status", "completed")
+      .order("game_datetime", { ascending: true })
+      .limit(3);
+    upcomingGames = data || [];
   }
+
+  // Treino de hoje especificamente (para presenças)
+  const todayTraining = upcomingTrainings.find(
+    (t) => t.session_date === todayDate,
+  );
+  const todayTrainingDone = todayTraining?.status === "completed";
 
   const today = format(new Date(), "EEEE, d 'de' MMMM", { locale: pt });
   const firstName = profile?.full_name?.split(" ")[0] || "Treinador";
@@ -88,6 +104,8 @@ export default async function DashboardPage() {
       color: "text-slate-600",
     },
   ];
+
+  const hasPending = upcomingTrainings.length > 0 || upcomingGames.length > 0;
 
   return (
     <div className="p-4 md:p-8 max-w-2xl mx-auto">
@@ -118,15 +136,15 @@ export default async function DashboardPage() {
         </Card>
       )}
 
-      {/* Tarefas pendentes do dia */}
+      {/* Tarefas pendentes */}
       {hasSetup && (
         <div className="mb-6 space-y-3">
           <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide">
-            Para fazer hoje
+            Próximos eventos
           </h2>
 
-          {/* Presenças do treino */}
-          {todaySession && !todayAttendanceDone && (
+          {/* Presenças de hoje — se houver treino hoje */}
+          {todayTraining && !todayTrainingDone && (
             <Link href="/attendance">
               <div className="flex items-center gap-3 p-4 bg-amber-50 border-2 border-amber-200 rounded-xl hover:border-amber-300 transition-colors">
                 <AlertCircle
@@ -138,7 +156,8 @@ export default async function DashboardPage() {
                     Presenças por confirmar
                   </p>
                   <p className="text-amber-700 text-xs">
-                    Treino de hoje · {todaySession.start_time?.substring(0, 5)}
+                    Treino de hoje ·{" "}
+                    {todayTraining.start_time?.substring(0, 5) || "—"}
                   </p>
                 </div>
                 <span className="text-amber-600 text-xs font-medium">→</span>
@@ -146,7 +165,7 @@ export default async function DashboardPage() {
             </Link>
           )}
 
-          {todaySession && todayAttendanceDone && (
+          {todayTraining && todayTrainingDone && (
             <div className="flex items-center gap-3 p-4 bg-emerald-50 border-2 border-emerald-200 rounded-xl">
               <ClipboardCheck
                 size={20}
@@ -163,39 +182,61 @@ export default async function DashboardPage() {
             </div>
           )}
 
-          {/* Jogo nas próximas 48h */}
-          {upcomingGame && (
-            <Link href="/calendar">
-              <div className="flex items-center gap-3 p-4 bg-blue-50 border-2 border-blue-200 rounded-xl hover:border-blue-300 transition-colors">
-                <AlertCircle
-                  size={20}
-                  className="text-blue-500 flex-shrink-0"
-                />
+          {/* Próximos treinos (sem hoje) */}
+          {upcomingTrainings
+            .filter((t) => t.session_date !== todayDate)
+            .map((training) => (
+              <Link key={training.id} href="/calendar">
+                <div className="flex items-center gap-3 p-4 bg-emerald-50 border border-emerald-200 rounded-xl hover:border-emerald-300 transition-colors">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center flex-shrink-0">
+                    <span className="text-white text-xs font-bold">T</span>
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-semibold text-emerald-900 text-sm">
+                      Treino
+                    </p>
+                    <p className="text-emerald-700 text-xs capitalize">
+                      {relativeDay(training.session_date)}
+                      {training.start_time
+                        ? ` · ${training.start_time.substring(0, 5)}`
+                        : ""}
+                    </p>
+                  </div>
+                  <span className="text-emerald-600 text-xs font-medium">
+                    →
+                  </span>
+                </div>
+              </Link>
+            ))}
+
+          {/* Próximos jogos */}
+          {upcomingGames.map((game) => (
+            <Link key={game.id} href="/calendar">
+              <div className="flex items-center gap-3 p-4 bg-blue-50 border border-blue-200 rounded-xl hover:border-blue-300 transition-colors">
+                <div className="w-8 h-8 rounded-lg bg-blue-500 flex items-center justify-center flex-shrink-0">
+                  <span className="text-white text-xs font-bold">J</span>
+                </div>
                 <div className="flex-1">
                   <p className="font-semibold text-blue-900 text-sm">
-                    Jogo em menos de 48h
+                    {game.opponent_name ? `vs ${game.opponent_name}` : "Jogo"}
                   </p>
-                  <p className="text-blue-700 text-xs">
-                    {upcomingGame.opponent_name
-                      ? `vs ${upcomingGame.opponent_name}`
-                      : "Confirma a convocatória"}
-                    {" · "}
-                    {format(
-                      new Date(upcomingGame.game_datetime),
-                      "EEEE 'às' HH:mm",
-                      { locale: pt },
-                    )}
+                  <p className="text-blue-700 text-xs capitalize">
+                    {relativeDay(game.game_datetime?.split("T")[0])}
+                    {game.game_datetime
+                      ? ` · ${game.game_datetime.split("T")[1]?.substring(0, 5)}`
+                      : ""}
+                    {game.location ? ` · ${game.location}` : ""}
                   </p>
                 </div>
                 <span className="text-blue-600 text-xs font-medium">→</span>
               </div>
             </Link>
-          )}
+          ))}
 
-          {!todaySession && !upcomingGame && (
+          {!hasPending && (
             <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-center">
               <p className="text-slate-400 text-sm">
-                Sem tarefas pendentes para hoje ✓
+                Sem eventos nos próximos 7 dias ✓
               </p>
             </div>
           )}

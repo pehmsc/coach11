@@ -20,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Plus, X, Mail, Check, Copy, Users } from "lucide-react";
 
 const FOOTBALL_FORMATS = [
   { value: "5", label: "Futebol 5" },
@@ -43,85 +44,104 @@ const AGE_GROUPS = [
   "Sénior",
 ];
 
-const TACTICAL_SYSTEMS: Record<string, string[]> = {
-  "7": ["3-3", "2-3-1", "3-2-1", "2-1-2-1"],
-  "9": ["3-3-2", "4-3-1", "3-2-3", "4-2-2"],
-  "11": ["4-3-3", "4-4-2", "3-5-2", "4-2-3-1", "3-4-3"],
-  "5": ["2-2", "1-2-1", "2-1-1"],
+const ROLE_OPTIONS = [
+  { value: "coach", label: "Treinador Principal" },
+  { value: "assistant_coach", label: "Treinador Adjunto" },
+  { value: "coordinator", label: "Coordenador" },
+];
+
+const ROLE_LABELS: Record<string, string> = {
+  coach: "Treinador Principal",
+  assistant_coach: "Treinador Adjunto",
+  coordinator: "Coordenador",
+};
+
+interface StaffInvite {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  role: string;
+  invite_code: string;
+  accepted_at?: string;
+  invite_sent_at: string;
+}
+
+const EMPTY_STAFF_FORM = {
+  firstName: "",
+  lastName: "",
+  email: "",
+  phone: "",
+  role: "assistant_coach",
 };
 
 export default function TeamSetupPage() {
   const router = useRouter();
   const supabase = createClient();
 
-  const [loading, setLoading] = useState(false);
+  // Escalão
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
   const [existingAgeGroup, setExistingAgeGroup] = useState<any>(null);
-
-  // Campos do formulário
   const [clubName, setClubName] = useState("");
   const [ageGroupName, setAgeGroupName] = useState("");
   const [footballFormat, setFootballFormat] = useState("");
   const [season, setSeason] = useState("2024/2025");
-  const [teams, setTeams] = useState([
-    { name: "Equipa A", is_competitive: true, tactical_system: "" },
-    { name: "Equipa B", is_competitive: true, tactical_system: "" },
-    { name: "Equipa C", is_competitive: true, tactical_system: "" },
-  ]);
+  const [isEditing, setIsEditing] = useState(false);
+
+  // Treinadores convidados
+  const [staffInvites, setStaffInvites] = useState<StaffInvite[]>([]);
+  const [showStaffForm, setShowStaffForm] = useState(false);
+  const [staffForm, setStaffForm] = useState(EMPTY_STAFF_FORM);
+  const [sendingInvite, setSendingInvite] = useState(false);
+  const [inviteResult, setInviteResult] = useState<{
+    code: string;
+    emailSent: boolean;
+    name: string;
+  } | null>(null);
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
   useEffect(() => {
-    loadExistingSetup();
+    loadData();
   }, []);
 
-  async function loadExistingSetup() {
+  async function loadData() {
     const {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) return;
 
-    const { data } = await supabase
+    const { data: ag } = await supabase
       .from("age_groups")
-      .select("*, teams(*)")
+      .select("*")
       .eq("coordinator_id", user.id)
       .single();
 
-    if (data) {
-      setExistingAgeGroup(data);
-      setClubName(data.club_name);
-      setAgeGroupName(data.name);
-      setFootballFormat(data.football_format);
-      setSeason(data.season);
+    if (ag) {
+      setExistingAgeGroup(ag);
+      setClubName(ag.club_name);
+      setAgeGroupName(ag.name);
+      setFootballFormat(ag.football_format);
+      setSeason(ag.season);
+
+      // Buscar convites de treinadores
+      const { data: invites } = await supabase
+        .from("staff_invites")
+        .select("*")
+        .eq("age_group_id", ag.id)
+        .order("created_at", { ascending: false });
+
+      setStaffInvites(invites || []);
     }
+
+    setLoading(false);
   }
 
-  function updateTeam(index: number, field: string, value: any) {
-    setTeams((prev) =>
-      prev.map((t, i) => (i === index ? { ...t, [field]: value } : t)),
-    );
-  }
-
-  function addTeam() {
-    const letters = ["A", "B", "C", "D", "E", "F"];
-    const nextLetter = letters[teams.length] || String(teams.length + 1);
-    setTeams((prev) => [
-      ...prev,
-      {
-        name: `Equipa ${nextLetter}`,
-        is_competitive: true,
-        tactical_system: "",
-      },
-    ]);
-  }
-
-  function removeTeam(index: number) {
-    if (teams.length <= 1) return;
-    setTeams((prev) => prev.filter((_, i) => i !== index));
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSaveSetup(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
+    setSaving(true);
     setError(null);
 
     const {
@@ -129,245 +149,459 @@ export default function TeamSetupPage() {
     } = await supabase.auth.getUser();
     if (!user) return;
 
-    try {
-      let ageGroupId: string;
-
-      if (existingAgeGroup) {
-        // Actualizar escalão existente
-        const { error } = await supabase
-          .from("age_groups")
-          .update({
-            club_name: clubName,
-            name: ageGroupName,
-            football_format: footballFormat,
-            season,
-          })
-          .eq("id", existingAgeGroup.id);
-
-        if (error) throw error;
-        ageGroupId = existingAgeGroup.id;
-      } else {
-        // Criar novo escalão
-        const { data, error } = await supabase
-          .from("age_groups")
-          .insert({
-            coordinator_id: user.id,
-            club_name: clubName,
-            name: ageGroupName,
-            football_format: footballFormat,
-            season,
-          })
-          .select()
-          .single();
-
-        if (error) throw error;
-        ageGroupId = data.id;
+    if (existingAgeGroup) {
+      const { error } = await supabase
+        .from("age_groups")
+        .update({
+          club_name: clubName,
+          name: ageGroupName,
+          football_format: footballFormat,
+          season,
+        })
+        .eq("id", existingAgeGroup.id);
+      if (error) {
+        setError("Erro ao guardar.");
+        setSaving(false);
+        return;
       }
-
-      // Criar equipas (apenas se é novo escalão)
-      if (!existingAgeGroup) {
-        for (const team of teams) {
-          const { error } = await supabase.from("teams").insert({
-            age_group_id: ageGroupId,
-            name: team.name,
-            is_competitive: team.is_competitive,
-            tactical_system: team.tactical_system || null,
-          });
-
-          if (error) throw error;
-        }
+      setExistingAgeGroup((prev: any) => ({
+        ...prev,
+        club_name: clubName,
+        name: ageGroupName,
+      }));
+    } else {
+      const { data, error } = await supabase
+        .from("age_groups")
+        .insert({
+          coordinator_id: user.id,
+          club_name: clubName,
+          name: ageGroupName,
+          football_format: footballFormat,
+          season,
+        })
+        .select()
+        .single();
+      if (error) {
+        setError("Erro ao criar escalão.");
+        setSaving(false);
+        return;
       }
-
-      setSuccess(true);
-      setTimeout(() => {
-        router.push("/dashboard");
-      }, 1500);
-    } catch (err: any) {
-      setError("Erro ao guardar. Tenta novamente.");
-      console.error(err);
-    } finally {
-      setLoading(false);
+      setExistingAgeGroup(data);
     }
+
+    setSaved(true);
+    setIsEditing(false);
+    setSaving(false);
+    setTimeout(() => setSaved(false), 3000);
   }
 
-  const availableSystems = TACTICAL_SYSTEMS[footballFormat] || [];
+  async function handleSendStaffInvite(e: React.FormEvent) {
+    e.preventDefault();
+    setSendingInvite(true);
+    setInviteResult(null);
+
+    const res = await fetch("/api/invite/staff", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        firstName: staffForm.firstName,
+        lastName: staffForm.lastName,
+        email: staffForm.email,
+        phone: staffForm.phone,
+        role: staffForm.role,
+      }),
+    });
+
+    const data = await res.json();
+
+    if (data.success) {
+      setInviteResult({
+        code: data.inviteCode,
+        emailSent: data.emailSent,
+        name: staffForm.firstName,
+      });
+      setStaffForm(EMPTY_STAFF_FORM);
+      loadData(); // Recarrega a lista
+    } else {
+      setError(data.error || "Erro ao enviar convite");
+    }
+
+    setSendingInvite(false);
+  }
+
+  function copyCode(code: string) {
+    navigator.clipboard.writeText(code);
+    setCopiedCode(code);
+    setTimeout(() => setCopiedCode(null), 2000);
+  }
+
+  if (loading)
+    return (
+      <div className="p-4 md:p-8">
+        <p className="text-slate-500">A carregar...</p>
+      </div>
+    );
 
   return (
-    <div className="p-4 md:p-8 max-w-2xl mx-auto">
-      <h1 className="text-2xl font-bold text-slate-900 mb-2">
-        {existingAgeGroup ? "Editar Escalão" : "Configurar Escalão"}
-      </h1>
-      <p className="text-slate-500 mb-8">
-        Define as informações base do teu escalão e equipas.
-      </p>
+    <div className="p-4 md:p-8 max-w-2xl mx-auto space-y-6">
+      <h1 className="text-2xl font-bold text-slate-900">Configurações</h1>
 
-      {success && (
-        <div className="bg-emerald-50 text-emerald-700 p-4 rounded-lg mb-6 border border-emerald-200">
-          ✓ Guardado com sucesso! A redirecionar...
-        </div>
-      )}
-
-      {error && (
-        <div className="bg-red-50 text-red-700 p-4 rounded-lg mb-6 border border-red-200">
-          {error}
-        </div>
-      )}
-
-      <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Informações do clube */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Informações do Clube</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="clubName">Nome do Clube *</Label>
-              <Input
-                id="clubName"
-                value={clubName}
-                onChange={(e) => setClubName(e.target.value)}
-                placeholder="ex: Os Belenenses"
-                required
-              />
+      {/* ── SECÇÃO 1: ESCALÃO ── */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base">Escalão</CardTitle>
+              {existingAgeGroup && !isEditing && (
+                <CardDescription className="mt-1">
+                  {existingAgeGroup.club_name} · {existingAgeGroup.name} ·
+                  Futebol {existingAgeGroup.football_format} ·{" "}
+                  {existingAgeGroup.season}
+                </CardDescription>
+              )}
             </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="ageGroup">Escalão *</Label>
-              <Select
-                value={ageGroupName}
-                onValueChange={setAgeGroupName}
-                required
+            {existingAgeGroup && !isEditing && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsEditing(true)}
               >
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleciona o escalão" />
-                </SelectTrigger>
-                <SelectContent>
-                  {AGE_GROUPS.map((ag) => (
-                    <SelectItem key={ag} value={ag}>
-                      {ag}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+                Editar
+              </Button>
+            )}
+          </div>
+        </CardHeader>
 
-            <div className="space-y-2">
-              <Label htmlFor="format">Modalidade *</Label>
-              <Select
-                value={footballFormat}
-                onValueChange={setFootballFormat}
-                required
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Futebol de..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {FOOTBALL_FORMATS.map((f) => (
-                    <SelectItem key={f.value} value={f.value}>
-                      {f.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+        {(!existingAgeGroup || isEditing) && (
+          <CardContent>
+            {error && (
+              <div className="bg-red-50 text-red-700 text-sm p-3 rounded-lg mb-4 border border-red-200">
+                {error}
+              </div>
+            )}
+            {saved && (
+              <div className="bg-emerald-50 text-emerald-700 text-sm p-3 rounded-lg mb-4 border border-emerald-200">
+                ✓ Guardado com sucesso!
+              </div>
+            )}
 
-            <div className="space-y-2">
-              <Label htmlFor="season">Época</Label>
-              <Input
-                id="season"
-                value={season}
-                onChange={(e) => setSeason(e.target.value)}
-                placeholder="2024/2025"
-              />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Equipas — só mostrar se é novo escalão */}
-        {!existingAgeGroup && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Equipas</CardTitle>
-              <CardDescription>
-                Define as equipas do teu escalão. Podes adicionar mais depois.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {teams.map((team, index) => (
-                <div
-                  key={index}
-                  className="flex gap-3 items-start p-3 bg-slate-50 rounded-lg"
+            <form onSubmit={handleSaveSetup} className="space-y-4">
+              <div className="space-y-1.5">
+                <Label>Nome do Clube *</Label>
+                <Input
+                  value={clubName}
+                  onChange={(e) => setClubName(e.target.value)}
+                  placeholder="ex: Os Belenenses"
+                  required
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Escalão *</Label>
+                  <Select value={ageGroupName} onValueChange={setAgeGroupName}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {AGE_GROUPS.map((ag) => (
+                        <SelectItem key={ag} value={ag}>
+                          {ag}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Modalidade *</Label>
+                  <Select
+                    value={footballFormat}
+                    onValueChange={setFootballFormat}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Futebol..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {FOOTBALL_FORMATS.map((f) => (
+                        <SelectItem key={f.value} value={f.value}>
+                          {f.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Época</Label>
+                <Input
+                  value={season}
+                  onChange={(e) => setSeason(e.target.value)}
+                  placeholder="2024/2025"
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  type="submit"
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                  disabled={saving}
                 >
-                  <div className="flex-1 space-y-3">
-                    <Input
-                      value={team.name}
-                      onChange={(e) =>
-                        updateTeam(index, "name", e.target.value)
-                      }
-                      placeholder="Nome da equipa"
-                    />
-                    {availableSystems.length > 0 && (
+                  {saving
+                    ? "A guardar..."
+                    : existingAgeGroup
+                      ? "Guardar alterações"
+                      : "Criar escalão"}
+                </Button>
+                {isEditing && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsEditing(false)}
+                  >
+                    Cancelar
+                  </Button>
+                )}
+              </div>
+            </form>
+          </CardContent>
+        )}
+      </Card>
+
+      {/* ── SECÇÃO 2: EQUIPA TÉCNICA ── */}
+      {existingAgeGroup && (
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Users size={16} /> Equipa Técnica
+                </CardTitle>
+                <CardDescription className="mt-1">
+                  Convida treinadores para acederem à plataforma
+                </CardDescription>
+              </div>
+              {!showStaffForm && (
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setShowStaffForm(true);
+                    setInviteResult(null);
+                  }}
+                  className="bg-emerald-600 hover:bg-emerald-700"
+                >
+                  <Plus size={14} className="mr-1" /> Convidar
+                </Button>
+              )}
+            </div>
+          </CardHeader>
+
+          <CardContent className="space-y-4">
+            {/* Formulário de convite */}
+            {showStaffForm && (
+              <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
+                <div className="flex justify-between items-center mb-4">
+                  <h4 className="font-semibold text-slate-800 text-sm">
+                    Novo convite
+                  </h4>
+                  <button
+                    onClick={() => {
+                      setShowStaffForm(false);
+                      setInviteResult(null);
+                    }}
+                  >
+                    <X size={16} className="text-slate-400" />
+                  </button>
+                </div>
+
+                {/* Resultado do convite */}
+                {inviteResult && (
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mb-4">
+                    <p className="text-emerald-800 font-semibold text-sm mb-1">
+                      {inviteResult.emailSent
+                        ? `✓ Email enviado para ${inviteResult.name}!`
+                        : `✓ Código gerado para ${inviteResult.name}`}
+                    </p>
+                    {!inviteResult.emailSent && (
+                      <p className="text-emerald-700 text-xs mb-3">
+                        O email não foi enviado. Partilha o código manualmente:
+                      </p>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 bg-white border border-emerald-200 rounded-lg px-3 py-2 font-mono text-lg font-bold text-slate-800 text-center tracking-widest">
+                        {inviteResult.code}
+                      </code>
+                      <button
+                        onClick={() => copyCode(inviteResult.code)}
+                        className="p-2 bg-emerald-100 hover:bg-emerald-200 rounded-lg transition-colors"
+                      >
+                        {copiedCode === inviteResult.code ? (
+                          <Check size={16} className="text-emerald-600" />
+                        ) : (
+                          <Copy size={16} className="text-emerald-600" />
+                        )}
+                      </button>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setInviteResult(null);
+                        setShowStaffForm(true);
+                      }}
+                      className="mt-3 w-full"
+                    >
+                      Convidar outro treinador
+                    </Button>
+                  </div>
+                )}
+
+                {!inviteResult && (
+                  <form onSubmit={handleSendStaffInvite} className="space-y-3">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Primeiro nome *</Label>
+                        <Input
+                          value={staffForm.firstName}
+                          required
+                          placeholder="João"
+                          onChange={(e) =>
+                            setStaffForm((f) => ({
+                              ...f,
+                              firstName: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Apelido *</Label>
+                        <Input
+                          value={staffForm.lastName}
+                          required
+                          placeholder="Silva"
+                          onChange={(e) =>
+                            setStaffForm((f) => ({
+                              ...f,
+                              lastName: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Email *</Label>
+                      <Input
+                        type="email"
+                        value={staffForm.email}
+                        required
+                        placeholder="treinador@email.com"
+                        onChange={(e) =>
+                          setStaffForm((f) => ({ ...f, email: e.target.value }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Telemóvel</Label>
+                      <Input
+                        type="tel"
+                        value={staffForm.phone}
+                        placeholder="9XX XXX XXX"
+                        onChange={(e) =>
+                          setStaffForm((f) => ({ ...f, phone: e.target.value }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Função *</Label>
                       <Select
-                        value={team.tactical_system}
+                        value={staffForm.role}
                         onValueChange={(v) =>
-                          updateTeam(index, "tactical_system", v)
+                          setStaffForm((f) => ({ ...f, role: v }))
                         }
                       >
                         <SelectTrigger>
-                          <SelectValue placeholder="Sistema tático (opcional)" />
+                          <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {availableSystems.map((s) => (
-                            <SelectItem key={s} value={s}>
-                              {s}
+                          {ROLE_OPTIONS.map((r) => (
+                            <SelectItem key={r.value} value={r.value}>
+                              {r.label}
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
-                    )}
-                    <label className="flex items-center gap-2 text-sm text-slate-600">
-                      <input
-                        type="checkbox"
-                        checked={team.is_competitive}
-                        onChange={(e) =>
-                          updateTeam(index, "is_competitive", e.target.checked)
-                        }
-                        className="rounded"
-                      />
-                      Equipa competitiva
-                    </label>
-                  </div>
-                  {teams.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => removeTeam(index)}
-                      className="text-red-400 hover:text-red-600 text-sm mt-2"
+                    </div>
+                    <Button
+                      type="submit"
+                      disabled={sendingInvite}
+                      className="w-full bg-emerald-600 hover:bg-emerald-700"
                     >
-                      ✕
-                    </button>
-                  )}
-                </div>
-              ))}
+                      <Mail size={14} className="mr-2" />
+                      {sendingInvite
+                        ? "A enviar..."
+                        : "Enviar convite por email"}
+                    </Button>
+                  </form>
+                )}
+              </div>
+            )}
 
-              <button
-                type="button"
-                onClick={addTeam}
-                className="text-emerald-600 text-sm font-medium hover:underline"
-              >
-                + Adicionar equipa
-              </button>
-            </CardContent>
-          </Card>
-        )}
-
-        <Button
-          type="submit"
-          className="w-full bg-emerald-600 hover:bg-emerald-700"
-          disabled={loading}
-        >
-          {loading ? "A guardar..." : "Guardar"}
-        </Button>
-      </form>
+            {/* Lista de convites enviados */}
+            {staffInvites.length > 0 ? (
+              <div className="space-y-2">
+                {staffInvites.map((invite) => (
+                  <div
+                    key={invite.id}
+                    className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100"
+                  >
+                    <div className="w-9 h-9 rounded-full bg-slate-200 flex items-center justify-center flex-shrink-0">
+                      <span className="text-xs font-bold text-slate-500">
+                        {invite.first_name[0]}
+                        {invite.last_name[0]}
+                      </span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-slate-800 text-sm truncate">
+                        {invite.first_name} {invite.last_name}
+                      </p>
+                      <p className="text-xs text-slate-400 truncate">
+                        {ROLE_LABELS[invite.role]} · {invite.email}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {invite.accepted_at ? (
+                        <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium">
+                          Activo
+                        </span>
+                      ) : (
+                        <>
+                          <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">
+                            Pendente
+                          </span>
+                          <button
+                            onClick={() => copyCode(invite.invite_code)}
+                            title="Copiar código"
+                            className="p-1.5 hover:bg-slate-200 rounded-lg transition-colors"
+                          >
+                            {copiedCode === invite.invite_code ? (
+                              <Check size={14} className="text-emerald-500" />
+                            ) : (
+                              <Copy size={14} className="text-slate-400" />
+                            )}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              !showStaffForm && (
+                <p className="text-sm text-slate-400 text-center py-4">
+                  Ainda não convidaste nenhum treinador.
+                </p>
+              )
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
