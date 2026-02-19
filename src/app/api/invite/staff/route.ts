@@ -163,7 +163,7 @@ export async function POST(request: Request) {
   // Para reduzir falhas enquanto validas domínio:
   // - Se RESEND_FROM_EMAIL existir, usa
   // - Senão, usa onboarding@resend.dev (modo teste, super fiável)
-  const fromEmail = configuredFrom || "Coach11 <noreply@berfirstrs.com";
+  const fromEmail = configuredFrom || "Coach11 <onboarding@resend.dev>";
 
   const resend = new Resend(process.env.RESEND_API_KEY);
 
