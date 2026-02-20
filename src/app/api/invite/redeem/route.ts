@@ -1,9 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
 
 export async function POST(request: Request) {
+  // Cliente regular apenas para autenticar o utilizador
   const supabase = await createClient();
-
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -21,8 +22,11 @@ export async function POST(request: Request) {
 
   const code = inviteCode.trim().toUpperCase();
 
+  // Admin client: bypassa RLS para todas as operações de escrita
+  const admin = createAdminClient();
+
   // 1. Buscar convite pendente
-  const { data: invite, error: inviteError } = await supabase
+  const { data: invite, error: inviteError } = await admin
     .from("staff_invites")
     .select("*")
     .eq("invite_code", code)
@@ -30,23 +34,24 @@ export async function POST(request: Request) {
     .single();
 
   if (inviteError || !invite) {
+    console.error("Convite não encontrado:", code, inviteError?.message);
     return NextResponse.json(
       { error: "Código inválido ou já utilizado" },
       { status: 404 },
     );
   }
 
-  // 2. Buscar o team_id real para o age_group (team_staff.team_id → teams.id)
-  // Se não existir equipa, criar automaticamente (para coordenadores criados antes do auto-create)
-  let { data: team } = await supabase
+  // 2. Buscar o team_id real para o age_group
+  let { data: team } = await admin
     .from("teams")
     .select("id")
     .eq("age_group_id", invite.age_group_id)
     .limit(1)
     .maybeSingle();
 
+  // Se não existir equipa, criar automaticamente
   if (!team) {
-    const { data: ageGroupInfo } = await supabase
+    const { data: ageGroupInfo } = await admin
       .from("age_groups")
       .select("club_name, name")
       .eq("id", invite.age_group_id)
@@ -59,7 +64,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const { data: newTeam, error: newTeamError } = await supabase
+    const { data: newTeam, error: newTeamError } = await admin
       .from("teams")
       .insert({
         age_group_id: invite.age_group_id,
@@ -70,68 +75,78 @@ export async function POST(request: Request) {
       .single();
 
     if (newTeamError || !newTeam) {
-      console.error("Erro ao criar equipa automaticamente:", newTeamError);
+      console.error("Erro ao criar equipa:", newTeamError?.message);
       return NextResponse.json(
         { error: "Erro ao processar convite. Tenta novamente." },
         { status: 500 },
       );
     }
-
     team = newTeam;
   }
 
-  // 3. Verificar se já está associado
-  const { data: existingStaff, error: existingError } = await supabase
+  // 3. Garantir que o perfil existe (email/password signup não passa pelo auth callback)
+  const { data: existingProfile } = await admin
+    .from("profiles")
+    .select("id, full_name")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (!existingProfile) {
+    const fullName =
+      `${invite.first_name || ""} ${invite.last_name || ""}`.trim() ||
+      user.email?.split("@")[0] ||
+      "Utilizador";
+    await admin.from("profiles").insert({
+      id: user.id,
+      full_name: fullName,
+      role: invite.role === "coordinator" ? "coordinator" : "coach",
+    });
+  }
+
+  // 4. Verificar se já está associado
+  const { data: existingStaff } = await admin
     .from("team_staff")
     .select("id")
     .eq("profile_id", user.id)
     .eq("team_id", team.id)
     .maybeSingle();
 
-  if (existingError) {
-    console.error("Erro ao verificar associação existente:", existingError);
-    return NextResponse.json(
-      { error: "Erro ao processar convite. Tenta novamente." },
-      { status: 500 },
-    );
-  }
-
   if (existingStaff) {
+    // Marcar como aceite na mesma
+    await admin
+      .from("staff_invites")
+      .update({ accepted_at: new Date().toISOString(), accepted_by: user.id, status: "accepted" })
+      .eq("id", invite.id);
     return NextResponse.json(
       { error: "Já estás associado a este escalão" },
       { status: 409 },
     );
   }
 
-  // 4. Criar associação em team_staff com o team_id correto
+  // 5. Criar associação em team_staff
   // team_staff.role CHECK: head_coach | assistant_coach | coordinator
-  // staff_invites.role usa: coach | assistant_coach | coordinator
-  const teamStaffRole =
-    invite.role === "coach" ? "head_coach" : invite.role;
+  const teamStaffRole = invite.role === "coach" ? "head_coach" : invite.role;
 
-  const { error: staffError } = await supabase.from("team_staff").insert({
+  const { error: staffError } = await admin.from("team_staff").insert({
     profile_id: user.id,
     team_id: team.id,
     role: teamStaffRole,
   });
 
   if (staffError) {
-    console.error("Erro ao criar team_staff:", staffError);
+    console.error("Erro ao criar team_staff:", staffError.message);
     return NextResponse.json(
-      { error: "Erro ao aceitar convite. Tenta novamente." },
+      { error: `Erro ao aceitar convite: ${staffError.message}` },
       { status: 500 },
     );
   }
 
-  // 5. Atualizar role do perfil (coach para coach/assistant_coach, coordinator mantém)
+  // 6. Atualizar role do perfil
   const profileRole = invite.role === "coordinator" ? "coordinator" : "coach";
-  await supabase
-    .from("profiles")
-    .update({ role: profileRole })
-    .eq("id", user.id);
+  await admin.from("profiles").update({ role: profileRole }).eq("id", user.id);
 
-  // 6. Marcar convite como aceite
-  await supabase
+  // 7. Marcar convite como aceite
+  await admin
     .from("staff_invites")
     .update({
       accepted_at: new Date().toISOString(),
@@ -140,24 +155,16 @@ export async function POST(request: Request) {
     })
     .eq("id", invite.id);
 
-  // 7. Atualizar nome do perfil se ainda não tiver
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("full_name")
-    .eq("id", user.id)
-    .single();
-
-  if (profile && !profile.full_name && invite.first_name) {
-    await supabase
+  // 8. Atualizar nome do perfil se ainda não tiver
+  if (existingProfile && !existingProfile.full_name && invite.first_name) {
+    await admin
       .from("profiles")
-      .update({
-        full_name: `${invite.first_name} ${invite.last_name || ""}`.trim(),
-      })
+      .update({ full_name: `${invite.first_name} ${invite.last_name || ""}`.trim() })
       .eq("id", user.id);
   }
 
-  // 8. Buscar info do escalão para resposta
-  const { data: ageGroup } = await supabase
+  // 9. Buscar info do escalão para resposta
+  const { data: ageGroup } = await admin
     .from("age_groups")
     .select("id, name, club_name")
     .eq("id", invite.age_group_id)

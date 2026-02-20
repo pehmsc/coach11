@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { format, addDays, parseISO, isToday, isTomorrow } from "date-fns";
+import { format, addDays, addHours, parseISO, isToday, isTomorrow } from "date-fns";
 import { pt } from "date-fns/locale";
 import {
   Users,
@@ -44,8 +44,10 @@ export default async function DashboardPage() {
   const hasSetup = ageGroups && ageGroups.length > 0;
   const firstTeam = ageGroups?.[0]?.teams?.[0];
 
-  const todayDate = format(new Date(), "yyyy-MM-dd");
-  const in7days = format(addDays(new Date(), 7), "yyyy-MM-dd");
+  const now = new Date();
+  const todayDate = format(now, "yyyy-MM-dd");
+  const in7days = format(addDays(now, 7), "yyyy-MM-dd");
+  const in48h = addHours(now, 48);
 
   // Próximos treinos (7 dias) — mais recente primeiro
   let upcomingTrainings: TrainingSession[] = [];
@@ -224,28 +226,50 @@ export default async function DashboardPage() {
               ))}
 
             {/* Próximos jogos */}
-            {upcomingGames.map((game) => (
-              <Link key={game.id} href="/calendar">
-                <div className="flex items-center gap-3 p-4 bg-blue-50 border border-blue-200 rounded-xl hover:border-blue-300 transition-colors">
-                  <div className="w-8 h-8 rounded-lg bg-blue-500 flex items-center justify-center flex-shrink-0">
-                    <span className="text-white text-xs font-bold">J</span>
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-semibold text-blue-900 text-sm">
-                      {game.opponent_name ? `vs ${game.opponent_name}` : "Jogo"}
-                    </p>
-                    <p className="text-blue-700 text-xs capitalize">
-                      {relativeDay(game.game_datetime?.split("T")[0])}
-                      {game.game_datetime
-                        ? ` · ${game.game_datetime.split("T")[1]?.substring(0, 5)}`
-                        : ""}
-                      {game.location ? ` · ${game.location}` : ""}
-                    </p>
-                  </div>
-                  <span className="text-blue-600 text-xs font-medium">→</span>
+            {upcomingGames.map((game) => {
+              const gameDate = game.game_datetime ? parseISO(game.game_datetime) : null;
+              const needsConvocation = gameDate && gameDate <= in48h && gameDate >= now;
+              return (
+                <div key={game.id} className="space-y-1">
+                  <Link href="/calendar">
+                    <div className="flex items-center gap-3 p-4 bg-blue-50 border border-blue-200 rounded-xl hover:border-blue-300 transition-colors">
+                      <div className="w-8 h-8 rounded-lg bg-blue-500 flex items-center justify-center flex-shrink-0">
+                        <span className="text-white text-xs font-bold">J</span>
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-semibold text-blue-900 text-sm">
+                          {game.opponent_name ? `vs ${game.opponent_name}` : "Jogo"}
+                        </p>
+                        <p className="text-blue-700 text-xs capitalize">
+                          {relativeDay(game.game_datetime?.split("T")[0])}
+                          {game.game_datetime
+                            ? ` · ${game.game_datetime.split("T")[1]?.substring(0, 5)}`
+                            : ""}
+                          {game.location ? ` · ${game.location}` : ""}
+                        </p>
+                      </div>
+                      <span className="text-blue-600 text-xs font-medium">→</span>
+                    </div>
+                  </Link>
+                  {needsConvocation && (
+                    <Link href="/calendar">
+                      <div className="flex items-center gap-3 p-3 bg-amber-50 border-2 border-amber-300 rounded-xl hover:border-amber-400 transition-colors ml-2">
+                        <AlertCircle size={16} className="text-amber-500 flex-shrink-0" />
+                        <div className="flex-1">
+                          <p className="font-semibold text-amber-900 text-xs">
+                            Convocatória por criar
+                          </p>
+                          <p className="text-amber-700 text-xs">
+                            Jogo em menos de 48h — seleciona os convocados
+                          </p>
+                        </div>
+                        <span className="text-amber-600 text-xs font-medium">→</span>
+                      </div>
+                    </Link>
+                  )}
                 </div>
-              </Link>
-            ))}
+              );
+            })}
 
             {!hasPending && (
               <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-center">

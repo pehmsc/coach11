@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
   format,
@@ -75,7 +74,6 @@ const EMPTY_FORM: EventForm = {
 
 export default function CalendarPage() {
   const supabase = useMemo(() => createClient(), []);
-  const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [weekStart, setWeekStart] = useState(
@@ -492,11 +490,7 @@ export default function CalendarPage() {
                     {dayEvents.map((event) => (
                       <button
                         key={event.id}
-                        onClick={() =>
-                          event.type === "game"
-                            ? router.push(`/games/${event.id}`)
-                            : openEdit(event)
-                        }
+                        onClick={() => openEdit(event)}
                         className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors text-left"
                       >
                         {event.image_url ? (

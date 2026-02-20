@@ -44,7 +44,18 @@ export async function GET(request: Request) {
     }
 
     console.error("Auth callback error:", error);
-    return NextResponse.redirect(`${origin}/login?error=exchange_failed`);
+
+    // Preservar o código de convite na redirecção de erro
+    const errorUrl = new URL(`${origin}/login`);
+    errorUrl.searchParams.set("error", "exchange_failed");
+    try {
+      const nextUrl = new URL(decodeURIComponent(next), origin);
+      const inviteCode = nextUrl.searchParams.get("code");
+      if (inviteCode) errorUrl.searchParams.set("code", inviteCode);
+    } catch {
+      // next inválido — ignorar
+    }
+    return NextResponse.redirect(errorUrl.toString());
   }
 
   // Garantir que o perfil existe (para Google OAuth)
