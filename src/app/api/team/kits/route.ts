@@ -103,33 +103,33 @@ export async function POST(request: Request) {
       );
     }
 
-    const { data: existingPiece } = await admin
+    const { data: existingPieces } = await admin
       .from("kit_pieces")
       .select("*")
       .eq("team_id", team.id)
       .eq("kit_number", kitNumber)
       .eq("player_type", playerType)
       .eq("piece_type", pieceType)
-      .order("created_at", { ascending: true })
-      .limit(1)
-      .maybeSingle();
+      .order("created_at", { ascending: true });
 
-    if (existingPiece) {
-      const { data: updatedPiece, error: updateError } = await admin
+    if ((existingPieces || []).length > 0) {
+      const { data: updatedPieces, error: updateError } = await admin
         .from("kit_pieces")
         .update({ color_hex: colorHex })
-        .eq("id", existingPiece.id)
-        .select("*")
-        .single();
+        .eq("team_id", team.id)
+        .eq("kit_number", kitNumber)
+        .eq("player_type", playerType)
+        .eq("piece_type", pieceType)
+        .select("*");
 
-      if (updateError || !updatedPiece) {
+      if (updateError || !updatedPieces || updatedPieces.length === 0) {
         return NextResponse.json(
           { error: "Erro ao guardar a cor do kit." },
           { status: 500 },
         );
       }
 
-      return NextResponse.json({ success: true, piece: updatedPiece });
+      return NextResponse.json({ success: true, piece: updatedPieces[0] });
     }
 
     const { data: insertedPiece, error: insertError } = await admin
@@ -157,10 +157,19 @@ export async function POST(request: Request) {
     const message =
       error instanceof Error ? error.message : "Erro interno ao guardar cor de kit.";
 
+    if (message.includes("SUPABASE_SERVICE_ROLE_KEY")) {
+      return NextResponse.json(
+        {
+          error:
+            "Configuração do servidor incompleta: falta SUPABASE_SERVICE_ROLE_KEY no ambiente de produção.",
+        },
+        { status: 500 },
+      );
+    }
+
     return NextResponse.json(
       { error: message || "Erro interno ao guardar cor de kit." },
       { status: 500 },
     );
   }
 }
-

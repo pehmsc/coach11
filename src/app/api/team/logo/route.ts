@@ -14,6 +14,48 @@ function resolveExtension(fileName: string) {
   return "png";
 }
 
+async function uploadLogoWithRetry(
+  admin: ReturnType<typeof createAdminClient>,
+  filePath: string,
+  fileData: Uint8Array,
+  contentType: string,
+) {
+  let { error: uploadError } = await admin.storage
+    .from("club-logos")
+    .upload(filePath, fileData, {
+      upsert: true,
+      contentType,
+    });
+
+  if (
+    uploadError &&
+    typeof uploadError.message === "string" &&
+    uploadError.message.toLowerCase().includes("bucket")
+  ) {
+    const { error: createBucketError } = await admin.storage.createBucket("club-logos", {
+      public: true,
+      fileSizeLimit: MAX_FILE_SIZE_BYTES,
+      allowedMimeTypes: [
+        "image/png",
+        "image/jpeg",
+        "image/jpg",
+        "image/webp",
+        "image/svg+xml",
+      ],
+    });
+
+    if (!createBucketError) {
+      const retry = await admin.storage.from("club-logos").upload(filePath, fileData, {
+        upsert: true,
+        contentType,
+      });
+      uploadError = retry.error;
+    }
+  }
+
+  return uploadError;
+}
+
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
@@ -40,7 +82,12 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!file.type.startsWith(ACCEPTED_MIME_PREFIX)) {
+    const extension = resolveExtension(file.name || "");
+    const mimeType = (file.type || "").toLowerCase();
+    const mimeLooksValid =
+      mimeType.startsWith(ACCEPTED_MIME_PREFIX) || ACCEPTED_EXTENSIONS.has(extension);
+
+    if (!mimeLooksValid) {
       return NextResponse.json(
         { error: "Formato inválido. Usa uma imagem PNG, JPG, WEBP ou SVG." },
         { status: 400 },
@@ -102,16 +149,15 @@ export async function POST(request: Request) {
       );
     }
 
-    const extension = resolveExtension(file.name || "");
     const filePath = `${ageGroup.id}/logo.${extension}`;
-    const fileBuffer = await file.arrayBuffer();
+    const fileBytes = new Uint8Array(await file.arrayBuffer());
 
-    const { error: uploadError } = await admin.storage
-      .from("club-logos")
-      .upload(filePath, fileBuffer, {
-        upsert: true,
-        contentType: file.type || `image/${extension}`,
-      });
+    const uploadError = await uploadLogoWithRetry(
+      admin,
+      filePath,
+      fileBytes,
+      file.type || `image/${extension}`,
+    );
 
     if (uploadError) {
       console.error("Erro no upload do logotipo:", uploadError);
@@ -142,10 +188,19 @@ export async function POST(request: Request) {
     const message =
       error instanceof Error ? error.message : "Erro interno ao carregar logotipo.";
 
+    if (message.includes("SUPABASE_SERVICE_ROLE_KEY")) {
+      return NextResponse.json(
+        {
+          error:
+            "Configuração do servidor incompleta: falta SUPABASE_SERVICE_ROLE_KEY no ambiente de produção.",
+        },
+        { status: 500 },
+      );
+    }
+
     return NextResponse.json(
       { error: message || "Erro interno ao carregar logotipo." },
       { status: 500 },
     );
   }
 }
-

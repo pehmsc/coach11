@@ -95,6 +95,7 @@ export default function TeamSetupPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [kitStatusMessage, setKitStatusMessage] = useState<string | null>(null);
   const [existingAgeGroup, setExistingAgeGroup] = useState<AgeGroup | null>(null);
   const [teamId, setTeamId] = useState<string | null>(null);
   const [clubName, setClubName] = useState("");
@@ -313,11 +314,17 @@ export default function TeamSetupPage() {
   }
 
   function getKitPiece(kitNum: KitNumber, playerType: PlayerType, pieceType: PieceType) {
-    return kitPieces.find(
+    const matches = kitPieces.filter(
       (k) =>
         k.kit_number === kitNum &&
         k.player_type === playerType &&
         k.piece_type === pieceType,
+    );
+    if (matches.length === 0) return undefined;
+    return matches.reduce((latest, current) =>
+      new Date(current.created_at).getTime() >= new Date(latest.created_at).getTime()
+        ? current
+        : latest,
     );
   }
 
@@ -337,6 +344,7 @@ export default function TeamSetupPage() {
     const key = `${kitNum}-${playerType}-${pieceType}`;
     setSavingKit(key);
     setError(null);
+    setKitStatusMessage(null);
 
     const normalizedColor = normalizeColorHex(colorHex);
 
@@ -361,14 +369,19 @@ export default function TeamSetupPage() {
 
       const savedPiece = payload.piece as KitPiece;
       setKitPieces((prev) => {
-        const existingIndex = prev.findIndex((k) => k.id === savedPiece.id);
-        if (existingIndex >= 0) {
-          const next = [...prev];
-          next[existingIndex] = savedPiece;
-          return next;
-        }
-        return [...prev, savedPiece];
+        const filtered = prev.filter(
+          (piece) =>
+            !(
+              piece.team_id === savedPiece.team_id &&
+              piece.kit_number === savedPiece.kit_number &&
+              piece.player_type === savedPiece.player_type &&
+              piece.piece_type === savedPiece.piece_type
+            ),
+        );
+        return [...filtered, savedPiece];
       });
+      setKitStatusMessage("Cores dos kits guardadas.");
+      setTimeout(() => setKitStatusMessage(null), 2000);
     } catch {
       setError("Erro ao guardar a cor do kit.");
     } finally {
@@ -661,6 +674,9 @@ export default function TeamSetupPage() {
                 <CardDescription>
                   Define as cores de cada kit (campo e guarda-redes)
                 </CardDescription>
+                {kitStatusMessage && (
+                  <p className="text-xs text-emerald-600 mt-1">{kitStatusMessage}</p>
+                )}
               </div>
               <Button
                 type="button"
