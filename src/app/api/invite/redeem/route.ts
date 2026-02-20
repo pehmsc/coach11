@@ -58,8 +58,26 @@ export async function POST(request: Request) {
       );
     }
 
-    // Convite já utilizado por outro utilizador
-    if (invite.accepted_at && invite.accepted_by && invite.accepted_by !== user.id) {
+    const userEmail = user.email?.trim().toLowerCase() ?? null;
+    const inviteEmail =
+      typeof invite.email === "string" ? invite.email.trim().toLowerCase() : null;
+    const emailMatches = !!userEmail && !!inviteEmail && userEmail === inviteEmail;
+
+    if (inviteEmail && userEmail && !emailMatches) {
+      return NextResponse.json(
+        { error: "Este convite foi enviado para outro email." },
+        { status: 403 },
+      );
+    }
+
+    // Convite já utilizado por outro utilizador.
+    // Se o email coincide, permitimos corrigir a associação para este utilizador.
+    if (
+      invite.accepted_at &&
+      invite.accepted_by &&
+      invite.accepted_by !== user.id &&
+      !emailMatches
+    ) {
       return NextResponse.json(
         { error: "Este código já foi utilizado por outro utilizador." },
         { status: 409 },
@@ -165,13 +183,30 @@ export async function POST(request: Request) {
 
     // 5. Criar associação em team_staff
     // team_staff.role CHECK: head_coach | assistant_coach | coordinator
-    const teamStaffRole = invite.role === "coach" ? "head_coach" : invite.role;
+    const roleCandidates =
+      invite.role === "coach" ? ["head_coach", "coach"] : [invite.role];
 
-    const { error: staffError } = await admin.from("team_staff").insert({
-      profile_id: user.id,
-      team_id: team.id,
-      role: teamStaffRole,
-    });
+    let staffError: { message?: string; code?: string } | null = null;
+
+    for (let i = 0; i < roleCandidates.length; i += 1) {
+      const roleCandidate = roleCandidates[i];
+      const { error } = await admin.from("team_staff").insert({
+        profile_id: user.id,
+        team_id: team.id,
+        role: roleCandidate,
+      });
+
+      if (!error || error.code === "23505") {
+        staffError = null;
+        break;
+      }
+
+      staffError = error;
+      const isLast = i === roleCandidates.length - 1;
+      if (error.code !== "23514" || isLast) {
+        break;
+      }
+    }
 
     if (staffError) {
       console.error("Erro ao criar team_staff:", staffError.message);

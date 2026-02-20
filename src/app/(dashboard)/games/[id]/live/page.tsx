@@ -99,27 +99,34 @@ export default function LiveGamePage() {
       setClockRunning(false);
     }
 
-    // Buscar convocatória
-    const { data: conv } = await supabase
+    // Buscar convocatórias (pode haver duplicados em ambientes antigos).
+    const { data: convRows } = await supabase
       .from("convocations")
-      .select("id")
+      .select("id, created_at")
       .eq("game_id", id)
-      .maybeSingle();
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false });
 
     let convPlayers: Player[] = [];
-    if (conv) {
+    const convIds = (convRows || []).map((row) => row.id);
+    if (convIds.length > 0) {
       const { data: cp } = await supabase
         .from("convocation_players")
         .select("player_id, players(*)")
-        .eq("convocation_id", conv.id);
-      convPlayers = (cp || [])
-        .map((r) => r.players as unknown as Player)
-        .filter(Boolean)
-        .sort(
-          (a, b) =>
-            a.first_name.localeCompare(b.first_name, "pt", { sensitivity: "base" }) ||
-            a.last_name.localeCompare(b.last_name, "pt", { sensitivity: "base" }),
-        );
+        .in("convocation_id", convIds);
+
+      const byPlayerId = new Map<string, Player>();
+      (cp || []).forEach((row) => {
+        const player = row.players as unknown as Player;
+        if (!player?.id) return;
+        byPlayerId.set(player.id, player);
+      });
+
+      convPlayers = Array.from(byPlayerId.values()).sort(
+        (a, b) =>
+          a.first_name.localeCompare(b.first_name, "pt", { sensitivity: "base" }) ||
+          a.last_name.localeCompare(b.last_name, "pt", { sensitivity: "base" }),
+      );
     }
 
     // Buscar stats live existentes para saber quem está em campo

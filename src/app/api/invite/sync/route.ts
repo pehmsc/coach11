@@ -6,9 +6,11 @@ type StaffInviteRow = {
   id: string;
   age_group_id: string;
   role: string;
+  email: string | null;
   first_name: string | null;
   last_name: string | null;
   accepted_at: string | null;
+  accepted_by: string | null;
 };
 
 export async function POST() {
@@ -38,26 +40,26 @@ export async function POST() {
     let invite: StaffInviteRow | null = null;
 
     if (user.email) {
-      const pendingByEmail = await admin
+      const latestByEmail = await admin
         .from("staff_invites")
-        .select("id, age_group_id, role, first_name, last_name, accepted_at")
+        .select("id, age_group_id, role, email, first_name, last_name, accepted_at, accepted_by")
         .ilike("email", user.email)
-        .is("accepted_at", null)
+        .order("accepted_at", { ascending: false, nullsFirst: false })
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
 
-      if (!pendingByEmail.error && pendingByEmail.data) {
-        invite = pendingByEmail.data as StaffInviteRow;
+      if (!latestByEmail.error && latestByEmail.data) {
+        invite = latestByEmail.data as StaffInviteRow;
       }
     }
 
     if (!invite) {
       const acceptedByUser = await admin
         .from("staff_invites")
-        .select("id, age_group_id, role, first_name, last_name, accepted_at")
+        .select("id, age_group_id, role, email, first_name, last_name, accepted_at, accepted_by")
         .eq("accepted_by", user.id)
-        .order("accepted_at", { ascending: false })
+        .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
 
@@ -68,6 +70,16 @@ export async function POST() {
 
     if (!invite) {
       return NextResponse.json({ success: true, linked: false });
+    }
+
+    const inviteEmail =
+      typeof invite.email === "string" ? invite.email.trim().toLowerCase() : null;
+    const userEmail = user.email?.trim().toLowerCase() ?? null;
+    if (inviteEmail && userEmail && inviteEmail !== userEmail) {
+      return NextResponse.json(
+        { error: "O convite encontrado pertence a outro email." },
+        { status: 403 },
+      );
     }
 
     let { data: team } = await admin
@@ -132,25 +144,42 @@ export async function POST() {
       });
     }
 
-    const teamStaffRole = invite.role === "coach" ? "head_coach" : invite.role;
-    const { error: insertStaffError } = await admin.from("team_staff").insert({
-      profile_id: user.id,
-      team_id: team.id,
-      role: teamStaffRole,
-    });
+    const roleCandidates =
+      invite.role === "coach" ? ["head_coach", "coach"] : [invite.role];
+    let insertStaffError: { code?: string } | null = null;
 
-    if (insertStaffError && insertStaffError.code !== "23505") {
+    for (let i = 0; i < roleCandidates.length; i += 1) {
+      const roleCandidate = roleCandidates[i];
+      const { error } = await admin.from("team_staff").insert({
+        profile_id: user.id,
+        team_id: team.id,
+        role: roleCandidate,
+      });
+
+      if (!error || error.code === "23505") {
+        insertStaffError = null;
+        break;
+      }
+
+      insertStaffError = error;
+      const isLast = i === roleCandidates.length - 1;
+      if (error.code !== "23514" || isLast) {
+        break;
+      }
+    }
+
+    if (insertStaffError) {
       return NextResponse.json(
         { error: "Não foi possível associar à equipa técnica." },
         { status: 500 },
       );
     }
 
-    if (!invite.accepted_at) {
+    if (!invite.accepted_at || invite.accepted_by !== user.id) {
       await admin
         .from("staff_invites")
         .update({
-          accepted_at: new Date().toISOString(),
+          accepted_at: invite.accepted_at || new Date().toISOString(),
           accepted_by: user.id,
           status: "accepted",
         })
@@ -160,8 +189,22 @@ export async function POST() {
     return NextResponse.json({ success: true, linked: true, source: "invite_sync" });
   } catch (error) {
     console.error("Erro ao sincronizar convite:", error);
+
+    const message =
+      error instanceof Error ? error.message : "Erro interno ao sincronizar convite.";
+
+    if (message.includes("SUPABASE_SERVICE_ROLE_KEY")) {
+      return NextResponse.json(
+        {
+          error:
+            "Configuração do servidor incompleta: falta SUPABASE_SERVICE_ROLE_KEY no ambiente de produção.",
+        },
+        { status: 500 },
+      );
+    }
+
     return NextResponse.json(
-      { error: "Erro interno ao sincronizar convite." },
+      { error: message || "Erro interno ao sincronizar convite." },
       { status: 500 },
     );
   }

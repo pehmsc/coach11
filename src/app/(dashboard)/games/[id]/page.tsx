@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import { differenceInMinutes, format, parseISO, subMinutes } from "date-fns";
 import { pt } from "date-fns/locale";
 import {
@@ -28,7 +27,6 @@ interface PlayerWithStatus extends Player {
 export default function GameDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const supabase = useMemo(() => createClient(), []);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
@@ -53,109 +51,40 @@ export default function GameDetailPage() {
 
   async function loadData() {
     setLoading(true);
+    setError(null);
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
+    try {
+      const res = await fetch(`/api/games/${id}/convocation`, { cache: "no-store" });
+      const payload = await res.json().catch(() => ({}));
 
-    // Buscar jogo
-    const { data: gameData, error: gameErr } = await supabase
-      .from("games")
-      .select("*")
-      .eq("id", id)
-      .single();
-
-    if (gameErr || !gameData) {
-      setError("Jogo não encontrado.");
-      setLoading(false);
-      return;
-    }
-
-    setGame(gameData);
-
-    const agId = gameData.age_group_id;
-
-    // Buscar convocatória (se existir)
-    const { data: conv } = await supabase
-      .from("convocations")
-      .select("id, status")
-      .eq("game_id", id)
-      .maybeSingle();
-
-    if (conv?.status === "confirmed" || conv?.status === "closed") {
-      setConvocationStatus(conv.status);
-    } else {
-      setConvocationStatus("draft");
-    }
-
-    if (!agId) {
-      setLoading(false);
-      return;
-    }
-
-    // Buscar jogadores ativos
-    const { data: activePlayers } = await supabase
-      .from("players")
-      .select("*")
-      .eq("age_group_id", agId)
-      .eq("status", "active")
-      .order("first_name", { ascending: true })
-      .order("last_name", { ascending: true });
-
-    // Buscar convocados desta convocatória
-    const convocatedIds = new Set<string>();
-    if (conv) {
-      const { data: cp } = await supabase
-        .from("convocation_players")
-        .select("player_id")
-        .eq("convocation_id", conv.id);
-      (cp || []).forEach((r) => convocatedIds.add(r.player_id));
-    }
-
-    // Verificar bloqueios: jogadores já convocados noutro jogo de competição no mesmo dia
-    const blockedIds = new Set<string>();
-    if (gameData.competition_id) {
-      const gameDate = gameData.game_datetime?.split("T")[0];
-      if (gameDate) {
-        // Buscar outros jogos de competição no mesmo dia (excluindo este)
-        const { data: sameDay } = await supabase
-          .from("games")
-          .select("id")
-          .neq("id", id)
-          .not("competition_id", "is", null)
-          .gte("game_datetime", `${gameDate}T00:00:00`)
-          .lte("game_datetime", `${gameDate}T23:59:59`);
-
-        if (sameDay && sameDay.length > 0) {
-          const otherGameIds = sameDay.map((g) => g.id);
-
-          // Buscar convocatórias desses jogos
-          const { data: otherConvs } = await supabase
-            .from("convocations")
-            .select("id")
-            .in("game_id", otherGameIds);
-
-          if (otherConvs && otherConvs.length > 0) {
-            const otherConvIds = otherConvs.map((c) => c.id);
-            const { data: blocked } = await supabase
-              .from("convocation_players")
-              .select("player_id")
-              .in("convocation_id", otherConvIds);
-            (blocked || []).forEach((r) => blockedIds.add(r.player_id));
-          }
-        }
+      if (!res.ok || !payload?.game) {
+        setGame(null);
+        setPlayers([]);
+        setConvocationStatus("draft");
+        setError(payload?.error || "Erro ao carregar jogo.");
+        return;
       }
+
+      setGame(payload.game as Game);
+
+      if (
+        payload.convocationStatus === "confirmed" ||
+        payload.convocationStatus === "closed"
+      ) {
+        setConvocationStatus(payload.convocationStatus);
+      } else {
+        setConvocationStatus("draft");
+      }
+
+      setPlayers((Array.isArray(payload.players) ? payload.players : []) as PlayerWithStatus[]);
+    } catch {
+      setGame(null);
+      setPlayers([]);
+      setConvocationStatus("draft");
+      setError("Erro de ligação ao carregar jogo.");
+    } finally {
+      setLoading(false);
     }
-
-    const enriched: PlayerWithStatus[] = (activePlayers || []).map((p) => ({
-      ...p,
-      isConvocated: convocatedIds.has(p.id),
-      isBlocked: blockedIds.has(p.id) && !convocatedIds.has(p.id),
-    }));
-
-    setPlayers(enriched);
-    setLoading(false);
   }
 
   async function togglePlayer(player: PlayerWithStatus) {
@@ -374,43 +303,14 @@ export default function GameDetailPage() {
         </div>
       ) : (
         <div className="space-y-2">
-          {/* Convocados */}
-          {players.filter((p) => p.isConvocated).length > 0 && (
-            <div>
-              <p className="text-xs font-semibold text-emerald-600 uppercase tracking-wide mb-2">
-                Convocados ({players.filter((p) => p.isConvocated).length})
-              </p>
-              {players
-                .filter((p) => p.isConvocated)
-                .map((player) => (
-                  <PlayerRow
-                    key={player.id}
-                    player={player}
-                    saving={saving === player.id}
-                    onToggle={() => togglePlayer(player)}
-                  />
-                ))}
-            </div>
-          )}
-
-          {/* Não convocados */}
-          {players.filter((p) => !p.isConvocated).length > 0 && (
-            <div className="mt-4">
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">
-                Não convocados
-              </p>
-              {players
-                .filter((p) => !p.isConvocated)
-                .map((player) => (
-                  <PlayerRow
-                    key={player.id}
-                    player={player}
-                    saving={saving === player.id}
-                    onToggle={() => togglePlayer(player)}
-                  />
-                ))}
-            </div>
-          )}
+          {players.map((player) => (
+            <PlayerRow
+              key={player.id}
+              player={player}
+              saving={saving === player.id}
+              onToggle={() => togglePlayer(player)}
+            />
+          ))}
         </div>
       )}
 

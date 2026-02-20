@@ -117,9 +117,14 @@ export default function RedeemInviteGate() {
 
         if (res.ok && payload?.linked) {
           router.refresh();
+          return;
+        }
+
+        if (!res.ok && typeof payload?.error === "string") {
+          setError(payload.error);
         }
       } catch {
-        // Silencioso: sync é apenas fallback.
+        setError("Falha ao sincronizar convite. Tenta novamente.");
       }
     })();
   }, [router, sp]);

@@ -104,17 +104,27 @@ export async function POST(request: Request, { params }: RouteContext) {
       }
     }
 
-    let { data: convocation } = await admin
+    const { data: convocationRows, error: convocationRowsError } = await admin
       .from("convocations")
-      .select("id")
+      .select("id, status, created_at")
       .eq("game_id", gameId)
-      .maybeSingle();
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false });
+
+    if (convocationRowsError) {
+      return NextResponse.json(
+        { error: "Erro ao carregar a convocatória." },
+        { status: 500 },
+      );
+    }
+
+    let convocation = convocationRows?.[0] ?? null;
 
     if (!convocation) {
       const { data: newConvocation, error: createConvError } = await admin
         .from("convocations")
         .insert({ game_id: gameId, status: "draft" })
-        .select("id")
+        .select("id, status, created_at")
         .single();
 
       if (createConvError || !newConvocation) {
@@ -127,18 +137,30 @@ export async function POST(request: Request, { params }: RouteContext) {
       convocation = newConvocation;
     }
 
+    if (convocation.status === "closed") {
+      return NextResponse.json(
+        { error: "A convocatória está fechada e não pode ser editada." },
+        { status: 400 },
+      );
+    }
+
+    const allConvocationIds = convocationRows?.length
+      ? convocationRows.map((row) => row.id)
+      : [convocation.id];
+
     const { data: existing } = await admin
       .from("convocation_players")
       .select("id")
-      .eq("convocation_id", convocation.id)
+      .in("convocation_id", allConvocationIds)
       .eq("player_id", playerId)
-      .maybeSingle();
+      .limit(1);
 
-    if (existing) {
+    if ((existing?.length ?? 0) > 0) {
       const { error: deleteError } = await admin
         .from("convocation_players")
         .delete()
-        .eq("id", existing.id);
+        .in("convocation_id", allConvocationIds)
+        .eq("player_id", playerId);
 
       if (deleteError) {
         return NextResponse.json(
@@ -146,6 +168,12 @@ export async function POST(request: Request, { params }: RouteContext) {
           { status: 500 },
         );
       }
+
+      await admin
+        .from("convocations")
+        .update({ status: "draft" })
+        .eq("id", convocation.id)
+        .neq("status", "closed");
 
       return NextResponse.json({ success: true, isConvocated: false });
     }
@@ -167,11 +195,31 @@ export async function POST(request: Request, { params }: RouteContext) {
       );
     }
 
+    await admin
+      .from("convocations")
+      .update({ status: "draft" })
+      .eq("id", convocation.id)
+      .neq("status", "closed");
+
     return NextResponse.json({ success: true, isConvocated: true });
   } catch (error) {
     console.error("Erro no toggle da convocatória:", error);
+
+    const message =
+      error instanceof Error ? error.message : "Erro interno ao atualizar a convocatória.";
+
+    if (message.includes("SUPABASE_SERVICE_ROLE_KEY")) {
+      return NextResponse.json(
+        {
+          error:
+            "Configuração do servidor incompleta: falta SUPABASE_SERVICE_ROLE_KEY no ambiente de produção.",
+        },
+        { status: 500 },
+      );
+    }
+
     return NextResponse.json(
-      { error: "Erro interno ao atualizar a convocatória." },
+      { error: message || "Erro interno ao atualizar a convocatória." },
       { status: 500 },
     );
   }

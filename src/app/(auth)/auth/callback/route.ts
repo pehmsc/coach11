@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { SUPABASE_AUTH_COOKIE_OPTIONS } from "@/lib/supabase/config";
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
@@ -41,6 +42,7 @@ export async function GET(request: Request) {
           });
         },
       },
+      cookieOptions: SUPABASE_AUTH_COOKIE_OPTIONS,
     },
   );
 
@@ -57,6 +59,15 @@ export async function GET(request: Request) {
   }
 
   if (error || !data.session) {
+    const authErrorCode = typeof error?.code === "string" ? error.code : null;
+
+    if (authErrorCode === "pkce_code_verifier_not_found") {
+      const fallbackUrl = new URL(`${origin}/auth/callback/client`);
+      fallbackUrl.searchParams.set("code", code);
+      fallbackUrl.searchParams.set("next", next);
+      return NextResponse.redirect(fallbackUrl.toString());
+    }
+
     // PKCE falhou — verificar se existe sessão válida de tentativa anterior
     const {
       data: { user: existingUser },
