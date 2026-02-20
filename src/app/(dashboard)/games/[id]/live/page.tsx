@@ -32,6 +32,14 @@ interface EventModal {
   isOpponent: boolean;
 }
 
+type MatchPhase =
+  | "pre_match"
+  | "first_half"
+  | "halftime"
+  | "second_half"
+  | "review"
+  | "completed";
+
 const EVENT_LABELS: Record<string, string> = {
   goal: "⚽ Golo",
   penalty_goal: "⚽ Pénalti",
@@ -40,6 +48,14 @@ const EVENT_LABELS: Record<string, string> = {
   red_card: "🟥 Cartão Vermelho",
   substitution: "🔄 Substituição",
 };
+
+function formatClock(totalSeconds: number) {
+  const min = Math.floor(totalSeconds / 60)
+    .toString()
+    .padStart(2, "0");
+  const sec = (totalSeconds % 60).toString().padStart(2, "0");
+  return `${min}:${sec}`;
+}
 
 export default function LiveGamePage() {
   const { id } = useParams<{ id: string }>();
@@ -51,6 +67,9 @@ export default function LiveGamePage() {
   const [convocatedPlayers, setConvocatedPlayers] = useState<LivePlayer[]>([]);
   const [events, setEvents] = useState<GameEvent[]>([]);
   const [minute, setMinute] = useState(0);
+  const [clockSeconds, setClockSeconds] = useState(0);
+  const [phase, setPhase] = useState<MatchPhase>("pre_match");
+  const [clockRunning, setClockRunning] = useState(false);
   const [eventModal, setEventModal] = useState<EventModal | null>(null);
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const [selectedSubOutId, setSelectedSubOutId] = useState<string | null>(null);
@@ -72,6 +91,13 @@ export default function LiveGamePage() {
       return;
     }
     setGame(gameData);
+    if (gameData.status === "completed") {
+      setPhase("completed");
+      setClockRunning(false);
+    } else {
+      setPhase("pre_match");
+      setClockRunning(false);
+    }
 
     // Buscar convocatória
     const { data: conv } = await supabase
@@ -129,13 +155,35 @@ export default function LiveGamePage() {
       .eq("game_id", id)
       .order("minute", { ascending: true });
 
-    setEvents(evts || []);
+    const orderedEvents = evts || [];
+    setEvents(orderedEvents);
+    const lastMinute = orderedEvents.length
+      ? Math.max(...orderedEvents.map((e) => e.minute || 0))
+      : 0;
+    setMinute(lastMinute);
+    setClockSeconds(lastMinute * 60);
     setLoading(false);
   }, [id, supabase]);
 
   useEffect(() => {
     if (id) loadData();
   }, [id, loadData]);
+
+  useEffect(() => {
+    if (!clockRunning || phase === "completed") return;
+
+    const interval = setInterval(() => {
+      setClockSeconds((prev) => {
+        const next = prev + 1;
+        if (next % 60 === 0) {
+          setMinute((m) => m + 1);
+        }
+        return next;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [clockRunning, phase]);
 
   // Calcular marcador a partir dos eventos
   const score = useMemo(() => {
@@ -162,6 +210,11 @@ export default function LiveGamePage() {
     playerId?: string,
     relatedPlayerId?: string,
   ) {
+    if (phase !== "first_half" && phase !== "second_half") {
+      toast.error("Inicia a 1ª ou 2ª parte para registar eventos.");
+      return;
+    }
+
     setSavingEvent(true);
     const { data, error } = await supabase
       .from("game_events")
@@ -192,6 +245,11 @@ export default function LiveGamePage() {
   }
 
   async function handleSubstitution() {
+    if (phase !== "first_half" && phase !== "second_half") {
+      toast.error("Apenas durante a 1ª/2ª parte podes registar substituições.");
+      return;
+    }
+
     if (!selectedPlayerId || !selectedSubOutId) return;
     setSavingEvent(true);
 
@@ -303,27 +361,124 @@ export default function LiveGamePage() {
     setExportingPDF(false);
   }
 
+  async function persistFinalStats(finalMinute: number) {
+    // Recriar estatísticas finais do jogo para manter consistência.
+    await supabase.from("game_final_stats").delete().eq("game_id", id);
+
+    const { data: liveStats } = await supabase
+      .from("game_stats_live")
+      .select("player_id, status, start_minute, end_minute")
+      .eq("game_id", id);
+
+    const liveMap = new Map<
+      string,
+      { status: string; start_minute: number | null; end_minute: number | null }
+    >();
+
+    (liveStats || []).forEach((row) => {
+      liveMap.set(row.player_id, {
+        status: row.status || "",
+        start_minute: row.start_minute ?? null,
+        end_minute: row.end_minute ?? null,
+      });
+    });
+
+    const rows = convocatedPlayers.map((player) => {
+      const liveRow = liveMap.get(player.id);
+      const startMinute = liveRow?.start_minute ?? (player.isOnField ? 0 : null);
+      const endMinute =
+        liveRow?.end_minute ??
+        (player.isOnField || liveRow?.status === "on_field" ? finalMinute : null);
+
+      let minutesPlayed = 0;
+      if (startMinute !== null && endMinute !== null) {
+        minutesPlayed = Math.max(0, endMinute - startMinute);
+      } else if (player.isOnField) {
+        minutesPlayed = finalMinute;
+      }
+
+      const goals = events.filter(
+        (e) =>
+          e.player_id === player.id &&
+          !e.is_opponent_event &&
+          (e.event_type === "goal" || e.event_type === "penalty_goal"),
+      ).length;
+
+      const yellowCards = events.filter(
+        (e) =>
+          e.player_id === player.id &&
+          !e.is_opponent_event &&
+          e.event_type === "yellow_card",
+      ).length;
+
+      const redCards = events.filter(
+        (e) =>
+          e.player_id === player.id &&
+          !e.is_opponent_event &&
+          e.event_type === "red_card",
+      ).length;
+
+      return {
+        game_id: id,
+        player_id: player.id,
+        lineup_type: startMinute === 0 ? "starter" : "substitute",
+        minutes_played: minutesPlayed,
+        goals,
+        assists: 0,
+        yellow_cards: yellowCards,
+        red_cards: redCards,
+        is_finalized: true,
+      };
+    });
+
+    if (rows.length > 0) {
+      const { error } = await supabase.from("game_final_stats").insert(rows);
+      if (error) {
+        throw error;
+      }
+    }
+  }
+
   async function finalizeGame() {
     if (!game) return;
-    setFinalizing(true);
-
-    const { error } = await supabase
-      .from("games")
-      .update({
-        status: "completed",
-        score_home: score.home,
-        score_away: score.away,
-      })
-      .eq("id", id);
-
-    if (error) {
-      toast.error("Erro ao finalizar jogo.");
-    } else {
-      toast.success("Jogo finalizado!");
-      router.push(`/games/${id}`);
+    if (phase !== "review") {
+      toast.error("Termina a 2ª parte antes de finalizar o jogo.");
+      return;
     }
 
-    setFinalizing(false);
+    const confirmSave = window.confirm(
+      "Confirmas que os eventos e o marcador estão corretos para guardar nas estatísticas?",
+    );
+
+    if (!confirmSave) return;
+
+    setFinalizing(true);
+
+    try {
+      await persistFinalStats(minute);
+
+      const { error } = await supabase
+        .from("games")
+        .update({
+          status: "completed",
+          score_home: score.home,
+          score_away: score.away,
+        })
+        .eq("id", id);
+
+      if (error) {
+        throw error;
+      }
+
+      setClockRunning(false);
+      setPhase("completed");
+      toast.success("Jogo finalizado e estatísticas guardadas!");
+      router.push(`/games/${id}`);
+    } catch {
+      toast.error("Erro ao finalizar jogo.");
+    } finally {
+      setFinalizing(false);
+    }
   }
 
   const playersOnField = convocatedPlayers.filter((p) => p.isOnField);
@@ -353,6 +508,25 @@ export default function LiveGamePage() {
   }
 
   const isFinalized = game.status === "completed";
+  const isLivePhase = phase === "first_half" || phase === "second_half";
+  const gameStartAt = game.game_datetime ? parseISO(game.game_datetime) : null;
+  const liveUnlocked = gameStartAt ? new Date() >= new Date(gameStartAt.getTime() - 10 * 60 * 1000) : true;
+
+  if (!isFinalized && !liveUnlocked) {
+    return (
+      <div className="p-4 md:p-8 max-w-2xl mx-auto">
+        <button
+          onClick={() => router.back()}
+          className="flex items-center gap-2 text-slate-500 hover:text-slate-700 text-sm mb-4"
+        >
+          <ArrowLeft size={16} /> Voltar
+        </button>
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-800">
+          O live deste jogo só fica disponível 10 minutos antes do início.
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 md:p-8 max-w-2xl mx-auto pb-24">
@@ -374,6 +548,9 @@ export default function LiveGamePage() {
         <div className="text-5xl font-black tracking-tight">
           {score.home} – {score.away}
         </div>
+        <p className="text-slate-300 text-sm mt-2">
+          Relógio: {formatClock(clockSeconds)} · Minuto {minute}&apos;
+        </p>
         {isFinalized && (
           <span className="mt-2 inline-block text-xs bg-emerald-500 text-white px-3 py-0.5 rounded-full">
             Finalizado
@@ -383,25 +560,88 @@ export default function LiveGamePage() {
 
       {/* Minuto */}
       {!isFinalized && (
-        <div className="flex items-center gap-3 mb-5 p-3 bg-slate-50 rounded-xl border border-slate-200">
-          <span className="text-sm font-medium text-slate-600 flex-1">
-            Minuto
-          </span>
-          <button
-            onClick={() => setMinute((m) => Math.max(0, m - 1))}
-            className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center"
-          >
-            <Minus size={14} />
-          </button>
-          <span className="w-10 text-center font-bold text-lg text-slate-900">
-            {minute}&apos;
-          </span>
-          <button
-            onClick={() => setMinute((m) => m + 1)}
-            className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center"
-          >
-            <Plus size={14} />
-          </button>
+        <div className="mb-5 p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-medium text-slate-600 flex-1">
+              Minuto de jogo
+            </span>
+            <button
+              onClick={() => setMinute((m) => Math.max(0, m - 1))}
+              className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center"
+            >
+              <Minus size={14} />
+            </button>
+            <span className="w-10 text-center font-bold text-lg text-slate-900">
+              {minute}&apos;
+            </span>
+            <button
+              onClick={() => setMinute((m) => m + 1)}
+              className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center"
+            >
+              <Plus size={14} />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 gap-2">
+            {phase === "pre_match" && (
+              <Button
+                onClick={() => {
+                  setPhase("first_half");
+                  setClockRunning(true);
+                }}
+                className="w-full bg-emerald-600 hover:bg-emerald-700"
+              >
+                Iniciar 1ª parte
+              </Button>
+            )}
+
+            {phase === "first_half" && (
+              <Button
+                onClick={() => {
+                  setClockRunning(false);
+                  setPhase("halftime");
+                }}
+                className="w-full bg-amber-600 hover:bg-amber-700"
+              >
+                Terminar 1ª parte
+              </Button>
+            )}
+
+            {phase === "halftime" && (
+              <Button
+                onClick={() => {
+                  setClockRunning(true);
+                  setPhase("second_half");
+                }}
+                className="w-full bg-blue-600 hover:bg-blue-700"
+              >
+                Iniciar 2ª parte
+              </Button>
+            )}
+
+            {phase === "second_half" && (
+              <Button
+                onClick={() => {
+                  setClockRunning(false);
+                  setPhase("review");
+                }}
+                className="w-full bg-slate-800 hover:bg-slate-700"
+              >
+                Terminar 2ª parte
+              </Button>
+            )}
+          </div>
+
+          {phase === "halftime" && (
+            <p className="text-xs text-center text-amber-700">
+              Intervalo ativo. Retoma o jogo para continuar a registar eventos.
+            </p>
+          )}
+          {phase === "review" && (
+            <p className="text-xs text-center text-slate-600">
+              Revê os dados e finaliza para gravar estatísticas.
+            </p>
+          )}
         </div>
       )}
 
@@ -412,6 +652,7 @@ export default function LiveGamePage() {
             onClick={() =>
               setEventModal({ type: "goal", isOpponent: false })
             }
+            disabled={!isLivePhase}
             className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm font-medium hover:bg-emerald-100 transition-colors"
           >
             ⚽ Golo nosso
@@ -420,6 +661,7 @@ export default function LiveGamePage() {
             onClick={() =>
               setEventModal({ type: "goal", isOpponent: true })
             }
+            disabled={!isLivePhase}
             className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm font-medium hover:bg-red-100 transition-colors"
           >
             ⚽ Golo adversário
@@ -428,6 +670,7 @@ export default function LiveGamePage() {
             onClick={() =>
               setEventModal({ type: "yellow_card", isOpponent: false })
             }
+            disabled={!isLivePhase}
             className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 text-sm font-medium hover:bg-amber-100 transition-colors"
           >
             🟨 Amarelo
@@ -436,6 +679,7 @@ export default function LiveGamePage() {
             onClick={() =>
               setEventModal({ type: "red_card", isOpponent: false })
             }
+            disabled={!isLivePhase}
             className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm font-medium hover:bg-red-100 transition-colors"
           >
             🟥 Vermelho
@@ -444,6 +688,7 @@ export default function LiveGamePage() {
             onClick={() =>
               setEventModal({ type: "substitution", isOpponent: false })
             }
+            disabled={!isLivePhase}
             className="col-span-2 p-3 rounded-xl bg-blue-50 border border-blue-200 text-blue-700 text-sm font-medium hover:bg-blue-100 transition-colors"
           >
             🔄 Substituição
@@ -539,7 +784,7 @@ export default function LiveGamePage() {
       {!isFinalized && (
         <Button
           onClick={finalizeGame}
-          disabled={finalizing}
+          disabled={finalizing || phase !== "review"}
           className="w-full bg-slate-900 hover:bg-slate-800"
         >
           {finalizing ? (

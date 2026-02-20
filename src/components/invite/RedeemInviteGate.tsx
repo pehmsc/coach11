@@ -10,6 +10,7 @@ export default function RedeemInviteGate() {
   const [, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const lastProcessedCodeRef = useRef<string | null>(null);
+  const syncAttemptedRef = useRef(false);
 
   const redeemInvite = useCallback(
     async (code: string) => {
@@ -99,6 +100,29 @@ export default function RedeemInviteGate() {
     lastProcessedCodeRef.current = code;
     void redeemInvite(code);
   }, [redeemInvite, sp]);
+
+  useEffect(() => {
+    const codeFromUrl =
+      sp.get("code") ?? sp.get("inviteCode") ?? sp.get("invite_code");
+    const localCode = localStorage.getItem("inviteCode");
+
+    if (codeFromUrl || localCode || syncAttemptedRef.current) return;
+
+    syncAttemptedRef.current = true;
+
+    (async () => {
+      try {
+        const res = await fetch("/api/invite/sync", { method: "POST" });
+        const payload = await res.json().catch(() => ({}));
+
+        if (res.ok && payload?.linked) {
+          router.refresh();
+        }
+      } catch {
+        // Silencioso: sync é apenas fallback.
+      }
+    })();
+  }, [router, sp]);
 
   if (!error) return null;
 

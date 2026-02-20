@@ -5,7 +5,21 @@ import { NextResponse } from "next/server";
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/dashboard";
+  const rawNext = searchParams.get("next");
+
+  let next = "/dashboard";
+  if (rawNext) {
+    try {
+      const decoded = decodeURIComponent(rawNext);
+      if (decoded.startsWith("/")) {
+        next = decoded;
+      }
+    } catch {
+      if (rawNext.startsWith("/")) {
+        next = rawNext;
+      }
+    }
+  }
 
   if (!code) {
     return NextResponse.redirect(`${origin}/login?error=no_code`);

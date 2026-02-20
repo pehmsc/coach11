@@ -53,14 +53,14 @@ function LoginForm() {
     const supabase = createClient();
 
     // Preservar o código de convite através do OAuth passando-o no next param
-    const next = inviteCode
-      ? `/dashboard?code=${encodeURIComponent(inviteCode)}`
-      : "/dashboard";
+    const next = inviteCode ? `/dashboard?code=${inviteCode}` : "/dashboard";
+    const callbackUrl = new URL("/auth/callback", window.location.origin);
+    callbackUrl.searchParams.set("next", next);
 
     await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+        redirectTo: callbackUrl.toString(),
       },
     });
   }

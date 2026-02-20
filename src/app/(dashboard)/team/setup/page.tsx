@@ -111,6 +111,7 @@ export default function TeamSetupPage() {
 
   // Treinadores convidados
   const [staffInvites, setStaffInvites] = useState<StaffInvite[]>([]);
+  const [activeStaffProfileIds, setActiveStaffProfileIds] = useState<string[]>([]);
   const [showStaffForm, setShowStaffForm] = useState(false);
   const [staffForm, setStaffForm] = useState(EMPTY_STAFF_FORM);
   const [sendingInvite, setSendingInvite] = useState(false);
@@ -134,11 +135,44 @@ export default function TeamSetupPage() {
     } = await supabase.auth.getUser();
     if (!user) return;
 
-    const { data: ag } = await supabase
+    let preferredTeamId: string | null = null;
+
+    let { data: ag } = await supabase
       .from("age_groups")
       .select("*, teams(*)")
       .eq("coordinator_id", user.id)
-      .single();
+      .maybeSingle();
+
+    // Conta de treinador convidado (team_staff)
+    if (!ag) {
+      const { data: staffLink } = await supabase
+        .from("team_staff")
+        .select("team_id")
+        .eq("profile_id", user.id)
+        .limit(1)
+        .maybeSingle();
+
+      if (staffLink?.team_id) {
+        preferredTeamId = staffLink.team_id;
+        const { data: team } = await supabase
+          .from("teams")
+          .select("id, age_group_id")
+          .eq("id", staffLink.team_id)
+          .maybeSingle();
+
+        if (team?.age_group_id) {
+          const { data: fallbackAgeGroup } = await supabase
+            .from("age_groups")
+            .select("*, teams(*)")
+            .eq("id", team.age_group_id)
+            .maybeSingle();
+
+          if (fallbackAgeGroup) {
+            ag = fallbackAgeGroup;
+          }
+        }
+      }
+    }
 
     if (ag) {
       setExistingAgeGroup(ag);
@@ -148,7 +182,10 @@ export default function TeamSetupPage() {
       setSeason(ag.season);
       setLogoUrl(ag.club_logo_url || "");
 
-      let firstTeam = ag.teams?.[0];
+      let firstTeam =
+        (preferredTeamId
+          ? ag.teams?.find((t: { id: string }) => t.id === preferredTeamId)
+          : undefined) || ag.teams?.[0];
 
       // Auto-criar equipa se não existir (para coordenadores antigos sem equipa)
       if (!firstTeam) {
@@ -175,6 +212,12 @@ export default function TeamSetupPage() {
           .order("player_type")
           .order("piece_type");
         setKitPieces(kits || []);
+
+        const { data: teamStaff } = await supabase
+          .from("team_staff")
+          .select("profile_id")
+          .eq("team_id", firstTeam.id);
+        setActiveStaffProfileIds((teamStaff || []).map((s) => s.profile_id));
       }
 
       const { data: invites } = await supabase
@@ -862,7 +905,13 @@ export default function TeamSetupPage() {
 
             {staffInvites.length > 0 ? (
               <div className="space-y-2">
-                {staffInvites.map((invite) => (
+                {staffInvites.map((invite) => {
+                  const isActiveMember =
+                    !!invite.accepted_at &&
+                    !!invite.accepted_by &&
+                    activeStaffProfileIds.includes(invite.accepted_by);
+
+                  return (
                   <div
                     key={invite.id}
                     className="rounded-xl border border-slate-100 bg-slate-50"
@@ -884,9 +933,13 @@ export default function TeamSetupPage() {
                         </p>
                       </div>
                       <div className="flex items-center gap-1.5 flex-shrink-0">
-                        {invite.accepted_at ? (
+                        {isActiveMember ? (
                           <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium">
                             Activo
+                          </span>
+                        ) : invite.accepted_at ? (
+                          <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">
+                            Aceite (pendente)
                           </span>
                         ) : (
                           <>
@@ -957,7 +1010,8 @@ export default function TeamSetupPage() {
                       </div>
                     )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               !showStaffForm && (

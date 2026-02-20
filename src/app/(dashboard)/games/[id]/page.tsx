@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { format, parseISO } from "date-fns";
+import { differenceInMinutes, format, parseISO, subMinutes } from "date-fns";
 import { pt } from "date-fns/locale";
 import {
   ArrowLeft,
@@ -32,6 +32,11 @@ export default function GameDetailPage() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
+  const [confirmingConvocation, setConfirmingConvocation] = useState(false);
+  const [convocationStatus, setConvocationStatus] = useState<"draft" | "confirmed" | "closed">(
+    "draft",
+  );
+  const [now, setNow] = useState(() => new Date());
   const [game, setGame] = useState<Game | null>(null);
   const [players, setPlayers] = useState<PlayerWithStatus[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -40,6 +45,11 @@ export default function GameDetailPage() {
     if (id) loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  useEffect(() => {
+    const interval = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(interval);
+  }, []);
 
   async function loadData() {
     setLoading(true);
@@ -69,9 +79,15 @@ export default function GameDetailPage() {
     // Buscar convocatória (se existir)
     const { data: conv } = await supabase
       .from("convocations")
-      .select("id")
+      .select("id, status")
       .eq("game_id", id)
       .maybeSingle();
+
+    if (conv?.status === "confirmed" || conv?.status === "closed") {
+      setConvocationStatus(conv.status);
+    } else {
+      setConvocationStatus("draft");
+    }
 
     if (!agId) {
       setLoading(false);
@@ -159,6 +175,7 @@ export default function GameDetailPage() {
       if (!res.ok || typeof payload?.isConvocated !== "boolean") {
         setError(payload?.error || "Erro ao atualizar convocatória.");
       } else {
+        setConvocationStatus("draft");
         setPlayers((prev) =>
           prev.map((p) =>
             p.id === player.id
@@ -171,6 +188,29 @@ export default function GameDetailPage() {
       setError("Erro de ligação ao atualizar convocatória.");
     } finally {
       setSaving(null);
+    }
+  }
+
+  async function handleConfirmConvocation() {
+    setConfirmingConvocation(true);
+    setError(null);
+
+    try {
+      const res = await fetch(`/api/games/${id}/convocation/confirm`, {
+        method: "POST",
+      });
+      const payload = await res.json().catch(() => ({}));
+
+      if (!res.ok || payload?.status !== "confirmed") {
+        setError(payload?.error || "Erro ao guardar convocatória.");
+        return;
+      }
+
+      setConvocationStatus("confirmed");
+    } catch {
+      setError("Erro de ligação ao guardar convocatória.");
+    } finally {
+      setConfirmingConvocation(false);
     }
   }
 
@@ -208,6 +248,12 @@ export default function GameDetailPage() {
     : "—";
 
   const isCompetition = !!game.competition_id;
+  const gameDateTime = game.game_datetime ? parseISO(game.game_datetime) : null;
+  const liveUnlockAt = gameDateTime ? subMinutes(gameDateTime, 10) : null;
+  const canStartLive = !liveUnlockAt || now >= liveUnlockAt;
+  const minutesUntilLive = liveUnlockAt
+    ? Math.max(0, differenceInMinutes(liveUnlockAt, now))
+    : 0;
 
   return (
     <div className="p-4 md:p-8 max-w-2xl mx-auto">
@@ -253,12 +299,23 @@ export default function GameDetailPage() {
 
       {/* Live stats button — só disponível se jogo agendado */}
       {game.status === "scheduled" && (
-        <Button
-          onClick={() => router.push(`/games/${id}/live`)}
-          className="w-full mb-5 bg-emerald-600 hover:bg-emerald-700"
-        >
-          <Play size={16} className="mr-2" /> Iniciar jogo ao vivo
-        </Button>
+        <div className="mb-5 space-y-2">
+          <Button
+            onClick={() => router.push(`/games/${id}/live`)}
+            disabled={!canStartLive}
+            className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:text-slate-500"
+          >
+            <Play size={16} className="mr-2" />
+            {canStartLive
+              ? "Iniciar jogo ao vivo"
+              : `Disponível em ${minutesUntilLive} min`}
+          </Button>
+          {!canStartLive && (
+            <p className="text-xs text-slate-500 text-center">
+              O live fica disponível 10 minutos antes da hora do jogo.
+            </p>
+          )}
+        </div>
       )}
       {game.status === "completed" && (
         <div className="flex items-center justify-between p-4 rounded-xl bg-slate-50 border border-slate-200 mb-5">
@@ -282,9 +339,26 @@ export default function GameDetailPage() {
           <Shield size={18} className="text-slate-600" />
           <h2 className="font-bold text-slate-900">Convocatória</h2>
         </div>
-        <span className="text-sm text-slate-500">
-          {convocatedCount} convocado{convocatedCount !== 1 ? "s" : ""}
-        </span>
+        <div className="text-right">
+          <span className="text-sm text-slate-500 block">
+            {convocatedCount} convocado{convocatedCount !== 1 ? "s" : ""}
+          </span>
+          <span
+            className={`text-[11px] font-semibold ${
+              convocationStatus === "confirmed"
+                ? "text-emerald-600"
+                : convocationStatus === "closed"
+                  ? "text-slate-500"
+                  : "text-amber-600"
+            }`}
+          >
+            {convocationStatus === "confirmed"
+              ? "Guardada"
+              : convocationStatus === "closed"
+                ? "Fechada"
+                : "Rascunho"}
+          </span>
+        </div>
       </div>
 
       {error && (
@@ -345,6 +419,19 @@ export default function GameDetailPage() {
           Jogadores com jogo de competição no mesmo dia não podem ser convocados.
         </p>
       )}
+
+      <Button
+        onClick={handleConfirmConvocation}
+        disabled={confirmingConvocation || convocatedCount === 0 || convocationStatus === "closed"}
+        className="w-full mt-5 bg-slate-900 hover:bg-slate-800"
+      >
+        {confirmingConvocation ? (
+          <Loader2 size={16} className="mr-2 animate-spin" />
+        ) : (
+          <Check size={16} className="mr-2" />
+        )}
+        Guardar convocatória
+      </Button>
     </div>
   );
 }
