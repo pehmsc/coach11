@@ -38,12 +38,20 @@ export async function POST(request: Request) {
 
   // 2. Verificar se já está associado
   // team_staff usa: team_id (= age_group_id) e profile_id (= auth.uid)
-  const { data: existingStaff } = await supabase
+  const { data: existingStaff, error: existingError } = await supabase
     .from("team_staff")
     .select("id")
     .eq("profile_id", user.id)
     .eq("team_id", invite.age_group_id)
-    .single();
+    .maybeSingle();
+
+  if (existingError) {
+    console.error("Erro ao verificar associação existente:", existingError);
+    return NextResponse.json(
+      { error: "Erro ao processar convite. Tenta novamente." },
+      { status: 500 },
+    );
+  }
 
   if (existingStaff) {
     return NextResponse.json(

@@ -113,7 +113,7 @@ export async function POST(request: Request) {
       ? `${proto}://${host}`
       : process.env.NEXT_PUBLIC_APP_URL || "https://coach11.vercel.app";
 
-    const registerUrl = `${appUrl}/signup?code=${inviteCode}&email=${encodeURIComponent(email)}`;
+    const inviteUrl = `${appUrl}/invite?code=${inviteCode}&email=${encodeURIComponent(email)}`;
 
     // 📧 Configuração Resend
     if (!process.env.RESEND_API_KEY) {
@@ -154,7 +154,7 @@ export async function POST(request: Request) {
                   ${inviteCode}
                 </span>
               </div>
-              <a href="${registerUrl}"
+              <a href="${inviteUrl}"
                 style="display:block;background:#059669;color:white;text-decoration:none;text-align:center;padding:12px;border-radius:10px;">
                 Criar conta e aceitar convite →
               </a>
