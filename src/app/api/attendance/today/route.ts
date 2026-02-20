@@ -25,7 +25,16 @@ function isRelationMissing(error: unknown) {
   const code = "code" in error ? String((error as { code?: string }).code || "") : "";
   const message =
     "message" in error ? String((error as { message?: string }).message || "") : "";
-  return code === "42P01" || message.toLowerCase().includes("relation");
+  const lowered = message.toLowerCase();
+  return (
+    code === "42P01" ||
+    code === "PGRST204" ||
+    code === "PGRST205" ||
+    lowered.includes("relation") ||
+    lowered.includes("does not exist") ||
+    lowered.includes("could not find the table") ||
+    lowered.includes("schema cache")
+  );
 }
 
 function isMissingColumn(error: unknown) {
@@ -181,20 +190,60 @@ async function readAttendance(
   sessionId: string,
 ) {
   const tablePriority = ["attendance_records", "training_attendance"] as const;
+  const fkColumns = ["training_session_id", "session_id"] as const;
+  let criticalError: unknown = null;
 
   for (const table of tablePriority) {
-    const { data, error } = await admin
-      .from(table)
-      .select("player_id, status")
-      .eq("training_session_id", sessionId);
+    for (const fkColumn of fkColumns) {
+      const { data, error } = await admin
+        .from(table)
+        .select("*")
+        .eq(fkColumn, sessionId);
 
-    if (!error) {
-      return { table, rows: data || [] };
-    }
+      if (!error) {
+        const rows = (data || [])
+          .map((rawRow) => {
+            const row = rawRow as Record<string, unknown>;
+            const playerId =
+              typeof row.player_id === "string"
+                ? row.player_id
+                : typeof row.athlete_id === "string"
+                  ? row.athlete_id
+                  : null;
+            const status =
+              typeof row.status === "string"
+                ? row.status
+                : typeof row.attendance_status === "string"
+                  ? row.attendance_status
+                  : null;
 
-    if (!isRelationMissing(error)) {
-      return { table, rows: [], error };
+            return {
+              player_id: playerId,
+              status,
+            };
+          })
+          .filter((row) => typeof row.player_id === "string");
+
+        return { table, rows };
+      }
+
+      const schemaCompatError = isRelationMissing(error) || isMissingColumn(error);
+      if (!schemaCompatError && !criticalError) {
+        criticalError = error;
+      }
+
+      // Se for erro estrutural esperado, tenta próxima variação (FK/tabela).
+      if (schemaCompatError) {
+        continue;
+      }
+
+      // Erro inesperado: tentar próxima tabela, mas guardar para retorno final.
+      break;
     }
+  }
+
+  if (criticalError) {
+    return { table: null, rows: [], error: criticalError };
   }
 
   return { table: null, rows: [] };
