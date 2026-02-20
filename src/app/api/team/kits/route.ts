@@ -30,6 +30,11 @@ function isPieceType(value: unknown): value is PieceType {
   return value === "shirt" || value === "shorts" || value === "socks";
 }
 
+function pieceTypeVariants(pieceType: PieceType) {
+  if (pieceType === "shirt") return ["shirt", "jersey"];
+  return [pieceType];
+}
+
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
@@ -43,9 +48,15 @@ export async function POST(request: Request) {
 
     const body = (await request.json().catch(() => null)) as Payload | null;
     const teamId = typeof body?.teamId === "string" ? body.teamId : null;
-    const kitNumber =
-      typeof body?.kitNumber === "number" && [1, 2, 3].includes(body.kitNumber)
+    const rawKitNumber =
+      typeof body?.kitNumber === "number"
         ? body.kitNumber
+        : typeof body?.kitNumber === "string"
+          ? Number(body.kitNumber)
+          : null;
+    const kitNumber =
+      typeof rawKitNumber === "number" && [1, 2, 3].includes(rawKitNumber)
+        ? rawKitNumber
         : null;
     const playerType = isPlayerType(body?.playerType) ? body.playerType : null;
     const pieceType = isPieceType(body?.pieceType) ? body.pieceType : null;
@@ -103,23 +114,28 @@ export async function POST(request: Request) {
       );
     }
 
+    const candidatePieceTypes = pieceTypeVariants(pieceType);
+
     const { data: existingPieces } = await admin
       .from("kit_pieces")
       .select("*")
       .eq("team_id", team.id)
       .eq("kit_number", kitNumber)
       .eq("player_type", playerType)
-      .eq("piece_type", pieceType)
+      .in("piece_type", candidatePieceTypes)
       .order("created_at", { ascending: true });
 
     if ((existingPieces || []).length > 0) {
+      const pieceTypesInDb = Array.from(
+        new Set((existingPieces || []).map((piece) => piece.piece_type)),
+      );
       const { data: updatedPieces, error: updateError } = await admin
         .from("kit_pieces")
         .update({ color_hex: colorHex })
         .eq("team_id", team.id)
         .eq("kit_number", kitNumber)
         .eq("player_type", playerType)
-        .eq("piece_type", pieceType)
+        .in("piece_type", pieceTypesInDb)
         .select("*");
 
       if (updateError || !updatedPieces || updatedPieces.length === 0) {
@@ -132,17 +148,35 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, piece: updatedPieces[0] });
     }
 
-    const { data: insertedPiece, error: insertError } = await admin
+    const insertPayload = {
+      team_id: team.id,
+      kit_number: kitNumber,
+      player_type: playerType,
+      piece_type: pieceType,
+      color_hex: colorHex,
+    };
+
+    let insertedPiece: Record<string, unknown> | null = null;
+    let insertError: { code?: string; message?: string } | null = null;
+
+    const insertResult = await admin
       .from("kit_pieces")
-      .insert({
-        team_id: team.id,
-        kit_number: kitNumber,
-        player_type: playerType,
-        piece_type: pieceType,
-        color_hex: colorHex,
-      })
+      .insert(insertPayload)
       .select("*")
       .single();
+    insertedPiece = insertResult.data as Record<string, unknown> | null;
+    insertError = insertResult.error;
+
+    // Compatibilidade com schemas antigos que usam "jersey" em vez de "shirt".
+    if (insertError && pieceType === "shirt") {
+      const retry = await admin
+        .from("kit_pieces")
+        .insert({ ...insertPayload, piece_type: "jersey" })
+        .select("*")
+        .single();
+      insertedPiece = retry.data as Record<string, unknown> | null;
+      insertError = retry.error;
+    }
 
     if (insertError || !insertedPiece) {
       return NextResponse.json(

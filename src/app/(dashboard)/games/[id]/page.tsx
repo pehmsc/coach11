@@ -35,7 +35,7 @@ interface KitPieceRow {
   id: string;
   kit_number: number;
   player_type: "field" | "goalkeeper";
-  piece_type: "shirt" | "shorts" | "socks";
+  piece_type: "shirt" | "jersey" | "shorts" | "socks";
   color_name: string | null;
   color_hex: string | null;
 }
@@ -58,11 +58,23 @@ const EMPTY_KIT_SELECTION: KitSelection = {
   gk_socks_kit_id: null,
 };
 
-const PIECE_LABEL: Record<KitPieceRow["piece_type"], string> = {
+const UI_PIECE_TYPES = ["shirt", "shorts", "socks"] as const;
+
+const PIECE_LABEL: Record<(typeof UI_PIECE_TYPES)[number], string> = {
   shirt: "Camisola",
   shorts: "Calções",
   socks: "Meias",
 };
+
+function samePieceType(
+  dbPieceType: KitPieceRow["piece_type"],
+  requestedPieceType: (typeof UI_PIECE_TYPES)[number],
+) {
+  if (requestedPieceType === "shirt") {
+    return dbPieceType === "shirt" || dbPieceType === "jersey";
+  }
+  return dbPieceType === requestedPieceType;
+}
 
 export default function GameDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -143,10 +155,10 @@ export default function GameDetailPage() {
 
   function getKitOptions(
     playerType: KitPieceRow["player_type"],
-    pieceType: KitPieceRow["piece_type"],
+    pieceType: (typeof UI_PIECE_TYPES)[number],
   ) {
     return teamKits.filter(
-      (piece) => piece.player_type === playerType && piece.piece_type === pieceType,
+      (piece) => piece.player_type === playerType && samePieceType(piece.piece_type, pieceType),
     );
   }
 
@@ -391,7 +403,7 @@ export default function GameDetailPage() {
               {section.title}
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              {(["shirt", "shorts", "socks"] as const).map((pieceType) => {
+              {UI_PIECE_TYPES.map((pieceType) => {
                 const field = `${section.prefix}_${pieceType === "shirt" ? "jersey" : pieceType}_kit_id` as keyof KitSelection;
                 const options = getKitOptions(section.playerType, pieceType);
                 const selectedValue = kitSelection[field];

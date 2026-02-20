@@ -46,10 +46,23 @@ export default async function DashboardPage() {
 
   const { data: managedAgeGroups } = await (admin ?? supabase)
     .from("age_groups")
-    .select("*, teams(*)")
+    .select("id, club_name, name, club_logo_url, teams(id)")
     .eq("coordinator_id", user.id);
 
   let firstTeamId: string | null = managedAgeGroups?.[0]?.teams?.[0]?.id ?? null;
+  let activeAgeGroup: {
+    id: string;
+    club_name: string;
+    name: string;
+    club_logo_url: string | null;
+  } | null = managedAgeGroups?.[0]
+    ? {
+        id: managedAgeGroups[0].id,
+        club_name: managedAgeGroups[0].club_name,
+        name: managedAgeGroups[0].name,
+        club_logo_url: managedAgeGroups[0].club_logo_url ?? null,
+      }
+    : null;
 
   // Conta de staff convidado (não coordenador)
   if (!firstTeamId) {
@@ -61,6 +74,24 @@ export default async function DashboardPage() {
       .limit(1)
       .maybeSingle();
     firstTeamId = staffTeam?.team_id ?? null;
+
+    if (staffTeam?.team_id) {
+      const { data: staffTeamRow } = await (admin ?? supabase)
+        .from("teams")
+        .select("age_group_id")
+        .eq("id", staffTeam.team_id)
+        .maybeSingle();
+
+      if (staffTeamRow?.age_group_id) {
+        const { data: staffAgeGroup } = await (admin ?? supabase)
+          .from("age_groups")
+          .select("id, club_name, name, club_logo_url")
+          .eq("id", staffTeamRow.age_group_id)
+          .maybeSingle();
+
+        activeAgeGroup = staffAgeGroup ?? activeAgeGroup;
+      }
+    }
   }
 
   const hasSetup = !!firstTeamId;
@@ -81,6 +112,8 @@ export default async function DashboardPage() {
       .lte("session_date", in7days)
       .neq("status", "completed")
       .order("session_date", { ascending: true })
+      .order("start_time", { ascending: true, nullsFirst: false })
+      .order("created_at", { ascending: true })
       .limit(3);
     upcomingTrainings = data || [];
   }
@@ -101,9 +134,10 @@ export default async function DashboardPage() {
   }
 
   // Treino de hoje especificamente (para presenças)
-  const todayTraining = upcomingTrainings.find(
-    (t) => t.session_date === todayDate,
-  );
+  const todayTrainings = upcomingTrainings.filter((t) => t.session_date === todayDate);
+  const todayTraining =
+    todayTrainings.find((training) => training.status !== "completed") ||
+    todayTrainings[0];
   const todayTrainingDone = todayTraining?.status === "completed";
 
   const today = format(new Date(), "EEEE, d 'de' MMMM", { locale: pt });
@@ -150,6 +184,18 @@ export default async function DashboardPage() {
             Olá, {firstName} 👋
           </h1>
         </div>
+
+        {activeAgeGroup?.club_logo_url && (
+          <div className="mb-6">
+            <div className="w-24 h-24 mx-auto rounded-2xl border border-slate-200 bg-white flex items-center justify-center overflow-hidden p-2">
+              <img
+                src={activeAgeGroup.club_logo_url}
+                alt={`Logo ${activeAgeGroup.club_name}`}
+                className="max-w-full max-h-full object-contain object-center"
+              />
+            </div>
+          </div>
+        )}
 
         {/* Setup pendente */}
         {!hasSetup && (

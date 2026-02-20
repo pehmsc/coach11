@@ -66,6 +66,19 @@ const PIECE_LABELS: Record<PieceType, string> = { shirt: "Camisola", shorts: "Ca
 const PLAYER_TYPES: PlayerType[] = ["field", "goalkeeper"];
 const PLAYER_TYPE_LABELS: Record<PlayerType, string> = { field: "Campo", goalkeeper: "Guarda-redes" };
 
+function normalizePieceTypeForComparison(value: string | undefined) {
+  if (!value) return "";
+  return value === "jersey" ? "shirt" : value;
+}
+
+function samePieceType(dbPieceType: string | undefined, requestedPieceType: string) {
+  if (!dbPieceType) return false;
+  return (
+    normalizePieceTypeForComparison(dbPieceType) ===
+    normalizePieceTypeForComparison(requestedPieceType)
+  );
+}
+
 interface StaffInvite {
   id: string;
   first_name: string;
@@ -292,6 +305,7 @@ export default function TeamSetupPage() {
       const res = await fetch("/api/team/logo", {
         method: "POST",
         body: formData,
+        credentials: "include",
       });
       const payload = await res.json().catch(() => ({}));
 
@@ -318,7 +332,7 @@ export default function TeamSetupPage() {
       (k) =>
         k.kit_number === kitNum &&
         k.player_type === playerType &&
-        k.piece_type === pieceType,
+        samePieceType(k.piece_type, pieceType),
     );
     if (matches.length === 0) return undefined;
     return matches.reduce((latest, current) =>
@@ -352,6 +366,7 @@ export default function TeamSetupPage() {
       const res = await fetch("/api/team/kits", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           teamId,
           kitNumber: kitNum,
@@ -375,7 +390,7 @@ export default function TeamSetupPage() {
               piece.team_id === savedPiece.team_id &&
               piece.kit_number === savedPiece.kit_number &&
               piece.player_type === savedPiece.player_type &&
-              piece.piece_type === savedPiece.piece_type
+              samePieceType(piece.piece_type, savedPiece.piece_type)
             ),
         );
         return [...filtered, savedPiece];
@@ -647,7 +662,7 @@ export default function TeamSetupPage() {
                   )}
                 </Button>
                 <p className="text-xs text-slate-400 mt-1.5">
-                  PNG, JPG ou SVG · Máx. 2MB
+                  PNG, JPG, WEBP ou SVG · Máx. 5MB
                 </p>
               </div>
             </div>

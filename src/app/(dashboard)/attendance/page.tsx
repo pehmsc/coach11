@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { useEffect, useState } from "react";
 import { format } from "date-fns";
 import { pt } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
@@ -11,12 +10,33 @@ import type { Player, AgeGroup } from "@/types/database";
 type AttendanceStatus = "present" | "absent" | "injured";
 type AttendanceState = Record<string, AttendanceStatus>;
 
+interface AttendanceApiSession {
+  id: string;
+}
+
+interface AttendanceApiResponse {
+  success?: boolean;
+  linked?: boolean;
+  noSession?: boolean;
+  ageGroup?: AgeGroup | null;
+  players?: Player[];
+  session?: AttendanceApiSession | null;
+  attendance?: Record<string, AttendanceStatus>;
+  error?: string;
+}
+
+const VALID_STATUSES: AttendanceStatus[] = ["present", "absent", "injured"];
+
+function isValidStatus(value: unknown): value is AttendanceStatus {
+  return typeof value === "string" && VALID_STATUSES.includes(value as AttendanceStatus);
+}
+
 export default function AttendancePage() {
-  const supabase = useMemo(() => createClient(), []);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [noSession, setNoSession] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [players, setPlayers] = useState<Player[]>([]);
   const [ageGroup, setAgeGroup] = useState<AgeGroup | null>(null);
   const [attendance, setAttendance] = useState<AttendanceState>({});
@@ -26,105 +46,64 @@ export default function AttendancePage() {
   const todayDate = format(new Date(), "yyyy-MM-dd");
 
   useEffect(() => {
-    loadData();
+    void loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function loadData() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
+    setLoading(true);
+    setError(null);
 
-    // Buscar escalão e primeira equipa
-    const { data: ag } = await supabase
-      .from("age_groups")
-      .select("*, teams(*)")
-      .eq("coordinator_id", user.id)
-      .single();
+    try {
+      const res = await fetch(`/api/attendance/today?date=${todayDate}`, {
+        cache: "no-store",
+        credentials: "include",
+      });
+      const payload = (await res.json().catch(() => ({}))) as AttendanceApiResponse;
 
-    if (!ag) {
-      setLoading(false);
-      return;
-    }
-    setAgeGroup(ag);
-
-    const firstTeam = ag.teams?.[0];
-    if (!firstTeam) {
-      setLoading(false);
-      return;
-    }
-    // Buscar todos os atletas ACTIVOS do escalão
-    const { data: playersData } = await supabase
-      .from("players")
-      .select("*")
-      .eq("age_group_id", ag.id)
-      .eq("status", "active")
-      .order("first_name");
-
-    const activePlayers = playersData || [];
-    setPlayers(activePlayers);
-
-    // Procurar sessão de hoje — consulta por age_group_id para ser consistente com o calendário
-    const { data: existingSession } = await supabase
-      .from("training_sessions")
-      .select("id")
-      .eq("age_group_id", ag.id)
-      .eq("session_date", todayDate)
-      .maybeSingle();
-
-    if (!existingSession) {
-      // Criar sessão para hoje com age_group_id (consistente com o calendário)
-      const { data: newSession } = await supabase
-        .from("training_sessions")
-        .insert({
-          age_group_id: ag.id,
-          team_id: firstTeam.id,
-          session_date: todayDate,
-          start_time: "18:00",
-          status: "scheduled",
-        })
-        .select()
-        .single();
-
-      if (!newSession) {
+      if (!res.ok) {
+        setError(payload?.error || "Erro ao carregar presenças.");
+        setPlayers([]);
+        setAgeGroup(null);
+        setSessionId(null);
         setNoSession(true);
-        setLoading(false);
         return;
       }
-      setSessionId(newSession.id);
-    } else {
-      setSessionId(existingSession.id);
-    }
 
-    // Buscar presenças já guardadas
-    const sessionIdToUse = existingSession?.id;
-    if (sessionIdToUse) {
-      const { data: existingAttendance } = await supabase
-        .from("training_attendance")
-        .select("player_id, status")
-        .eq("training_session_id", sessionIdToUse);
+      if (!payload?.linked) {
+        setPlayers([]);
+        setAgeGroup(null);
+        setSessionId(null);
+        setNoSession(true);
+        return;
+      }
+
+      const incomingPlayers = Array.isArray(payload.players) ? payload.players : [];
+      const incomingAttendance =
+        payload.attendance && typeof payload.attendance === "object"
+          ? payload.attendance
+          : {};
+
+      setPlayers(incomingPlayers);
+      setAgeGroup(payload.ageGroup ?? null);
+      setSessionId(payload.session?.id ?? null);
+      setNoSession(Boolean(payload.noSession) || !payload.session);
 
       const initialAttendance: AttendanceState = {};
-      activePlayers.forEach((player) => {
-        const saved = existingAttendance?.find(
-          (a) => a.player_id === player.id,
-        );
-        initialAttendance[player.id] = saved
-          ? (saved.status as AttendanceStatus)
-          : "present";
+      incomingPlayers.forEach((player) => {
+        const status = incomingAttendance[player.id];
+        initialAttendance[player.id] = isValidStatus(status) ? status : "present";
       });
       setAttendance(initialAttendance);
-    } else {
-      // Sessão nova — todos presentes por defeito
-      const initialAttendance: AttendanceState = {};
-      activePlayers.forEach((player) => {
-        initialAttendance[player.id] = "present";
-      });
-      setAttendance(initialAttendance);
+    } catch {
+      setError("Erro de ligação ao carregar presenças.");
+      setPlayers([]);
+      setAgeGroup(null);
+      setSessionId(null);
+      setNoSession(true);
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   }
 
   function toggleAttendance(playerId: string) {
@@ -143,35 +122,34 @@ export default function AttendancePage() {
   async function handleSave() {
     if (!sessionId) return;
     setSaving(true);
+    setError(null);
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    try {
+      const res = await fetch("/api/attendance/today", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          sessionId,
+          attendance,
+        }),
+      });
+      const payload = (await res.json().catch(() => ({}))) as AttendanceApiResponse;
 
-    const records = Object.entries(attendance).map(([player_id, status]) => ({
-      training_session_id: sessionId,
-      player_id,
-      status,
-      marked_by: user?.id,
-      marked_at: new Date().toISOString(),
-    }));
+      if (!res.ok || !payload?.success) {
+        setError(payload?.error || "Erro ao guardar presenças.");
+        setSaving(false);
+        return;
+      }
 
-    const { error } = await supabase
-      .from("training_attendance")
-      .upsert(records, { onConflict: "training_session_id,player_id" });
-
-    if (!error) {
-      await supabase
-        .from("training_sessions")
-        .update({ status: "completed" })
-        .eq("id", sessionId);
       setSaved(true);
+    } catch {
+      setError("Erro de ligação ao guardar presenças.");
+    } finally {
+      setSaving(false);
     }
-
-    setSaving(false);
   }
 
-  // Contadores — calculados directamente do estado actual
   const counts = players.reduce(
     (acc, player) => {
       const status = attendance[player.id] ?? "present";
@@ -230,9 +208,9 @@ export default function AttendancePage() {
     return (
       <div className="p-4 md:p-8 text-center py-16">
         <CheckCircle2 className="mx-auto mb-4 text-slate-300" size={48} />
-        <h2 className="font-semibold text-slate-700 mb-2">Erro ao criar sessão</h2>
+        <h2 className="font-semibold text-slate-700 mb-2">Sem treino hoje</h2>
         <p className="text-slate-500 text-sm">
-          Não foi possível criar a sessão de treino. Tenta novamente.
+          Não existe sessão de treino para hoje no calendário.
         </p>
       </div>
     );
@@ -254,7 +232,6 @@ export default function AttendancePage() {
 
   return (
     <div className="p-4 md:p-8 max-w-lg mx-auto">
-      {/* Header */}
       <div className="mb-5">
         <p className="text-slate-500 text-sm capitalize">{today}</p>
         <h1 className="text-2xl font-bold text-slate-900">Presenças</h1>
@@ -263,7 +240,12 @@ export default function AttendancePage() {
         </p>
       </div>
 
-      {/* Contadores */}
+      {error && (
+        <div className="bg-red-50 text-red-700 text-sm p-3 rounded-lg border border-red-200 mb-4">
+          {error}
+        </div>
+      )}
+
       <div className="grid grid-cols-3 gap-2 mb-4">
         <div className="bg-emerald-50 rounded-xl p-3 text-center">
           <p className="text-3xl font-bold text-emerald-600">
@@ -285,12 +267,10 @@ export default function AttendancePage() {
         </div>
       </div>
 
-      {/* Legenda */}
       <p className="text-xs text-slate-400 mb-3 px-1">
         Toca num atleta para alternar estado: Presente → Ausente → Lesionado
       </p>
 
-      {/* Lista */}
       <div className="space-y-2 mb-6">
         {players.map((player) => {
           const status = attendance[player.id] ?? "present";
@@ -302,7 +282,6 @@ export default function AttendancePage() {
               onClick={() => toggleAttendance(player.id)}
               className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all active:scale-[0.98] text-left ${config.bg}`}
             >
-              {/* Avatar */}
               <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center flex-shrink-0">
                 <span className="text-sm font-bold text-slate-500">
                   {player.first_name[0]}
@@ -310,7 +289,6 @@ export default function AttendancePage() {
                 </span>
               </div>
 
-              {/* Nome */}
               <div className="flex-1 min-w-0">
                 <p className="font-semibold text-slate-900 truncate">
                   {player.first_name} {player.last_name}
@@ -322,7 +300,6 @@ export default function AttendancePage() {
                 )}
               </div>
 
-              {/* Estado */}
               <div className="flex items-center gap-2 flex-shrink-0">
                 <span
                   className={`text-xs font-medium hidden sm:block ${config.labelColor}`}
@@ -336,7 +313,6 @@ export default function AttendancePage() {
         })}
       </div>
 
-      {/* Botão Guardar */}
       <div className="sticky bottom-20 md:bottom-4">
         {saved ? (
           <div className="bg-emerald-50 border-2 border-emerald-200 text-emerald-700 p-4 rounded-xl text-center font-semibold">
@@ -359,3 +335,4 @@ export default function AttendancePage() {
     </div>
   );
 }
+

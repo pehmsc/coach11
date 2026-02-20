@@ -27,6 +27,17 @@ const KIT_FIELD_RULES: Record<
   gk_socks_kit_id: { playerType: "goalkeeper", pieceType: "socks" },
 };
 
+function pieceTypeMatches(
+  actual: string | null | undefined,
+  expected: "shirt" | "shorts" | "socks",
+) {
+  if (!actual) return false;
+  if (expected === "shirt") {
+    return actual === "shirt" || actual === "jersey";
+  }
+  return actual === expected;
+}
+
 function normalizeKitSelection(body: unknown): KitSelectionPayload {
   const getValue = (key: keyof KitSelectionPayload) => {
     const value =
@@ -165,7 +176,7 @@ export async function POST(request: Request, { params }: RouteContext) {
         const expected = KIT_FIELD_RULES[fieldName];
         if (
           piece.player_type !== expected.playerType ||
-          piece.piece_type !== expected.pieceType
+          !pieceTypeMatches(piece.piece_type, expected.pieceType)
         ) {
           return NextResponse.json(
             { error: "Combinação de equipamento inválida para a peça selecionada." },

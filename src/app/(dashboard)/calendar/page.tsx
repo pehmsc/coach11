@@ -72,6 +72,20 @@ const EMPTY_FORM: EventForm = {
   image_url: "",
 };
 
+function timeToMinutes(time?: string) {
+  if (!time) return Number.MAX_SAFE_INTEGER;
+  const [h, m] = time.split(":").map((v) => Number(v));
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return Number.MAX_SAFE_INTEGER;
+  return h * 60 + m;
+}
+
+function compareEventsByDateTime(a: CalEvent, b: CalEvent) {
+  if (a.date !== b.date) return a.date.localeCompare(b.date);
+  const diff = timeToMinutes(a.start_time) - timeToMinutes(b.start_time);
+  if (diff !== 0) return diff;
+  return a.type.localeCompare(b.type);
+}
+
 export default function CalendarPage() {
   const supabase = useMemo(() => createClient(), []);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -102,7 +116,10 @@ export default function CalendarPage() {
       .select("*")
       .eq("age_group_id", ageGroupId)
       .gte("session_date", from)
-      .lte("session_date", to);
+      .lte("session_date", to)
+      .order("session_date", { ascending: true })
+      .order("start_time", { ascending: true, nullsFirst: false })
+      .order("created_at", { ascending: true });
 
     if (sessErr) console.error("Erro training_sessions:", sessErr);
 
@@ -111,7 +128,9 @@ export default function CalendarPage() {
       .select("*")
       .eq("age_group_id", ageGroupId)
       .gte("game_datetime", `${from}T00:00:00`)
-      .lte("game_datetime", `${to}T23:59:59`);
+      .lte("game_datetime", `${to}T23:59:59`)
+      .order("game_datetime", { ascending: true })
+      .order("created_at", { ascending: true });
 
     if (gamesErr) console.error("Erro games:", gamesErr);
 
@@ -143,7 +162,7 @@ export default function CalendarPage() {
       notes: g.notes,
     }));
 
-    setEvents([...sessionEvents, ...gameEvents]);
+    setEvents([...sessionEvents, ...gameEvents].sort(compareEventsByDateTime));
   }, [ageGroupId, weekStart, supabase]);
 
   useEffect(() => {
@@ -480,7 +499,9 @@ export default function CalendarPage() {
       <div className="space-y-2">
         {days.map((day, i) => {
           const dayStr = format(day, "yyyy-MM-dd");
-          const dayEvents = events.filter((e) => e.date === dayStr);
+          const dayEvents = events
+            .filter((e) => e.date === dayStr)
+            .sort(compareEventsByDateTime);
           const isCurrentDay = isToday(day);
 
           return (

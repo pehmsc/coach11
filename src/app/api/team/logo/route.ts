@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 
 const ACCEPTED_EXTENSIONS = new Set(["png", "jpg", "jpeg", "webp", "svg"]);
 const ACCEPTED_MIME_PREFIX = "image/";
-const MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024;
+const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 
 function resolveExtension(fileName: string) {
   const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
@@ -96,7 +96,7 @@ export async function POST(request: Request) {
 
     if (file.size > MAX_FILE_SIZE_BYTES) {
       return NextResponse.json(
-        { error: "Imagem demasiado grande. Máximo permitido: 2MB." },
+        { error: "Imagem demasiado grande. Máximo permitido: 5MB." },
         { status: 400 },
       );
     }
