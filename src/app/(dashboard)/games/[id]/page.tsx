@@ -303,14 +303,41 @@ export default function GameDetailPage() {
         </div>
       ) : (
         <div className="space-y-2">
-          {players.map((player) => (
-            <PlayerRow
-              key={player.id}
-              player={player}
-              saving={saving === player.id}
-              onToggle={() => togglePlayer(player)}
-            />
-          ))}
+          {players.filter((p) => p.isConvocated).length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-emerald-600 uppercase tracking-wide mb-2">
+                Convocados ({players.filter((p) => p.isConvocated).length})
+              </p>
+              {players
+                .filter((p) => p.isConvocated)
+                .map((player) => (
+                  <PlayerRow
+                    key={player.id}
+                    player={player}
+                    saving={saving === player.id}
+                    onToggle={() => togglePlayer(player)}
+                  />
+                ))}
+            </div>
+          )}
+
+          {players.filter((p) => !p.isConvocated).length > 0 && (
+            <div className="mt-4">
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">
+                Não convocados
+              </p>
+              {players
+                .filter((p) => !p.isConvocated)
+                .map((player) => (
+                  <PlayerRow
+                    key={player.id}
+                    player={player}
+                    saving={saving === player.id}
+                    onToggle={() => togglePlayer(player)}
+                  />
+                ))}
+            </div>
+          )}
         </div>
       )}
 

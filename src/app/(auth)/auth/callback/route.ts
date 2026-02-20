@@ -1,119 +1,30 @@
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { SUPABASE_AUTH_COOKIE_OPTIONS } from "@/lib/supabase/config";
+
+function sanitizeNext(rawNext: string | null) {
+  if (!rawNext) return "/dashboard";
+
+  try {
+    const decoded = decodeURIComponent(rawNext);
+    if (decoded.startsWith("/")) return decoded;
+  } catch {
+    if (rawNext.startsWith("/")) return rawNext;
+  }
+
+  return "/dashboard";
+}
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  const rawNext = searchParams.get("next");
-
-  let next = "/dashboard";
-  if (rawNext) {
-    try {
-      const decoded = decodeURIComponent(rawNext);
-      if (decoded.startsWith("/")) {
-        next = decoded;
-      }
-    } catch {
-      if (rawNext.startsWith("/")) {
-        next = rawNext;
-      }
-    }
-  }
+  const next = sanitizeNext(searchParams.get("next"));
 
   if (!code) {
     return NextResponse.redirect(`${origin}/login?error=no_code`);
   }
 
-  const cookieStore = await cookies();
-
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            cookieStore.set(name, value, options);
-          });
-        },
-      },
-      cookieOptions: SUPABASE_AUTH_COOKIE_OPTIONS,
-    },
-  );
-
-  let { data, error } = await supabase.auth.exchangeCodeForSession(code);
-
-  // Mitigar falhas transitórias de PKCE/code exchange em alguns navegadores.
-  if (error || !data.session) {
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    const retry = await supabase.auth.exchangeCodeForSession(code);
-    if (!retry.error && retry.data.session) {
-      data = retry.data;
-      error = null;
-    }
-  }
-
-  if (error || !data.session) {
-    const authErrorCode = typeof error?.code === "string" ? error.code : null;
-
-    if (authErrorCode === "pkce_code_verifier_not_found") {
-      const fallbackUrl = new URL(`${origin}/auth/callback/client`);
-      fallbackUrl.searchParams.set("code", code);
-      fallbackUrl.searchParams.set("next", next);
-      return NextResponse.redirect(fallbackUrl.toString());
-    }
-
-    // PKCE falhou — verificar se existe sessão válida de tentativa anterior
-    const {
-      data: { user: existingUser },
-    } = await supabase.auth.getUser();
-
-    if (existingUser) {
-      // Sessão válida existe — redirecionar normalmente
-      return NextResponse.redirect(`${origin}${next}`);
-    }
-
-    console.error("Auth callback error:", error);
-
-    // Preservar o código de convite na redirecção de erro
-    const errorUrl = new URL(`${origin}/login`);
-    errorUrl.searchParams.set("error", "exchange_failed");
-    try {
-      const nextUrl = new URL(decodeURIComponent(next), origin);
-      const inviteCode = nextUrl.searchParams.get("code");
-      if (inviteCode) errorUrl.searchParams.set("code", inviteCode);
-    } catch {
-      // next inválido — ignorar
-    }
-    return NextResponse.redirect(errorUrl.toString());
-  }
-
-  // Garantir que o perfil existe (para Google OAuth)
-  const userId = data.session.user.id;
-  const { data: existingProfile } = await supabase
-    .from("profiles")
-    .select("id")
-    .eq("id", userId)
-    .single();
-
-  if (!existingProfile) {
-    const user = data.session.user;
-    await supabase.from("profiles").insert({
-      id: userId,
-      full_name:
-        user.user_metadata?.full_name ||
-        user.user_metadata?.name ||
-        user.email?.split("@")[0] ||
-        "Utilizador",
-      role: "coordinator",
-    });
-  }
-
-  // Redirect com sessão activa
-  return NextResponse.redirect(`${origin}${next}`);
+  // Troca do código feita no cliente para evitar falhas de PKCE em callback SSR.
+  const fallbackUrl = new URL(`${origin}/auth/callback/client`);
+  fallbackUrl.searchParams.set("code", code);
+  fallbackUrl.searchParams.set("next", next);
+  return NextResponse.redirect(fallbackUrl.toString());
 }

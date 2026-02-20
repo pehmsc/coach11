@@ -54,6 +54,9 @@ function OAuthCallbackClientContent() {
         }
       }
 
+      await fetch("/api/auth/ensure-profile", { method: "POST" }).catch(() => null);
+      await fetch("/api/invite/sync", { method: "POST" }).catch(() => null);
+
       if (!cancelled) {
         window.location.replace(next);
       }

@@ -63,6 +63,19 @@ const PIECE_TYPES: PieceType[] = ["shirt", "shorts", "socks"];
 const PIECE_LABELS: Record<PieceType, string> = { shirt: "Camisola", shorts: "Calções", socks: "Meias" };
 const PLAYER_TYPES: PlayerType[] = ["field", "goalkeeper"];
 const PLAYER_TYPE_LABELS: Record<PlayerType, string> = { field: "Campo", goalkeeper: "Guarda-redes" };
+const KIT_COLOR_OPTIONS = [
+  { value: "#FFFFFF", label: "Branco" },
+  { value: "#000000", label: "Preto" },
+  { value: "#DC2626", label: "Vermelho" },
+  { value: "#2563EB", label: "Azul" },
+  { value: "#16A34A", label: "Verde" },
+  { value: "#F59E0B", label: "Amarelo" },
+  { value: "#FB923C", label: "Laranja" },
+  { value: "#A855F7", label: "Roxo" },
+  { value: "#64748B", label: "Cinzento" },
+  { value: "#0F172A", label: "Azul escuro" },
+];
+const DEFAULT_KIT_COLOR = "#CCCCCC";
 
 interface StaffInvite {
   id: string;
@@ -123,6 +136,7 @@ export default function TeamSetupPage() {
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [accountRole, setAccountRole] = useState<string>("coordinator");
 
   useEffect(() => {
     loadData();
@@ -130,51 +144,38 @@ export default function TeamSetupPage() {
   }, []);
 
   async function loadData() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
+    setLoading(true);
+    setError(null);
 
-    let preferredTeamId: string | null = null;
+    try {
+      const res = await fetch("/api/me/context", { cache: "no-store" });
+      const payload = await res.json().catch(() => ({}));
 
-    let { data: ag } = await supabase
-      .from("age_groups")
-      .select("*, teams(*)")
-      .eq("coordinator_id", user.id)
-      .maybeSingle();
-
-    // Conta de treinador convidado (team_staff)
-    if (!ag) {
-      const { data: staffLink } = await supabase
-        .from("team_staff")
-        .select("team_id")
-        .eq("profile_id", user.id)
-        .limit(1)
-        .maybeSingle();
-
-      if (staffLink?.team_id) {
-        preferredTeamId = staffLink.team_id;
-        const { data: team } = await supabase
-          .from("teams")
-          .select("id, age_group_id")
-          .eq("id", staffLink.team_id)
-          .maybeSingle();
-
-        if (team?.age_group_id) {
-          const { data: fallbackAgeGroup } = await supabase
-            .from("age_groups")
-            .select("*, teams(*)")
-            .eq("id", team.age_group_id)
-            .maybeSingle();
-
-          if (fallbackAgeGroup) {
-            ag = fallbackAgeGroup;
-          }
-        }
+      if (!res.ok) {
+        setError(payload?.error || "Erro ao carregar contexto da equipa.");
+        setLoading(false);
+        return;
       }
-    }
 
-    if (ag) {
+      const ag = payload?.ageGroup as AgeGroup | null;
+      const incomingTeamId =
+        typeof payload?.teamId === "string" ? (payload.teamId as string) : null;
+      const incomingRole =
+        typeof payload?.profile?.role === "string"
+          ? (payload.profile.role as string)
+          : "coordinator";
+      setAccountRole(incomingRole);
+
+      if (!ag) {
+        setExistingAgeGroup(null);
+        setTeamId(null);
+        setKitPieces([]);
+        setActiveStaffProfileIds([]);
+        setStaffInvites([]);
+        setLoading(false);
+        return;
+      }
+
       setExistingAgeGroup(ag);
       setClubName(ag.club_name);
       setAgeGroupName(ag.name);
@@ -182,13 +183,10 @@ export default function TeamSetupPage() {
       setSeason(ag.season);
       setLogoUrl(ag.club_logo_url || "");
 
-      let firstTeam =
-        (preferredTeamId
-          ? ag.teams?.find((t: { id: string }) => t.id === preferredTeamId)
-          : undefined) || ag.teams?.[0];
+      let resolvedTeamId = incomingTeamId;
 
-      // Auto-criar equipa se não existir (para coordenadores antigos sem equipa)
-      if (!firstTeam) {
+      // Coordenador sem equipa associada: criar automaticamente.
+      if (!resolvedTeamId) {
         const { data: newTeam } = await supabase
           .from("teams")
           .insert({
@@ -196,40 +194,20 @@ export default function TeamSetupPage() {
             name: `${ag.club_name} ${ag.name}`,
             is_competitive: true,
           })
-          .select()
+          .select("id")
           .single();
-        firstTeam = newTeam;
+        resolvedTeamId = newTeam?.id ?? null;
       }
 
-      if (firstTeam) {
-        setTeamId(firstTeam.id);
-
-        const { data: kits } = await supabase
-          .from("kit_pieces")
-          .select("*")
-          .eq("team_id", firstTeam.id)
-          .order("kit_number")
-          .order("player_type")
-          .order("piece_type");
-        setKitPieces(kits || []);
-
-        const { data: teamStaff } = await supabase
-          .from("team_staff")
-          .select("profile_id")
-          .eq("team_id", firstTeam.id);
-        setActiveStaffProfileIds((teamStaff || []).map((s) => s.profile_id));
-      }
-
-      const { data: invites } = await supabase
-        .from("staff_invites")
-        .select("*")
-        .eq("age_group_id", ag.id)
-        .order("created_at", { ascending: false });
-
-      setStaffInvites(invites || []);
+      setTeamId(resolvedTeamId);
+      setKitPieces((payload?.kits as KitPiece[]) || []);
+      setActiveStaffProfileIds((payload?.activeStaffProfileIds as string[]) || []);
+      setStaffInvites((payload?.staffInvites as StaffInvite[]) || []);
+    } catch {
+      setError("Erro de ligação ao carregar a equipa.");
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   }
 
   async function handleSaveSetup(e: { preventDefault(): void }) {
@@ -240,7 +218,16 @@ export default function TeamSetupPage() {
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user) {
+      setSaving(false);
+      return;
+    }
+
+    if (!existingAgeGroup && accountRole !== "coordinator") {
+      setError("Conta de treinador: não podes criar um novo escalão.");
+      setSaving(false);
+      return;
+    }
 
     if (existingAgeGroup) {
       const { error } = await supabase
@@ -501,6 +488,13 @@ export default function TeamSetupPage() {
 
         {(!existingAgeGroup || isEditing) && (
           <CardContent>
+            {!existingAgeGroup && accountRole !== "coordinator" ? (
+              <div className="bg-amber-50 text-amber-800 text-sm p-3 rounded-lg border border-amber-200">
+                Conta de treinador sem acesso de coordenador. Esta conta deve ser
+                associada a um convite existente.
+              </div>
+            ) : (
+              <>
             {error && (
               <div className="bg-red-50 text-red-700 text-sm p-3 rounded-lg mb-4 border border-red-200">
                 {error}
@@ -588,6 +582,8 @@ export default function TeamSetupPage() {
                 )}
               </div>
             </form>
+              </>
+            )}
           </CardContent>
         )}
       </Card>
@@ -678,31 +674,51 @@ export default function TeamSetupPage() {
                         {PIECE_TYPES.map((pieceType) => {
                           const piece = getKitPiece(kitNum, playerType, pieceType);
                           const key = `${kitNum}-${playerType}-${pieceType}`;
+                          const rawColor = piece?.color_hex || DEFAULT_KIT_COLOR;
+                          const normalizedColor = rawColor.startsWith("#")
+                            ? rawColor.toUpperCase()
+                            : `#${rawColor.toUpperCase()}`;
+                          const hasPreset = KIT_COLOR_OPTIONS.some(
+                            (c) => c.value === normalizedColor,
+                          );
                           return (
                             <div key={pieceType} className="space-y-1">
                               <Label className="text-xs text-slate-500">
                                 {PIECE_LABELS[pieceType]}
                               </Label>
                               <div className="flex items-center gap-2">
-                                <input
-                                  type="color"
-                                  value={piece?.color_hex || "#cccccc"}
-                                  onChange={(e) =>
+                                <Select
+                                  value={normalizedColor}
+                                  onValueChange={(value) =>
                                     handleKitColorChange(
                                       kitNum,
                                       playerType,
                                       pieceType,
-                                      e.target.value,
+                                      value,
                                     )
                                   }
-                                  className="w-9 h-9 rounded-lg border border-slate-200 cursor-pointer p-0.5 bg-white"
-                                  title={`${KIT_LABELS[kitNum]} · ${PLAYER_TYPE_LABELS[playerType]} · ${PIECE_LABELS[pieceType]}`}
-                                />
-                                <span className="text-xs text-slate-400 font-mono">
+                                >
+                                  <SelectTrigger className="h-9">
+                                    <SelectValue placeholder="Selecionar cor" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {!hasPreset && (
+                                      <SelectItem value={normalizedColor}>
+                                        Personalizada ({normalizedColor})
+                                      </SelectItem>
+                                    )}
+                                    {KIT_COLOR_OPTIONS.map((color) => (
+                                      <SelectItem key={color.value} value={color.value}>
+                                        {color.label} ({color.value})
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                <span className="text-xs text-slate-400 font-mono min-w-[62px] text-right">
                                   {savingKit === key ? (
-                                    <Loader2 size={12} className="animate-spin" />
+                                    <Loader2 size={12} className="animate-spin ml-auto" />
                                   ) : (
-                                    (piece?.color_hex || "—").toUpperCase()
+                                    normalizedColor
                                   )}
                                 </span>
                               </div>

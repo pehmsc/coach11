@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { format, addDays, addHours, parseISO, isToday, isTomorrow } from "date-fns";
@@ -25,6 +26,13 @@ function relativeDay(dateStr: string) {
 
 export default async function DashboardPage() {
   const supabase = await createClient();
+  let admin: ReturnType<typeof createAdminClient> | null = null;
+  try {
+    admin = createAdminClient();
+  } catch {
+    admin = null;
+  }
+
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -36,7 +44,7 @@ export default async function DashboardPage() {
     .eq("id", user.id)
     .single();
 
-  const { data: managedAgeGroups } = await supabase
+  const { data: managedAgeGroups } = await (admin ?? supabase)
     .from("age_groups")
     .select("*, teams(*)")
     .eq("coordinator_id", user.id);
@@ -45,10 +53,11 @@ export default async function DashboardPage() {
 
   // Conta de staff convidado (não coordenador)
   if (!firstTeamId) {
-    const { data: staffTeam } = await supabase
+    const { data: staffTeam } = await (admin ?? supabase)
       .from("team_staff")
       .select("team_id")
       .eq("profile_id", user.id)
+      .order("created_at", { ascending: true })
       .limit(1)
       .maybeSingle();
     firstTeamId = staffTeam?.team_id ?? null;
@@ -64,7 +73,7 @@ export default async function DashboardPage() {
   // Próximos treinos (7 dias) — mais recente primeiro
   let upcomingTrainings: TrainingSession[] = [];
   if (firstTeamId) {
-    const { data } = await supabase
+    const { data } = await (admin ?? supabase)
       .from("training_sessions")
       .select("*")
       .eq("team_id", firstTeamId)
@@ -79,7 +88,7 @@ export default async function DashboardPage() {
   // Próximos jogos (7 dias)
   let upcomingGames: Game[] = [];
   if (firstTeamId) {
-    const { data } = await supabase
+    const { data } = await (admin ?? supabase)
       .from("games")
       .select("*")
       .eq("team_id", firstTeamId)
