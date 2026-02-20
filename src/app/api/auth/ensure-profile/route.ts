@@ -24,7 +24,7 @@ export async function POST() {
 
     const { data: existingProfile } = await db
       .from("profiles")
-      .select("id, full_name, role, email")
+      .select("id, full_name, role, email, avatar_url")
       .eq("id", user.id)
       .maybeSingle();
 
@@ -52,6 +52,11 @@ export async function POST() {
       existingProfile?.full_name ||
       user.email?.split("@")[0] ||
       "Utilizador";
+    const avatarUrl =
+      user.user_metadata?.avatar_url ||
+      user.user_metadata?.picture ||
+      existingProfile?.avatar_url ||
+      null;
 
     if (!existingProfile) {
       const { error: insertError } = await db.from("profiles").insert({
@@ -59,6 +64,7 @@ export async function POST() {
         full_name: fullName,
         role: resolvedRole,
         email: user.email ?? null,
+        avatar_url: avatarUrl,
       });
 
       if (insertError) {
@@ -72,6 +78,7 @@ export async function POST() {
       if (!existingProfile.full_name && fullName) updates.full_name = fullName;
       if (!existingProfile.role && resolvedRole) updates.role = resolvedRole;
       if (!existingProfile.email && user.email) updates.email = user.email;
+      if (!existingProfile.avatar_url && avatarUrl) updates.avatar_url = avatarUrl;
 
       if (Object.keys(updates).length > 0) {
         await db.from("profiles").update(updates).eq("id", user.id);

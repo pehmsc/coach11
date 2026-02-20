@@ -25,9 +25,17 @@ const navItems = [
 
 interface SidebarProps {
   profile: Profile | null;
+  avatarUrl?: string | null;
 }
 
-export function Sidebar({ profile }: SidebarProps) {
+const ROLE_LABELS: Record<string, string> = {
+  coordinator: "Coordenador",
+  coach: "Treinador",
+  player: "Jogador",
+  parent: "Encarregado",
+};
+
+export function Sidebar({ profile, avatarUrl }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -47,9 +55,25 @@ export function Sidebar({ profile }: SidebarProps) {
           <span className="text-emerald-400">11</span>
         </h1>
         {profile && (
-          <p className="text-slate-400 text-sm mt-1 truncate">
-            {profile.full_name}
-          </p>
+          <div className="mt-3 flex items-center gap-2.5 min-w-0">
+            {avatarUrl ? (
+              <img
+                src={avatarUrl}
+                alt={profile.full_name}
+                className="w-8 h-8 rounded-full object-cover border border-slate-700"
+              />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-slate-700 text-slate-200 text-xs font-bold flex items-center justify-center border border-slate-600">
+                {profile.full_name?.[0]?.toUpperCase() || "U"}
+              </div>
+            )}
+            <div className="min-w-0">
+              <p className="text-slate-300 text-sm truncate">{profile.full_name}</p>
+              <p className="text-slate-500 text-xs truncate">
+                {ROLE_LABELS[profile.role] || profile.role}
+              </p>
+            </div>
+          </div>
         )}
       </div>
 

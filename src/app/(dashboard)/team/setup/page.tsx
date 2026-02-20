@@ -281,34 +281,35 @@ export default function TeamSetupPage() {
     const file = e.target.files?.[0];
     if (!file || !existingAgeGroup) return;
     setUploadingLogo(true);
+    setError(null);
 
-    const ext = file.name.split(".").pop();
-    const fileName = `${existingAgeGroup.id}/logo.${ext}`;
+    try {
+      const formData = new FormData();
+      formData.set("ageGroupId", existingAgeGroup.id);
+      formData.set("file", file);
 
-    const { data, error } = await supabase.storage
-      .from("club-logos")
-      .upload(fileName, file, { upsert: true });
+      const res = await fetch("/api/team/logo", {
+        method: "POST",
+        body: formData,
+      });
+      const payload = await res.json().catch(() => ({}));
 
-    if (error || !data) {
-      console.error("Erro upload logo:", error);
+      if (!res.ok || typeof payload?.url !== "string") {
+        setError(payload?.error || "Erro ao carregar logotipo.");
+        return;
+      }
+
+      const url = payload.url as string;
+      setLogoUrl(url);
+      setExistingAgeGroup((prev) => (prev ? { ...prev, club_logo_url: url } : prev));
+    } catch {
       setError("Erro ao carregar logotipo.");
+    } finally {
       setUploadingLogo(false);
-      return;
+      if (logoRef.current) {
+        logoRef.current.value = "";
+      }
     }
-
-    const { data: urlData } = supabase.storage
-      .from("club-logos")
-      .getPublicUrl(data.path);
-
-    const url = urlData.publicUrl;
-    await supabase
-      .from("age_groups")
-      .update({ club_logo_url: url })
-      .eq("id", existingAgeGroup.id);
-
-    setLogoUrl(url);
-    setExistingAgeGroup((prev) => prev ? { ...prev, club_logo_url: url } : prev);
-    setUploadingLogo(false);
   }
 
   function getKitPiece(kitNum: KitNumber, playerType: PlayerType, pieceType: PieceType) {
@@ -337,45 +338,51 @@ export default function TeamSetupPage() {
     setSavingKit(key);
     setError(null);
 
-    const existing = getKitPiece(kitNum, playerType, pieceType);
     const normalizedColor = normalizeColorHex(colorHex);
 
-    if (existing) {
-      const { error } = await supabase
-        .from("kit_pieces")
-        .update({ color_hex: normalizedColor })
-        .eq("id", existing.id);
-      if (!error) {
-        setKitPieces((prev) =>
-          prev.map((k) => (k.id === existing.id ? { ...k, color_hex: normalizedColor } : k)),
-        );
-      } else {
-        setError("Erro ao guardar a cor do kit.");
-      }
-    } else {
-      const { data, error } = await supabase
-        .from("kit_pieces")
-        .insert({
-          team_id: teamId,
-          kit_number: kitNum,
-          player_type: playerType,
-          piece_type: pieceType,
-          color_hex: normalizedColor,
-        })
-        .select()
-        .single();
-      if (!error && data) {
-        setKitPieces((prev) => [...prev, data]);
-      } else {
-        setError("Erro ao guardar a cor do kit.");
-      }
-    }
+    try {
+      const res = await fetch("/api/team/kits", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          teamId,
+          kitNumber: kitNum,
+          playerType,
+          pieceType,
+          colorHex: normalizedColor,
+        }),
+      });
+      const payload = await res.json().catch(() => ({}));
 
-    setSavingKit(null);
+      if (!res.ok || !payload?.piece?.id) {
+        setError(payload?.error || "Erro ao guardar a cor do kit.");
+        return;
+      }
+
+      const savedPiece = payload.piece as KitPiece;
+      setKitPieces((prev) => {
+        const existingIndex = prev.findIndex((k) => k.id === savedPiece.id);
+        if (existingIndex >= 0) {
+          const next = [...prev];
+          next[existingIndex] = savedPiece;
+          return next;
+        }
+        return [...prev, savedPiece];
+      });
+    } catch {
+      setError("Erro ao guardar a cor do kit.");
+    } finally {
+      setSavingKit(null);
+    }
   }
 
   async function handleSendStaffInvite(e: { preventDefault(): void }) {
     e.preventDefault();
+    if (accountRole !== "coordinator") {
+      setError("Apenas o coordenador pode convidar treinadores.");
+      return;
+    }
+
     setSendingInvite(true);
     setInviteResult(null);
     setError(null);
@@ -410,39 +417,32 @@ export default function TeamSetupPage() {
   }
 
   async function handleDeleteInvite(invite: StaffInvite) {
-    setDeletingId(invite.id);
-    setConfirmDeleteId(null);
-
-    // Se o convite foi aceite, remover também da team_staff
-    if (invite.accepted_at && invite.accepted_by && teamId) {
-      const { error: staffErr } = await supabase
-        .from("team_staff")
-        .delete()
-        .eq("profile_id", invite.accepted_by)
-        .eq("team_id", teamId);
-
-      if (staffErr) {
-        console.error("Erro ao remover staff:", staffErr);
-        setError("Erro ao remover membro da equipa.");
-        setDeletingId(null);
-        return;
-      }
-    }
-
-    const { error: inviteErr } = await supabase
-      .from("staff_invites")
-      .delete()
-      .eq("id", invite.id);
-
-    if (inviteErr) {
-      console.error("Erro ao apagar convite:", inviteErr);
-      setError("Erro ao cancelar convite.");
-      setDeletingId(null);
+    if (accountRole !== "coordinator") {
+      setError("Apenas o coordenador pode remover membros da equipa técnica.");
       return;
     }
 
-    setStaffInvites((prev) => prev.filter((i) => i.id !== invite.id));
-    setDeletingId(null);
+    setDeletingId(invite.id);
+    setConfirmDeleteId(null);
+    setError(null);
+
+    try {
+      const res = await fetch(`/api/invite/staff/${invite.id}`, {
+        method: "DELETE",
+      });
+      const payload = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        setError(payload?.error || "Erro ao cancelar convite.");
+        return;
+      }
+
+      setStaffInvites((prev) => prev.filter((item) => item.id !== invite.id));
+    } catch {
+      setError("Erro ao cancelar convite.");
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   function copyCode(code: string) {
@@ -461,6 +461,11 @@ export default function TeamSetupPage() {
   return (
     <div className="p-4 md:p-8 max-w-2xl mx-auto space-y-6">
       <h1 className="text-2xl font-bold text-slate-900">Configurações</h1>
+      {error && (
+        <div className="bg-red-50 text-red-700 text-sm p-3 rounded-lg border border-red-200">
+          {error}
+        </div>
+      )}
 
       {/* ── SECÇÃO 1: ESCALÃO ── */}
       <Card>
@@ -497,11 +502,6 @@ export default function TeamSetupPage() {
               </div>
             ) : (
               <>
-            {error && (
-              <div className="bg-red-50 text-red-700 text-sm p-3 rounded-lg mb-4 border border-red-200">
-                {error}
-              </div>
-            )}
             {saved && (
               <div className="bg-emerald-50 text-emerald-700 text-sm p-3 rounded-lg mb-4 border border-emerald-200">
                 ✓ Guardado com sucesso!
@@ -750,10 +750,12 @@ export default function TeamSetupPage() {
                   <Users size={16} /> Equipa Técnica
                 </CardTitle>
                 <CardDescription className="mt-1">
-                  Convida treinadores para acederem à plataforma
+                  {accountRole === "coordinator"
+                    ? "Convida treinadores para acederem à plataforma"
+                    : "Apenas o coordenador pode gerir convites e membros da equipa técnica"}
                 </CardDescription>
               </div>
-              {!showStaffForm && (
+              {accountRole === "coordinator" && !showStaffForm && (
                 <Button
                   size="sm"
                   onClick={() => {
@@ -770,13 +772,7 @@ export default function TeamSetupPage() {
           </CardHeader>
 
           <CardContent className="space-y-4">
-            {error && (
-              <div className="bg-red-50 text-red-700 text-sm p-3 rounded-lg border border-red-200">
-                {error}
-              </div>
-            )}
-
-            {showStaffForm && (
+            {showStaffForm && accountRole === "coordinator" && (
               <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
                 <div className="flex justify-between items-center mb-4">
                   <h4 className="font-semibold text-slate-800 text-sm">
@@ -966,49 +962,53 @@ export default function TeamSetupPage() {
                             <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">
                               Pendente
                             </span>
-                            <button
-                              onClick={() => copyCode(invite.invite_code)}
-                              title="Copiar código"
-                              className="p-1.5 hover:bg-slate-200 rounded-lg transition-colors"
-                            >
-                              {copiedCode === invite.invite_code ? (
-                                <Check size={14} className="text-emerald-500" />
-                              ) : (
-                                <Copy size={14} className="text-slate-400" />
-                              )}
-                            </button>
+                            {accountRole === "coordinator" && (
+                              <button
+                                onClick={() => copyCode(invite.invite_code)}
+                                title="Copiar código"
+                                className="p-1.5 hover:bg-slate-200 rounded-lg transition-colors"
+                              >
+                                {copiedCode === invite.invite_code ? (
+                                  <Check size={14} className="text-emerald-500" />
+                                ) : (
+                                  <Copy size={14} className="text-slate-400" />
+                                )}
+                              </button>
+                            )}
                           </>
                         )}
-                        <button
-                          onClick={() =>
-                            setConfirmDeleteId(
-                              confirmDeleteId === invite.id ? null : invite.id,
-                            )
-                          }
-                          disabled={deletingId === invite.id}
-                          title={
-                            invite.accepted_at
-                              ? "Remover membro"
-                              : "Cancelar convite"
-                          }
-                          className="p-1.5 hover:bg-red-50 rounded-lg transition-colors group"
-                        >
-                          {deletingId === invite.id ? (
-                            <Loader2
-                              size={14}
-                              className="text-slate-300 animate-spin"
-                            />
-                          ) : (
-                            <Trash2
-                              size={14}
-                              className="text-slate-300 group-hover:text-red-500 transition-colors"
-                            />
-                          )}
-                        </button>
+                        {accountRole === "coordinator" && (
+                          <button
+                            onClick={() =>
+                              setConfirmDeleteId(
+                                confirmDeleteId === invite.id ? null : invite.id,
+                              )
+                            }
+                            disabled={deletingId === invite.id}
+                            title={
+                              invite.accepted_at
+                                ? "Remover membro"
+                                : "Cancelar convite"
+                            }
+                            className="p-1.5 hover:bg-red-50 rounded-lg transition-colors group"
+                          >
+                            {deletingId === invite.id ? (
+                              <Loader2
+                                size={14}
+                                className="text-slate-300 animate-spin"
+                              />
+                            ) : (
+                              <Trash2
+                                size={14}
+                                className="text-slate-300 group-hover:text-red-500 transition-colors"
+                              />
+                            )}
+                          </button>
+                        )}
                       </div>
                     </div>
 
-                    {confirmDeleteId === invite.id && (
+                    {accountRole === "coordinator" && confirmDeleteId === invite.id && (
                       <div className="px-3 pb-3 flex items-center gap-2">
                         <p className="text-xs text-red-600 flex-1">
                           {invite.accepted_at
@@ -1036,7 +1036,9 @@ export default function TeamSetupPage() {
             ) : (
               !showStaffForm && (
                 <p className="text-sm text-slate-400 text-center py-4">
-                  Ainda não convidaste nenhum treinador.
+                  {accountRole === "coordinator"
+                    ? "Ainda não convidaste nenhum treinador."
+                    : "Sem treinadores associados a este escalão."}
                 </p>
               )
             )}
