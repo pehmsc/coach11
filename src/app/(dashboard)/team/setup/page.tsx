@@ -30,6 +30,8 @@ import {
   Loader2,
   ImageIcon,
   Palette,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import type { AgeGroup, KitPiece, KitNumber, PlayerType, PieceType } from "@/types/database";
 
@@ -63,19 +65,6 @@ const PIECE_TYPES: PieceType[] = ["shirt", "shorts", "socks"];
 const PIECE_LABELS: Record<PieceType, string> = { shirt: "Camisola", shorts: "Calções", socks: "Meias" };
 const PLAYER_TYPES: PlayerType[] = ["field", "goalkeeper"];
 const PLAYER_TYPE_LABELS: Record<PlayerType, string> = { field: "Campo", goalkeeper: "Guarda-redes" };
-const KIT_COLOR_OPTIONS = [
-  { value: "#FFFFFF", label: "Branco" },
-  { value: "#000000", label: "Preto" },
-  { value: "#DC2626", label: "Vermelho" },
-  { value: "#2563EB", label: "Azul" },
-  { value: "#16A34A", label: "Verde" },
-  { value: "#F59E0B", label: "Amarelo" },
-  { value: "#FB923C", label: "Laranja" },
-  { value: "#A855F7", label: "Roxo" },
-  { value: "#64748B", label: "Cinzento" },
-  { value: "#0F172A", label: "Azul escuro" },
-];
-const DEFAULT_KIT_COLOR = "#CCCCCC";
 
 interface StaffInvite {
   id: string;
@@ -121,6 +110,7 @@ export default function TeamSetupPage() {
   // Kits
   const [kitPieces, setKitPieces] = useState<KitPiece[]>([]);
   const [savingKit, setSavingKit] = useState<string | null>(null);
+  const [kitsExpanded, setKitsExpanded] = useState(false);
 
   // Treinadores convidados
   const [staffInvites, setStaffInvites] = useState<StaffInvite[]>([]);
@@ -330,6 +320,12 @@ export default function TeamSetupPage() {
     );
   }
 
+  function normalizeColorHex(value: string | null | undefined) {
+    if (!value) return "#cccccc";
+    const normalized = value.startsWith("#") ? value : `#${value}`;
+    return /^#[0-9a-fA-F]{6}$/.test(normalized) ? normalized.toLowerCase() : "#cccccc";
+  }
+
   async function handleKitColorChange(
     kitNum: KitNumber,
     playerType: PlayerType,
@@ -339,18 +335,22 @@ export default function TeamSetupPage() {
     if (!teamId) return;
     const key = `${kitNum}-${playerType}-${pieceType}`;
     setSavingKit(key);
+    setError(null);
 
     const existing = getKitPiece(kitNum, playerType, pieceType);
+    const normalizedColor = normalizeColorHex(colorHex);
 
     if (existing) {
       const { error } = await supabase
         .from("kit_pieces")
-        .update({ color_hex: colorHex })
+        .update({ color_hex: normalizedColor })
         .eq("id", existing.id);
       if (!error) {
         setKitPieces((prev) =>
-          prev.map((k) => (k.id === existing.id ? { ...k, color_hex: colorHex } : k)),
+          prev.map((k) => (k.id === existing.id ? { ...k, color_hex: normalizedColor } : k)),
         );
+      } else {
+        setError("Erro ao guardar a cor do kit.");
       }
     } else {
       const { data, error } = await supabase
@@ -360,12 +360,14 @@ export default function TeamSetupPage() {
           kit_number: kitNum,
           player_type: playerType,
           piece_type: pieceType,
-          color_hex: colorHex,
+          color_hex: normalizedColor,
         })
         .select()
         .single();
       if (!error && data) {
         setKitPieces((prev) => [...prev, data]);
+      } else {
+        setError("Erro ao guardar a cor do kit.");
       }
     }
 
@@ -651,88 +653,90 @@ export default function TeamSetupPage() {
       {existingAgeGroup && teamId && (
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Palette size={16} /> Kits da Equipa
-            </CardTitle>
-            <CardDescription>
-              Define as cores de cada kit (campo e guarda-redes)
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {KIT_NUMBERS.map((kitNum) => (
-              <div key={kitNum}>
-                <h4 className="text-sm font-semibold text-slate-700 mb-3">
-                  {KIT_LABELS[kitNum]}
-                </h4>
-                <div className="space-y-4">
-                  {PLAYER_TYPES.map((playerType) => (
-                    <div key={playerType}>
-                      <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">
-                        {PLAYER_TYPE_LABELS[playerType]}
-                      </p>
-                      <div className="grid grid-cols-3 gap-3">
-                        {PIECE_TYPES.map((pieceType) => {
-                          const piece = getKitPiece(kitNum, playerType, pieceType);
-                          const key = `${kitNum}-${playerType}-${pieceType}`;
-                          const rawColor = piece?.color_hex || DEFAULT_KIT_COLOR;
-                          const normalizedColor = rawColor.startsWith("#")
-                            ? rawColor.toUpperCase()
-                            : `#${rawColor.toUpperCase()}`;
-                          const hasPreset = KIT_COLOR_OPTIONS.some(
-                            (c) => c.value === normalizedColor,
-                          );
-                          return (
-                            <div key={pieceType} className="space-y-1">
-                              <Label className="text-xs text-slate-500">
-                                {PIECE_LABELS[pieceType]}
-                              </Label>
-                              <div className="flex items-center gap-2">
-                                <Select
-                                  value={normalizedColor}
-                                  onValueChange={(value) =>
-                                    handleKitColorChange(
-                                      kitNum,
-                                      playerType,
-                                      pieceType,
-                                      value,
-                                    )
-                                  }
-                                >
-                                  <SelectTrigger className="h-9">
-                                    <SelectValue placeholder="Selecionar cor" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {!hasPreset && (
-                                      <SelectItem value={normalizedColor}>
-                                        Personalizada ({normalizedColor})
-                                      </SelectItem>
-                                    )}
-                                    {KIT_COLOR_OPTIONS.map((color) => (
-                                      <SelectItem key={color.value} value={color.value}>
-                                        {color.label} ({color.value})
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                                <span className="text-xs text-slate-400 font-mono min-w-[62px] text-right">
-                                  {savingKit === key ? (
-                                    <Loader2 size={12} className="animate-spin ml-auto" />
-                                  ) : (
-                                    normalizedColor
-                                  )}
-                                </span>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                {kitNum < 3 && <hr className="mt-4 border-slate-100" />}
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Palette size={16} /> Kits da Equipa
+                </CardTitle>
+                <CardDescription>
+                  Define as cores de cada kit (campo e guarda-redes)
+                </CardDescription>
               </div>
-            ))}
-          </CardContent>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setKitsExpanded((v) => !v)}
+              >
+                {kitsExpanded ? (
+                  <>
+                    <ChevronUp size={14} className="mr-1" /> Recolher
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown size={14} className="mr-1" /> Expandir
+                  </>
+                )}
+              </Button>
+            </div>
+          </CardHeader>
+          {kitsExpanded && (
+            <CardContent className="space-y-6">
+              {KIT_NUMBERS.map((kitNum) => (
+                <div key={kitNum}>
+                  <h4 className="text-sm font-semibold text-slate-700 mb-3">
+                    {KIT_LABELS[kitNum]}
+                  </h4>
+                  <div className="space-y-4">
+                    {PLAYER_TYPES.map((playerType) => (
+                      <div key={playerType}>
+                        <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">
+                          {PLAYER_TYPE_LABELS[playerType]}
+                        </p>
+                        <div className="grid grid-cols-3 gap-3">
+                          {PIECE_TYPES.map((pieceType) => {
+                            const piece = getKitPiece(kitNum, playerType, pieceType);
+                            const key = `${kitNum}-${playerType}-${pieceType}`;
+                            return (
+                              <div key={pieceType} className="space-y-1">
+                                <Label className="text-xs text-slate-500">
+                                  {PIECE_LABELS[pieceType]}
+                                </Label>
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="color"
+                                    value={normalizeColorHex(piece?.color_hex)}
+                                    onChange={(e) =>
+                                      handleKitColorChange(
+                                        kitNum,
+                                        playerType,
+                                        pieceType,
+                                        e.target.value,
+                                      )
+                                    }
+                                    className="w-9 h-9 rounded-lg border border-slate-200 cursor-pointer p-0.5 bg-white"
+                                    title={`${KIT_LABELS[kitNum]} · ${PLAYER_TYPE_LABELS[playerType]} · ${PIECE_LABELS[pieceType]}`}
+                                  />
+                                  <span className="text-xs text-slate-400 font-mono">
+                                    {savingKit === key ? (
+                                      <Loader2 size={12} className="animate-spin" />
+                                    ) : (
+                                      normalizeColorHex(piece?.color_hex).toUpperCase()
+                                    )}
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {kitNum < 3 && <hr className="mt-4 border-slate-100" />}
+                </div>
+              ))}
+            </CardContent>
+          )}
         </Card>
       )}
 

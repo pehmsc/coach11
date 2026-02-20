@@ -7,6 +7,11 @@ export function createClient() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookieOptions: SUPABASE_AUTH_COOKIE_OPTIONS,
+      auth: {
+        flowType: "pkce",
+        // O callback OAuth é tratado explicitamente em /auth/callback/client.
+        detectSessionInUrl: false,
+      },
     }
   )
 }

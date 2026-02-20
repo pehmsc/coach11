@@ -17,12 +17,52 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { Game, Player } from "@/types/database";
 
 interface PlayerWithStatus extends Player {
   isConvocated: boolean;
   isBlocked: boolean; // já convocado noutro jogo de competição no mesmo dia
 }
+
+interface KitPieceRow {
+  id: string;
+  kit_number: number;
+  player_type: "field" | "goalkeeper";
+  piece_type: "shirt" | "shorts" | "socks";
+  color_name: string | null;
+  color_hex: string | null;
+}
+
+type KitSelection = {
+  fp_jersey_kit_id: string | null;
+  fp_shorts_kit_id: string | null;
+  fp_socks_kit_id: string | null;
+  gk_jersey_kit_id: string | null;
+  gk_shorts_kit_id: string | null;
+  gk_socks_kit_id: string | null;
+};
+
+const EMPTY_KIT_SELECTION: KitSelection = {
+  fp_jersey_kit_id: null,
+  fp_shorts_kit_id: null,
+  fp_socks_kit_id: null,
+  gk_jersey_kit_id: null,
+  gk_shorts_kit_id: null,
+  gk_socks_kit_id: null,
+};
+
+const PIECE_LABEL: Record<KitPieceRow["piece_type"], string> = {
+  shirt: "Camisola",
+  shorts: "Calções",
+  socks: "Meias",
+};
 
 export default function GameDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -37,6 +77,9 @@ export default function GameDetailPage() {
   const [now, setNow] = useState(() => new Date());
   const [game, setGame] = useState<Game | null>(null);
   const [players, setPlayers] = useState<PlayerWithStatus[]>([]);
+  const [teamKits, setTeamKits] = useState<KitPieceRow[]>([]);
+  const [kitSelection, setKitSelection] = useState<KitSelection>(EMPTY_KIT_SELECTION);
+  const [savingKitField, setSavingKitField] = useState<keyof KitSelection | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -60,6 +103,8 @@ export default function GameDetailPage() {
       if (!res.ok || !payload?.game) {
         setGame(null);
         setPlayers([]);
+        setTeamKits([]);
+        setKitSelection(EMPTY_KIT_SELECTION);
         setConvocationStatus("draft");
         setError(payload?.error || "Erro ao carregar jogo.");
         return;
@@ -77,13 +122,75 @@ export default function GameDetailPage() {
       }
 
       setPlayers((Array.isArray(payload.players) ? payload.players : []) as PlayerWithStatus[]);
+      setTeamKits((Array.isArray(payload.kits) ? payload.kits : []) as KitPieceRow[]);
+      setKitSelection({
+        ...EMPTY_KIT_SELECTION,
+        ...(typeof payload.kitSelection === "object" && payload.kitSelection
+          ? (payload.kitSelection as Partial<KitSelection>)
+          : {}),
+      });
     } catch {
       setGame(null);
       setPlayers([]);
+      setTeamKits([]);
+      setKitSelection(EMPTY_KIT_SELECTION);
       setConvocationStatus("draft");
       setError("Erro de ligação ao carregar jogo.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  function getKitOptions(
+    playerType: KitPieceRow["player_type"],
+    pieceType: KitPieceRow["piece_type"],
+  ) {
+    return teamKits.filter(
+      (piece) => piece.player_type === playerType && piece.piece_type === pieceType,
+    );
+  }
+
+  async function handleKitChange(field: keyof KitSelection, value: string) {
+    const normalizedValue = value === "__none__" ? null : value;
+    const previousSelection = kitSelection;
+    const nextSelection: KitSelection = {
+      ...kitSelection,
+      [field]: normalizedValue,
+    };
+
+    setSavingKitField(field);
+    setError(null);
+    setKitSelection(nextSelection);
+
+    try {
+      const res = await fetch(`/api/games/${id}/convocation/kits`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(nextSelection),
+      });
+      const payload = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        setKitSelection(previousSelection);
+        setError(payload?.error || "Erro ao guardar equipamentos da convocatória.");
+        return;
+      }
+
+      const responseSelection =
+        typeof payload?.kitSelection === "object" && payload.kitSelection
+          ? (payload.kitSelection as Partial<KitSelection>)
+          : null;
+
+      setKitSelection({
+        ...nextSelection,
+        ...(responseSelection || {}),
+      });
+      setConvocationStatus("draft");
+    } catch {
+      setKitSelection(previousSelection);
+      setError("Erro de ligação ao guardar equipamentos da convocatória.");
+    } finally {
+      setSavingKitField(null);
     }
   }
 
@@ -261,6 +368,71 @@ export default function GameDetailPage() {
           </Button>
         </div>
       )}
+
+      {/* Equipamento por jogo */}
+      <div className="mb-5 rounded-xl border border-slate-200 bg-white p-4 space-y-4">
+        <div>
+          <h2 className="font-bold text-slate-900">Equipamento do jogo</h2>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Seleciona camisola, calções e meias de forma independente.
+          </p>
+        </div>
+
+        {[
+          { title: "Jogadores de campo", playerType: "field" as const, prefix: "fp" as const },
+          {
+            title: "Guarda-redes",
+            playerType: "goalkeeper" as const,
+            prefix: "gk" as const,
+          },
+        ].map((section) => (
+          <div key={section.prefix} className="space-y-2">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+              {section.title}
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              {(["shirt", "shorts", "socks"] as const).map((pieceType) => {
+                const field = `${section.prefix}_${pieceType === "shirt" ? "jersey" : pieceType}_kit_id` as keyof KitSelection;
+                const options = getKitOptions(section.playerType, pieceType);
+                const selectedValue = kitSelection[field];
+                const hasSelectedOption = !selectedValue
+                  ? true
+                  : options.some((option) => option.id === selectedValue);
+
+                return (
+                  <div key={pieceType} className="space-y-1">
+                    <label className="text-xs text-slate-500">{PIECE_LABEL[pieceType]}</label>
+                    <Select
+                      value={selectedValue ?? "__none__"}
+                      onValueChange={(value) => void handleKitChange(field, value)}
+                      disabled={savingKitField === field}
+                    >
+                      <SelectTrigger className="h-9">
+                        <SelectValue placeholder="Sem seleção" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">Sem seleção</SelectItem>
+                        {!hasSelectedOption && selectedValue && (
+                          <SelectItem value={selectedValue}>Seleção atual (indisponível)</SelectItem>
+                        )}
+                        {options.map((piece) => {
+                          const pieceColor = (piece.color_hex || piece.color_name || "Sem cor")
+                            .toUpperCase();
+                          return (
+                            <SelectItem key={piece.id} value={piece.id}>
+                              Kit {piece.kit_number} · {pieceColor}
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
 
       {/* Convocatória */}
       <div className="flex items-center justify-between mb-3">

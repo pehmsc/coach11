@@ -85,7 +85,9 @@ export async function GET(_request: Request, { params }: RouteContext) {
 
     const { data: convocations, error: convocationError } = await admin
       .from("convocations")
-      .select("id, status, created_at")
+      .select(
+        "id, status, created_at, fp_jersey_kit_id, fp_shorts_kit_id, fp_socks_kit_id, gk_jersey_kit_id, gk_shorts_kit_id, gk_socks_kit_id",
+      )
       .eq("game_id", gameId)
       .order("created_at", { ascending: false })
       .order("id", { ascending: false });
@@ -99,6 +101,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
 
     const convocationIds = (convocations || []).map((c) => c.id);
     const convocationStatus = toConvocationStatus(convocations?.[0]?.status);
+    const latestConvocation = convocations?.[0] || null;
 
     const selectedIds = new Set<string>();
     if (convocationIds.length > 0) {
@@ -185,12 +188,51 @@ export async function GET(_request: Request, { params }: RouteContext) {
       };
     });
 
+    let kits: Record<string, unknown>[] = [];
+    if (teamId) {
+      const { data: kitRows, error: kitsError } = await admin
+        .from("kit_pieces")
+        .select("*")
+        .eq("team_id", teamId)
+        .order("kit_number")
+        .order("player_type")
+        .order("piece_type");
+
+      if (kitsError) {
+        return NextResponse.json(
+          { error: "Erro ao carregar equipamentos da equipa." },
+          { status: 500 },
+        );
+      }
+
+      kits = (kitRows || []) as unknown as Record<string, unknown>[];
+    }
+
     return NextResponse.json({
       success: true,
       game,
+      teamId,
       convocationStatus,
       convocationId: convocations?.[0]?.id ?? null,
       convocationCount: convocationIds.length,
+      kitSelection: latestConvocation
+        ? {
+            fp_jersey_kit_id: latestConvocation.fp_jersey_kit_id ?? null,
+            fp_shorts_kit_id: latestConvocation.fp_shorts_kit_id ?? null,
+            fp_socks_kit_id: latestConvocation.fp_socks_kit_id ?? null,
+            gk_jersey_kit_id: latestConvocation.gk_jersey_kit_id ?? null,
+            gk_shorts_kit_id: latestConvocation.gk_shorts_kit_id ?? null,
+            gk_socks_kit_id: latestConvocation.gk_socks_kit_id ?? null,
+          }
+        : {
+            fp_jersey_kit_id: null,
+            fp_shorts_kit_id: null,
+            fp_socks_kit_id: null,
+            gk_jersey_kit_id: null,
+            gk_shorts_kit_id: null,
+            gk_socks_kit_id: null,
+          },
+      kits,
       players,
     });
   } catch (error) {
