@@ -177,8 +177,10 @@ export default function CalendarPage() {
     loadTeam();
   }, [supabase]);
 
+  // Efeito de bootstrap/sincronização de dados com o backend.
   useEffect(() => {
-    if (ageGroupId) loadEvents();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (ageGroupId) void loadEvents();
   }, [ageGroupId, weekStart, loadEvents]);
 
   function openAdd(type: "training" | "game", date: string) {

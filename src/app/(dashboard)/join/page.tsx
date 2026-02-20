@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -17,7 +17,7 @@ import { Check, Ticket, ArrowRight, Loader2 } from "lucide-react";
 export default function JoinPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   const [code, setCode] = useState(searchParams.get("code") || "");
   const [loading, setLoading] = useState(false);
@@ -35,11 +35,43 @@ export default function JoinPage() {
     coordinator: "Coordenador",
   };
 
-  useEffect(() => {
-    checkUserStatus();
-  }, []);
+  const handleRedeemWithCode = useCallback(async (inviteCode: string) => {
+    setLoading(true);
+    setError(null);
 
-  async function checkUserStatus() {
+    try {
+      const res = await fetch("/api/invite/redeem", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inviteCode }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (res.status === 409) {
+        router.push("/dashboard");
+        return;
+      }
+
+      if (!res.ok || !data.success) {
+        setError(data.error || "Código inválido ou já utilizado.");
+        setLoading(false);
+        return;
+      }
+
+      setSuccess({
+        clubName: data.ageGroup?.clubName || "",
+        ageGroupName: data.ageGroup?.name || "",
+        role: data.role,
+      });
+    } catch {
+      setError("Erro de ligação. Tenta novamente.");
+    }
+
+    setLoading(false);
+  }, [router]);
+
+  const checkUserStatus = useCallback(async () => {
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -81,45 +113,20 @@ export default function JoinPage() {
     const urlCode = searchParams.get("code");
     if (urlCode) {
       setCode(urlCode);
-      handleRedeemWithCode(urlCode);
+      void handleRedeemWithCode(urlCode);
     }
-  }
+  }, [handleRedeemWithCode, router, searchParams, supabase]);
 
-  async function handleRedeemWithCode(inviteCode: string) {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const res = await fetch("/api/invite/redeem", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ inviteCode }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok || !data.success) {
-        setError(data.error || "Código inválido ou já utilizado.");
-        setLoading(false);
-        return;
-      }
-
-      setSuccess({
-        clubName: data.ageGroup?.clubName || "",
-        ageGroupName: data.ageGroup?.name || "",
-        role: data.role,
-      });
-    } catch {
-      setError("Erro de ligação. Tenta novamente.");
-    }
-
-    setLoading(false);
-  }
+  // Bootstrap da página de convite após montar.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void checkUserStatus();
+  }, [checkUserStatus]);
 
   async function handleRedeem(e: React.FormEvent) {
     e.preventDefault();
     if (!code.trim()) return;
-    handleRedeemWithCode(code.trim());
+    void handleRedeemWithCode(code.trim());
   }
 
   if (checking) {

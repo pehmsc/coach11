@@ -1,18 +1,66 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AlertCircle, X } from "lucide-react";
 
 export default function RedeemInviteGate() {
   const router = useRouter();
   const sp = useSearchParams();
-  const [running, setRunning] = useState(false);
+  const [, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const lastProcessedCodeRef = useRef<string | null>(null);
+
+  const redeemInvite = useCallback(
+    async (code: string) => {
+      setRunning(true);
+      setError(null);
+
+      try {
+        const res = await fetch("/api/invite/redeem", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ inviteCode: code }),
+        });
+
+        let payload: { error?: string } | null = null;
+        try {
+          payload = await res.json();
+        } catch {
+          payload = null;
+        }
+
+        if (res.ok || res.status === 409) {
+          localStorage.removeItem("inviteCode");
+          localStorage.removeItem("inviteEmail");
+          router.replace("/dashboard");
+          router.refresh();
+          return;
+        }
+
+        if (res.status === 401) {
+          localStorage.setItem("inviteCode", code);
+          router.replace(`/login?code=${encodeURIComponent(code)}`);
+          return;
+        }
+
+        const msg =
+          payload?.error ||
+          "Erro ao aceitar o convite. Tenta novamente ou contacta o coordenador.";
+
+        console.error("Redeem falhou:", res.status, payload);
+        setError(msg);
+      } catch (err) {
+        console.error("Erro de rede no redeem:", err);
+        setError("Falha de ligação. Verifica a internet e tenta novamente.");
+      } finally {
+        setRunning(false);
+      }
+    },
+    [router],
+  );
 
   useEffect(() => {
-    if (running) return;
-
     const codeFromUrl =
       sp.get("code") ?? sp.get("inviteCode") ?? sp.get("invite_code");
 
@@ -23,43 +71,11 @@ export default function RedeemInviteGate() {
       "";
 
     if (!code) return;
+    if (lastProcessedCodeRef.current === code) return;
 
-    setRunning(true);
-
-    (async () => {
-      const res = await fetch("/api/invite/redeem", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ inviteCode: code }),
-      });
-
-      if (res.ok) {
-        localStorage.removeItem("inviteCode");
-        localStorage.removeItem("inviteEmail");
-        router.replace("/dashboard");
-        router.refresh();
-        return;
-      }
-
-      const err = await res.json().catch(() => ({}));
-
-      // 409 = já associado (tudo ok)
-      if (res.status === 409) {
-        localStorage.removeItem("inviteCode");
-        localStorage.removeItem("inviteEmail");
-        router.replace("/dashboard");
-        router.refresh();
-        return;
-      }
-
-      const msg =
-        err?.error ||
-        "Erro ao aceitar o convite. Tenta novamente ou contacta o coordenador.";
-      console.error("Redeem falhou:", res.status, err);
-      setError(msg);
-      setRunning(false);
-    })();
-  }, [running, router, sp]);
+    lastProcessedCodeRef.current = code;
+    void redeemInvite(code);
+  }, [redeemInvite, sp]);
 
   if (!error) return null;
 

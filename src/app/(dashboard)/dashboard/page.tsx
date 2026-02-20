@@ -231,7 +231,7 @@ export default async function DashboardPage() {
               const needsConvocation = gameDate && gameDate <= in48h && gameDate >= now;
               return (
                 <div key={game.id} className="space-y-1">
-                  <Link href="/calendar">
+                  <Link href={`/games/${game.id}`}>
                     <div className="flex items-center gap-3 p-4 bg-blue-50 border border-blue-200 rounded-xl hover:border-blue-300 transition-colors">
                       <div className="w-8 h-8 rounded-lg bg-blue-500 flex items-center justify-center flex-shrink-0">
                         <span className="text-white text-xs font-bold">J</span>
@@ -252,7 +252,7 @@ export default async function DashboardPage() {
                     </div>
                   </Link>
                   {needsConvocation && (
-                    <Link href="/calendar">
+                    <Link href={`/games/${game.id}`}>
                       <div className="flex items-center gap-3 p-3 bg-amber-50 border-2 border-amber-300 rounded-xl hover:border-amber-400 transition-colors ml-2">
                         <AlertCircle size={16} className="text-amber-500 flex-shrink-0" />
                         <div className="flex-1">

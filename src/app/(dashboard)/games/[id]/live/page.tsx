@@ -88,7 +88,12 @@ export default function LiveGamePage() {
         .eq("convocation_id", conv.id);
       convPlayers = (cp || [])
         .map((r) => r.players as unknown as Player)
-        .filter(Boolean);
+        .filter(Boolean)
+        .sort(
+          (a, b) =>
+            a.first_name.localeCompare(b.first_name, "pt", { sensitivity: "base" }) ||
+            a.last_name.localeCompare(b.last_name, "pt", { sensitivity: "base" }),
+        );
     }
 
     // Buscar stats live existentes para saber quem está em campo

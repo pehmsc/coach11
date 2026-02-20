@@ -35,7 +35,6 @@ export default function GameDetailPage() {
   const [game, setGame] = useState<Game | null>(null);
   const [convocation, setConvocation] = useState<Convocation | null>(null);
   const [players, setPlayers] = useState<PlayerWithStatus[]>([]);
-  const [ageGroupId, setAgeGroupId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -67,7 +66,6 @@ export default function GameDetailPage() {
     setGame(gameData);
 
     const agId = gameData.age_group_id;
-    setAgeGroupId(agId);
 
     // Buscar ou criar convocatória
     let conv: Convocation | null = null;
@@ -101,7 +99,8 @@ export default function GameDetailPage() {
       .select("*")
       .eq("age_group_id", agId)
       .eq("status", "active")
-      .order("jersey_number", { ascending: true, nullsFirst: false });
+      .order("first_name", { ascending: true })
+      .order("last_name", { ascending: true });
 
     // Buscar convocados desta convocatória
     const convocatedIds = new Set<string>();
