@@ -58,15 +58,8 @@ export async function POST(request: Request) {
       );
     }
 
-    // Idempotência: se já foi aceite por este utilizador, considerar sucesso lógico
-    if (invite.accepted_at) {
-      if (invite.accepted_by === user.id) {
-        return NextResponse.json(
-          { error: "Já estás associado a este escalão" },
-          { status: 409 },
-        );
-      }
-
+    // Convite já utilizado por outro utilizador
+    if (invite.accepted_at && invite.accepted_by && invite.accepted_by !== user.id) {
       return NextResponse.json(
         { error: "Este código já foi utilizado por outro utilizador." },
         { status: 409 },
@@ -153,10 +146,21 @@ export async function POST(request: Request) {
           status: "accepted",
         })
         .eq("id", invite.id);
-      return NextResponse.json(
-        { error: "Já estás associado a este escalão" },
-        { status: 409 },
-      );
+
+      const { data: ageGroup } = await admin
+        .from("age_groups")
+        .select("id, name, club_name")
+        .eq("id", invite.age_group_id)
+        .single();
+
+      return NextResponse.json({
+        success: true,
+        alreadyLinked: true,
+        ageGroup: ageGroup
+          ? { name: ageGroup.name, clubName: ageGroup.club_name }
+          : null,
+        role: invite.role,
+      });
     }
 
     // 5. Criar associação em team_staff

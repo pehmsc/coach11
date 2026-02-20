@@ -30,7 +30,17 @@ export async function GET(request: Request) {
     },
   );
 
-  const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+  let { data, error } = await supabase.auth.exchangeCodeForSession(code);
+
+  // Mitigar falhas transitórias de PKCE/code exchange em alguns navegadores.
+  if (error || !data.session) {
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const retry = await supabase.auth.exchangeCodeForSession(code);
+    if (!retry.error && retry.data.session) {
+      data = retry.data;
+      error = null;
+    }
+  }
 
   if (error || !data.session) {
     // PKCE falhou — verificar se existe sessão válida de tentativa anterior

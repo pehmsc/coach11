@@ -156,21 +156,65 @@ export default function CalendarPage() {
         return;
       }
 
-      const { data: ag, error } = await supabase
-        .from("age_groups")
-        .select("*, teams(*)")
-        .eq("coordinator_id", user.id)
-        .single();
+      let resolvedAgeGroupId: string | null = null;
+      let resolvedTeamId: string | null = null;
+      let resolvedAgeGroupName = "";
 
-      if (error || !ag) {
-        console.error("Erro ao carregar escalão:", error);
+      // Conta coordenador
+      const { data: managedAgeGroup } = await supabase
+        .from("age_groups")
+        .select("id, club_name, name, teams(id)")
+        .eq("coordinator_id", user.id)
+        .limit(1)
+        .maybeSingle();
+
+      if (managedAgeGroup) {
+        resolvedAgeGroupId = managedAgeGroup.id;
+        resolvedTeamId = managedAgeGroup.teams?.[0]?.id ?? null;
+        resolvedAgeGroupName = `${managedAgeGroup.club_name} · ${managedAgeGroup.name}`;
+      }
+
+      // Conta staff convidado
+      if (!resolvedAgeGroupId) {
+        const { data: staffTeam } = await supabase
+          .from("team_staff")
+          .select("team_id")
+          .eq("profile_id", user.id)
+          .limit(1)
+          .maybeSingle();
+
+        if (staffTeam?.team_id) {
+          const { data: team } = await supabase
+            .from("teams")
+            .select("id, age_group_id")
+            .eq("id", staffTeam.team_id)
+            .maybeSingle();
+
+          if (team?.age_group_id) {
+            const { data: staffAgeGroup } = await supabase
+              .from("age_groups")
+              .select("id, club_name, name")
+              .eq("id", team.age_group_id)
+              .maybeSingle();
+
+            if (staffAgeGroup) {
+              resolvedAgeGroupId = staffAgeGroup.id;
+              resolvedTeamId = team.id;
+              resolvedAgeGroupName = `${staffAgeGroup.club_name} · ${staffAgeGroup.name}`;
+            }
+          }
+        }
+      }
+
+      if (!resolvedAgeGroupId) {
+        console.error("Erro ao carregar escalão: utilizador sem equipa associada.");
         setLoading(false);
         return;
       }
 
-      setAgeGroupId(ag.id);
-      setAgeGroupName(`${ag.club_name} · ${ag.name}`);
-      if (ag.teams?.[0]) setTeamId(ag.teams[0].id);
+      setAgeGroupId(resolvedAgeGroupId);
+      setAgeGroupName(resolvedAgeGroupName);
+      if (resolvedTeamId) setTeamId(resolvedTeamId);
       setLoading(false);
     }
 

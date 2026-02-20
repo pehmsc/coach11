@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { Game, Player, Convocation } from "@/types/database";
+import type { Game, Player } from "@/types/database";
 
 interface PlayerWithStatus extends Player {
   isConvocated: boolean;
@@ -33,7 +33,6 @@ export default function GameDetailPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [game, setGame] = useState<Game | null>(null);
-  const [convocation, setConvocation] = useState<Convocation | null>(null);
   const [players, setPlayers] = useState<PlayerWithStatus[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -67,26 +66,12 @@ export default function GameDetailPage() {
 
     const agId = gameData.age_group_id;
 
-    // Buscar ou criar convocatória
-    let conv: Convocation | null = null;
-    const { data: existingConv } = await supabase
+    // Buscar convocatória (se existir)
+    const { data: conv } = await supabase
       .from("convocations")
-      .select("*")
+      .select("id")
       .eq("game_id", id)
       .maybeSingle();
-
-    if (existingConv) {
-      conv = existingConv;
-    } else {
-      const { data: newConv } = await supabase
-        .from("convocations")
-        .insert({ game_id: id, status: "draft" })
-        .select()
-        .single();
-      conv = newConv;
-    }
-
-    setConvocation(conv);
 
     if (!agId) {
       setLoading(false);
@@ -158,46 +143,35 @@ export default function GameDetailPage() {
   }
 
   async function togglePlayer(player: PlayerWithStatus) {
-    if (!convocation || player.isBlocked) return;
+    if (player.isBlocked) return;
     setSaving(player.id);
     setError(null);
 
-    if (player.isConvocated) {
-      // Remover da convocatória
-      const { error } = await supabase
-        .from("convocation_players")
-        .delete()
-        .eq("convocation_id", convocation.id)
-        .eq("player_id", player.id);
-
-      if (error) {
-        setError("Erro ao remover jogador.");
-      } else {
-        setPlayers((prev) =>
-          prev.map((p) =>
-            p.id === player.id ? { ...p, isConvocated: false } : p,
-          ),
-        );
-      }
-    } else {
-      // Adicionar à convocatória
-      const { error } = await supabase.from("convocation_players").insert({
-        convocation_id: convocation.id,
-        player_id: player.id,
+    try {
+      const res = await fetch(`/api/games/${id}/convocation/toggle`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ playerId: player.id }),
       });
 
-      if (error) {
-        setError("Erro ao convocar jogador.");
+      const payload = await res.json().catch(() => ({}));
+
+      if (!res.ok || typeof payload?.isConvocated !== "boolean") {
+        setError(payload?.error || "Erro ao atualizar convocatória.");
       } else {
         setPlayers((prev) =>
           prev.map((p) =>
-            p.id === player.id ? { ...p, isConvocated: true } : p,
+            p.id === player.id
+              ? { ...p, isConvocated: payload.isConvocated as boolean }
+              : p,
           ),
         );
       }
+    } catch {
+      setError("Erro de ligação ao atualizar convocatória.");
+    } finally {
+      setSaving(null);
     }
-
-    setSaving(null);
   }
 
   const convocatedCount = players.filter((p) => p.isConvocated).length;

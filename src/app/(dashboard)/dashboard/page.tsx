@@ -36,13 +36,25 @@ export default async function DashboardPage() {
     .eq("id", user.id)
     .single();
 
-  const { data: ageGroups } = await supabase
+  const { data: managedAgeGroups } = await supabase
     .from("age_groups")
     .select("*, teams(*)")
     .eq("coordinator_id", user.id);
 
-  const hasSetup = ageGroups && ageGroups.length > 0;
-  const firstTeam = ageGroups?.[0]?.teams?.[0];
+  let firstTeamId: string | null = managedAgeGroups?.[0]?.teams?.[0]?.id ?? null;
+
+  // Conta de staff convidado (não coordenador)
+  if (!firstTeamId) {
+    const { data: staffTeam } = await supabase
+      .from("team_staff")
+      .select("team_id")
+      .eq("profile_id", user.id)
+      .limit(1)
+      .maybeSingle();
+    firstTeamId = staffTeam?.team_id ?? null;
+  }
+
+  const hasSetup = !!firstTeamId;
 
   const now = new Date();
   const todayDate = format(now, "yyyy-MM-dd");
@@ -51,11 +63,11 @@ export default async function DashboardPage() {
 
   // Próximos treinos (7 dias) — mais recente primeiro
   let upcomingTrainings: TrainingSession[] = [];
-  if (firstTeam) {
+  if (firstTeamId) {
     const { data } = await supabase
       .from("training_sessions")
       .select("*")
-      .eq("team_id", firstTeam.id)
+      .eq("team_id", firstTeamId)
       .gte("session_date", todayDate)
       .lte("session_date", in7days)
       .neq("status", "completed")
@@ -66,11 +78,11 @@ export default async function DashboardPage() {
 
   // Próximos jogos (7 dias)
   let upcomingGames: Game[] = [];
-  if (firstTeam) {
+  if (firstTeamId) {
     const { data } = await supabase
       .from("games")
       .select("*")
-      .eq("team_id", firstTeam.id)
+      .eq("team_id", firstTeamId)
       .gte("game_datetime", `${todayDate}T00:00:00`)
       .lte("game_datetime", `${in7days}T23:59:59`)
       .neq("status", "completed")

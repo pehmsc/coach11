@@ -49,7 +49,14 @@ export default function JoinPage() {
       const data = await res.json().catch(() => ({}));
 
       if (res.status === 409) {
-        router.push("/dashboard");
+        const message = String(data?.error || "");
+        if (message.toLowerCase().includes("já estás associado")) {
+          router.push("/dashboard");
+          return;
+        }
+
+        setError(message || "Este convite já foi utilizado.");
+        setLoading(false);
         return;
       }
 

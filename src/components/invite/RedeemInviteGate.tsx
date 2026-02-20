@@ -17,39 +17,62 @@ export default function RedeemInviteGate() {
       setError(null);
 
       try {
-        const res = await fetch("/api/invite/redeem", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ inviteCode: code }),
-        });
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const res = await fetch("/api/invite/redeem", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ inviteCode: code }),
+          });
 
-        let payload: { error?: string } | null = null;
-        try {
-          payload = await res.json();
-        } catch {
-          payload = null;
-        }
+          let payload: { error?: string } | null = null;
+          try {
+            payload = await res.json();
+          } catch {
+            payload = null;
+          }
 
-        if (res.ok || res.status === 409) {
-          localStorage.removeItem("inviteCode");
-          localStorage.removeItem("inviteEmail");
-          router.replace("/dashboard");
-          router.refresh();
+          const errorText =
+            typeof payload?.error === "string" ? payload.error.toLowerCase() : "";
+
+          if (res.ok) {
+            localStorage.removeItem("inviteCode");
+            localStorage.removeItem("inviteEmail");
+            router.replace("/dashboard");
+            router.refresh();
+            return;
+          }
+
+          // Compatibilidade com deploy anterior: 409 "já associado".
+          if (
+            res.status === 409 &&
+            errorText.includes("já estás associado")
+          ) {
+            localStorage.removeItem("inviteCode");
+            localStorage.removeItem("inviteEmail");
+            router.replace("/dashboard");
+            router.refresh();
+            return;
+          }
+
+          if (res.status === 401 && attempt < 2) {
+            await new Promise((resolve) => setTimeout(resolve, 500));
+            continue;
+          }
+
+          if (res.status === 401) {
+            localStorage.setItem("inviteCode", code);
+            router.replace(`/login?code=${encodeURIComponent(code)}`);
+            return;
+          }
+
+          const msg =
+            payload?.error ||
+            "Erro ao aceitar o convite. Tenta novamente ou contacta o coordenador.";
+
+          console.error("Redeem falhou:", res.status, payload);
+          setError(msg);
           return;
         }
-
-        if (res.status === 401) {
-          localStorage.setItem("inviteCode", code);
-          router.replace(`/login?code=${encodeURIComponent(code)}`);
-          return;
-        }
-
-        const msg =
-          payload?.error ||
-          "Erro ao aceitar o convite. Tenta novamente ou contacta o coordenador.";
-
-        console.error("Redeem falhou:", res.status, payload);
-        setError(msg);
       } catch (err) {
         console.error("Erro de rede no redeem:", err);
         setError("Falha de ligação. Verifica a internet e tenta novamente.");
