@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -15,14 +15,18 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Suspense } from "react";
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const sp = useSearchParams();
+  const [email, setEmail] = useState(() => sp.get("email") || "");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const inviteCode = sp.get("code") ?? sp.get("inviteCode") ?? null;
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -38,17 +42,25 @@ export default function LoginPage() {
       setLoading(false);
       return;
     }
-    router.push("/dashboard");
+    // Se há código de convite na URL, redirecionar para dashboard com o código
+    const dest = inviteCode ? `/dashboard?code=${inviteCode}` : "/dashboard";
+    router.push(dest);
     router.refresh();
   }
 
   async function handleGoogleLogin() {
     setGoogleLoading(true);
     const supabase = createClient();
+
+    // Preservar o código de convite através do OAuth passando-o no next param
+    const next = inviteCode
+      ? `/dashboard?code=${encodeURIComponent(inviteCode)}`
+      : "/dashboard";
+
     await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
       },
     });
   }
@@ -65,6 +77,12 @@ export default function LoginPage() {
           {error && (
             <div className="bg-red-50 text-red-700 text-sm p-3 rounded-md border border-red-200">
               {error}
+            </div>
+          )}
+
+          {sp.get("error") === "exchange_failed" && (
+            <div className="bg-amber-50 text-amber-700 text-sm p-3 rounded-md border border-amber-200">
+              Ocorreu um problema com o Google. Por favor tenta novamente.
             </div>
           )}
 
@@ -142,7 +160,7 @@ export default function LoginPage() {
           <p className="text-sm text-slate-500 text-center">
             Não tens conta?{" "}
             <Link
-              href="/register"
+              href={inviteCode ? `/register?code=${inviteCode}` : "/register"}
               className="text-emerald-600 font-medium hover:underline"
             >
               Registar
@@ -151,5 +169,13 @@ export default function LoginPage() {
         </CardFooter>
       </form>
     </Card>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="p-4">A carregar...</div>}>
+      <LoginForm />
+    </Suspense>
   );
 }

@@ -33,6 +33,16 @@ export async function GET(request: Request) {
   const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
   if (error || !data.session) {
+    // PKCE falhou — verificar se existe sessão válida de tentativa anterior
+    const {
+      data: { user: existingUser },
+    } = await supabase.auth.getUser();
+
+    if (existingUser) {
+      // Sessão válida existe — redirecionar normalmente
+      return NextResponse.redirect(`${origin}${next}`);
+    }
+
     console.error("Auth callback error:", error);
     return NextResponse.redirect(`${origin}/login?error=exchange_failed`);
   }

@@ -60,7 +60,7 @@ export default function AttendancePage() {
       .select("*")
       .eq("age_group_id", ag.id)
       .eq("status", "active")
-      .order("last_name");
+      .order("first_name");
 
     const activePlayers = playersData || [];
     setPlayers(activePlayers);

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -16,14 +16,17 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
-export default function RegisterPage() {
+function RegisterForm() {
   const router = useRouter();
+  const sp = useSearchParams();
   const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(() => sp.get("email") || "");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const inviteCode = sp.get("code") ?? sp.get("inviteCode") ?? null;
 
   async function handleRegister(e: React.FormEvent) {
     e.preventDefault();
@@ -45,16 +48,25 @@ export default function RegisterPage() {
       setLoading(false);
       return;
     }
-    router.push("/dashboard");
+    const dest = inviteCode ? `/dashboard?code=${inviteCode}` : "/dashboard";
+    router.push(dest);
     router.refresh();
   }
 
   async function handleGoogleLogin() {
     setGoogleLoading(true);
     const supabase = createClient();
+
+    // Preservar o código de convite através do OAuth passando-o no next param
+    const next = inviteCode
+      ? `/dashboard?code=${encodeURIComponent(inviteCode)}`
+      : "/dashboard";
+
     await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+      },
     });
   }
 
@@ -62,7 +74,11 @@ export default function RegisterPage() {
     <Card>
       <CardHeader>
         <CardTitle>Criar conta</CardTitle>
-        <CardDescription>Começa a gerir o teu escalão hoje</CardDescription>
+        <CardDescription>
+          {inviteCode
+            ? "Cria conta para aceitar o convite"
+            : "Começa a gerir o teu escalão hoje"}
+        </CardDescription>
       </CardHeader>
 
       <form onSubmit={handleRegister}>
@@ -155,7 +171,7 @@ export default function RegisterPage() {
           <p className="text-sm text-slate-500 text-center">
             Já tens conta?{" "}
             <Link
-              href="/login"
+              href={inviteCode ? `/login?code=${inviteCode}` : "/login"}
               className="text-emerald-600 font-medium hover:underline"
             >
               Entrar
@@ -164,5 +180,13 @@ export default function RegisterPage() {
         </CardFooter>
       </form>
     </Card>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={<div className="p-4">A carregar...</div>}>
+      <RegisterForm />
+    </Suspense>
   );
 }

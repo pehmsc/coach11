@@ -13,6 +13,7 @@ import {
   Loader2,
   Trash2,
   Calendar,
+  PlusCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,12 +39,26 @@ interface CompetitionForm {
   has_two_legs: boolean;
 }
 
-const EMPTY_FORM: CompetitionForm = {
+interface GameForm {
+  opponent_name: string;
+  game_datetime: string;
+  is_home: boolean;
+  location: string;
+}
+
+const EMPTY_COMP_FORM: CompetitionForm = {
   name: "",
   season: "2025/2026",
   phase: "",
   total_rounds: "",
   has_two_legs: false,
+};
+
+const EMPTY_GAME_FORM: GameForm = {
+  opponent_name: "",
+  game_datetime: "",
+  is_home: true,
+  location: "",
 };
 
 export default function CompetitionsPage() {
@@ -53,13 +68,21 @@ export default function CompetitionsPage() {
   const [loading, setLoading] = useState(true);
   const [competitions, setCompetitions] = useState<CompetitionWithGames[]>([]);
   const [teamId, setTeamId] = useState<string | null>(null);
+  const [ageGroupId, setAgeGroupId] = useState<string | null>(null);
 
-  const [showForm, setShowForm] = useState(false);
+  // Competição form
+  const [showCompForm, setShowCompForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState(EMPTY_FORM);
-  const [saving, setSaving] = useState(false);
+  const [compForm, setCompForm] = useState(EMPTY_COMP_FORM);
+  const [savingComp, setSavingComp] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // Jogo form
+  const [addingGameToCompId, setAddingGameToCompId] = useState<string | null>(null);
+  const [gameForm, setGameForm] = useState(EMPTY_GAME_FORM);
+  const [savingGame, setSavingGame] = useState(false);
+
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -84,6 +107,7 @@ export default function CompetitionsPage() {
       return;
     }
 
+    setAgeGroupId(ag.id);
     const firstTeam = (ag.teams as Array<{ id: string }>)?.[0];
     if (!firstTeam) {
       setLoading(false);
@@ -95,7 +119,7 @@ export default function CompetitionsPage() {
     const { data: comps } = await supabase
       .from("competitions")
       .select(
-        "*, games(id, game_datetime, opponent_name, is_home, status, score_home, score_away)",
+        "*, games(id, game_datetime, opponent_name, is_home, status, score_home, score_away, location)",
       )
       .eq("team_id", firstTeam.id)
       .order("created_at", { ascending: false });
@@ -104,16 +128,16 @@ export default function CompetitionsPage() {
     setLoading(false);
   }
 
-  function openCreate() {
+  function openCreateComp() {
     setEditingId(null);
-    setForm(EMPTY_FORM);
+    setCompForm(EMPTY_COMP_FORM);
     setError(null);
-    setShowForm(true);
+    setShowCompForm(true);
   }
 
-  function openEdit(comp: CompetitionWithGames) {
+  function openEditComp(comp: CompetitionWithGames) {
     setEditingId(comp.id);
-    setForm({
+    setCompForm({
       name: comp.name,
       season: comp.season,
       phase: comp.phase || "",
@@ -121,29 +145,29 @@ export default function CompetitionsPage() {
       has_two_legs: comp.has_two_legs || false,
     });
     setError(null);
-    setShowForm(true);
+    setShowCompForm(true);
   }
 
-  function closeForm() {
-    setShowForm(false);
+  function closeCompForm() {
+    setShowCompForm(false);
     setEditingId(null);
-    setForm(EMPTY_FORM);
+    setCompForm(EMPTY_COMP_FORM);
     setError(null);
   }
 
-  async function handleSave(e: { preventDefault(): void }) {
+  async function handleSaveComp(e: { preventDefault(): void }) {
     e.preventDefault();
     if (!teamId) return;
-    setSaving(true);
+    setSavingComp(true);
     setError(null);
 
     const payload = {
       team_id: teamId,
-      name: form.name,
-      season: form.season,
-      phase: form.phase || null,
-      total_rounds: form.total_rounds ? parseInt(form.total_rounds) : null,
-      has_two_legs: form.has_two_legs,
+      name: compForm.name,
+      season: compForm.season,
+      phase: compForm.phase || null,
+      total_rounds: compForm.total_rounds ? parseInt(compForm.total_rounds) : null,
+      has_two_legs: compForm.has_two_legs,
     };
 
     if (editingId) {
@@ -153,24 +177,24 @@ export default function CompetitionsPage() {
         .eq("id", editingId);
       if (error) {
         setError("Erro ao guardar: " + error.message);
-        setSaving(false);
+        setSavingComp(false);
         return;
       }
     } else {
       const { error } = await supabase.from("competitions").insert(payload);
       if (error) {
         setError("Erro ao criar: " + error.message);
-        setSaving(false);
+        setSavingComp(false);
         return;
       }
     }
 
-    setSaving(false);
-    closeForm();
+    setSavingComp(false);
+    closeCompForm();
     loadData();
   }
 
-  async function handleDelete(id: string) {
+  async function handleDeleteComp(id: string) {
     setDeletingId(id);
     setConfirmDeleteId(null);
 
@@ -185,6 +209,46 @@ export default function CompetitionsPage() {
       setCompetitions((prev) => prev.filter((c) => c.id !== id));
     }
     setDeletingId(null);
+  }
+
+  function openAddGame(compId: string) {
+    setAddingGameToCompId(compId);
+    setGameForm(EMPTY_GAME_FORM);
+    setError(null);
+  }
+
+  function closeGameForm() {
+    setAddingGameToCompId(null);
+    setGameForm(EMPTY_GAME_FORM);
+    setError(null);
+  }
+
+  async function handleSaveGame(e: { preventDefault(): void }) {
+    e.preventDefault();
+    if (!teamId || !ageGroupId || !addingGameToCompId) return;
+    setSavingGame(true);
+    setError(null);
+
+    const { error } = await supabase.from("games").insert({
+      team_id: teamId,
+      age_group_id: ageGroupId,
+      competition_id: addingGameToCompId,
+      opponent_name: gameForm.opponent_name,
+      game_datetime: gameForm.game_datetime,
+      is_home: gameForm.is_home,
+      location: gameForm.location || null,
+      status: "scheduled",
+    });
+
+    if (error) {
+      setError("Erro ao criar jogo: " + error.message);
+      setSavingGame(false);
+      return;
+    }
+
+    setSavingGame(false);
+    closeGameForm();
+    loadData();
   }
 
   function gameResultLabel(game: Game) {
@@ -226,7 +290,7 @@ export default function CompetitionsPage() {
           <p className="text-slate-500 text-sm">Época 2025/2026</p>
         </div>
         <Button
-          onClick={openCreate}
+          onClick={openCreateComp}
           className="bg-emerald-600 hover:bg-emerald-700"
           size="sm"
         >
@@ -246,7 +310,7 @@ export default function CompetitionsPage() {
           <Trophy size={40} className="text-slate-200 mx-auto mb-3" />
           <p className="text-slate-500 text-sm">Nenhuma competição criada.</p>
           <Button
-            onClick={openCreate}
+            onClick={openCreateComp}
             variant="outline"
             size="sm"
             className="mt-4"
@@ -276,12 +340,13 @@ export default function CompetitionsPage() {
                         {comp.phase ? ` · ${comp.phase}` : ""}
                         {comp.total_rounds
                           ? ` · ${games.length}/${comp.total_rounds} jogos`
-                          : ` · ${games.length} jogos`}
+                          : ` · ${games.length} jogo${games.length !== 1 ? "s" : ""}`}
+                        {comp.has_two_legs ? " · 2 mãos" : ""}
                       </p>
                     </div>
                     <div className="flex items-center gap-1">
                       <button
-                        onClick={() => openEdit(comp)}
+                        onClick={() => openEditComp(comp)}
                         className="text-xs text-slate-400 hover:text-slate-600 px-2 py-1 rounded-lg hover:bg-slate-100 transition-colors"
                       >
                         Editar
@@ -316,7 +381,7 @@ export default function CompetitionsPage() {
                         Eliminar esta competição e todos os jogos?
                       </p>
                       <button
-                        onClick={() => handleDelete(comp.id)}
+                        onClick={() => handleDeleteComp(comp.id)}
                         className="text-xs font-semibold text-white bg-red-500 hover:bg-red-600 px-3 py-1 rounded-lg"
                       >
                         Eliminar
@@ -354,11 +419,18 @@ export default function CompetitionsPage() {
                             "d MMM · HH:mm",
                             { locale: pt },
                           )}
+                          {game.location ? ` · ${game.location}` : ""}
                         </p>
                       </div>
                       <ChevronRight size={14} className="text-slate-300" />
                     </button>
                   ))}
+
+                  {upcoming.length > 3 && (
+                    <p className="text-xs text-slate-400 text-center py-1">
+                      +{upcoming.length - 3} jogo{upcoming.length - 3 !== 1 ? "s" : ""} por jogar
+                    </p>
+                  )}
 
                   {/* Resultados recentes */}
                   {played
@@ -393,10 +465,117 @@ export default function CompetitionsPage() {
                       </button>
                     ))}
 
-                  {games.length === 0 && (
-                    <p className="text-xs text-slate-400 text-center py-3">
-                      Sem jogos criados — adiciona no Calendário
-                    </p>
+                  {/* Adicionar jogo */}
+                  {addingGameToCompId === comp.id ? (
+                    <div className="border border-emerald-200 bg-emerald-50 rounded-xl p-3 mt-2">
+                      <div className="flex items-center justify-between mb-3">
+                        <p className="text-xs font-semibold text-emerald-800">
+                          Novo jogo — {comp.name}
+                        </p>
+                        <button onClick={closeGameForm}>
+                          <X size={14} className="text-slate-400" />
+                        </button>
+                      </div>
+                      <form onSubmit={handleSaveGame} className="space-y-2">
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <Label className="text-xs">Adversário *</Label>
+                            <Input
+                              value={gameForm.opponent_name}
+                              onChange={(e) =>
+                                setGameForm((f) => ({
+                                  ...f,
+                                  opponent_name: e.target.value,
+                                }))
+                              }
+                              placeholder="Nome do adversário"
+                              required
+                              className="text-sm h-8"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-xs">Data e hora *</Label>
+                            <Input
+                              type="datetime-local"
+                              value={gameForm.game_datetime}
+                              onChange={(e) =>
+                                setGameForm((f) => ({
+                                  ...f,
+                                  game_datetime: e.target.value,
+                                }))
+                              }
+                              required
+                              className="text-sm h-8"
+                            />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <Label className="text-xs">Local (opcional)</Label>
+                            <Input
+                              value={gameForm.location}
+                              onChange={(e) =>
+                                setGameForm((f) => ({
+                                  ...f,
+                                  location: e.target.value,
+                                }))
+                              }
+                              placeholder="Estádio / Campo"
+                              className="text-sm h-8"
+                            />
+                          </div>
+                          <div className="flex items-end pb-0.5">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setGameForm((f) => ({
+                                  ...f,
+                                  is_home: !f.is_home,
+                                }))
+                              }
+                              className={`w-full h-8 rounded-lg text-xs font-semibold transition-colors border-2 ${
+                                gameForm.is_home
+                                  ? "bg-blue-50 border-blue-300 text-blue-700"
+                                  : "bg-slate-50 border-slate-200 text-slate-600"
+                              }`}
+                            >
+                              {gameForm.is_home ? "Casa" : "Fora"}
+                            </button>
+                          </div>
+                        </div>
+                        <div className="flex gap-2 pt-1">
+                          <Button
+                            type="submit"
+                            size="sm"
+                            className="flex-1 bg-emerald-600 hover:bg-emerald-700 h-8 text-xs"
+                            disabled={savingGame}
+                          >
+                            {savingGame ? (
+                              <Loader2 size={12} className="animate-spin" />
+                            ) : (
+                              "Adicionar jogo"
+                            )}
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-8 text-xs"
+                            onClick={closeGameForm}
+                          >
+                            Cancelar
+                          </Button>
+                        </div>
+                      </form>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => openAddGame(comp.id)}
+                      className="w-full flex items-center justify-center gap-2 p-2.5 rounded-xl border-2 border-dashed border-slate-200 hover:border-emerald-300 hover:bg-emerald-50 transition-colors text-slate-400 hover:text-emerald-600 mt-1"
+                    >
+                      <PlusCircle size={14} />
+                      <span className="text-xs font-medium">Adicionar jogo</span>
+                    </button>
                   )}
                 </CardContent>
               </Card>
@@ -405,11 +584,11 @@ export default function CompetitionsPage() {
         </div>
       )}
 
-      {/* ── MODAL FORM ── */}
-      {showForm && (
+      {/* ── MODAL: COMPETIÇÃO FORM ── */}
+      {showCompForm && (
         <div
           className="fixed inset-0 bg-black/50 z-50 flex items-end md:items-center justify-center p-4"
-          onClick={closeForm}
+          onClick={closeCompForm}
         >
           <div
             className="bg-white rounded-2xl w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto"
@@ -419,12 +598,12 @@ export default function CompetitionsPage() {
               <h3 className="font-bold text-slate-900">
                 {editingId ? "Editar competição" : "Nova competição"}
               </h3>
-              <button onClick={closeForm}>
+              <button onClick={closeCompForm}>
                 <X size={20} className="text-slate-400" />
               </button>
             </div>
 
-            <form onSubmit={handleSave} className="p-5 space-y-4">
+            <form onSubmit={handleSaveComp} className="p-5 space-y-4">
               {error && (
                 <div className="bg-red-50 text-red-700 text-sm p-3 rounded-lg border border-red-200">
                   {error}
@@ -434,9 +613,9 @@ export default function CompetitionsPage() {
               <div className="space-y-1.5">
                 <Label>Nome da competição *</Label>
                 <Input
-                  value={form.name}
+                  value={compForm.name}
                   onChange={(e) =>
-                    setForm((f) => ({ ...f, name: e.target.value }))
+                    setCompForm((f) => ({ ...f, name: e.target.value }))
                   }
                   placeholder="ex: Campeonato Distrital"
                   required
@@ -447,9 +626,9 @@ export default function CompetitionsPage() {
                 <div className="space-y-1.5">
                   <Label>Fase / Série</Label>
                   <Input
-                    value={form.phase}
+                    value={compForm.phase}
                     onChange={(e) =>
-                      setForm((f) => ({ ...f, phase: e.target.value }))
+                      setCompForm((f) => ({ ...f, phase: e.target.value }))
                     }
                     placeholder="ex: Série B"
                   />
@@ -457,9 +636,9 @@ export default function CompetitionsPage() {
                 <div className="space-y-1.5">
                   <Label>Época</Label>
                   <Input
-                    value={form.season}
+                    value={compForm.season}
                     onChange={(e) =>
-                      setForm((f) => ({ ...f, season: e.target.value }))
+                      setCompForm((f) => ({ ...f, season: e.target.value }))
                     }
                     placeholder="2025/2026"
                   />
@@ -471,9 +650,9 @@ export default function CompetitionsPage() {
                 <Input
                   type="number"
                   min="1"
-                  value={form.total_rounds}
+                  value={compForm.total_rounds}
                   onChange={(e) =>
-                    setForm((f) => ({ ...f, total_rounds: e.target.value }))
+                    setCompForm((f) => ({ ...f, total_rounds: e.target.value }))
                   }
                   placeholder="ex: 22"
                 />
@@ -483,15 +662,18 @@ export default function CompetitionsPage() {
                 <button
                   type="button"
                   onClick={() =>
-                    setForm((f) => ({ ...f, has_two_legs: !f.has_two_legs }))
+                    setCompForm((f) => ({
+                      ...f,
+                      has_two_legs: !f.has_two_legs,
+                    }))
                   }
                   className={`w-10 h-6 rounded-full transition-colors flex-shrink-0 ${
-                    form.has_two_legs ? "bg-emerald-500" : "bg-slate-200"
+                    compForm.has_two_legs ? "bg-emerald-500" : "bg-slate-200"
                   }`}
                 >
                   <span
                     className={`block w-4 h-4 bg-white rounded-full shadow transition-transform mx-1 ${
-                      form.has_two_legs ? "translate-x-4" : "translate-x-0"
+                      compForm.has_two_legs ? "translate-x-4" : "translate-x-0"
                     }`}
                   />
                 </button>
@@ -502,9 +684,9 @@ export default function CompetitionsPage() {
                 <Button
                   type="submit"
                   className="flex-1 bg-emerald-600 hover:bg-emerald-700"
-                  disabled={saving}
+                  disabled={savingComp}
                 >
-                  {saving ? (
+                  {savingComp ? (
                     <Loader2 size={16} className="animate-spin" />
                   ) : editingId ? (
                     "Guardar"
@@ -512,7 +694,7 @@ export default function CompetitionsPage() {
                     "Criar competição"
                   )}
                 </Button>
-                <Button type="button" variant="outline" onClick={closeForm}>
+                <Button type="button" variant="outline" onClick={closeCompForm}>
                   Cancelar
                 </Button>
               </div>

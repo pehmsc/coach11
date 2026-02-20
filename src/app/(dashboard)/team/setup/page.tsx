@@ -148,7 +148,22 @@ export default function TeamSetupPage() {
       setSeason(ag.season);
       setLogoUrl(ag.club_logo_url || "");
 
-      const firstTeam = ag.teams?.[0];
+      let firstTeam = ag.teams?.[0];
+
+      // Auto-criar equipa se não existir (para coordenadores antigos sem equipa)
+      if (!firstTeam) {
+        const { data: newTeam } = await supabase
+          .from("teams")
+          .insert({
+            age_group_id: ag.id,
+            name: `${ag.club_name} ${ag.name}`,
+            is_competitive: true,
+          })
+          .select()
+          .single();
+        firstTeam = newTeam;
+      }
+
       if (firstTeam) {
         setTeamId(firstTeam.id);
 

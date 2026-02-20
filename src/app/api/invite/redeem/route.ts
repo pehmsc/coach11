@@ -37,19 +37,47 @@ export async function POST(request: Request) {
   }
 
   // 2. Buscar o team_id real para o age_group (team_staff.team_id → teams.id)
-  const { data: team, error: teamError } = await supabase
+  // Se não existir equipa, criar automaticamente (para coordenadores criados antes do auto-create)
+  let { data: team } = await supabase
     .from("teams")
     .select("id")
     .eq("age_group_id", invite.age_group_id)
     .limit(1)
-    .single();
+    .maybeSingle();
 
-  if (teamError || !team) {
-    console.error("Erro ao buscar equipa para o escalão:", teamError);
-    return NextResponse.json(
-      { error: "Escalão sem equipa associada. Contacta o coordenador." },
-      { status: 422 },
-    );
+  if (!team) {
+    const { data: ageGroupInfo } = await supabase
+      .from("age_groups")
+      .select("club_name, name")
+      .eq("id", invite.age_group_id)
+      .single();
+
+    if (!ageGroupInfo) {
+      return NextResponse.json(
+        { error: "Escalão não encontrado. Contacta o coordenador." },
+        { status: 422 },
+      );
+    }
+
+    const { data: newTeam, error: newTeamError } = await supabase
+      .from("teams")
+      .insert({
+        age_group_id: invite.age_group_id,
+        name: `${ageGroupInfo.club_name} ${ageGroupInfo.name}`,
+        is_competitive: true,
+      })
+      .select("id")
+      .single();
+
+    if (newTeamError || !newTeam) {
+      console.error("Erro ao criar equipa automaticamente:", newTeamError);
+      return NextResponse.json(
+        { error: "Erro ao processar convite. Tenta novamente." },
+        { status: 500 },
+      );
+    }
+
+    team = newTeam;
   }
 
   // 3. Verificar se já está associado
