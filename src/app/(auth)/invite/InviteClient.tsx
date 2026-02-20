@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { useEffect } from "react";
 
 export default function InviteClient() {
   const sp = useSearchParams();
@@ -11,6 +12,11 @@ export default function InviteClient() {
 
   const code = decodeURIComponent(raw).trim().toUpperCase();
   const email = decodeURIComponent(sp.get("email") ?? "").trim();
+
+  useEffect(() => {
+    if (code) localStorage.setItem("inviteCode", code);
+    if (email) localStorage.setItem("inviteEmail", email);
+  }, [code, email]);
 
   if (!code) {
     return (
