@@ -71,6 +71,10 @@ export default function AttendancePage() {
       }
 
       if (!payload?.linked) {
+        setError(
+          payload?.error ||
+            "Não foi possível identificar o escalão desta conta para marcar presenças.",
+        );
         setPlayers([]);
         setAgeGroup(null);
         setSessionId(null);
@@ -191,6 +195,18 @@ export default function AttendancePage() {
   }
 
   if (!ageGroup) {
+    if (error) {
+      return (
+        <div className="p-4 md:p-8 text-center py-16">
+          <AlertCircle className="mx-auto mb-4 text-red-400" size={48} />
+          <h2 className="font-semibold text-slate-700 mb-2">
+            Erro ao carregar presenças
+          </h2>
+          <p className="text-slate-500 text-sm">{error}</p>
+        </div>
+      );
+    }
+
     return (
       <div className="p-4 md:p-8 text-center py-16">
         <CheckCircle2 className="mx-auto mb-4 text-slate-300" size={48} />
@@ -335,4 +351,3 @@ export default function AttendancePage() {
     </div>
   );
 }
-

@@ -51,16 +51,89 @@ function normalizeDateParam(raw: string | null) {
   return new Date().toISOString().slice(0, 10);
 }
 
-async function resolveStaffContext(admin: ReturnType<typeof createAdminClient>, userId: string) {
-  const context: StaffContext = { ageGroup: null, teamId: null };
+function toAgeGroupPayload(data: Record<string, unknown> | null) {
+  if (!data) return null;
+  const id = typeof data.id === "string" ? data.id : null;
+  const name = typeof data.name === "string" ? data.name : null;
+  const clubName = typeof data.club_name === "string" ? data.club_name : null;
+  if (!id || !name || !clubName) return null;
 
-  const { data: managedAgeGroup } = await admin
+  return {
+    id,
+    name,
+    club_name: clubName,
+    club_logo_url:
+      typeof data.club_logo_url === "string" ? data.club_logo_url : null,
+  };
+}
+
+async function getAgeGroupByCoordinator(
+  admin: ReturnType<typeof createAdminClient>,
+  userId: string,
+) {
+  const primary = await admin
     .from("age_groups")
     .select("id, name, club_name, club_logo_url")
     .eq("coordinator_id", userId)
     .order("created_at", { ascending: true })
     .limit(1)
     .maybeSingle();
+
+  if (!primary.error) {
+    return toAgeGroupPayload((primary.data ?? null) as Record<string, unknown> | null);
+  }
+
+  // Compatibilidade com schemas sem coluna club_logo_url.
+  if (isMissingColumn(primary.error)) {
+    const fallback = await admin
+      .from("age_groups")
+      .select("id, name, club_name")
+      .eq("coordinator_id", userId)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (!fallback.error) {
+      return toAgeGroupPayload((fallback.data ?? null) as Record<string, unknown> | null);
+    }
+  }
+
+  return null;
+}
+
+async function getAgeGroupById(
+  admin: ReturnType<typeof createAdminClient>,
+  ageGroupId: string,
+) {
+  const primary = await admin
+    .from("age_groups")
+    .select("id, name, club_name, club_logo_url")
+    .eq("id", ageGroupId)
+    .maybeSingle();
+
+  if (!primary.error) {
+    return toAgeGroupPayload((primary.data ?? null) as Record<string, unknown> | null);
+  }
+
+  if (isMissingColumn(primary.error)) {
+    const fallback = await admin
+      .from("age_groups")
+      .select("id, name, club_name")
+      .eq("id", ageGroupId)
+      .maybeSingle();
+
+    if (!fallback.error) {
+      return toAgeGroupPayload((fallback.data ?? null) as Record<string, unknown> | null);
+    }
+  }
+
+  return null;
+}
+
+async function resolveStaffContext(admin: ReturnType<typeof createAdminClient>, userId: string) {
+  const context: StaffContext = { ageGroup: null, teamId: null };
+
+  const managedAgeGroup = await getAgeGroupByCoordinator(admin, userId);
 
   if (managedAgeGroup) {
     context.ageGroup = managedAgeGroup;
@@ -97,11 +170,7 @@ async function resolveStaffContext(admin: ReturnType<typeof createAdminClient>, 
 
   if (!team?.age_group_id) return context;
 
-  const { data: ageGroup } = await admin
-    .from("age_groups")
-    .select("id, name, club_name, club_logo_url")
-    .eq("id", team.age_group_id)
-    .maybeSingle();
+  const ageGroup = await getAgeGroupById(admin, team.age_group_id);
 
   context.ageGroup = ageGroup ?? null;
   return context;
@@ -517,4 +586,3 @@ export async function POST(request: Request) {
     );
   }
 }
-
