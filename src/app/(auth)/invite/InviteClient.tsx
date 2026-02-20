@@ -25,21 +25,6 @@ export default function InviteClient() {
         <p className="mt-2 text-sm text-slate-600">
           O link não traz o código. Pede ao coordenador para reenviar.
         </p>
-
-        <pre className="mt-4 rounded-xl bg-slate-100 p-3 text-xs overflow-auto">
-          {JSON.stringify(
-            {
-              code: sp.get("code"),
-              inviteCode: sp.get("inviteCode"),
-              invite_code: sp.get("invite_code"),
-              email: sp.get("email"),
-              href: typeof window !== "undefined" ? window.location.href : null,
-            },
-            null,
-            2,
-          )}
-        </pre>
-
         <Link className="mt-4 inline-block underline" href="/login">
           Ir para login
         </Link>

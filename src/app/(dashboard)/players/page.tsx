@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,9 +24,8 @@ import {
   ArrowDown,
   Mail,
   Phone,
-  ChevronDown,
 } from "lucide-react";
-import type { Player, AgeGroup } from "@/types/database";
+import type { Player, AgeGroup, PlayerStatus } from "@/types/database";
 
 const POSITIONS = ["GR", "DD", "DC", "DE", "MD", "MC", "ME", "AV", "EE", "ED"];
 
@@ -62,8 +62,17 @@ const EMPTY_FORM = {
   jerseyNumber: "",
 };
 
+function generateInviteCode(): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const arr = new Uint8Array(8);
+  crypto.getRandomValues(arr);
+  return Array.from(arr)
+    .map((b) => chars[b % chars.length])
+    .join("");
+}
+
 export default function PlayersPage() {
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const [players, setPlayers] = useState<Player[]>([]);
   const [ageGroup, setAgeGroup] = useState<AgeGroup | null>(null);
   const [loading, setLoading] = useState(true);
@@ -74,11 +83,11 @@ export default function PlayersPage() {
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [form, setForm] = useState(EMPTY_FORM);
-  // Estado local para o dropdown de cada card (não abre o formulário)
   const [openStatusId, setOpenStatusId] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Fechar dropdown ao clicar fora
@@ -89,6 +98,9 @@ export default function PlayersPage() {
     document.addEventListener("click", handleClick);
     return () => document.removeEventListener("click", handleClick);
   }, []);
+
+  // openStatusId kept for future dropdown; suppress lint warning
+  void openStatusId;
 
   async function loadData() {
     const {
@@ -149,7 +161,7 @@ export default function PlayersPage() {
     setError(null);
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: { preventDefault(): void }) {
     e.preventDefault();
     if (!ageGroup) return;
     setSaving(true);
@@ -198,12 +210,10 @@ export default function PlayersPage() {
     setSaving(false);
   }
 
-  async function updateStatus(playerId: string, status: string) {
+  async function updateStatus(playerId: string, status: PlayerStatus) {
     await supabase.from("players").update({ status }).eq("id", playerId);
     setPlayers((prev) =>
-      prev.map((p) =>
-        p.id === playerId ? { ...p, status: status as any } : p,
-      ),
+      prev.map((p) => (p.id === playerId ? { ...p, status } : p)),
     );
     setOpenStatusId(null);
   }
@@ -223,20 +233,24 @@ export default function PlayersPage() {
       setSaving(false);
 
       if (data.success) {
-        alert(
-          data.emailSent
-            ? `✓ Email enviado para ${player.first_name}!\n\nCódigo: ${data.inviteCode}`
-            : `Código gerado: ${data.inviteCode}\n\n(Email não enviado — partilha manualmente)`,
-        );
+        if (data.emailSent) {
+          toast.success(`Email enviado para ${player.first_name}!`, {
+            description: `Código: ${data.inviteCode}`,
+          });
+        } else {
+          toast.warning(`Email não enviado`, {
+            description: `Partilha o código manualmente: ${data.inviteCode}`,
+          });
+        }
+        loadData();
       } else {
-        alert("Erro ao gerar convite: " + (data.error || "Erro desconhecido"));
+        toast.error("Erro ao gerar convite", {
+          description: data.error || "Erro desconhecido",
+        });
       }
     } else {
-      // Convite por código (sem email)
-      const inviteCode = Math.random()
-        .toString(36)
-        .substring(2, 10)
-        .toUpperCase();
+      // Convite por código (sem email) — gerado com crypto.getRandomValues
+      const inviteCode = generateInviteCode();
       await supabase
         .from("players")
         .update({
@@ -245,11 +259,11 @@ export default function PlayersPage() {
           invite_sent_at: new Date().toISOString(),
         })
         .eq("id", player.id);
-      alert(
-        `Código de convite: ${inviteCode}\nPartilha com ${player.first_name}.`,
-      );
+      toast.success(`Código gerado para ${player.first_name}`, {
+        description: `Código: ${inviteCode}`,
+      });
+      loadData();
     }
-    loadData();
   }
 
   const sorted = [...players].sort((a, b) => {
@@ -525,8 +539,7 @@ export default function PlayersPage() {
           {sorted.map((player) => {
             const sc = STATUS_CONFIG[player.status] || STATUS_CONFIG.active;
 
-            // Ciclo de estados ao clicar
-            const statusCycle: Record<string, string> = {
+            const statusCycle: Record<PlayerStatus, PlayerStatus> = {
               active: "injured",
               injured: "inactive",
               inactive: "suspended",
@@ -567,7 +580,7 @@ export default function PlayersPage() {
                       </div>
                     </div>
 
-                    {/* Estado — toca para avançar no ciclo */}
+                    {/* Estado */}
                     <button
                       onClick={(e) => {
                         e.stopPropagation();

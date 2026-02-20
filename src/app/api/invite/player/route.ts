@@ -26,7 +26,7 @@ export async function POST(request: Request) {
   // Buscar dados do jogador e do escalão
   const { data: player } = await supabase
     .from("players")
-    .select("*, age_groups(name, club_name, coordinator_id)")
+    .select("*, age_groups(id, name, club_name, coordinator_id)")
     .eq("id", playerId)
     .single();
 
@@ -35,6 +35,18 @@ export async function POST(request: Request) {
       { error: "Atleta não encontrado" },
       { status: 404 },
     );
+  }
+
+  // Verificar que o jogador pertence ao escalão do utilizador autenticado
+  const ageGroup = player.age_groups as {
+    id: string;
+    name: string;
+    club_name: string;
+    coordinator_id: string;
+  } | null;
+
+  if (!ageGroup || ageGroup.coordinator_id !== user.id) {
+    return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
   }
 
   if (!player.email) {
@@ -66,7 +78,6 @@ export async function POST(request: Request) {
     .single();
 
   const coordinatorName = profile?.full_name || "O teu treinador";
-  const ageGroup = player.age_groups as any;
   const appUrl =
     process.env.NEXT_PUBLIC_APP_URL || "https://coach11.vercel.app";
   const registerUrl = `${appUrl}/register?code=${inviteCode}&email=${encodeURIComponent(player.email)}&type=player`;

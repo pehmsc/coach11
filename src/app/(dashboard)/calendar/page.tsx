@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
   format,
@@ -25,6 +25,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import type { PostgrestError } from "@supabase/supabase-js";
 
 const DAY_NAMES = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 
@@ -72,7 +73,7 @@ const EMPTY_FORM: EventForm = {
 };
 
 export default function CalendarPage() {
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [weekStart, setWeekStart] = useState(
@@ -91,41 +92,7 @@ export default function CalendarPage() {
   const [uploading, setUploading] = useState(false);
   const [opError, setOpError] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadTeam();
-  }, []);
-  useEffect(() => {
-    if (ageGroupId) loadEvents();
-  }, [ageGroupId, weekStart]);
-
-  async function loadTeam() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      setLoading(false);
-      return;
-    }
-
-    const { data: ag, error } = await supabase
-      .from("age_groups")
-      .select("*, teams(*)")
-      .eq("coordinator_id", user.id)
-      .single();
-
-    if (error || !ag) {
-      console.error("Erro ao carregar escalão:", error);
-      setLoading(false);
-      return;
-    }
-
-    setAgeGroupId(ag.id);
-    setAgeGroupName(`${ag.club_name} · ${ag.name}`);
-    if (ag.teams?.[0]) setTeamId(ag.teams[0].id);
-    setLoading(false);
-  }
-
-  async function loadEvents() {
+  const loadEvents = useCallback(async () => {
     if (!ageGroupId) return;
     const from = format(weekStart, "yyyy-MM-dd");
     const to = format(addDays(weekStart, 6), "yyyy-MM-dd");
@@ -177,7 +144,42 @@ export default function CalendarPage() {
     }));
 
     setEvents([...sessionEvents, ...gameEvents]);
-  }
+  }, [ageGroupId, weekStart, supabase]);
+
+  useEffect(() => {
+    async function loadTeam() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+
+      const { data: ag, error } = await supabase
+        .from("age_groups")
+        .select("*, teams(*)")
+        .eq("coordinator_id", user.id)
+        .single();
+
+      if (error || !ag) {
+        console.error("Erro ao carregar escalão:", error);
+        setLoading(false);
+        return;
+      }
+
+      setAgeGroupId(ag.id);
+      setAgeGroupName(`${ag.club_name} · ${ag.name}`);
+      if (ag.teams?.[0]) setTeamId(ag.teams[0].id);
+      setLoading(false);
+    }
+
+    loadTeam();
+  }, [supabase]);
+
+  useEffect(() => {
+    if (ageGroupId) loadEvents();
+  }, [ageGroupId, weekStart, loadEvents]);
 
   function openAdd(type: "training" | "game", date: string) {
     setSelectedEvent(null);
@@ -251,7 +253,7 @@ export default function CalendarPage() {
     const isEditing =
       modalMode === "edit_training" || modalMode === "edit_game";
 
-    let dbError: any = null;
+    let dbError: PostgrestError | null = null;
 
     if (isTraining) {
       const payload = {

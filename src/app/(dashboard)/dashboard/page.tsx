@@ -13,6 +13,7 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import RedeemInviteGate from "@/components/invite/RedeemInviteGate";
+import type { TrainingSession, Game } from "@/types/database";
 
 function relativeDay(dateStr: string) {
   const d = parseISO(dateStr);
@@ -30,7 +31,7 @@ export default async function DashboardPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("*")
+    .select("full_name")
     .eq("id", user.id)
     .single();
 
@@ -46,7 +47,7 @@ export default async function DashboardPage() {
   const in7days = format(addDays(new Date(), 7), "yyyy-MM-dd");
 
   // Próximos treinos (7 dias) — mais recente primeiro
-  let upcomingTrainings: any[] = [];
+  let upcomingTrainings: TrainingSession[] = [];
   if (firstTeam) {
     const { data } = await supabase
       .from("training_sessions")
@@ -61,7 +62,7 @@ export default async function DashboardPage() {
   }
 
   // Próximos jogos (7 dias)
-  let upcomingGames: any[] = [];
+  let upcomingGames: Game[] = [];
   if (firstTeam) {
     const { data } = await supabase
       .from("games")

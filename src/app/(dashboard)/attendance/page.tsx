@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { format } from "date-fns";
 import { pt } from "date-fns/locale";
@@ -12,21 +12,22 @@ type AttendanceStatus = "present" | "absent" | "injured";
 type AttendanceState = Record<string, AttendanceStatus>;
 
 export default function AttendancePage() {
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [noSession, setNoSession] = useState(false);
   const [players, setPlayers] = useState<Player[]>([]);
   const [ageGroup, setAgeGroup] = useState<AgeGroup | null>(null);
   const [attendance, setAttendance] = useState<AttendanceState>({});
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [teamId, setTeamId] = useState<string | null>(null);
 
   const today = format(new Date(), "EEEE, d 'de' MMMM", { locale: pt });
   const todayDate = format(new Date(), "yyyy-MM-dd");
 
   useEffect(() => {
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function loadData() {
@@ -48,14 +49,11 @@ export default function AttendancePage() {
     }
     setAgeGroup(ag);
 
-    // Usar a primeira equipa (treinos não distinguem equipa)
     const firstTeam = ag.teams?.[0];
     if (!firstTeam) {
       setLoading(false);
       return;
     }
-    setTeamId(firstTeam.id);
-
     // Buscar todos os atletas ACTIVOS do escalão
     const { data: playersData } = await supabase
       .from("players")
@@ -67,21 +65,20 @@ export default function AttendancePage() {
     const activePlayers = playersData || [];
     setPlayers(activePlayers);
 
-    // Criar ou buscar sessão de hoje
-    let currentSessionId: string;
+    // Procurar sessão de hoje — consulta por age_group_id para ser consistente com o calendário
     const { data: existingSession } = await supabase
       .from("training_sessions")
       .select("id")
-      .eq("team_id", firstTeam.id)
+      .eq("age_group_id", ag.id)
       .eq("session_date", todayDate)
       .maybeSingle();
 
-    if (existingSession) {
-      currentSessionId = existingSession.id;
-    } else {
+    if (!existingSession) {
+      // Criar sessão para hoje com age_group_id (consistente com o calendário)
       const { data: newSession } = await supabase
         .from("training_sessions")
         .insert({
+          age_group_id: ag.id,
           team_id: firstTeam.id,
           session_date: todayDate,
           start_time: "18:00",
@@ -91,31 +88,42 @@ export default function AttendancePage() {
         .single();
 
       if (!newSession) {
+        setNoSession(true);
         setLoading(false);
         return;
       }
-      currentSessionId = newSession.id;
+      setSessionId(newSession.id);
+    } else {
+      setSessionId(existingSession.id);
     }
 
-    setSessionId(currentSessionId);
-
     // Buscar presenças já guardadas
-    const { data: existingAttendance } = await supabase
-      .from("training_attendance")
-      .select("player_id, status")
-      .eq("training_session_id", currentSessionId);
+    const sessionIdToUse = existingSession?.id;
+    if (sessionIdToUse) {
+      const { data: existingAttendance } = await supabase
+        .from("training_attendance")
+        .select("player_id, status")
+        .eq("training_session_id", sessionIdToUse);
 
-    // IMPORTANTE: inicializar TODOS os jogadores como presentes por defeito
-    // Se já existir registo guardado, usar esse valor
-    const initialAttendance: AttendanceState = {};
-    activePlayers.forEach((player) => {
-      const saved = existingAttendance?.find((a) => a.player_id === player.id);
-      initialAttendance[player.id] = saved
-        ? (saved.status as AttendanceStatus)
-        : "present";
-    });
+      const initialAttendance: AttendanceState = {};
+      activePlayers.forEach((player) => {
+        const saved = existingAttendance?.find(
+          (a) => a.player_id === player.id,
+        );
+        initialAttendance[player.id] = saved
+          ? (saved.status as AttendanceStatus)
+          : "present";
+      });
+      setAttendance(initialAttendance);
+    } else {
+      // Sessão nova — todos presentes por defeito
+      const initialAttendance: AttendanceState = {};
+      activePlayers.forEach((player) => {
+        initialAttendance[player.id] = "present";
+      });
+      setAttendance(initialAttendance);
+    }
 
-    setAttendance(initialAttendance);
     setLoading(false);
   }
 
@@ -204,7 +212,33 @@ export default function AttendancePage() {
     );
   }
 
-  if (!ageGroup || players.length === 0) {
+  if (!ageGroup) {
+    return (
+      <div className="p-4 md:p-8 text-center py-16">
+        <CheckCircle2 className="mx-auto mb-4 text-slate-300" size={48} />
+        <h2 className="font-semibold text-slate-700 mb-2">
+          Escalão não configurado
+        </h2>
+        <p className="text-slate-500 text-sm">
+          Configura o escalão em Configurações antes de registar presenças.
+        </p>
+      </div>
+    );
+  }
+
+  if (noSession) {
+    return (
+      <div className="p-4 md:p-8 text-center py-16">
+        <CheckCircle2 className="mx-auto mb-4 text-slate-300" size={48} />
+        <h2 className="font-semibold text-slate-700 mb-2">Erro ao criar sessão</h2>
+        <p className="text-slate-500 text-sm">
+          Não foi possível criar a sessão de treino. Tenta novamente.
+        </p>
+      </div>
+    );
+  }
+
+  if (players.length === 0) {
     return (
       <div className="p-4 md:p-8 text-center py-16">
         <CheckCircle2 className="mx-auto mb-4 text-slate-300" size={48} />

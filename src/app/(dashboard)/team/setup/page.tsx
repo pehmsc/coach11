@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,6 +29,7 @@ import {
   Trash2,
   Loader2,
 } from "lucide-react";
+import type { AgeGroup } from "@/types/database";
 
 const FOOTBALL_FORMATS = [
   { value: "5", label: "Futebol 5" },
@@ -86,19 +86,18 @@ const EMPTY_STAFF_FORM = {
 };
 
 export default function TeamSetupPage() {
-  const router = useRouter();
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   // Escalão
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [existingAgeGroup, setExistingAgeGroup] = useState<any>(null);
+  const [existingAgeGroup, setExistingAgeGroup] = useState<AgeGroup | null>(null);
   const [clubName, setClubName] = useState("");
   const [ageGroupName, setAgeGroupName] = useState("");
   const [footballFormat, setFootballFormat] = useState("");
-  const [season, setSeason] = useState("2024/2025");
+  const [season, setSeason] = useState("2025/2026");
   const [isEditing, setIsEditing] = useState(false);
 
   // Treinadores convidados
@@ -113,9 +112,11 @@ export default function TeamSetupPage() {
   } | null>(null);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function loadData() {
@@ -149,7 +150,7 @@ export default function TeamSetupPage() {
     setLoading(false);
   }
 
-  async function handleSaveSetup(e: React.FormEvent) {
+  async function handleSaveSetup(e: { preventDefault(): void }) {
     e.preventDefault();
     setSaving(true);
     setError(null);
@@ -174,11 +175,9 @@ export default function TeamSetupPage() {
         setSaving(false);
         return;
       }
-      setExistingAgeGroup((prev: any) => ({
-        ...prev,
-        club_name: clubName,
-        name: ageGroupName,
-      }));
+      setExistingAgeGroup((prev) =>
+        prev ? { ...prev, club_name: clubName, name: ageGroupName } : prev,
+      );
     } else {
       const { data, error } = await supabase
         .from("age_groups")
@@ -205,7 +204,7 @@ export default function TeamSetupPage() {
     setTimeout(() => setSaved(false), 3000);
   }
 
-  async function handleSendStaffInvite(e: React.FormEvent) {
+  async function handleSendStaffInvite(e: { preventDefault(): void }) {
     e.preventDefault();
     setSendingInvite(true);
     setInviteResult(null);
@@ -241,24 +240,16 @@ export default function TeamSetupPage() {
   }
 
   async function handleDeleteInvite(invite: StaffInvite) {
-    const label = `${invite.first_name} ${invite.last_name}`;
-    const isAccepted = !!invite.accepted_at;
-
-    const confirmMsg = isAccepted
-      ? `Remover ${label} da equipa técnica? O acesso será revogado.`
-      : `Cancelar o convite de ${label}?`;
-
-    if (!confirm(confirmMsg)) return;
-
     setDeletingId(invite.id);
+    setConfirmDeleteId(null);
 
     // Se o convite foi aceite, remover também da team_staff
-    if (isAccepted && invite.accepted_by) {
+    if (invite.accepted_at && invite.accepted_by) {
       const { error: staffErr } = await supabase
         .from("team_staff")
         .delete()
         .eq("profile_id", invite.accepted_by)
-        .eq("team_id", existingAgeGroup.id);
+        .eq("team_id", existingAgeGroup!.id);
 
       if (staffErr) {
         console.error("Erro ao remover staff:", staffErr);
@@ -281,7 +272,6 @@ export default function TeamSetupPage() {
       return;
     }
 
-    // Atualizar lista localmente (sem recarregar tudo)
     setStaffInvites((prev) => prev.filter((i) => i.id !== invite.id));
     setDeletingId(null);
   }
@@ -392,7 +382,7 @@ export default function TeamSetupPage() {
                 <Input
                   value={season}
                   onChange={(e) => setSeason(e.target.value)}
-                  placeholder="2024/2025"
+                  placeholder="2025/2026"
                 />
               </div>
               <div className="flex gap-2">
@@ -613,70 +603,99 @@ export default function TeamSetupPage() {
                 {staffInvites.map((invite) => (
                   <div
                     key={invite.id}
-                    className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100"
+                    className="rounded-xl border border-slate-100 bg-slate-50"
                   >
-                    <div className="w-9 h-9 rounded-full bg-slate-200 flex items-center justify-center flex-shrink-0">
-                      <span className="text-xs font-bold text-slate-500">
-                        {invite.first_name?.[0]}
-                        {invite.last_name?.[0]}
-                      </span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-slate-800 text-sm truncate">
-                        {invite.first_name} {invite.last_name}
-                      </p>
-                      <p className="text-xs text-slate-400 truncate">
-                        {ROLE_LABELS[invite.role] || invite.role} ·{" "}
-                        {invite.email}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-1.5 flex-shrink-0">
-                      {invite.accepted_at ? (
-                        <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium">
-                          Activo
+                    <div className="flex items-center gap-3 p-3">
+                      <div className="w-9 h-9 rounded-full bg-slate-200 flex items-center justify-center flex-shrink-0">
+                        <span className="text-xs font-bold text-slate-500">
+                          {invite.first_name?.[0]}
+                          {invite.last_name?.[0]}
                         </span>
-                      ) : (
-                        <>
-                          <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">
-                            Pendente
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-slate-800 text-sm truncate">
+                          {invite.first_name} {invite.last_name}
+                        </p>
+                        <p className="text-xs text-slate-400 truncate">
+                          {ROLE_LABELS[invite.role] || invite.role} ·{" "}
+                          {invite.email}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        {invite.accepted_at ? (
+                          <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium">
+                            Activo
                           </span>
-                          <button
-                            onClick={() => copyCode(invite.invite_code)}
-                            title="Copiar código"
-                            className="p-1.5 hover:bg-slate-200 rounded-lg transition-colors"
-                          >
-                            {copiedCode === invite.invite_code ? (
-                              <Check size={14} className="text-emerald-500" />
-                            ) : (
-                              <Copy size={14} className="text-slate-400" />
-                            )}
-                          </button>
-                        </>
-                      )}
-                      {/* Botão de eliminar */}
-                      <button
-                        onClick={() => handleDeleteInvite(invite)}
-                        disabled={deletingId === invite.id}
-                        title={
-                          invite.accepted_at
-                            ? "Remover membro"
-                            : "Cancelar convite"
-                        }
-                        className="p-1.5 hover:bg-red-50 rounded-lg transition-colors group"
-                      >
-                        {deletingId === invite.id ? (
-                          <Loader2
-                            size={14}
-                            className="text-slate-300 animate-spin"
-                          />
                         ) : (
-                          <Trash2
-                            size={14}
-                            className="text-slate-300 group-hover:text-red-500 transition-colors"
-                          />
+                          <>
+                            <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">
+                              Pendente
+                            </span>
+                            <button
+                              onClick={() => copyCode(invite.invite_code)}
+                              title="Copiar código"
+                              className="p-1.5 hover:bg-slate-200 rounded-lg transition-colors"
+                            >
+                              {copiedCode === invite.invite_code ? (
+                                <Check size={14} className="text-emerald-500" />
+                              ) : (
+                                <Copy size={14} className="text-slate-400" />
+                              )}
+                            </button>
+                          </>
                         )}
-                      </button>
+                        {/* Botão de eliminar */}
+                        <button
+                          onClick={() =>
+                            setConfirmDeleteId(
+                              confirmDeleteId === invite.id ? null : invite.id,
+                            )
+                          }
+                          disabled={deletingId === invite.id}
+                          title={
+                            invite.accepted_at
+                              ? "Remover membro"
+                              : "Cancelar convite"
+                          }
+                          className="p-1.5 hover:bg-red-50 rounded-lg transition-colors group"
+                        >
+                          {deletingId === invite.id ? (
+                            <Loader2
+                              size={14}
+                              className="text-slate-300 animate-spin"
+                            />
+                          ) : (
+                            <Trash2
+                              size={14}
+                              className="text-slate-300 group-hover:text-red-500 transition-colors"
+                            />
+                          )}
+                        </button>
+                      </div>
                     </div>
+
+                    {/* Confirmação de eliminação inline */}
+                    {confirmDeleteId === invite.id && (
+                      <div className="px-3 pb-3 flex items-center gap-2">
+                        <p className="text-xs text-red-600 flex-1">
+                          {invite.accepted_at
+                            ? "Remover este membro da equipa técnica?"
+                            : "Cancelar este convite?"}
+                        </p>
+                        <button
+                          onClick={() => handleDeleteInvite(invite)}
+                          className="text-xs font-semibold text-white bg-red-500 hover:bg-red-600 px-3 py-1 rounded-lg transition-colors"
+                        >
+                          Confirmar
+                        </button>
+                        <button
+                          onClick={() => setConfirmDeleteId(null)}
+                          className="text-xs font-semibold text-slate-500 hover:text-slate-700 px-2 py-1 rounded-lg transition-colors"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

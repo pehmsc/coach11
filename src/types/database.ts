@@ -2,6 +2,7 @@ export type UserRole = "coordinator" | "coach" | "player" | "parent";
 export type PlayerStatus = "active" | "injured" | "suspended" | "inactive";
 export type AttendanceStatus = "present" | "absent" | "injured";
 export type FootballFormat = "5" | "7" | "9" | "11";
+export type EventStatus = "scheduled" | "completed" | "cancelled";
 
 export interface Profile {
   id: string;
@@ -56,13 +57,34 @@ export interface Player {
 
 export interface TrainingSession {
   id: string;
-  training_id?: string;
+  age_group_id?: string;
   team_id: string;
+  title?: string;
   session_date: string;
   start_time: string;
   end_time?: string;
+  location?: string;
+  location_address?: string;
   notes?: string;
-  status: "scheduled" | "completed" | "cancelled";
+  image_url?: string;
+  status: EventStatus;
+  created_at: string;
+}
+
+export interface Game {
+  id: string;
+  age_group_id?: string;
+  team_id?: string;
+  title?: string;
+  game_datetime: string;
+  opponent_name?: string;
+  location?: string;
+  location_address?: string;
+  is_home: boolean;
+  notes?: string;
+  image_url?: string;
+  status: EventStatus;
+  game_type?: string;
   created_at: string;
 }
 
