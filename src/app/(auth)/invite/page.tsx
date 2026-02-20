@@ -1,20 +1,17 @@
-import Link from "next/link";
+"use client";
 
-export default function InvitePage({
-  searchParams,
-}: {
-  searchParams: Record<string, string | string[] | undefined>;
-}) {
-  // aceita code, inviteCode, invite_code (qualquer um)
-  const raw = (searchParams.code ??
-    searchParams.inviteCode ??
-    searchParams.invite_code ??
-    "") as string;
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+
+export default function InvitePage() {
+  const sp = useSearchParams();
+
+  // aceita code, inviteCode, invite_code
+  const raw =
+    sp.get("code") ?? sp.get("inviteCode") ?? sp.get("invite_code") ?? "";
 
   const code = decodeURIComponent(raw).trim().toUpperCase();
-
-  const rawEmail = (searchParams.email ?? "") as string;
-  const email = decodeURIComponent(rawEmail).trim();
+  const email = decodeURIComponent(sp.get("email") ?? "").trim();
 
   if (!code) {
     return (
@@ -23,12 +20,19 @@ export default function InvitePage({
         <p className="mt-2 text-sm text-slate-600">
           O link não traz o código. Pede ao coordenador para reenviar.
         </p>
-
-        {/* Debug útil (podes remover depois) */}
         <pre className="mt-4 rounded-xl bg-slate-100 p-3 text-xs overflow-auto">
-          {JSON.stringify(searchParams, null, 2)}
+          {JSON.stringify(
+            {
+              code: sp.get("code"),
+              inviteCode: sp.get("inviteCode"),
+              invite_code: sp.get("invite_code"),
+              email: sp.get("email"),
+              href: typeof window !== "undefined" ? window.location.href : null,
+            },
+            null,
+            2,
+          )}
         </pre>
-
         <Link className="mt-4 inline-block underline" href="/login">
           Ir para login
         </Link>

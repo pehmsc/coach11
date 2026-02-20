@@ -37,6 +37,7 @@ export async function middleware(request: NextRequest) {
     path.startsWith("/login") ||
     path.startsWith("/register") ||
     path.startsWith("/auth") ||
+    path.startsWith("/invite") ||
     path === "/";
 
   // Não autenticado a tentar aceder a rota privada
