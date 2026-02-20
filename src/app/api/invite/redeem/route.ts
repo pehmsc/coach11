@@ -217,8 +217,22 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error("Erro inesperado ao aceitar convite:", error);
+
+    const message =
+      error instanceof Error ? error.message : "Erro interno ao aceitar o convite.";
+
+    if (message.includes("SUPABASE_SERVICE_ROLE_KEY")) {
+      return NextResponse.json(
+        {
+          error:
+            "Configuração do servidor incompleta: falta SUPABASE_SERVICE_ROLE_KEY no ambiente de produção.",
+        },
+        { status: 500 },
+      );
+    }
+
     return NextResponse.json(
-      { error: "Erro interno ao aceitar o convite." },
+      { error: message || "Erro interno ao aceitar o convite." },
       { status: 500 },
     );
   }
