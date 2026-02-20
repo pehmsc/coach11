@@ -36,13 +36,28 @@ export async function POST(request: Request) {
     );
   }
 
-  // 2. Verificar se já está associado
-  // team_staff usa: team_id (= age_group_id) e profile_id (= auth.uid)
+  // 2. Buscar o team_id real para o age_group (team_staff.team_id → teams.id)
+  const { data: team, error: teamError } = await supabase
+    .from("teams")
+    .select("id")
+    .eq("age_group_id", invite.age_group_id)
+    .limit(1)
+    .single();
+
+  if (teamError || !team) {
+    console.error("Erro ao buscar equipa para o escalão:", teamError);
+    return NextResponse.json(
+      { error: "Escalão sem equipa associada. Contacta o coordenador." },
+      { status: 422 },
+    );
+  }
+
+  // 3. Verificar se já está associado
   const { data: existingStaff, error: existingError } = await supabase
     .from("team_staff")
     .select("id")
     .eq("profile_id", user.id)
-    .eq("team_id", invite.age_group_id)
+    .eq("team_id", team.id)
     .maybeSingle();
 
   if (existingError) {
@@ -60,10 +75,10 @@ export async function POST(request: Request) {
     );
   }
 
-  // 3. Criar associação em team_staff
+  // 4. Criar associação em team_staff com o team_id correto
   const { error: staffError } = await supabase.from("team_staff").insert({
     profile_id: user.id,
-    team_id: invite.age_group_id,
+    team_id: team.id,
     role: invite.role,
   });
 
@@ -75,7 +90,14 @@ export async function POST(request: Request) {
     );
   }
 
-  // 4. Marcar convite como aceite
+  // 5. Atualizar role do perfil (coach para coach/assistant_coach, coordinator mantém)
+  const profileRole = invite.role === "coordinator" ? "coordinator" : "coach";
+  await supabase
+    .from("profiles")
+    .update({ role: profileRole })
+    .eq("id", user.id);
+
+  // 6. Marcar convite como aceite
   await supabase
     .from("staff_invites")
     .update({
@@ -85,7 +107,7 @@ export async function POST(request: Request) {
     })
     .eq("id", invite.id);
 
-  // 5. Atualizar perfil com nome do convite (se perfil não tiver nome)
+  // 7. Atualizar nome do perfil se ainda não tiver
   const { data: profile } = await supabase
     .from("profiles")
     .select("full_name")
@@ -101,7 +123,7 @@ export async function POST(request: Request) {
       .eq("id", user.id);
   }
 
-  // 6. Buscar info do escalão
+  // 8. Buscar info do escalão para resposta
   const { data: ageGroup } = await supabase
     .from("age_groups")
     .select("id, name, club_name")

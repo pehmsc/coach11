@@ -6,7 +6,8 @@ import { pt } from "date-fns/locale";
 import {
   Users,
   Calendar,
-  ClipboardCheck,
+  Trophy,
+  BarChart2,
   Settings,
   AlertCircle,
 } from "lucide-react";
@@ -86,18 +87,24 @@ export default async function DashboardPage() {
   const firstName = profile?.full_name?.split(" ")[0] || "Treinador";
 
   const navCards = [
-    {
-      href: "/attendance",
-      icon: ClipboardCheck,
-      label: "Presenças",
-      color: "text-emerald-600",
-    },
     { href: "/players", icon: Users, label: "Plantel", color: "text-blue-600" },
     {
       href: "/calendar",
       icon: Calendar,
       label: "Calendário",
       color: "text-purple-600",
+    },
+    {
+      href: "/competitions",
+      icon: Trophy,
+      label: "Competições",
+      color: "text-amber-600",
+    },
+    {
+      href: "/statistics",
+      icon: BarChart2,
+      label: "Estatísticas",
+      color: "text-emerald-600",
     },
     {
       href: "/team/setup",
@@ -174,7 +181,7 @@ export default async function DashboardPage() {
 
             {todayTraining && todayTrainingDone && (
               <div className="flex items-center gap-3 p-4 bg-emerald-50 border-2 border-emerald-200 rounded-xl">
-                <ClipboardCheck
+                <Calendar
                   size={20}
                   className="text-emerald-500 flex-shrink-0"
                 />

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,8 +28,10 @@ import {
   Users,
   Trash2,
   Loader2,
+  ImageIcon,
+  Palette,
 } from "lucide-react";
-import type { AgeGroup } from "@/types/database";
+import type { AgeGroup, KitPiece, KitNumber, PlayerType, PieceType } from "@/types/database";
 
 const FOOTBALL_FORMATS = [
   { value: "5", label: "Futebol 5" },
@@ -39,18 +41,8 @@ const FOOTBALL_FORMATS = [
 ];
 
 const AGE_GROUPS = [
-  "Sub-7",
-  "Sub-8",
-  "Sub-9",
-  "Sub-10",
-  "Sub-11",
-  "Sub-12",
-  "Sub-13",
-  "Sub-14",
-  "Sub-15",
-  "Sub-17",
-  "Sub-19",
-  "Sénior",
+  "Sub-7", "Sub-8", "Sub-9", "Sub-10", "Sub-11", "Sub-12",
+  "Sub-13", "Sub-14", "Sub-15", "Sub-17", "Sub-19", "Sénior",
 ];
 
 const ROLE_OPTIONS = [
@@ -64,6 +56,13 @@ const ROLE_LABELS: Record<string, string> = {
   assistant_coach: "Treinador Adjunto",
   coordinator: "Coordenador",
 };
+
+const KIT_NUMBERS: KitNumber[] = [1, 2, 3];
+const KIT_LABELS: Record<KitNumber, string> = { 1: "1.º Kit", 2: "2.º Kit", 3: "3.º Kit" };
+const PIECE_TYPES: PieceType[] = ["shirt", "shorts", "socks"];
+const PIECE_LABELS: Record<PieceType, string> = { shirt: "Camisola", shorts: "Calções", socks: "Meias" };
+const PLAYER_TYPES: PlayerType[] = ["field", "goalkeeper"];
+const PLAYER_TYPE_LABELS: Record<PlayerType, string> = { field: "Campo", goalkeeper: "Guarda-redes" };
 
 interface StaffInvite {
   id: string;
@@ -87,6 +86,7 @@ const EMPTY_STAFF_FORM = {
 
 export default function TeamSetupPage() {
   const supabase = useMemo(() => createClient(), []);
+  const logoRef = useRef<HTMLInputElement>(null);
 
   // Escalão
   const [loading, setLoading] = useState(true);
@@ -94,11 +94,20 @@ export default function TeamSetupPage() {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [existingAgeGroup, setExistingAgeGroup] = useState<AgeGroup | null>(null);
+  const [teamId, setTeamId] = useState<string | null>(null);
   const [clubName, setClubName] = useState("");
   const [ageGroupName, setAgeGroupName] = useState("");
   const [footballFormat, setFootballFormat] = useState("");
   const [season, setSeason] = useState("2025/2026");
   const [isEditing, setIsEditing] = useState(false);
+
+  // Logo
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [logoUrl, setLogoUrl] = useState<string>("");
+
+  // Kits
+  const [kitPieces, setKitPieces] = useState<KitPiece[]>([]);
+  const [savingKit, setSavingKit] = useState<string | null>(null);
 
   // Treinadores convidados
   const [staffInvites, setStaffInvites] = useState<StaffInvite[]>([]);
@@ -127,7 +136,7 @@ export default function TeamSetupPage() {
 
     const { data: ag } = await supabase
       .from("age_groups")
-      .select("*")
+      .select("*, teams(*)")
       .eq("coordinator_id", user.id)
       .single();
 
@@ -137,6 +146,21 @@ export default function TeamSetupPage() {
       setAgeGroupName(ag.name);
       setFootballFormat(ag.football_format);
       setSeason(ag.season);
+      setLogoUrl(ag.club_logo_url || "");
+
+      const firstTeam = ag.teams?.[0];
+      if (firstTeam) {
+        setTeamId(firstTeam.id);
+
+        const { data: kits } = await supabase
+          .from("kit_pieces")
+          .select("*")
+          .eq("team_id", firstTeam.id)
+          .order("kit_number")
+          .order("player_type")
+          .order("piece_type");
+        setKitPieces(kits || []);
+      }
 
       const { data: invites } = await supabase
         .from("staff_invites")
@@ -204,6 +228,91 @@ export default function TeamSetupPage() {
     setTimeout(() => setSaved(false), 3000);
   }
 
+  async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !existingAgeGroup) return;
+    setUploadingLogo(true);
+
+    const ext = file.name.split(".").pop();
+    const fileName = `${existingAgeGroup.id}/logo.${ext}`;
+
+    const { data, error } = await supabase.storage
+      .from("club-logos")
+      .upload(fileName, file, { upsert: true });
+
+    if (error || !data) {
+      console.error("Erro upload logo:", error);
+      setError("Erro ao carregar logotipo.");
+      setUploadingLogo(false);
+      return;
+    }
+
+    const { data: urlData } = supabase.storage
+      .from("club-logos")
+      .getPublicUrl(data.path);
+
+    const url = urlData.publicUrl;
+    await supabase
+      .from("age_groups")
+      .update({ club_logo_url: url })
+      .eq("id", existingAgeGroup.id);
+
+    setLogoUrl(url);
+    setExistingAgeGroup((prev) => prev ? { ...prev, club_logo_url: url } : prev);
+    setUploadingLogo(false);
+  }
+
+  function getKitPiece(kitNum: KitNumber, playerType: PlayerType, pieceType: PieceType) {
+    return kitPieces.find(
+      (k) =>
+        k.kit_number === kitNum &&
+        k.player_type === playerType &&
+        k.piece_type === pieceType,
+    );
+  }
+
+  async function handleKitColorChange(
+    kitNum: KitNumber,
+    playerType: PlayerType,
+    pieceType: PieceType,
+    colorHex: string,
+  ) {
+    if (!teamId) return;
+    const key = `${kitNum}-${playerType}-${pieceType}`;
+    setSavingKit(key);
+
+    const existing = getKitPiece(kitNum, playerType, pieceType);
+
+    if (existing) {
+      const { error } = await supabase
+        .from("kit_pieces")
+        .update({ color_hex: colorHex })
+        .eq("id", existing.id);
+      if (!error) {
+        setKitPieces((prev) =>
+          prev.map((k) => (k.id === existing.id ? { ...k, color_hex: colorHex } : k)),
+        );
+      }
+    } else {
+      const { data, error } = await supabase
+        .from("kit_pieces")
+        .insert({
+          team_id: teamId,
+          kit_number: kitNum,
+          player_type: playerType,
+          piece_type: pieceType,
+          color_hex: colorHex,
+        })
+        .select()
+        .single();
+      if (!error && data) {
+        setKitPieces((prev) => [...prev, data]);
+      }
+    }
+
+    setSavingKit(null);
+  }
+
   async function handleSendStaffInvite(e: { preventDefault(): void }) {
     e.preventDefault();
     setSendingInvite(true);
@@ -244,12 +353,12 @@ export default function TeamSetupPage() {
     setConfirmDeleteId(null);
 
     // Se o convite foi aceite, remover também da team_staff
-    if (invite.accepted_at && invite.accepted_by) {
+    if (invite.accepted_at && invite.accepted_by && teamId) {
       const { error: staffErr } = await supabase
         .from("team_staff")
         .delete()
         .eq("profile_id", invite.accepted_by)
-        .eq("team_id", existingAgeGroup!.id);
+        .eq("team_id", teamId);
 
       if (staffErr) {
         console.error("Erro ao remover staff:", staffErr);
@@ -259,7 +368,6 @@ export default function TeamSetupPage() {
       }
     }
 
-    // Apagar o convite
     const { error: inviteErr } = await supabase
       .from("staff_invites")
       .delete()
@@ -412,7 +520,135 @@ export default function TeamSetupPage() {
         )}
       </Card>
 
-      {/* ── SECÇÃO 2: EQUIPA TÉCNICA ── */}
+      {/* ── SECÇÃO 2: LOGOTIPO DO CLUBE ── */}
+      {existingAgeGroup && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <ImageIcon size={16} /> Logotipo do Clube
+            </CardTitle>
+            <CardDescription>
+              Imagem em PNG ou SVG, fundo transparente recomendado
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-4">
+              {logoUrl ? (
+                <img
+                  src={logoUrl}
+                  alt="Logo do clube"
+                  className="w-20 h-20 object-contain rounded-xl border border-slate-200 bg-white p-1"
+                />
+              ) : (
+                <div className="w-20 h-20 rounded-xl border-2 border-dashed border-slate-200 flex items-center justify-center bg-slate-50">
+                  <ImageIcon size={24} className="text-slate-300" />
+                </div>
+              )}
+              <div className="flex-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => logoRef.current?.click()}
+                  disabled={uploadingLogo}
+                >
+                  {uploadingLogo ? (
+                    <>
+                      <Loader2 size={14} className="mr-2 animate-spin" />
+                      A carregar...
+                    </>
+                  ) : (
+                    <>
+                      <ImageIcon size={14} className="mr-2" />
+                      {logoUrl ? "Substituir logotipo" : "Carregar logotipo"}
+                    </>
+                  )}
+                </Button>
+                <p className="text-xs text-slate-400 mt-1.5">
+                  PNG, JPG ou SVG · Máx. 2MB
+                </p>
+              </div>
+            </div>
+            <input
+              ref={logoRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleLogoUpload}
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── SECÇÃO 3: KITS DA EQUIPA ── */}
+      {existingAgeGroup && teamId && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Palette size={16} /> Kits da Equipa
+            </CardTitle>
+            <CardDescription>
+              Define as cores de cada kit (campo e guarda-redes)
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {KIT_NUMBERS.map((kitNum) => (
+              <div key={kitNum}>
+                <h4 className="text-sm font-semibold text-slate-700 mb-3">
+                  {KIT_LABELS[kitNum]}
+                </h4>
+                <div className="space-y-4">
+                  {PLAYER_TYPES.map((playerType) => (
+                    <div key={playerType}>
+                      <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">
+                        {PLAYER_TYPE_LABELS[playerType]}
+                      </p>
+                      <div className="grid grid-cols-3 gap-3">
+                        {PIECE_TYPES.map((pieceType) => {
+                          const piece = getKitPiece(kitNum, playerType, pieceType);
+                          const key = `${kitNum}-${playerType}-${pieceType}`;
+                          return (
+                            <div key={pieceType} className="space-y-1">
+                              <Label className="text-xs text-slate-500">
+                                {PIECE_LABELS[pieceType]}
+                              </Label>
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="color"
+                                  value={piece?.color_hex || "#cccccc"}
+                                  onChange={(e) =>
+                                    handleKitColorChange(
+                                      kitNum,
+                                      playerType,
+                                      pieceType,
+                                      e.target.value,
+                                    )
+                                  }
+                                  className="w-9 h-9 rounded-lg border border-slate-200 cursor-pointer p-0.5 bg-white"
+                                  title={`${KIT_LABELS[kitNum]} · ${PLAYER_TYPE_LABELS[playerType]} · ${PIECE_LABELS[pieceType]}`}
+                                />
+                                <span className="text-xs text-slate-400 font-mono">
+                                  {savingKit === key ? (
+                                    <Loader2 size={12} className="animate-spin" />
+                                  ) : (
+                                    (piece?.color_hex || "—").toUpperCase()
+                                  )}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {kitNum < 3 && <hr className="mt-4 border-slate-100" />}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── SECÇÃO 4: EQUIPA TÉCNICA ── */}
       {existingAgeGroup && (
         <Card>
           <CardHeader className="pb-3">
@@ -442,14 +678,12 @@ export default function TeamSetupPage() {
           </CardHeader>
 
           <CardContent className="space-y-4">
-            {/* Erro global */}
             {error && (
               <div className="bg-red-50 text-red-700 text-sm p-3 rounded-lg border border-red-200">
                 {error}
               </div>
             )}
 
-            {/* Formulário de convite */}
             {showStaffForm && (
               <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
                 <div className="flex justify-between items-center mb-4">
@@ -597,7 +831,6 @@ export default function TeamSetupPage() {
               </div>
             )}
 
-            {/* Lista de convites / staff */}
             {staffInvites.length > 0 ? (
               <div className="space-y-2">
                 {staffInvites.map((invite) => (
@@ -644,7 +877,6 @@ export default function TeamSetupPage() {
                             </button>
                           </>
                         )}
-                        {/* Botão de eliminar */}
                         <button
                           onClick={() =>
                             setConfirmDeleteId(
@@ -674,7 +906,6 @@ export default function TeamSetupPage() {
                       </div>
                     </div>
 
-                    {/* Confirmação de eliminação inline */}
                     {confirmDeleteId === invite.id && (
                       <div className="px-3 pb-3 flex items-center gap-2">
                         <p className="text-xs text-red-600 flex-1">

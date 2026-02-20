@@ -6,7 +6,8 @@ import {
   Home,
   Users,
   Calendar,
-  ClipboardCheck,
+  Trophy,
+  BarChart2,
   Settings,
   LogOut,
 } from "lucide-react";
@@ -17,7 +18,8 @@ const navItems = [
   { href: "/dashboard", icon: Home, label: "Dashboard" },
   { href: "/players", icon: Users, label: "Plantel" },
   { href: "/calendar", icon: Calendar, label: "Calendário" },
-  { href: "/attendance", icon: ClipboardCheck, label: "Presenças" },
+  { href: "/competitions", icon: Trophy, label: "Competições" },
+  { href: "/statistics", icon: BarChart2, label: "Estatísticas" },
   { href: "/team/setup", icon: Settings, label: "Configurações" },
 ];
 
@@ -54,7 +56,8 @@ export function Sidebar({ profile }: SidebarProps) {
       {/* Navegação */}
       <nav className="flex-1 p-4 space-y-1">
         {navItems.map(({ href, icon: Icon, label }) => {
-          const isActive = pathname === href;
+          const isActive =
+            pathname === href || pathname.startsWith(`${href}/`);
           return (
             <Link
               key={href}
