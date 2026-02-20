@@ -129,7 +129,6 @@ export interface Competition {
   team_id: string;
   name: string;
   season: string;
-  competition_type: CompetitionType;
   phase?: string;
   num_opponents?: number;
   total_rounds?: number;

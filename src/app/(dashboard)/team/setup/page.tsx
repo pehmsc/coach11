@@ -220,6 +220,20 @@ export default function TeamSetupPage() {
         return;
       }
       setExistingAgeGroup(data);
+
+      // Criar equipa padrão associada ao escalão (necessário para convites de staff)
+      const { data: newTeam } = await supabase
+        .from("teams")
+        .insert({
+          age_group_id: data.id,
+          name: `${clubName} ${ageGroupName}`,
+          is_competitive: true,
+        })
+        .select()
+        .single();
+      if (newTeam) {
+        setTeamId(newTeam.id);
+      }
     }
 
     setSaved(true);

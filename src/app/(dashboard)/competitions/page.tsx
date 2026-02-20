@@ -23,31 +23,16 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { Competition, CompetitionType, Game } from "@/types/database";
+import type { Competition, Game } from "@/types/database";
 
 interface CompetitionWithGames extends Competition {
-  teams?: { age_groups?: { football_format?: string } };
   games?: Game[];
 }
-
-const COMPETITION_TYPES = [
-  { value: "league", label: "Liga" },
-  { value: "cup", label: "Taça" },
-  { value: "friendly", label: "Torneio / Amigável" },
-];
 
 interface CompetitionForm {
   name: string;
   season: string;
-  competition_type: CompetitionType;
   phase: string;
   total_rounds: string;
   has_two_legs: boolean;
@@ -56,7 +41,6 @@ interface CompetitionForm {
 const EMPTY_FORM: CompetitionForm = {
   name: "",
   season: "2025/2026",
-  competition_type: "league",
   phase: "",
   total_rounds: "",
   has_two_legs: false,
@@ -110,7 +94,9 @@ export default function CompetitionsPage() {
 
     const { data: comps } = await supabase
       .from("competitions")
-      .select("*, games(id, game_datetime, opponent_name, is_home, status, score_home, score_away)")
+      .select(
+        "*, games(id, game_datetime, opponent_name, is_home, status, score_home, score_away)",
+      )
       .eq("team_id", firstTeam.id)
       .order("created_at", { ascending: false });
 
@@ -130,7 +116,6 @@ export default function CompetitionsPage() {
     setForm({
       name: comp.name,
       season: comp.season,
-      competition_type: comp.competition_type,
       phase: comp.phase || "",
       total_rounds: comp.total_rounds?.toString() || "",
       has_two_legs: comp.has_two_legs || false,
@@ -156,7 +141,6 @@ export default function CompetitionsPage() {
       team_id: teamId,
       name: form.name,
       season: form.season,
-      competition_type: form.competition_type,
       phase: form.phase || null,
       total_rounds: form.total_rounds ? parseInt(form.total_rounds) : null,
       has_two_legs: form.has_two_legs,
@@ -223,7 +207,9 @@ export default function CompetitionsPage() {
     return (
       <div className="p-4 md:p-8 text-center py-16">
         <Trophy size={40} className="text-slate-300 mx-auto mb-3" />
-        <p className="text-slate-700 font-semibold mb-2">Sem equipa configurada</p>
+        <p className="text-slate-700 font-semibold mb-2">
+          Sem equipa configurada
+        </p>
         <p className="text-slate-500 text-sm">
           Configura o teu escalão em Configurações antes de gerir competições.
         </p>
@@ -284,14 +270,7 @@ export default function CompetitionsPage() {
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <CardTitle className="text-base">{comp.name}</CardTitle>
-                        <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">
-                          {COMPETITION_TYPES.find(
-                            (t) => t.value === comp.competition_type,
-                          )?.label || comp.competition_type}
-                        </span>
-                      </div>
+                      <CardTitle className="text-base">{comp.name}</CardTitle>
                       <p className="text-xs text-slate-400 mt-0.5">
                         {comp.season}
                         {comp.phase ? ` · ${comp.phase}` : ""}
@@ -360,16 +339,21 @@ export default function CompetitionsPage() {
                       onClick={() => router.push(`/games/${game.id}`)}
                       className="w-full flex items-center gap-3 p-3 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors text-left"
                     >
-                      <Calendar size={14} className="text-blue-500 flex-shrink-0" />
+                      <Calendar
+                        size={14}
+                        className="text-blue-500 flex-shrink-0"
+                      />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-slate-800 truncate">
                           {game.is_home ? "vs" : "@"}{" "}
                           {game.opponent_name || "Adversário"}
                         </p>
                         <p className="text-xs text-slate-400">
-                          {format(parseISO(game.game_datetime), "d MMM · HH:mm", {
-                            locale: pt,
-                          })}
+                          {format(
+                            parseISO(game.game_datetime),
+                            "d MMM · HH:mm",
+                            { locale: pt },
+                          )}
                         </p>
                       </div>
                       <ChevronRight size={14} className="text-slate-300" />
@@ -377,32 +361,37 @@ export default function CompetitionsPage() {
                   ))}
 
                   {/* Resultados recentes */}
-                  {played.slice(-2).reverse().map((game) => (
-                    <button
-                      key={game.id}
-                      onClick={() => router.push(`/games/${game.id}`)}
-                      className="w-full flex items-center gap-3 p-3 rounded-xl bg-white border border-slate-100 hover:bg-slate-50 transition-colors text-left"
-                    >
-                      <span className="text-xs text-slate-400 w-4 text-center">✓</span>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-600 truncate">
-                          {game.is_home ? "vs" : "@"}{" "}
-                          {game.opponent_name || "Adversário"}
-                        </p>
-                        <p className="text-xs text-slate-400">
-                          {format(parseISO(game.game_datetime), "d MMM", {
-                            locale: pt,
-                          })}
-                        </p>
-                      </div>
-                      {gameResultLabel(game) && (
-                        <span className="text-sm font-bold text-slate-700">
-                          {gameResultLabel(game)}
+                  {played
+                    .slice(-2)
+                    .reverse()
+                    .map((game) => (
+                      <button
+                        key={game.id}
+                        onClick={() => router.push(`/games/${game.id}`)}
+                        className="w-full flex items-center gap-3 p-3 rounded-xl bg-white border border-slate-100 hover:bg-slate-50 transition-colors text-left"
+                      >
+                        <span className="text-xs text-slate-400 w-4 text-center">
+                          ✓
                         </span>
-                      )}
-                      <ChevronRight size={14} className="text-slate-300" />
-                    </button>
-                  ))}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-slate-600 truncate">
+                            {game.is_home ? "vs" : "@"}{" "}
+                            {game.opponent_name || "Adversário"}
+                          </p>
+                          <p className="text-xs text-slate-400">
+                            {format(parseISO(game.game_datetime), "d MMM", {
+                              locale: pt,
+                            })}
+                          </p>
+                        </div>
+                        {gameResultLabel(game) && (
+                          <span className="text-sm font-bold text-slate-700">
+                            {gameResultLabel(game)}
+                          </span>
+                        )}
+                        <ChevronRight size={14} className="text-slate-300" />
+                      </button>
+                    ))}
 
                   {games.length === 0 && (
                     <p className="text-xs text-slate-400 text-center py-3">
@@ -446,7 +435,9 @@ export default function CompetitionsPage() {
                 <Label>Nome da competição *</Label>
                 <Input
                   value={form.name}
-                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, name: e.target.value }))
+                  }
                   placeholder="ex: Campeonato Distrital"
                   required
                 />
@@ -454,59 +445,38 @@ export default function CompetitionsPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label>Tipo</Label>
-                  <Select
-                    value={form.competition_type}
-                    onValueChange={(v) =>
-                      setForm((f) => ({
-                        ...f,
-                        competition_type: v as typeof form.competition_type,
-                      }))
+                  <Label>Fase / Série</Label>
+                  <Input
+                    value={form.phase}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, phase: e.target.value }))
                     }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {COMPETITION_TYPES.map((t) => (
-                        <SelectItem key={t.value} value={t.value}>
-                          {t.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    placeholder="ex: Série B"
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label>Época</Label>
                   <Input
                     value={form.season}
-                    onChange={(e) => setForm((f) => ({ ...f, season: e.target.value }))}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, season: e.target.value }))
+                    }
                     placeholder="2025/2026"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label>Fase</Label>
-                  <Input
-                    value={form.phase}
-                    onChange={(e) => setForm((f) => ({ ...f, phase: e.target.value }))}
-                    placeholder="ex: Série B"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Total de jornadas</Label>
-                  <Input
-                    type="number"
-                    min="1"
-                    value={form.total_rounds}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, total_rounds: e.target.value }))
-                    }
-                    placeholder="ex: 22"
-                  />
-                </div>
+              <div className="space-y-1.5">
+                <Label>Total de jornadas</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  value={form.total_rounds}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, total_rounds: e.target.value }))
+                  }
+                  placeholder="ex: 22"
+                />
               </div>
 
               <div className="flex items-center gap-3">
@@ -515,7 +485,7 @@ export default function CompetitionsPage() {
                   onClick={() =>
                     setForm((f) => ({ ...f, has_two_legs: !f.has_two_legs }))
                   }
-                  className={`w-10 h-6 rounded-full transition-colors ${
+                  className={`w-10 h-6 rounded-full transition-colors flex-shrink-0 ${
                     form.has_two_legs ? "bg-emerald-500" : "bg-slate-200"
                   }`}
                 >

@@ -76,10 +76,15 @@ export async function POST(request: Request) {
   }
 
   // 4. Criar associação em team_staff com o team_id correto
+  // team_staff.role CHECK: head_coach | assistant_coach | coordinator
+  // staff_invites.role usa: coach | assistant_coach | coordinator
+  const teamStaffRole =
+    invite.role === "coach" ? "head_coach" : invite.role;
+
   const { error: staffError } = await supabase.from("team_staff").insert({
     profile_id: user.id,
     team_id: team.id,
-    role: invite.role,
+    role: teamStaffRole,
   });
 
   if (staffError) {
