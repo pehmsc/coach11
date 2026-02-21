@@ -29,11 +29,12 @@ interface MatchReportData {
 
 const EVENT_PT: Record<string, string> = {
   goal: "Golo",
-  penalty_goal: "Golo (Pénalti)",
+  assist: "Assistência",
   own_goal: "Autogolo",
   yellow_card: "Cartão Amarelo",
   red_card: "Cartão Vermelho",
-  substitution: "Substituição",
+  substitution_in: "Substituição (entra)",
+  substitution_out: "Substituição (sai)",
 };
 
 export async function exportMatchReportPDF(data: MatchReportData): Promise<void> {

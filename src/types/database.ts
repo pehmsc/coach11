@@ -6,11 +6,12 @@ export type EventStatus = "scheduled" | "completed" | "cancelled";
 export type ConvocationStatus = "draft" | "confirmed" | "closed";
 export type GameEventType =
   | "goal"
+  | "assist"
+  | "own_goal"
   | "yellow_card"
   | "red_card"
-  | "substitution"
-  | "penalty_goal"
-  | "own_goal";
+  | "substitution_in"
+  | "substitution_out";
 export type LineupType = "starter" | "substitute";
 export type CompetitionType = "league" | "cup" | "friendly";
 export type KitNumber = 1 | 2 | 3;

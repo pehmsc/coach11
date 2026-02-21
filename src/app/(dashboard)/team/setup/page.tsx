@@ -59,12 +59,17 @@ const ROLE_LABELS: Record<string, string> = {
   coordinator: "Coordenador",
 };
 
-const KIT_NUMBERS: KitNumber[] = [1, 2, 3];
+const KIT_NUMBERS: KitNumber[] = [1, 2];
 const KIT_LABELS: Record<KitNumber, string> = { 1: "1.º Kit", 2: "2.º Kit", 3: "3.º Kit" };
 const PIECE_TYPES: PieceType[] = ["shirt", "shorts", "socks"];
 const PIECE_LABELS: Record<PieceType, string> = { shirt: "Camisola", shorts: "Calções", socks: "Meias" };
 const PLAYER_TYPES: PlayerType[] = ["field", "goalkeeper"];
 const PLAYER_TYPE_LABELS: Record<PlayerType, string> = { field: "Campo", goalkeeper: "Guarda-redes" };
+
+function normalizePlayerTypeForComparison(value: string | undefined) {
+  if (!value) return "";
+  return value === "field_player" ? "field" : value;
+}
 
 function normalizePieceTypeForComparison(value: string | undefined) {
   if (!value) return "";
@@ -154,7 +159,8 @@ export default function TeamSetupPage() {
     const colorMap: Record<string, string> = {};
     kitPieces.forEach((piece) => {
       const normalizedType = normalizePieceTypeForComparison(piece.piece_type);
-      const key = `${piece.kit_number}-${piece.player_type}-${normalizedType}`;
+      const normalizedPlayerType = normalizePlayerTypeForComparison(piece.player_type);
+      const key = `${piece.kit_number}-${normalizedPlayerType}-${normalizedType}`;
       if (piece.color_hex) colorMap[key] = piece.color_hex.toLowerCase();
     });
     setKitColors(colorMap);
@@ -344,7 +350,7 @@ export default function TeamSetupPage() {
     const matches = kitPieces.filter(
       (k) =>
         k.kit_number === kitNum &&
-        k.player_type === playerType &&
+        normalizePlayerTypeForComparison(k.player_type) === playerType &&
         samePieceType(k.piece_type, pieceType),
     );
     if (matches.length === 0) return undefined;
@@ -402,7 +408,8 @@ export default function TeamSetupPage() {
             !(
               piece.team_id === savedPiece.team_id &&
               piece.kit_number === savedPiece.kit_number &&
-              piece.player_type === savedPiece.player_type &&
+              normalizePlayerTypeForComparison(piece.player_type) ===
+                normalizePlayerTypeForComparison(savedPiece.player_type) &&
               samePieceType(piece.piece_type, savedPiece.piece_type)
             ),
         );

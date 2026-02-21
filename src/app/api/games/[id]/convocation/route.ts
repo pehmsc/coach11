@@ -13,6 +13,42 @@ function toConvocationStatus(value: string | null | undefined): ConvocationStatu
   return "draft";
 }
 
+function normalizeLiveStatusForUi(value: string | null | undefined) {
+  if (!value) return null;
+  if (
+    value === "on_field" ||
+    value === "starter" ||
+    value === "playing" ||
+    value === "titular"
+  ) {
+    return "on_field";
+  }
+  if (
+    value === "substitute" ||
+    value === "on_bench" ||
+    value === "substituted_out" ||
+    value === "bench" ||
+    value === "suplente"
+  ) {
+    return "substitute";
+  }
+  return null;
+}
+
+function normalizeKitRowForUi(row: Record<string, unknown>) {
+  return {
+    ...row,
+    player_type:
+      typeof row.player_type === "string" && row.player_type === "field_player"
+        ? "field"
+        : row.player_type,
+    piece_type:
+      typeof row.piece_type === "string" && row.piece_type === "jersey"
+        ? "shirt"
+        : row.piece_type,
+  };
+}
+
 export async function GET(_request: Request, { params }: RouteContext) {
   try {
     const { id: gameId } = await params;
@@ -207,7 +243,9 @@ export async function GET(_request: Request, { params }: RouteContext) {
     const lineupStatuses: Record<string, string> = {};
     (liveStats || []).forEach((row) => {
       const r = row as unknown as { player_id?: string; status?: string };
-      if (r.player_id) lineupStatuses[r.player_id] = r.status ?? "substitute";
+      if (!r.player_id) return;
+      const normalized = normalizeLiveStatusForUi(r.status);
+      if (normalized) lineupStatuses[r.player_id] = normalized;
     });
 
     let kits: Record<string, unknown>[] = [];
@@ -227,7 +265,9 @@ export async function GET(_request: Request, { params }: RouteContext) {
         );
       }
 
-      kits = (kitRows || []) as unknown as Record<string, unknown>[];
+      kits = ((kitRows || []) as unknown as Record<string, unknown>[]).map((row) =>
+        normalizeKitRowForUi(row),
+      );
     }
 
     return NextResponse.json({

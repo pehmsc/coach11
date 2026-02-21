@@ -50,6 +50,11 @@ const PLAYER_TYPE_LABELS: Record<PlayerType, string> = {
   goalkeeper: "Guarda-redes",
 };
 
+function normalizePlayerType(value: string | undefined) {
+  if (!value) return "";
+  return value === "field_player" ? "field" : value;
+}
+
 function normalizePiece(value: string | undefined) {
   if (!value) return "";
   return value === "jersey" ? "shirt" : value;
@@ -105,7 +110,7 @@ export default function TeamPage() {
   useEffect(() => {
     const colorMap: Record<string, string> = {};
     kitPieces.forEach((piece) => {
-      const key = `${piece.kit_number}-${piece.player_type}-${normalizePiece(piece.piece_type)}`;
+      const key = `${piece.kit_number}-${normalizePlayerType(piece.player_type)}-${normalizePiece(piece.piece_type)}`;
       if (piece.color_hex) colorMap[key] = piece.color_hex.toLowerCase();
     });
     setKitColors(colorMap);
@@ -221,7 +226,10 @@ export default function TeamPage() {
 
   function getKitPiece(kitNum: KitNumber, playerType: PlayerType, pieceType: PieceType) {
     const matches = kitPieces.filter(
-      (k) => k.kit_number === kitNum && k.player_type === playerType && samePiece(k.piece_type, pieceType),
+      (k) =>
+        k.kit_number === kitNum &&
+        normalizePlayerType(k.player_type) === playerType &&
+        samePiece(k.piece_type, pieceType),
     );
     if (matches.length === 0) return undefined;
     return matches.reduce((latest, current) =>
@@ -249,7 +257,8 @@ export default function TeamPage() {
       setKitPieces((prev) => {
         const filtered = prev.filter(
           (p) => !(p.team_id === savedPiece.team_id && p.kit_number === savedPiece.kit_number &&
-            p.player_type === savedPiece.player_type && samePiece(p.piece_type, savedPiece.piece_type)),
+            normalizePlayerType(p.player_type) === normalizePlayerType(savedPiece.player_type) &&
+            samePiece(p.piece_type, savedPiece.piece_type)),
         );
         return [...filtered, savedPiece];
       });

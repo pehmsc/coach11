@@ -38,12 +38,47 @@ type MatchPhase =
 
 const EVENT_LABELS: Record<string, string> = {
   goal: "⚽ Golo",
-  penalty_goal: "⚽ Pénalti",
+  assist: "🅰️ Assistência",
   own_goal: "⚽ Autogolo",
   yellow_card: "🟨 Cartão Amarelo",
   red_card: "🟥 Cartão Vermelho",
-  substitution: "🔄 Substituição",
+  substitution_in: "🔄 Substituição (entra)",
+  substitution_out: "🔄 Substituição (sai)",
 };
+
+type LiveStatus = "on_field" | "substitute" | "substituted";
+
+function normalizeLiveStatus(value: string | null | undefined): LiveStatus | null {
+  if (!value) return null;
+  if (
+    value === "on_field" ||
+    value === "starter" ||
+    value === "titular" ||
+    value === "playing"
+  ) {
+    return "on_field";
+  }
+  if (
+    value === "substitute" ||
+    value === "bench" ||
+    value === "suplente" ||
+    value === "on_bench"
+  ) {
+    return "substitute";
+  }
+  if (value === "substituted" || value === "substituted_out") return "substituted";
+  return null;
+}
+
+function toDbLiveStatus(status: LiveStatus, startMinute: number | null | undefined) {
+  if (status === "substituted") return "substituted_out";
+  if (status === "substitute") return "on_bench";
+  return startMinute === 0 ? "starter" : "playing";
+}
+
+function isGoalEventType(eventType: string | null | undefined) {
+  return eventType === "goal" || eventType === "penalty_goal";
+}
 
 function formatClock(totalSeconds: number) {
   const min = Math.floor(totalSeconds / 60)
@@ -60,8 +95,26 @@ function computeMinutesPlayed(
   starterIds: Set<string>,
   finalMinute: number,
 ): Map<string, number> {
-  const subEvents = events
-    .filter((e) => e.event_type === "substitution" && !e.is_opponent_event)
+  const substitutions = events
+    .filter((e) => !e.is_opponent_event)
+    .flatMap((e) => {
+      if (
+        e.event_type === "substitution_out" &&
+        typeof e.player_id === "string" &&
+        typeof e.related_player_id === "string"
+      ) {
+        return [{ minute: e.minute, outPlayerId: e.player_id, inPlayerId: e.related_player_id }];
+      }
+      // Compatibilidade com registos antigos.
+      if (
+        (e.event_type as string) === "substitution" &&
+        typeof e.player_id === "string" &&
+        typeof e.related_player_id === "string"
+      ) {
+        return [{ minute: e.minute, outPlayerId: e.related_player_id, inPlayerId: e.player_id }];
+      }
+      return [];
+    })
     .sort((a, b) => a.minute - b.minute);
 
   const result = new Map<string, number>();
@@ -70,11 +123,11 @@ function computeMinutesPlayed(
     const periods: [number, number][] = [];
     let currentStart: number | null = starterIds.has(player.id) ? 0 : null;
 
-    for (const ev of subEvents) {
-      if (ev.player_id === player.id) {
+    for (const ev of substitutions) {
+      if (ev.inPlayerId === player.id) {
         // Player entered
         currentStart = ev.minute;
-      } else if (ev.related_player_id === player.id) {
+      } else if (ev.outPlayerId === player.id) {
         // Player exited
         if (currentStart !== null) {
           periods.push([currentStart, ev.minute]);
@@ -160,12 +213,12 @@ export default function LiveGamePage() {
       .order("id", { ascending: false });
 
     let convPlayers: Player[] = [];
-    const convIds = (convRows || []).map((row) => row.id);
-    if (convIds.length > 0) {
+    const latestConvocationId = convRows?.[0]?.id ?? null;
+    if (latestConvocationId) {
       const { data: cp } = await supabase
         .from("convocation_players")
         .select("player_id, players(*)")
-        .in("convocation_id", convIds);
+        .eq("convocation_id", latestConvocationId);
 
       const byPlayerId = new Map<string, Player>();
       (cp || []).forEach((row) => {
@@ -187,11 +240,20 @@ export default function LiveGamePage() {
       .select("*")
       .eq("game_id", id);
 
+    const normalizedStats = (liveStats || []).map((row) => ({
+      player_id: row.player_id,
+      status: normalizeLiveStatus(row.status),
+    }));
+
     const onFieldIds = new Set(
-      (liveStats || []).filter((s) => s.status === "on_field").map((s) => s.player_id),
+      normalizedStats
+        .filter((s) => s.status === "on_field")
+        .map((s) => s.player_id),
     );
     const benchIds = new Set(
-      (liveStats || []).filter((s) => s.status === "substitute").map((s) => s.player_id),
+      normalizedStats
+        .filter((s) => s.status === "substitute" || s.status === "substituted")
+        .map((s) => s.player_id),
     );
 
     const enriched: LivePlayer[] = convPlayers.map((p) => ({
@@ -222,6 +284,52 @@ export default function LiveGamePage() {
     if (id) void loadData();
   }, [id, loadData]);
 
+  const saveLivePlayerStatus = useCallback(
+    async (
+      playerId: string,
+      status: LiveStatus,
+      options?: { startMinute?: number | null; endMinute?: number | null },
+    ) => {
+      const startMinute = options?.startMinute ?? null;
+      const endMinute = options?.endMinute ?? null;
+      const payload = {
+        status: toDbLiveStatus(status, startMinute),
+        start_minute: startMinute,
+        end_minute: endMinute,
+      };
+
+      const { data: existingRows, error: existingRowsError } = await supabase
+        .from("game_stats_live")
+        .select("id")
+        .eq("game_id", id)
+        .eq("player_id", playerId);
+
+      if (existingRowsError) throw existingRowsError;
+
+      if ((existingRows || []).length > 0) {
+        const { error: updateError } = await supabase
+          .from("game_stats_live")
+          .update(payload)
+          .eq("game_id", id)
+          .eq("player_id", playerId);
+
+        if (updateError) throw updateError;
+        return;
+      }
+
+      const { error: insertError } = await supabase
+        .from("game_stats_live")
+        .insert({
+          game_id: id,
+          player_id: playerId,
+          ...payload,
+        });
+
+      if (insertError) throw insertError;
+    },
+    [id, supabase],
+  );
+
   useEffect(() => {
     if (!clockRunning || phase === "completed") return;
     const interval = setInterval(() => {
@@ -242,12 +350,26 @@ export default function LiveGamePage() {
       if (e.event_type === "own_goal") {
         if (e.is_opponent_event) home++;
         else away++;
-      } else if (e.event_type === "goal" || e.event_type === "penalty_goal") {
+      } else if (isGoalEventType(e.event_type)) {
         if (e.is_opponent_event) away++;
         else home++;
       }
     });
     return { home, away };
+  }, [events]);
+
+  const displayEvents = useMemo(() => {
+    const sorted = [...events].sort((a, b) => a.minute - b.minute);
+    return sorted.filter((event) => {
+      if (event.event_type !== "substitution_in") return true;
+      return !sorted.some(
+        (other) =>
+          other.event_type === "substitution_out" &&
+          other.minute === event.minute &&
+          other.player_id === event.related_player_id &&
+          other.related_player_id === event.player_id,
+      );
+    });
   }, [events]);
 
   const playersOnField = convocatedPlayers.filter((p) => p.isOnField);
@@ -305,12 +427,13 @@ export default function LiveGamePage() {
   }
 
   async function confirmGoal() {
+    const goalEventType: GameEventType = modalType === "own_goal" ? "own_goal" : "goal";
     setSavingEvent(true);
     const { data, error: evErr } = await supabase
       .from("game_events")
       .insert({
         game_id: id,
-        event_type: modalType as GameEventType,
+        event_type: goalEventType,
         player_id: selectedScorerID || null,
         related_player_id: selectedAssistID || null,
         minute,
@@ -323,13 +446,13 @@ export default function LiveGamePage() {
       toast.error("Erro ao registar golo.");
     } else if (data) {
       setEvents((prev) => [...prev, data].sort((a, b) => a.minute - b.minute));
-      toast.success(`${EVENT_LABELS[modalType!] ?? modalType} — min. ${minute}`);
+      toast.success(`${EVENT_LABELS[goalEventType] ?? goalEventType} — min. ${minute}`);
     }
     setSavingEvent(false);
     closeModal();
   }
 
-  async function confirmCard(eventType: GameEventType) {
+  async function confirmCard(eventType: "yellow_card" | "red_card") {
     if (!selectedScorerID && !modalIsOpponent) return;
     setSavingEvent(true);
     const { data, error: evErr } = await supabase
@@ -360,16 +483,26 @@ export default function LiveGamePage() {
 
     const { data, error: evErr } = await supabase
       .from("game_events")
-      .insert({
-        game_id: id,
-        event_type: "substitution",
-        player_id: selectedSubInId,       // enters
-        related_player_id: selectedSubOutId, // exits
-        minute,
-        is_opponent_event: false,
-      })
+      .insert([
+        {
+          game_id: id,
+          event_type: "substitution_out",
+          player_id: selectedSubOutId,
+          related_player_id: selectedSubInId,
+          minute,
+          is_opponent_event: false,
+        },
+        {
+          game_id: id,
+          event_type: "substitution_in",
+          player_id: selectedSubInId,
+          related_player_id: selectedSubOutId,
+          minute,
+          is_opponent_event: false,
+        },
+      ])
       .select()
-      .single();
+      .order("created_at", { ascending: true });
 
     if (evErr) {
       toast.error("Erro ao registar substituição.");
@@ -377,15 +510,21 @@ export default function LiveGamePage() {
       return;
     }
 
-    // Update live stats (current status only — minutes calc uses events)
-    await supabase.from("game_stats_live").upsert(
-      { game_id: id, player_id: selectedSubOutId, status: "substituted", end_minute: minute },
-      { onConflict: "game_id,player_id" },
-    );
-    await supabase.from("game_stats_live").upsert(
-      { game_id: id, player_id: selectedSubInId, status: "on_field", start_minute: minute },
-      { onConflict: "game_id,player_id" },
-    );
+    try {
+      // Update live stats (current status only — minutes calc uses events)
+      await saveLivePlayerStatus(selectedSubOutId, "substituted", {
+        startMinute: null,
+        endMinute: minute,
+      });
+      await saveLivePlayerStatus(selectedSubInId, "on_field", {
+        startMinute: minute,
+        endMinute: null,
+      });
+    } catch {
+      toast.error("Erro ao atualizar estado dos jogadores.");
+      setSavingEvent(false);
+      return;
+    }
 
     setConvocatedPlayers((prev) =>
       prev.map((p) => {
@@ -395,8 +534,8 @@ export default function LiveGamePage() {
       }),
     );
 
-    if (data) {
-      setEvents((prev) => [...prev, data].sort((a, b) => a.minute - b.minute));
+    if ((data || []).length > 0) {
+      setEvents((prev) => [...prev, ...(data as GameEvent[])].sort((a, b) => a.minute - b.minute));
     }
 
     toast.success(`Substituição — min. ${minute}`);
@@ -410,30 +549,59 @@ export default function LiveGamePage() {
     setSavingLineup(playerId);
 
     const newIsOnField = !player.isOnField;
-    const newStatus = newIsOnField ? "on_field" : "substitute";
+    const newStatus: LiveStatus = newIsOnField ? "on_field" : "substitute";
 
-    await supabase.from("game_stats_live").upsert(
-      { game_id: id, player_id: playerId, status: newStatus, start_minute: newIsOnField ? 0 : null },
-      { onConflict: "game_id,player_id" },
-    );
+    try {
+      await saveLivePlayerStatus(playerId, newStatus, {
+        startMinute: newIsOnField ? 0 : null,
+        endMinute: null,
+      });
 
-    setConvocatedPlayers((prev) =>
-      prev.map((p) =>
-        p.id === playerId
-          ? { ...p, isOnField: newIsOnField, isInitialBench: !newIsOnField }
-          : p,
-      ),
-    );
+      setConvocatedPlayers((prev) =>
+        prev.map((p) =>
+          p.id === playerId
+            ? { ...p, isOnField: newIsOnField, isInitialBench: !newIsOnField }
+            : p,
+        ),
+      );
+    } catch {
+      toast.error("Erro ao guardar titular/banco.");
+    }
     setSavingLineup(null);
   }
 
   async function deleteEvent(eventId: string) {
+    const eventToDelete = events.find((event) => event.id === eventId);
+    const idsToDelete = new Set<string>([eventId]);
+
+    if (eventToDelete?.event_type === "substitution_out") {
+      const pair = events.find(
+        (event) =>
+          event.event_type === "substitution_in" &&
+          event.minute === eventToDelete.minute &&
+          event.player_id === eventToDelete.related_player_id &&
+          event.related_player_id === eventToDelete.player_id,
+      );
+      if (pair?.id) idsToDelete.add(pair.id);
+    }
+
+    if (eventToDelete?.event_type === "substitution_in") {
+      const pair = events.find(
+        (event) =>
+          event.event_type === "substitution_out" &&
+          event.minute === eventToDelete.minute &&
+          event.player_id === eventToDelete.related_player_id &&
+          event.related_player_id === eventToDelete.player_id,
+      );
+      if (pair?.id) idsToDelete.add(pair.id);
+    }
+
     const { error: delErr } = await supabase
       .from("game_events")
       .delete()
-      .eq("id", eventId);
+      .in("id", Array.from(idsToDelete));
     if (!delErr) {
-      setEvents((prev) => prev.filter((e) => e.id !== eventId));
+      setEvents((prev) => prev.filter((event) => !idsToDelete.has(event.id)));
     }
   }
 
@@ -448,7 +616,13 @@ export default function LiveGamePage() {
 
     const starterIdsFromDB = new Set(
       (liveStats || [])
-        .filter((s) => s.start_minute === 0 || s.status === "on_field")
+        .filter(
+          (s) =>
+            s.start_minute === 0 ||
+            s.status === "starter" ||
+            s.status === "playing" ||
+            s.status === "on_field",
+        )
         .map((s) => s.player_id),
     );
 
@@ -470,14 +644,14 @@ export default function LiveGamePage() {
         (e) =>
           e.player_id === player.id &&
           !e.is_opponent_event &&
-          (e.event_type === "goal" || e.event_type === "penalty_goal"),
+          isGoalEventType(e.event_type),
       ).length;
 
       const assists = events.filter(
         (e) =>
           e.related_player_id === player.id &&
           !e.is_opponent_event &&
-          (e.event_type === "goal" || e.event_type === "penalty_goal"),
+          isGoalEventType(e.event_type),
       ).length;
 
       const yellowCards = events.filter(
@@ -558,7 +732,7 @@ export default function LiveGamePage() {
         scoreHome: score.home,
         scoreAway: score.away,
         location: game.location,
-        events: events.map((e) => {
+        events: displayEvents.map((e) => {
           const pl = convocatedPlayers.find((p) => p.id === e.player_id);
           return {
             minute: e.minute,
@@ -571,10 +745,10 @@ export default function LiveGamePage() {
           jersey_number: p.jersey_number,
           name: `${p.first_name} ${p.last_name}`,
           goals: events.filter(
-            (e) => e.player_id === p.id && (e.event_type === "goal" || e.event_type === "penalty_goal"),
+            (e) => e.player_id === p.id && isGoalEventType(e.event_type),
           ).length,
           assists: events.filter(
-            (e) => e.related_player_id === p.id && (e.event_type === "goal" || e.event_type === "penalty_goal"),
+            (e) => e.related_player_id === p.id && isGoalEventType(e.event_type),
           ).length,
           yellow_cards: events.filter(
             (e) => e.player_id === p.id && e.event_type === "yellow_card",
@@ -884,13 +1058,13 @@ export default function LiveGamePage() {
       )}
 
       {/* ── Events log ── */}
-      {events.length > 0 && (
+      {displayEvents.length > 0 && (
         <div className="mb-5">
           <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">
             Eventos
           </h3>
           <div className="space-y-1">
-            {events.map((ev) => {
+            {displayEvents.map((ev) => {
               const pl = convocatedPlayers.find((p) => p.id === ev.player_id);
               const assist = convocatedPlayers.find((p) => p.id === ev.related_player_id);
               return (
@@ -904,8 +1078,9 @@ export default function LiveGamePage() {
                   <span className="text-sm flex-1">
                     {EVENT_LABELS[ev.event_type] || ev.event_type}
                     {pl ? ` — ${pl.first_name} ${pl.last_name}` : ev.is_opponent_event ? " — Adversário" : ""}
-                    {assist && ev.event_type !== "substitution" ? ` (🅰️ ${assist.first_name} ${assist.last_name})` : ""}
-                    {ev.event_type === "substitution" && assist ? ` ← ${assist.first_name} ${assist.last_name}` : ""}
+                    {assist && ev.event_type === "goal" ? ` (🅰️ ${assist.first_name} ${assist.last_name})` : ""}
+                    {ev.event_type === "substitution_out" && assist ? ` → ${assist.first_name} ${assist.last_name}` : ""}
+                    {ev.event_type === "substitution_in" && assist ? ` ← ${assist.first_name} ${assist.last_name}` : ""}
                   </span>
                   {!isFinalized && (
                     <button
@@ -1150,7 +1325,7 @@ export default function LiveGamePage() {
               )}
 
               {/* GOAL (own team) — 2-step: scorer → assist */}
-              {(modalType === "goal" || modalType === "penalty_goal") && !modalIsOpponent && (
+              {modalType === "goal" && !modalIsOpponent && (
                 <>
                   {goalStep === "scorer" && (
                     <>

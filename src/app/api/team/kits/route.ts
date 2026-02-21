@@ -2,8 +2,10 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-type PlayerType = "field" | "goalkeeper";
-type PieceType = "shirt" | "shorts" | "socks";
+type PlayerTypeInput = "field" | "field_player" | "goalkeeper";
+type DbPlayerType = "field_player" | "goalkeeper";
+type PieceTypeInput = "shirt" | "jersey" | "shorts" | "socks";
+type DbPieceType = "jersey" | "shorts" | "socks";
 
 type Payload = {
   teamId?: unknown;
@@ -22,17 +24,54 @@ function normalizeColorHex(raw: unknown) {
   return value.toLowerCase();
 }
 
-function isPlayerType(value: unknown): value is PlayerType {
-  return value === "field" || value === "goalkeeper";
+function isPlayerType(value: unknown): value is PlayerTypeInput {
+  return value === "field" || value === "field_player" || value === "goalkeeper";
 }
 
-function isPieceType(value: unknown): value is PieceType {
-  return value === "shirt" || value === "shorts" || value === "socks";
+function normalizePlayerType(value: PlayerTypeInput): DbPlayerType {
+  if (value === "goalkeeper") return "goalkeeper";
+  return "field_player";
 }
 
-function pieceTypeVariants(pieceType: PieceType) {
-  if (pieceType === "shirt") return ["shirt", "jersey"];
+function playerTypeVariants(playerType: DbPlayerType) {
+  if (playerType === "field_player") return ["field_player", "field"];
+  return ["goalkeeper"];
+}
+
+function isPieceType(value: unknown): value is PieceTypeInput {
+  return value === "shirt" || value === "jersey" || value === "shorts" || value === "socks";
+}
+
+function normalizePieceType(value: PieceTypeInput): DbPieceType {
+  if (value === "shirt" || value === "jersey") return "jersey";
+  return value;
+}
+
+function pieceTypeVariants(pieceType: DbPieceType) {
+  if (pieceType === "jersey") return ["jersey", "shirt"];
   return [pieceType];
+}
+
+function normalizePieceForUi(value: string | null | undefined) {
+  if (!value) return value ?? null;
+  return value === "jersey" ? "shirt" : value;
+}
+
+function normalizePlayerForUi(value: string | null | undefined) {
+  if (!value) return value ?? null;
+  return value === "field_player" ? "field" : value;
+}
+
+function toUiPiece<T extends Record<string, unknown>>(piece: T) {
+  return {
+    ...piece,
+    player_type: normalizePlayerForUi(
+      typeof piece.player_type === "string" ? piece.player_type : null,
+    ),
+    piece_type: normalizePieceForUi(
+      typeof piece.piece_type === "string" ? piece.piece_type : null,
+    ),
+  };
 }
 
 export async function POST(request: Request) {
@@ -55,12 +94,14 @@ export async function POST(request: Request) {
           ? Number(body.kitNumber)
           : null;
     const kitNumber =
-      typeof rawKitNumber === "number" && [1, 2, 3].includes(rawKitNumber)
+      typeof rawKitNumber === "number" && [1, 2].includes(rawKitNumber)
         ? rawKitNumber
         : null;
-    const playerType = isPlayerType(body?.playerType) ? body.playerType : null;
-    const pieceType = isPieceType(body?.pieceType) ? body.pieceType : null;
+    const rawPlayerType = isPlayerType(body?.playerType) ? body.playerType : null;
+    const rawPieceType = isPieceType(body?.pieceType) ? body.pieceType : null;
     const colorHex = normalizeColorHex(body?.colorHex);
+    const playerType = rawPlayerType ? normalizePlayerType(rawPlayerType) : null;
+    const pieceType = rawPieceType ? normalizePieceType(rawPieceType) : null;
 
     if (!teamId || !kitNumber || !playerType || !pieceType || !colorHex) {
       return NextResponse.json(
@@ -114,6 +155,8 @@ export async function POST(request: Request) {
       );
     }
 
+    const colorName = colorHex.toUpperCase();
+    const candidatePlayerTypes = playerTypeVariants(playerType);
     const candidatePieceTypes = pieceTypeVariants(pieceType);
 
     const { data: existingPieces } = await admin
@@ -121,7 +164,7 @@ export async function POST(request: Request) {
       .select("*")
       .eq("team_id", team.id)
       .eq("kit_number", kitNumber)
-      .eq("player_type", playerType)
+      .in("player_type", candidatePlayerTypes)
       .in("piece_type", candidatePieceTypes)
       .order("created_at", { ascending: true });
 
@@ -129,12 +172,15 @@ export async function POST(request: Request) {
       const pieceTypesInDb = Array.from(
         new Set((existingPieces || []).map((piece) => piece.piece_type)),
       );
+      const playerTypesInDb = Array.from(
+        new Set((existingPieces || []).map((piece) => piece.player_type)),
+      );
       const { data: updatedPieces, error: updateError } = await admin
         .from("kit_pieces")
-        .update({ color_hex: colorHex })
+        .update({ color_hex: colorHex, color_name: colorName })
         .eq("team_id", team.id)
         .eq("kit_number", kitNumber)
-        .eq("player_type", playerType)
+        .in("player_type", playerTypesInDb)
         .in("piece_type", pieceTypesInDb)
         .select("*");
 
@@ -145,7 +191,10 @@ export async function POST(request: Request) {
         );
       }
 
-      return NextResponse.json({ success: true, piece: updatedPieces[0] });
+      return NextResponse.json({
+        success: true,
+        piece: toUiPiece(updatedPieces[0] as Record<string, unknown>),
+      });
     }
 
     const insertPayload = {
@@ -153,29 +202,30 @@ export async function POST(request: Request) {
       kit_number: kitNumber,
       player_type: playerType,
       piece_type: pieceType,
+      color_name: colorName,
       color_hex: colorHex,
     };
 
     let insertedPiece: Record<string, unknown> | null = null;
     let insertError: { code?: string; message?: string } | null = null;
 
-    const insertResult = await admin
-      .from("kit_pieces")
-      .insert(insertPayload)
-      .select("*")
-      .single();
-    insertedPiece = insertResult.data as Record<string, unknown> | null;
-    insertError = insertResult.error;
+    const insertCandidates: Array<{ player_type: string; piece_type: string }> = [];
+    for (const pt of candidatePlayerTypes) {
+      for (const piece of candidatePieceTypes) {
+        insertCandidates.push({ player_type: pt, piece_type: piece });
+      }
+    }
 
-    // Compatibilidade com schemas antigos que usam "jersey" em vez de "shirt".
-    if (insertError && pieceType === "shirt") {
-      const retry = await admin
+    for (const candidate of insertCandidates) {
+      const insertResult = await admin
         .from("kit_pieces")
-        .insert({ ...insertPayload, piece_type: "jersey" })
+        .insert({ ...insertPayload, ...candidate })
         .select("*")
         .single();
-      insertedPiece = retry.data as Record<string, unknown> | null;
-      insertError = retry.error;
+
+      insertedPiece = insertResult.data as Record<string, unknown> | null;
+      insertError = insertResult.error;
+      if (!insertError && insertedPiece) break;
     }
 
     if (insertError || !insertedPiece) {
@@ -185,7 +235,7 @@ export async function POST(request: Request) {
       );
     }
 
-    return NextResponse.json({ success: true, piece: insertedPiece });
+    return NextResponse.json({ success: true, piece: toUiPiece(insertedPiece) });
   } catch (error) {
     console.error("Erro ao guardar cor de kit:", error);
     const message =

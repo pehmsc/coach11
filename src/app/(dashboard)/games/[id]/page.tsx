@@ -44,7 +44,7 @@ const FORMATIONS_BY_FORMAT: Record<string, string[]> = {
 interface KitPieceRow {
   id: string;
   kit_number: number;
-  player_type: "field" | "goalkeeper";
+  player_type: "field" | "field_player" | "goalkeeper";
   piece_type: "shirt" | "jersey" | "shorts" | "socks";
   color_name: string | null;
   color_hex: string | null;
@@ -84,6 +84,16 @@ function samePieceType(
     return dbPieceType === "shirt" || dbPieceType === "jersey";
   }
   return dbPieceType === requestedPieceType;
+}
+
+function samePlayerType(
+  dbPlayerType: KitPieceRow["player_type"],
+  requestedPlayerType: "field" | "goalkeeper",
+) {
+  if (requestedPlayerType === "field") {
+    return dbPlayerType === "field" || dbPlayerType === "field_player";
+  }
+  return dbPlayerType === requestedPlayerType;
 }
 
 export default function GameDetailPage() {
@@ -260,11 +270,11 @@ export default function GameDetailPage() {
   }
 
   function getKitOptions(
-    playerType: KitPieceRow["player_type"],
+    playerType: "field" | "goalkeeper",
     pieceType: (typeof UI_PIECE_TYPES)[number],
   ) {
     return teamKits.filter(
-      (piece) => piece.player_type === playerType && samePieceType(piece.piece_type, pieceType),
+      (piece) => samePlayerType(piece.player_type, playerType) && samePieceType(piece.piece_type, pieceType),
     );
   }
 

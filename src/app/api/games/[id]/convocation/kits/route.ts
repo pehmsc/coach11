@@ -17,7 +17,10 @@ type KitSelectionPayload = {
 
 const KIT_FIELD_RULES: Record<
   keyof KitSelectionPayload,
-  { playerType: "field" | "goalkeeper"; pieceType: "shirt" | "shorts" | "socks" }
+  {
+    playerType: "field" | "field_player" | "goalkeeper";
+    pieceType: "shirt" | "shorts" | "socks";
+  }
 > = {
   fp_jersey_kit_id: { playerType: "field", pieceType: "shirt" },
   fp_shorts_kit_id: { playerType: "field", pieceType: "shorts" },
@@ -34,6 +37,17 @@ function pieceTypeMatches(
   if (!actual) return false;
   if (expected === "shirt") {
     return actual === "shirt" || actual === "jersey";
+  }
+  return actual === expected;
+}
+
+function playerTypeMatches(
+  actual: string | null | undefined,
+  expected: "field" | "field_player" | "goalkeeper",
+) {
+  if (!actual) return false;
+  if (expected === "field") {
+    return actual === "field" || actual === "field_player";
   }
   return actual === expected;
 }
@@ -175,7 +189,7 @@ export async function POST(request: Request, { params }: RouteContext) {
 
         const expected = KIT_FIELD_RULES[fieldName];
         if (
-          piece.player_type !== expected.playerType ||
+          !playerTypeMatches(piece.player_type, expected.playerType) ||
           !pieceTypeMatches(piece.piece_type, expected.pieceType)
         ) {
           return NextResponse.json(

@@ -2,6 +2,23 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 
+function normalizeKitRowForUi(row: Record<string, unknown>) {
+  const playerType =
+    typeof row.player_type === "string" && row.player_type === "field_player"
+      ? "field"
+      : row.player_type;
+  const pieceType =
+    typeof row.piece_type === "string" && row.piece_type === "jersey"
+      ? "shirt"
+      : row.piece_type;
+
+  return {
+    ...row,
+    player_type: playerType,
+    piece_type: pieceType,
+  };
+}
+
 export async function GET() {
   try {
     const supabase = await createClient();
@@ -144,7 +161,9 @@ export async function GET() {
       teamId,
       teamRole,
       ageGroup,
-      kits: kitsRes.data || [],
+      kits: ((kitsRes.data || []) as Record<string, unknown>[]).map((row) =>
+        normalizeKitRowForUi(row),
+      ),
       activeStaffProfileIds: staffProfileIds,
       staffMembers,
       staffInvites: invitesRes.data || [],

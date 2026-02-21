@@ -88,20 +88,82 @@ export async function POST(request: Request, { params }: RouteContext) {
       );
     }
 
-    const { error } = await admin
-      .from("game_stats_live")
-      .upsert(
-        {
-          game_id: gameId,
-          player_id: playerId,
-          status: lineupStatus,
-          start_minute: lineupStatus === "on_field" ? 0 : null,
-        },
-        { onConflict: "game_id,player_id" },
-      );
+    const { data: convocationRows } = await admin
+      .from("convocations")
+      .select("id, created_at")
+      .eq("game_id", gameId)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false });
 
-    if (error) {
-      console.error("Erro ao guardar lineup:", error);
+    const latestConvocationId = convocationRows?.[0]?.id ?? null;
+    if (!latestConvocationId) {
+      return NextResponse.json(
+        { error: "Convocatória não encontrada para este jogo." },
+        { status: 400 },
+      );
+    }
+
+    const { data: playerInConvocation } = await admin
+      .from("convocation_players")
+      .select("id")
+      .eq("convocation_id", latestConvocationId)
+      .eq("player_id", playerId)
+      .maybeSingle();
+
+    if (!playerInConvocation) {
+      return NextResponse.json(
+        { error: "Jogador não está convocado neste jogo." },
+        { status: 400 },
+      );
+    }
+
+    const dbStatus = lineupStatus === "on_field" ? "starter" : "on_bench";
+    const payload = {
+      status: dbStatus,
+      start_minute: lineupStatus === "on_field" ? 0 : null,
+      end_minute: null,
+    };
+
+    const { data: existingRows, error: existingRowsError } = await admin
+      .from("game_stats_live")
+      .select("id")
+      .eq("game_id", gameId)
+      .eq("player_id", playerId);
+
+    if (existingRowsError) {
+      console.error("Erro ao validar lineup:", existingRowsError);
+      return NextResponse.json(
+        { error: "Erro ao guardar lineup." },
+        { status: 500 },
+      );
+    }
+
+    if ((existingRows || []).length > 0) {
+      const { error: updateError } = await admin
+        .from("game_stats_live")
+        .update(payload)
+        .eq("game_id", gameId)
+        .eq("player_id", playerId);
+
+      if (!updateError) {
+        return NextResponse.json({ success: true, playerId, lineupStatus });
+      }
+
+      console.error("Erro ao atualizar lineup:", updateError);
+      return NextResponse.json(
+        { error: "Erro ao guardar lineup." },
+        { status: 500 },
+      );
+    }
+
+    const { error: insertError } = await admin.from("game_stats_live").insert({
+      game_id: gameId,
+      player_id: playerId,
+      ...payload,
+    });
+
+    if (insertError) {
+      console.error("Erro ao inserir lineup:", insertError);
       return NextResponse.json(
         { error: "Erro ao guardar lineup." },
         { status: 500 },
