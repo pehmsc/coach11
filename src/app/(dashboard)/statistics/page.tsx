@@ -245,11 +245,11 @@ export default function StatisticsPage() {
       {/* Rankings */}
       <Card>
         <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle className="text-base flex items-center gap-2">
               <Trophy size={16} className="text-amber-500" /> Rankings
             </CardTitle>
-            <div className="flex gap-1">
+            <div className="flex flex-wrap gap-1">
               {(Object.keys(SORT_LABELS) as SortKey[]).map((key) => (
                 <button
                   key={key}

@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { format, addDays, addHours, parseISO, isToday, isTomorrow } from "date-fns";
 import { pt } from "date-fns/locale";
 import {
@@ -38,16 +39,14 @@ export default async function DashboardPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("full_name")
-    .eq("id", user.id)
-    .single();
-
-  const { data: managedAgeGroups } = await (admin ?? supabase)
-    .from("age_groups")
-    .select("id, club_name, name, club_logo_url, teams(id)")
-    .eq("coordinator_id", user.id);
+  // Fetch profile + age groups in parallel (both only depend on user.id)
+  const [{ data: profile }, { data: managedAgeGroups }] = await Promise.all([
+    supabase.from("profiles").select("full_name").eq("id", user.id).single(),
+    (admin ?? supabase)
+      .from("age_groups")
+      .select("id, club_name, name, club_logo_url, teams(id)")
+      .eq("coordinator_id", user.id),
+  ]);
 
   let firstTeamId: string | null = managedAgeGroups?.[0]?.teams?.[0]?.id ?? null;
   let activeAgeGroup: {
@@ -101,36 +100,34 @@ export default async function DashboardPage() {
   const in7days = format(addDays(now, 7), "yyyy-MM-dd");
   const in48h = addHours(now, 48);
 
-  // Próximos treinos (7 dias) — mais recente primeiro
+  // Próximos treinos + jogos (7 dias) — em paralelo
   let upcomingTrainings: TrainingSession[] = [];
-  if (firstTeamId) {
-    const { data } = await (admin ?? supabase)
-      .from("training_sessions")
-      .select("*")
-      .eq("team_id", firstTeamId)
-      .gte("session_date", todayDate)
-      .lte("session_date", in7days)
-      .neq("status", "completed")
-      .order("session_date", { ascending: true })
-      .order("start_time", { ascending: true, nullsFirst: false })
-      .order("created_at", { ascending: true })
-      .limit(3);
-    upcomingTrainings = data || [];
-  }
-
-  // Próximos jogos (7 dias)
   let upcomingGames: Game[] = [];
   if (firstTeamId) {
-    const { data } = await (admin ?? supabase)
-      .from("games")
-      .select("*")
-      .eq("team_id", firstTeamId)
-      .gte("game_datetime", `${todayDate}T00:00:00`)
-      .lte("game_datetime", `${in7days}T23:59:59`)
-      .neq("status", "completed")
-      .order("game_datetime", { ascending: true })
-      .limit(3);
-    upcomingGames = data || [];
+    const [{ data: trainingsData }, { data: gamesData }] = await Promise.all([
+      (admin ?? supabase)
+        .from("training_sessions")
+        .select("*")
+        .eq("team_id", firstTeamId)
+        .gte("session_date", todayDate)
+        .lte("session_date", in7days)
+        .neq("status", "completed")
+        .order("session_date", { ascending: true })
+        .order("start_time", { ascending: true, nullsFirst: false })
+        .order("created_at", { ascending: true })
+        .limit(3),
+      (admin ?? supabase)
+        .from("games")
+        .select("*")
+        .eq("team_id", firstTeamId)
+        .gte("game_datetime", `${todayDate}T00:00:00`)
+        .lte("game_datetime", `${in7days}T23:59:59`)
+        .neq("status", "completed")
+        .order("game_datetime", { ascending: true })
+        .limit(3),
+    ]);
+    upcomingTrainings = trainingsData || [];
+    upcomingGames = gamesData || [];
   }
 
   // Treino de hoje especificamente (para presenças)
@@ -188,10 +185,13 @@ export default async function DashboardPage() {
         {activeAgeGroup?.club_logo_url && (
           <div className="mb-6">
             <div className="w-24 h-24 mx-auto rounded-2xl border border-slate-200 bg-white flex items-center justify-center overflow-hidden p-2">
-              <img
+              <Image
                 src={activeAgeGroup.club_logo_url}
                 alt={`Logo ${activeAgeGroup.club_name}`}
-                className="max-w-full max-h-full object-contain object-center"
+                width={88}
+                height={88}
+                className="object-contain"
+                priority
               />
             </div>
           </div>

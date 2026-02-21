@@ -69,6 +69,7 @@ export default function CompetitionsPage() {
   const [competitions, setCompetitions] = useState<CompetitionWithGames[]>([]);
   const [teamId, setTeamId] = useState<string | null>(null);
   const [ageGroupId, setAgeGroupId] = useState<string | null>(null);
+  const [footballFormat, setFootballFormat] = useState<string | null>(null);
 
   // Competição form
   const [showCompForm, setShowCompForm] = useState(false);
@@ -98,7 +99,7 @@ export default function CompetitionsPage() {
 
     const { data: ag } = await supabase
       .from("age_groups")
-      .select("id, teams(id)")
+      .select("id, football_format, teams(id)")
       .eq("coordinator_id", user.id)
       .single();
 
@@ -108,6 +109,7 @@ export default function CompetitionsPage() {
     }
 
     setAgeGroupId(ag.id);
+    setFootballFormat((ag as unknown as { football_format: string }).football_format ?? null);
     const firstTeam = (ag.teams as Array<{ id: string }>)?.[0];
     if (!firstTeam) {
       setLoading(false);
@@ -287,7 +289,14 @@ export default function CompetitionsPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Competições</h1>
-          <p className="text-slate-500 text-sm">Época 2025/2026</p>
+          <p className="text-slate-500 text-sm">
+            Época 2025/2026
+            {footballFormat && (
+              <span className="ml-2 text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-2 py-0.5">
+                Futebol {footballFormat}
+              </span>
+            )}
+          </p>
         </div>
         <Button
           onClick={openCreateComp}
@@ -477,22 +486,22 @@ export default function CompetitionsPage() {
                         </button>
                       </div>
                       <form onSubmit={handleSaveGame} className="space-y-2">
+                        <div>
+                          <Label className="text-xs">Adversário *</Label>
+                          <Input
+                            value={gameForm.opponent_name}
+                            onChange={(e) =>
+                              setGameForm((f) => ({
+                                ...f,
+                                opponent_name: e.target.value,
+                              }))
+                            }
+                            placeholder="Nome do adversário"
+                            required
+                            className="text-sm h-8"
+                          />
+                        </div>
                         <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <Label className="text-xs">Adversário *</Label>
-                            <Input
-                              value={gameForm.opponent_name}
-                              onChange={(e) =>
-                                setGameForm((f) => ({
-                                  ...f,
-                                  opponent_name: e.target.value,
-                                }))
-                              }
-                              placeholder="Nome do adversário"
-                              required
-                              className="text-sm h-8"
-                            />
-                          </div>
                           <div>
                             <Label className="text-xs">Data e hora *</Label>
                             <Input
@@ -505,22 +514,6 @@ export default function CompetitionsPage() {
                                 }))
                               }
                               required
-                              className="text-sm h-8"
-                            />
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <Label className="text-xs">Local (opcional)</Label>
-                            <Input
-                              value={gameForm.location}
-                              onChange={(e) =>
-                                setGameForm((f) => ({
-                                  ...f,
-                                  location: e.target.value,
-                                }))
-                              }
-                              placeholder="Estádio / Campo"
                               className="text-sm h-8"
                             />
                           </div>
@@ -539,9 +532,23 @@ export default function CompetitionsPage() {
                                   : "bg-slate-50 border-slate-200 text-slate-600"
                               }`}
                             >
-                              {gameForm.is_home ? "Casa" : "Fora"}
+                              {gameForm.is_home ? "🏠 Casa" : "✈️ Fora"}
                             </button>
                           </div>
+                        </div>
+                        <div>
+                          <Label className="text-xs">Local (opcional)</Label>
+                          <Input
+                            value={gameForm.location}
+                            onChange={(e) =>
+                              setGameForm((f) => ({
+                                ...f,
+                                location: e.target.value,
+                              }))
+                            }
+                            placeholder="Estádio / Campo"
+                            className="text-sm h-8"
+                          />
                         </div>
                         <div className="flex gap-2 pt-1">
                           <Button
@@ -621,6 +628,16 @@ export default function CompetitionsPage() {
                   required
                 />
               </div>
+
+              {footballFormat && (
+                <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-800">
+                  <span className="font-semibold">Modalidade:</span>
+                  <span>Futebol {footballFormat}</span>
+                  <span className="text-blue-500 text-xs ml-auto">
+                    (altera em Configurações → Escalão)
+                  </span>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">

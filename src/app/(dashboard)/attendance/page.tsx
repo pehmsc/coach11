@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { format } from "date-fns";
+import { useEffect, useState, useCallback } from "react";
+import { format, addDays, subDays, parseISO, isToday } from "date-fns";
 import { pt } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, XCircle, AlertCircle, Save } from "lucide-react";
+import { CheckCircle2, XCircle, AlertCircle, Save, ChevronLeft, ChevronRight } from "lucide-react";
 import type { Player, AgeGroup } from "@/types/database";
 
 type AttendanceStatus = "present" | "absent" | "injured";
@@ -12,6 +12,7 @@ type AttendanceState = Record<string, AttendanceStatus>;
 
 interface AttendanceApiSession {
   id: string;
+  status?: string;
 }
 
 interface AttendanceApiResponse {
@@ -32,30 +33,31 @@ function isValidStatus(value: unknown): value is AttendanceStatus {
 }
 
 export default function AttendancePage() {
+  const todayStr = format(new Date(), "yyyy-MM-dd");
+  const [selectedDate, setSelectedDate] = useState(todayStr);
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [noSession, setNoSession] = useState(false);
+  const [sessionClosed, setSessionClosed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [players, setPlayers] = useState<Player[]>([]);
   const [ageGroup, setAgeGroup] = useState<AgeGroup | null>(null);
   const [attendance, setAttendance] = useState<AttendanceState>({});
   const [sessionId, setSessionId] = useState<string | null>(null);
 
-  const today = format(new Date(), "EEEE, d 'de' MMMM", { locale: pt });
-  const todayDate = format(new Date(), "yyyy-MM-dd");
+  const dateLabel = isToday(parseISO(selectedDate))
+    ? "Hoje"
+    : format(parseISO(selectedDate), "EEEE, d 'de' MMMM", { locale: pt });
 
-  useEffect(() => {
-    void loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  async function loadData() {
+  const loadData = useCallback(async (date: string) => {
     setLoading(true);
     setError(null);
+    setSaved(false);
 
     try {
-      const res = await fetch(`/api/attendance/today?date=${todayDate}`, {
+      const res = await fetch(`/api/attendance/today?date=${date}`, {
         cache: "no-store",
         credentials: "include",
       });
@@ -67,6 +69,7 @@ export default function AttendancePage() {
         setAgeGroup(null);
         setSessionId(null);
         setNoSession(true);
+        setSessionClosed(false);
         return;
       }
 
@@ -79,6 +82,7 @@ export default function AttendancePage() {
         setAgeGroup(null);
         setSessionId(null);
         setNoSession(true);
+        setSessionClosed(false);
         return;
       }
 
@@ -92,6 +96,7 @@ export default function AttendancePage() {
       setAgeGroup(payload.ageGroup ?? null);
       setSessionId(payload.session?.id ?? null);
       setNoSession(Boolean(payload.noSession) || !payload.session);
+      setSessionClosed(payload.session?.status === "completed");
 
       const initialAttendance: AttendanceState = {};
       incomingPlayers.forEach((player) => {
@@ -105,9 +110,22 @@ export default function AttendancePage() {
       setAgeGroup(null);
       setSessionId(null);
       setNoSession(true);
+      setSessionClosed(false);
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    void loadData(selectedDate);
+  }, [selectedDate, loadData]);
+
+  function goToPrevDay() {
+    setSelectedDate((d) => format(subDays(parseISO(d), 1), "yyyy-MM-dd"));
+  }
+
+  function goToNextDay() {
+    setSelectedDate((d) => format(addDays(parseISO(d), 1), "yyyy-MM-dd"));
   }
 
   function toggleAttendance(playerId: string) {
@@ -133,10 +151,7 @@ export default function AttendancePage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({
-          sessionId,
-          attendance,
-        }),
+        body: JSON.stringify({ sessionId, attendance }),
       });
       const payload = (await res.json().catch(() => ({}))) as AttendanceApiResponse;
 
@@ -147,6 +162,7 @@ export default function AttendancePage() {
       }
 
       setSaved(true);
+      setSessionClosed(true);
     } catch {
       setError("Erro de ligação ao guardar presenças.");
     } finally {
@@ -165,9 +181,7 @@ export default function AttendancePage() {
 
   const statusConfig = {
     present: {
-      icon: (
-        <CheckCircle2 size={28} className="text-emerald-500 flex-shrink-0" />
-      ),
+      icon: <CheckCircle2 size={28} className="text-emerald-500 flex-shrink-0" />,
       bg: "bg-white border-emerald-200",
       label: "Presente",
       labelColor: "text-emerald-600",
@@ -186,10 +200,45 @@ export default function AttendancePage() {
     },
   };
 
+  // ── Header de navegação de datas ──
+  const dateNav = (
+    <div className="flex items-center justify-between mb-5">
+      <button
+        onClick={goToPrevDay}
+        className="p-2 rounded-lg hover:bg-slate-100 transition-colors"
+        aria-label="Dia anterior"
+      >
+        <ChevronLeft size={20} className="text-slate-600" />
+      </button>
+
+      <div className="text-center flex-1">
+        <p className="text-slate-500 text-xs uppercase tracking-wide">Presenças</p>
+        <p className="font-bold text-slate-900 capitalize">{dateLabel}</p>
+        {ageGroup && (
+          <p className="text-slate-400 text-xs">
+            {ageGroup.name} · {ageGroup.club_name}
+          </p>
+        )}
+      </div>
+
+      <button
+        onClick={goToNextDay}
+        disabled={selectedDate >= todayStr}
+        className="p-2 rounded-lg hover:bg-slate-100 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+        aria-label="Próximo dia"
+      >
+        <ChevronRight size={20} className="text-slate-600" />
+      </button>
+    </div>
+  );
+
   if (loading) {
     return (
-      <div className="p-4 md:p-8 flex items-center justify-center min-h-[50vh]">
-        <p className="text-slate-500">A carregar...</p>
+      <div className="p-4 md:p-8 max-w-lg mx-auto">
+        {dateNav}
+        <div className="flex items-center justify-center min-h-[30vh]">
+          <p className="text-slate-500">A carregar...</p>
+        </div>
       </div>
     );
   }
@@ -197,64 +246,74 @@ export default function AttendancePage() {
   if (!ageGroup) {
     if (error) {
       return (
-        <div className="p-4 md:p-8 text-center py-16">
-          <AlertCircle className="mx-auto mb-4 text-red-400" size={48} />
-          <h2 className="font-semibold text-slate-700 mb-2">
-            Erro ao carregar presenças
-          </h2>
-          <p className="text-slate-500 text-sm">{error}</p>
+        <div className="p-4 md:p-8 max-w-lg mx-auto">
+          {dateNav}
+          <div className="text-center py-10">
+            <AlertCircle className="mx-auto mb-4 text-red-400" size={48} />
+            <h2 className="font-semibold text-slate-700 mb-2">Erro ao carregar presenças</h2>
+            <p className="text-slate-500 text-sm">{error}</p>
+          </div>
         </div>
       );
     }
 
     return (
-      <div className="p-4 md:p-8 text-center py-16">
-        <CheckCircle2 className="mx-auto mb-4 text-slate-300" size={48} />
-        <h2 className="font-semibold text-slate-700 mb-2">
-          Escalão não configurado
-        </h2>
-        <p className="text-slate-500 text-sm">
-          Configura o escalão em Configurações antes de registar presenças.
-        </p>
+      <div className="p-4 md:p-8 max-w-lg mx-auto">
+        {dateNav}
+        <div className="text-center py-10">
+          <CheckCircle2 className="mx-auto mb-4 text-slate-300" size={48} />
+          <h2 className="font-semibold text-slate-700 mb-2">Escalão não configurado</h2>
+          <p className="text-slate-500 text-sm">
+            Configura o escalão em Configurações antes de registar presenças.
+          </p>
+        </div>
       </div>
     );
   }
 
   if (noSession) {
     return (
-      <div className="p-4 md:p-8 text-center py-16">
-        <CheckCircle2 className="mx-auto mb-4 text-slate-300" size={48} />
-        <h2 className="font-semibold text-slate-700 mb-2">Sem treino hoje</h2>
-        <p className="text-slate-500 text-sm">
-          Não existe sessão de treino para hoje no calendário.
-        </p>
+      <div className="p-4 md:p-8 max-w-lg mx-auto">
+        {dateNav}
+        <div className="text-center py-10">
+          <CheckCircle2 className="mx-auto mb-4 text-slate-300" size={48} />
+          <h2 className="font-semibold text-slate-700 mb-2">Sem treino neste dia</h2>
+          <p className="text-slate-500 text-sm">
+            Não existe sessão de treino para este dia no calendário.
+          </p>
+        </div>
       </div>
     );
   }
 
   if (players.length === 0) {
     return (
-      <div className="p-4 md:p-8 text-center py-16">
-        <CheckCircle2 className="mx-auto mb-4 text-slate-300" size={48} />
-        <h2 className="font-semibold text-slate-700 mb-2">
-          Sem atletas activos
-        </h2>
-        <p className="text-slate-500 text-sm">
-          Adiciona atletas ao plantel para registar presenças.
-        </p>
+      <div className="p-4 md:p-8 max-w-lg mx-auto">
+        {dateNav}
+        <div className="text-center py-10">
+          <CheckCircle2 className="mx-auto mb-4 text-slate-300" size={48} />
+          <h2 className="font-semibold text-slate-700 mb-2">Sem atletas activos</h2>
+          <p className="text-slate-500 text-sm">
+            Adiciona atletas ao plantel para registar presenças.
+          </p>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="p-4 md:p-8 max-w-lg mx-auto">
-      <div className="mb-5">
-        <p className="text-slate-500 text-sm capitalize">{today}</p>
-        <h1 className="text-2xl font-bold text-slate-900">Presenças</h1>
-        <p className="text-slate-400 text-sm">
-          {ageGroup.name} · {ageGroup.club_name}
-        </p>
-      </div>
+      {dateNav}
+
+      {/* Badge histórico */}
+      {sessionClosed && (
+        <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 mb-4">
+          <CheckCircle2 size={16} className="text-emerald-500 flex-shrink-0" />
+          <p className="text-sm text-slate-600">
+            Treino fechado — podes editar e guardar novamente.
+          </p>
+        </div>
+      )}
 
       {error && (
         <div className="bg-red-50 text-red-700 text-sm p-3 rounded-lg border border-red-200 mb-4">
@@ -264,12 +323,8 @@ export default function AttendancePage() {
 
       <div className="grid grid-cols-3 gap-2 mb-4">
         <div className="bg-emerald-50 rounded-xl p-3 text-center">
-          <p className="text-3xl font-bold text-emerald-600">
-            {counts.present}
-          </p>
-          <p className="text-xs text-emerald-700 font-medium mt-0.5">
-            Presentes
-          </p>
+          <p className="text-3xl font-bold text-emerald-600">{counts.present}</p>
+          <p className="text-xs text-emerald-700 font-medium mt-0.5">Presentes</p>
         </div>
         <div className="bg-red-50 rounded-xl p-3 text-center">
           <p className="text-3xl font-bold text-red-500">{counts.absent}</p>
@@ -277,9 +332,7 @@ export default function AttendancePage() {
         </div>
         <div className="bg-orange-50 rounded-xl p-3 text-center">
           <p className="text-3xl font-bold text-orange-500">{counts.injured}</p>
-          <p className="text-xs text-orange-700 font-medium mt-0.5">
-            Lesionados
-          </p>
+          <p className="text-xs text-orange-700 font-medium mt-0.5">Lesionados</p>
         </div>
       </div>
 
@@ -310,16 +363,12 @@ export default function AttendancePage() {
                   {player.first_name} {player.last_name}
                 </p>
                 {player.preferred_position && (
-                  <p className="text-xs text-slate-400">
-                    {player.preferred_position}
-                  </p>
+                  <p className="text-xs text-slate-400">{player.preferred_position}</p>
                 )}
               </div>
 
               <div className="flex items-center gap-2 flex-shrink-0">
-                <span
-                  className={`text-xs font-medium hidden sm:block ${config.labelColor}`}
-                >
+                <span className={`text-xs font-medium hidden sm:block ${config.labelColor}`}>
                   {config.label}
                 </span>
                 {config.icon}
@@ -332,8 +381,8 @@ export default function AttendancePage() {
       <div className="sticky bottom-20 md:bottom-4">
         {saved ? (
           <div className="bg-emerald-50 border-2 border-emerald-200 text-emerald-700 p-4 rounded-xl text-center font-semibold">
-            ✓ Presenças guardadas! ({counts.present} presentes · {counts.absent}{" "}
-            ausentes · {counts.injured} lesionados)
+            ✓ Presenças guardadas! ({counts.present} presentes · {counts.absent} ausentes ·{" "}
+            {counts.injured} lesionados)
           </div>
         ) : (
           <Button
@@ -344,7 +393,9 @@ export default function AttendancePage() {
             <Save size={20} className="mr-2" />
             {saving
               ? "A guardar..."
-              : `Guardar — ${counts.present} presentes · ${counts.absent} ausentes`}
+              : sessionClosed
+                ? `Regravar — ${counts.present} presentes`
+                : `Guardar — ${counts.present} presentes · ${counts.absent} ausentes`}
           </Button>
         )}
       </div>

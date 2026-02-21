@@ -133,7 +133,12 @@ export default function GameDetailPage() {
         setConvocationStatus("draft");
       }
 
-      setPlayers((Array.isArray(payload.players) ? payload.players : []) as PlayerWithStatus[]);
+      const sortedPlayers = (Array.isArray(payload.players) ? [...payload.players] : []).sort(
+        (a: PlayerWithStatus, b: PlayerWithStatus) =>
+          a.first_name.localeCompare(b.first_name, "pt", { sensitivity: "base" }) ||
+          a.last_name.localeCompare(b.last_name, "pt", { sensitivity: "base" }),
+      );
+      setPlayers(sortedPlayers as PlayerWithStatus[]);
       setTeamKits((Array.isArray(payload.kits) ? payload.kits : []) as KitPieceRow[]);
       setKitSelection({
         ...EMPTY_KIT_SELECTION,
@@ -333,7 +338,7 @@ export default function GameDetailPage() {
         <h1 className="text-xl font-bold mt-1">
           {game.opponent_name ? `vs ${game.opponent_name}` : "Jogo"}
         </h1>
-        <div className="flex items-center gap-4 mt-2 text-blue-100 text-sm">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-blue-100 text-sm">
           <span className="flex items-center gap-1">
             <Clock size={13} /> <span className="capitalize">{gameDate}</span>
           </span>

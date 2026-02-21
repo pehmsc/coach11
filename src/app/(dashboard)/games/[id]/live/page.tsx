@@ -74,6 +74,7 @@ export default function LiveGamePage() {
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const [selectedSubOutId, setSelectedSubOutId] = useState<string | null>(null);
   const [savingEvent, setSavingEvent] = useState(false);
+  const [savingLineup, setSavingLineup] = useState<string | null>(null);
   const [finalizing, setFinalizing] = useState(false);
   const [exportingPDF, setExportingPDF] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -313,6 +314,34 @@ export default function LiveGamePage() {
     setEventModal(null);
     setSelectedPlayerId(null);
     setSelectedSubOutId(null);
+  }
+
+  async function toggleLineup(playerId: string) {
+    const player = convocatedPlayers.find((p) => p.id === playerId);
+    if (!player) return;
+    setSavingLineup(playerId);
+
+    const newIsOnField = !player.isOnField;
+    const newStatus = newIsOnField ? "on_field" : "substitute";
+
+    await supabase.from("game_stats_live").upsert(
+      {
+        game_id: id,
+        player_id: playerId,
+        status: newStatus,
+        start_minute: newIsOnField ? 0 : null,
+      },
+      { onConflict: "game_id,player_id" },
+    );
+
+    setConvocatedPlayers((prev) =>
+      prev.map((p) =>
+        p.id === playerId
+          ? { ...p, isOnField: newIsOnField, isSubstitute: !newIsOnField }
+          : p,
+      ),
+    );
+    setSavingLineup(null);
   }
 
   async function deleteEvent(eventId: string) {
@@ -565,6 +594,68 @@ export default function LiveGamePage() {
         )}
       </div>
 
+      {/* ── Seleção de titulares (pré-jogo) ── */}
+      {phase === "pre_match" && convocatedPlayers.length > 0 && (
+        <div className="mb-5 rounded-xl border border-slate-200 bg-white overflow-hidden">
+          <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+            <div>
+              <p className="font-bold text-slate-900 text-sm">Escalação inicial</p>
+              <p className="text-xs text-slate-500">Toca para alternar Titular / Banco</p>
+            </div>
+            <div className="text-right">
+              <span className="text-sm font-bold text-emerald-600">{playersOnField.length}</span>
+              <span className="text-xs text-slate-400"> titulares</span>
+              {playersOnBench.length > 0 && (
+                <>
+                  <span className="text-slate-300 mx-1">·</span>
+                  <span className="text-sm font-bold text-slate-500">{playersOnBench.length}</span>
+                  <span className="text-xs text-slate-400"> banco</span>
+                </>
+              )}
+            </div>
+          </div>
+          <div className="divide-y divide-slate-50">
+            {convocatedPlayers.map((player) => (
+              <button
+                key={player.id}
+                onClick={() => toggleLineup(player.id)}
+                disabled={savingLineup === player.id}
+                className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
+                  player.isOnField
+                    ? "bg-emerald-50 hover:bg-emerald-100"
+                    : "bg-white hover:bg-slate-50"
+                }`}
+              >
+                <div
+                  className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                    player.isOnField ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-400"
+                  }`}
+                >
+                  {player.jersey_number || "—"}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-slate-800 truncate">
+                    {player.first_name} {player.last_name}
+                  </p>
+                  {player.preferred_position && (
+                    <p className="text-xs text-slate-400">{player.preferred_position}</p>
+                  )}
+                </div>
+                <span
+                  className={`text-xs font-semibold px-2.5 py-1 rounded-full flex-shrink-0 ${
+                    player.isOnField
+                      ? "bg-emerald-100 text-emerald-700"
+                      : "bg-slate-100 text-slate-500"
+                  }`}
+                >
+                  {savingLineup === player.id ? "..." : player.isOnField ? "Titular" : "Banco"}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Minuto */}
       {!isFinalized && (
         <div className="mb-5 p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
@@ -596,9 +687,12 @@ export default function LiveGamePage() {
                   setPhase("first_half");
                   setClockRunning(true);
                 }}
-                className="w-full bg-emerald-600 hover:bg-emerald-700"
+                disabled={playersOnField.length === 0}
+                className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:text-slate-500"
               >
-                Iniciar 1ª parte
+                {playersOnField.length === 0
+                  ? "Seleciona pelo menos 1 titular"
+                  : `Iniciar 1ª parte (${playersOnField.length} titulares)`}
               </Button>
             )}
 
