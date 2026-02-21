@@ -29,7 +29,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     // Verify game exists and get team/age_group
     const { data: game } = await admin
       .from("games")
-      .select("id, team_id, age_group_id")
+      .select("id, team_id, age_group_id, status")
       .eq("id", gameId)
       .maybeSingle();
 
@@ -39,6 +39,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
 
     // Check access: coordinator or staff
     let hasAccess = false;
+    let isCoordinator = false;
     const ageGroupId = (game as unknown as { age_group_id?: string }).age_group_id ?? null;
     let teamId: string | null = (game as unknown as { team_id?: string }).team_id ?? null;
 
@@ -50,6 +51,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
         .eq("coordinator_id", user.id)
         .maybeSingle();
       hasAccess = !!ag;
+      isCoordinator = !!ag;
     }
 
     if (!teamId && ageGroupId) {
@@ -75,6 +77,14 @@ export async function PATCH(request: Request, { params }: RouteContext) {
 
     if (!hasAccess) {
       return NextResponse.json({ error: "Sem permissões." }, { status: 403 });
+    }
+
+    const gameStatus = (game as unknown as { status?: string }).status ?? null;
+    if (gameStatus === "completed" && !isCoordinator) {
+      return NextResponse.json(
+        { error: "Só o coordenador pode editar jogos terminados." },
+        { status: 403 },
+      );
     }
 
     // Only allow safe fields to be updated

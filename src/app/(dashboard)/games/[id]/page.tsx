@@ -120,6 +120,10 @@ export default function GameDetailPage() {
   const [lineupStatuses, setLineupStatuses] = useState<
     Record<string, "on_field" | "substitute">
   >({});
+  const [canEditCompleted, setCanEditCompleted] = useState(false);
+  const [livePhase, setLivePhase] = useState<"first_half" | "second_half" | null>(
+    null,
+  );
   const [savingTactical, setSavingTactical] = useState(false);
   const [savingLineupPlayer, setSavingLineupPlayer] = useState<string | null>(
     null,
@@ -159,11 +163,22 @@ export default function GameDetailPage() {
         setTeamKits([]);
         setKitSelection(EMPTY_KIT_SELECTION);
         setConvocationStatus("draft");
+        setLivePhase(null);
+        setCanEditCompleted(false);
         setError(payload?.error || "Erro ao carregar jogo.");
         return;
       }
 
-      setGame(payload.game as Game);
+      const coordinatorCanEdit = payload?.isCoordinator === true;
+      setCanEditCompleted(coordinatorCanEdit);
+
+      const loadedGame = payload.game as Game;
+      if (loadedGame.status === "completed" && !coordinatorCanEdit) {
+        router.replace(`/games/${id}/summary`);
+        return;
+      }
+
+      setGame(loadedGame);
 
       if (
         payload.convocationStatus === "confirmed" ||
@@ -214,12 +229,23 @@ export default function GameDetailPage() {
         }
       }
       setLineupStatuses(normalizedLineup);
+      const checkpointPhase =
+        typeof payload?.liveCheckpoint?.phase === "string"
+          ? payload.liveCheckpoint.phase
+          : null;
+      if (checkpointPhase === "first_half" || checkpointPhase === "second_half") {
+        setLivePhase(checkpointPhase);
+      } else {
+        setLivePhase(null);
+      }
     } catch {
       setGame(null);
       setPlayers([]);
       setTeamKits([]);
       setKitSelection(EMPTY_KIT_SELECTION);
       setConvocationStatus("draft");
+      setLivePhase(null);
+      setCanEditCompleted(false);
       setError("Erro de ligação ao carregar jogo.");
     } finally {
       setLoading(false);
@@ -553,6 +579,7 @@ export default function GameDetailPage() {
   const gameDateTime = game.game_datetime ? parseISO(game.game_datetime) : null;
   const liveUnlockAt = gameDateTime ? subMinutes(gameDateTime, 10) : null;
   const canStartLive = !liveUnlockAt || now >= liveUnlockAt;
+  const isLiveInProgress = livePhase === "first_half" || livePhase === "second_half";
   const minutesUntilLive = liveUnlockAt
     ? Math.max(0, differenceInMinutes(liveUnlockAt, now))
     : 0;
@@ -569,7 +596,7 @@ export default function GameDetailPage() {
 
       {/* Game header */}
       <div className="rounded-2xl bg-blue-600 text-white p-5 mb-5 relative">
-        {game.status !== "completed" && (
+        {(game.status !== "completed" || canEditCompleted) && (
           <button
             onClick={openEditGame}
             className="absolute top-3 right-3 p-1.5 rounded-full bg-white/20 hover:bg-white/30 transition-colors"
@@ -694,7 +721,7 @@ export default function GameDetailPage() {
       )}
 
       {/* Live stats button — só disponível se jogo agendado */}
-      {game.status === "scheduled" && (
+      {game.status !== "completed" && game.status !== "cancelled" && (
         <div className="mb-5 space-y-2">
           <Button
             onClick={() => router.push(`/games/${id}/live`)}
@@ -703,7 +730,9 @@ export default function GameDetailPage() {
           >
             <Play size={16} className="mr-2" />
             {canStartLive
-              ? "Iniciar jogo ao vivo"
+              ? isLiveInProgress
+                ? "Continuar jogo ao vivo"
+                : "Iniciar jogo ao vivo"
               : `Disponível em ${minutesUntilLive} min`}
           </Button>
           {!canStartLive && (
@@ -722,9 +751,9 @@ export default function GameDetailPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => router.push(`/games/${id}/live`)}
+            onClick={() => router.push(`/games/${id}/summary`)}
           >
-            Ver detalhes
+            Ver sumário
           </Button>
         </div>
       )}

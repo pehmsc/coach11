@@ -1,0 +1,271 @@
+import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
+import { NextResponse } from "next/server";
+
+type RouteContext = {
+  params: Promise<{ id: string }>;
+};
+
+type FinalStatInput = {
+  player_id: string;
+  lineup_type: "starter" | "substitute";
+  minutes_played: number;
+  goals: number;
+  own_goals: number;
+  assists: number;
+  yellow_cards: number;
+  red_cards: number;
+  coach_rating: number | null;
+  notes?: string | null;
+  is_mvp: boolean;
+  is_finalized: boolean;
+};
+
+type FinalizePayload = {
+  finalStats: FinalStatInput[];
+  score_home: number;
+  score_away: number;
+  final_minute?: number;
+};
+
+async function assertGameAccess(
+  admin: ReturnType<typeof createAdminClient>,
+  gameId: string,
+  userId: string,
+) {
+  const { data: game, error: gameError } = await admin
+    .from("games")
+    .select("id, team_id, age_group_id, status")
+    .eq("id", gameId)
+    .maybeSingle();
+
+  if (gameError) {
+    return {
+      ok: false as const,
+      response: NextResponse.json({ error: "Erro ao validar jogo." }, { status: 500 }),
+    };
+  }
+
+  if (!game) {
+    return {
+      ok: false as const,
+      response: NextResponse.json({ error: "Jogo não encontrado." }, { status: 404 }),
+    };
+  }
+
+  let hasAccess = false;
+  let isCoordinator = false;
+  let teamId: string | null = (game as unknown as { team_id?: string }).team_id ?? null;
+  const ageGroupId = (game as unknown as { age_group_id?: string }).age_group_id ?? null;
+  const gameStatus = (game as unknown as { status?: string }).status ?? null;
+
+  if (ageGroupId) {
+    const { data: ageGroupOwner } = await admin
+      .from("age_groups")
+      .select("id")
+      .eq("id", ageGroupId)
+      .eq("coordinator_id", userId)
+      .maybeSingle();
+    hasAccess = !!ageGroupOwner;
+    isCoordinator = !!ageGroupOwner;
+  }
+
+  if (!teamId && ageGroupId) {
+    const { data: fallbackTeam } = await admin
+      .from("teams")
+      .select("id")
+      .eq("age_group_id", ageGroupId)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    teamId = (fallbackTeam as unknown as { id?: string } | null)?.id ?? null;
+  }
+
+  if (!hasAccess && teamId) {
+    const { data: staffLink } = await admin
+      .from("team_staff")
+      .select("id")
+      .eq("team_id", teamId)
+      .eq("profile_id", userId)
+      .maybeSingle();
+    hasAccess = !!staffLink;
+  }
+
+  if (!hasAccess) {
+    return {
+      ok: false as const,
+      response: NextResponse.json({ error: "Sem permissões." }, { status: 403 }),
+    };
+  }
+
+  return {
+    ok: true as const,
+    isCoordinator,
+    gameStatus,
+  };
+}
+
+function isValidFinalStat(row: unknown): row is FinalStatInput {
+  if (!row || typeof row !== "object") return false;
+  const stat = row as Partial<FinalStatInput>;
+
+  if (typeof stat.player_id !== "string" || stat.player_id.length === 0) return false;
+  if (stat.lineup_type !== "starter" && stat.lineup_type !== "substitute") return false;
+  if (typeof stat.minutes_played !== "number" || !Number.isFinite(stat.minutes_played)) return false;
+  if (typeof stat.goals !== "number" || !Number.isFinite(stat.goals)) return false;
+  if (typeof stat.own_goals !== "number" || !Number.isFinite(stat.own_goals)) return false;
+  if (typeof stat.assists !== "number" || !Number.isFinite(stat.assists)) return false;
+  if (typeof stat.yellow_cards !== "number" || !Number.isFinite(stat.yellow_cards)) return false;
+  if (typeof stat.red_cards !== "number" || !Number.isFinite(stat.red_cards)) return false;
+  if (stat.notes !== undefined && stat.notes !== null && typeof stat.notes !== "string") {
+    return false;
+  }
+  if (stat.coach_rating !== null && stat.coach_rating !== undefined) {
+    if (typeof stat.coach_rating !== "number" || stat.coach_rating < 0 || stat.coach_rating > 10) {
+      return false;
+    }
+  }
+  if (typeof stat.is_mvp !== "boolean") return false;
+  if (typeof stat.is_finalized !== "boolean") return false;
+  return true;
+}
+
+export async function POST(request: Request, { params }: RouteContext) {
+  try {
+    const { id: gameId } = await params;
+
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
+    }
+
+    const body = (await request.json().catch(() => null)) as Partial<FinalizePayload> | null;
+    if (!body) {
+      return NextResponse.json({ error: "Payload inválido." }, { status: 400 });
+    }
+
+    const finalStats = Array.isArray(body.finalStats) ? body.finalStats : [];
+    if (finalStats.length === 0) {
+      return NextResponse.json({ error: "Sem estatísticas finais para guardar." }, { status: 400 });
+    }
+    if (!finalStats.every((row) => isValidFinalStat(row))) {
+      return NextResponse.json({ error: "Formato de estatísticas finais inválido." }, { status: 400 });
+    }
+
+    const scoreHome =
+      typeof body.score_home === "number" && Number.isFinite(body.score_home)
+        ? Math.max(0, Math.floor(body.score_home))
+        : null;
+    const scoreAway =
+      typeof body.score_away === "number" && Number.isFinite(body.score_away)
+        ? Math.max(0, Math.floor(body.score_away))
+        : null;
+
+    if (scoreHome === null || scoreAway === null) {
+      return NextResponse.json({ error: "Score final inválido." }, { status: 400 });
+    }
+    const finalMinute =
+      typeof body.final_minute === "number" && Number.isFinite(body.final_minute)
+        ? Math.max(1, Math.floor(body.final_minute))
+        : null;
+
+    const admin = createAdminClient();
+    const access = await assertGameAccess(admin, gameId, user.id);
+    if (!access.ok) return access.response;
+    if (access.gameStatus === "completed" && !access.isCoordinator) {
+      return NextResponse.json(
+        { error: "Só o coordenador pode editar jogos terminados." },
+        { status: 403 },
+      );
+    }
+
+    const deleteResult = await admin.from("game_final_stats").delete().eq("game_id", gameId);
+    if (deleteResult.error) {
+      return NextResponse.json(
+        { error: `Erro ao limpar estatísticas antigas: ${deleteResult.error.message}` },
+        { status: 500 },
+      );
+    }
+
+    const rowsToInsert = finalStats.map((row) => ({
+      game_id: gameId,
+      player_id: row.player_id,
+      lineup_type: row.lineup_type,
+      minutes_played: Math.max(0, Math.floor(row.minutes_played)),
+      goals: Math.max(0, Math.floor(row.goals)),
+      own_goals: Math.max(0, Math.floor(row.own_goals)),
+      assists: Math.max(0, Math.floor(row.assists)),
+      yellow_cards: Math.max(0, Math.floor(row.yellow_cards)),
+      red_cards: Math.max(0, Math.floor(row.red_cards)),
+      coach_rating: row.coach_rating,
+      notes: row.notes ?? null,
+      is_mvp: row.is_mvp,
+      is_finalized: true,
+      finalized_at: new Date().toISOString(),
+    }));
+
+    const insertResult = await admin
+      .from("game_final_stats")
+      .insert(rowsToInsert)
+      .select("id");
+
+    if (insertResult.error) {
+      return NextResponse.json(
+        { error: `Erro ao inserir game_final_stats: ${insertResult.error.message}` },
+        { status: 500 },
+      );
+    }
+
+    const updateGameResult = await admin
+      .from("games")
+      .update({ status: "completed", score_home: scoreHome, score_away: scoreAway })
+      .eq("id", gameId)
+      .select("id")
+      .single();
+
+    if (updateGameResult.error) {
+      return NextResponse.json(
+        { error: `Erro ao marcar jogo como completed: ${updateGameResult.error.message}` },
+        { status: 500 },
+      );
+    }
+
+    const checkpointResult = await admin
+      .from("game_live_checkpoints")
+      .upsert(
+        {
+          game_id: gameId,
+          phase: "completed",
+          base_seconds:
+            finalMinute !== null
+              ? Math.max(0, (finalMinute - 1) * 60)
+              : rowsToInsert.reduce(
+                  (max, row) => Math.max(max, Math.floor(row.minutes_played * 60)),
+                  0,
+                ),
+          running_since_ms: null,
+          updated_at: new Date().toISOString(),
+          updated_by: user.id,
+        },
+        { onConflict: "game_id" },
+      );
+
+    if (checkpointResult.error) {
+      // non-blocking for finalization: game is already completed and stats inserted
+      console.error("Finalize warning (checkpoint):", checkpointResult.error);
+    }
+
+    return NextResponse.json({
+      success: true,
+      insertedRows: insertResult.data?.length ?? 0,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Erro interno.";
+    console.error("Live finalize error:", error);
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}

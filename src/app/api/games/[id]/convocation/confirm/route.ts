@@ -137,6 +137,44 @@ export async function POST(_request: Request, { params }: RouteContext) {
       );
     }
 
+    // Guarantee game_stats_live has a row for each convocated player.
+    // Missing rows are initialized as bench so live page always has full state.
+    const { data: existingLiveRows, error: existingLiveRowsError } = await admin
+      .from("game_stats_live")
+      .select("player_id")
+      .eq("game_id", gameId);
+
+    if (existingLiveRowsError) {
+      return NextResponse.json(
+        { error: "Erro ao preparar estados live dos convocados." },
+        { status: 500 },
+      );
+    }
+
+    const existingLiveIds = new Set((existingLiveRows || []).map((row) => row.player_id));
+    const missingLiveRows = Array.from(uniquePlayers)
+      .filter((playerId) => !existingLiveIds.has(playerId))
+      .map((playerId) => ({
+        game_id: gameId,
+        player_id: playerId,
+        status: "on_bench",
+        start_minute: null,
+        end_minute: null,
+      }));
+
+    if (missingLiveRows.length > 0) {
+      const { error: insertLiveRowsError } = await admin
+        .from("game_stats_live")
+        .insert(missingLiveRows);
+
+      if (insertLiveRowsError) {
+        return NextResponse.json(
+          { error: "Erro ao guardar suplentes/titulares no live." },
+          { status: 500 },
+        );
+      }
+    }
+
     const { error: updateError } = await admin
       .from("convocations")
       .update({ status: "confirmed" })

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { format, parseISO } from "date-fns";
@@ -36,6 +36,26 @@ type MatchPhase =
   | "review"
   | "completed";
 
+type ClockState = {
+  baseSeconds: number;
+  runningSinceMs: number | null;
+};
+
+type PersistedClockState = {
+  version: 1;
+  phase: MatchPhase;
+  baseSeconds: number;
+  runningSinceMs: number | null;
+  savedAt: number;
+};
+
+type BackendCheckpointState = {
+  phase: MatchPhase;
+  baseSeconds: number;
+  runningSinceMs: number | null;
+  savedAt: number;
+};
+
 const EVENT_LABELS: Record<string, string> = {
   goal: "⚽ Golo",
   assist: "🅰️ Assistência",
@@ -70,12 +90,6 @@ function normalizeLiveStatus(value: string | null | undefined): LiveStatus | nul
   return null;
 }
 
-function toDbLiveStatus(status: LiveStatus, startMinute: number | null | undefined) {
-  if (status === "substituted") return "substituted_out";
-  if (status === "substitute") return "on_bench";
-  return startMinute === 0 ? "starter" : "playing";
-}
-
 function isGoalEventType(eventType: string | null | undefined) {
   return eventType === "goal" || eventType === "penalty_goal";
 }
@@ -88,6 +102,82 @@ function formatClock(totalSeconds: number) {
   return `${min}:${sec}`;
 }
 
+function isRunningPhase(phase: MatchPhase) {
+  return phase === "first_half" || phase === "second_half";
+}
+
+function computeClockSecondsAt(state: ClockState, atMs: number) {
+  if (!state.runningSinceMs) return Math.max(0, state.baseSeconds);
+  const runningSeconds = Math.max(0, Math.floor((atMs - state.runningSinceMs) / 1000));
+  return Math.max(0, state.baseSeconds + runningSeconds);
+}
+
+function clockStorageKey(gameId: string) {
+  return `coach11:live-clock:${gameId}`;
+}
+
+function loadPersistedClock(gameId: string): PersistedClockState | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(clockStorageKey(gameId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<PersistedClockState>;
+    if (parsed.version !== 1) return null;
+    if (typeof parsed.phase !== "string") return null;
+    if (typeof parsed.baseSeconds !== "number") return null;
+    return {
+      version: 1,
+      phase: parsed.phase as MatchPhase,
+      baseSeconds: Math.max(0, Math.floor(parsed.baseSeconds)),
+      runningSinceMs: typeof parsed.runningSinceMs === "number" ? parsed.runningSinceMs : null,
+      savedAt: typeof parsed.savedAt === "number" ? parsed.savedAt : Date.now(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function persistClock(gameId: string, payload: PersistedClockState) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(clockStorageKey(gameId), JSON.stringify(payload));
+  } catch {
+    // ignore storage errors (private mode / quota)
+  }
+}
+
+type LiveEventInput = {
+  event_type: string;
+  player_id?: string | null;
+  related_player_id?: string | null;
+  minute: number;
+  is_opponent_event: boolean;
+};
+
+type FinalStatPayloadRow = {
+  player_id: string;
+  lineup_type: "starter" | "substitute";
+  minutes_played: number;
+  goals: number;
+  own_goals: number;
+  assists: number;
+  yellow_cards: number;
+  red_cards: number;
+  coach_rating: number | null;
+  is_mvp: boolean;
+  is_finalized: boolean;
+};
+
+function mergeEvents(prev: GameEvent[], incoming: GameEvent[]) {
+  const byId = new Map<string, GameEvent>();
+  prev.forEach((event) => byId.set(event.id, event));
+  incoming.forEach((event) => byId.set(event.id, event));
+  return Array.from(byId.values()).sort((a, b) => {
+    if (a.minute !== b.minute) return a.minute - b.minute;
+    return (a.created_at || "").localeCompare(b.created_at || "");
+  });
+}
+
 /** Calculates minutes played per player from game_events substitution events */
 function computeMinutesPlayed(
   players: LivePlayer[],
@@ -95,54 +185,107 @@ function computeMinutesPlayed(
   starterIds: Set<string>,
   finalMinute: number,
 ): Map<string, number> {
-  const substitutions = events
-    .filter((e) => !e.is_opponent_event)
-    .flatMap((e) => {
-      if (
-        e.event_type === "substitution_out" &&
-        typeof e.player_id === "string" &&
-        typeof e.related_player_id === "string"
-      ) {
-        return [{ minute: e.minute, outPlayerId: e.player_id, inPlayerId: e.related_player_id }];
+  type SubTransition = {
+    minute: number;
+    outPlayerId: string;
+    inPlayerId: string | null;
+    createdAt: string;
+    order: number;
+  };
+
+  const rawTransitions: SubTransition[] = [];
+
+  events.forEach((event, index) => {
+    if (event.is_opponent_event) return;
+    if (event.event_type === "substitution_out" && typeof event.player_id === "string") {
+      rawTransitions.push({
+        minute: Math.max(0, Math.floor(event.minute || 0)),
+        outPlayerId: event.player_id,
+        inPlayerId:
+          typeof event.related_player_id === "string" ? event.related_player_id : null,
+        createdAt: event.created_at || "",
+        order: index,
+      });
+      return;
+    }
+    // Compatibilidade com registos antigos.
+    if (
+      (event.event_type as string) === "substitution" &&
+      typeof event.player_id === "string" &&
+      typeof event.related_player_id === "string"
+    ) {
+      rawTransitions.push({
+        minute: Math.max(0, Math.floor(event.minute || 0)),
+        outPlayerId: event.related_player_id,
+        inPlayerId: event.player_id,
+        createdAt: event.created_at || "",
+        order: index,
+      });
+      return;
+    }
+    // Fallback: some datasets may have only substitution_in.
+    if (
+      event.event_type === "substitution_in" &&
+      typeof event.player_id === "string" &&
+      typeof event.related_player_id === "string"
+    ) {
+      const minute = Math.max(0, Math.floor(event.minute || 0));
+      const outPlayerId = event.related_player_id;
+      const inPlayerId = event.player_id;
+      const hasMatchingOut = rawTransitions.some(
+        (item) =>
+          item.minute === minute &&
+          item.outPlayerId === outPlayerId &&
+          item.inPlayerId === inPlayerId,
+      );
+      if (!hasMatchingOut) {
+        rawTransitions.push({
+          minute,
+          outPlayerId,
+          inPlayerId,
+          createdAt: event.created_at || "",
+          order: index,
+        });
       }
-      // Compatibilidade com registos antigos.
-      if (
-        (e.event_type as string) === "substitution" &&
-        typeof e.player_id === "string" &&
-        typeof e.related_player_id === "string"
-      ) {
-        return [{ minute: e.minute, outPlayerId: e.related_player_id, inPlayerId: e.player_id }];
-      }
-      return [];
-    })
-    .sort((a, b) => a.minute - b.minute);
+    }
+  });
+
+  const substitutions = rawTransitions.sort((a, b) => {
+    if (a.minute !== b.minute) return a.minute - b.minute;
+    const createdCmp = (a.createdAt || "").localeCompare(b.createdAt || "");
+    if (createdCmp !== 0) return createdCmp;
+    return a.order - b.order;
+  });
+
+  const normalizedFinalMinute = Math.max(0, Math.floor(finalMinute));
 
   const result = new Map<string, number>();
 
   for (const player of players) {
-    const periods: [number, number][] = [];
     let currentStart: number | null = starterIds.has(player.id) ? 0 : null;
+    let total = 0;
 
     for (const ev of substitutions) {
+      const minute = Math.max(0, Math.min(normalizedFinalMinute, ev.minute));
       if (ev.inPlayerId === player.id) {
-        // Player entered
-        currentStart = ev.minute;
-      } else if (ev.outPlayerId === player.id) {
-        // Player exited
         if (currentStart !== null) {
-          periods.push([currentStart, ev.minute]);
-          currentStart = null;
+          // Defensive close if malformed data says "in" while already active.
+          total += Math.max(0, minute - currentStart);
         }
+        currentStart = minute;
+      }
+      if (ev.outPlayerId === player.id) {
+        if (currentStart === null) continue;
+        total += Math.max(0, minute - currentStart);
+        currentStart = null;
       }
     }
 
-    // Still on field at end
     if (currentStart !== null) {
-      periods.push([currentStart, finalMinute]);
+      total += Math.max(0, normalizedFinalMinute - currentStart);
     }
 
-    const total = periods.reduce((acc, [s, e]) => acc + Math.max(0, e - s), 0);
-    result.set(player.id, total);
+    result.set(player.id, Math.max(0, Math.min(total, normalizedFinalMinute)));
   }
 
   return result;
@@ -156,10 +299,15 @@ export default function LiveGamePage() {
   const [loading, setLoading] = useState(true);
   const [game, setGame] = useState<Game | null>(null);
   const [convocatedPlayers, setConvocatedPlayers] = useState<LivePlayer[]>([]);
+  const [initialStarterIds, setInitialStarterIds] = useState<string[]>([]);
   const [events, setEvents] = useState<GameEvent[]>([]);
-  const [clockSeconds, setClockSeconds] = useState(0);
+  const [clockState, setClockState] = useState<ClockState>({
+    baseSeconds: 0,
+    runningSinceMs: null,
+  });
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const [clockHydrated, setClockHydrated] = useState(false);
   const [phase, setPhase] = useState<MatchPhase>("pre_match");
-  const [clockRunning, setClockRunning] = useState(false);
   const [savingEvent, setSavingEvent] = useState(false);
   const [savingLineup, setSavingLineup] = useState<string | null>(null);
   const [finalizing, setFinalizing] = useState(false);
@@ -181,10 +329,132 @@ export default function LiveGamePage() {
   // Review phase
   const [playerRatings, setPlayerRatings] = useState<Record<string, number>>({});
   const [mvpPlayerId, setMvpPlayerId] = useState<string | null>(null);
+  const checkpointBackendEnabledRef = useRef(true);
+  const lastCheckpointFingerprintRef = useRef<string | null>(null);
+  const clockSeconds = useMemo(
+    () => computeClockSecondsAt(clockState, nowMs),
+    [clockState, nowMs],
+  );
   const elapsedMinutes = Math.floor(clockSeconds / 60);
   const currentMinute = elapsedMinutes + 1; // 1-based minute for UI and game_events
 
+  const persistCheckpointToBackend = useCallback(
+    async (
+      snapshot: { phase: MatchPhase; baseSeconds: number; runningSinceMs: number | null },
+      options?: { keepalive?: boolean },
+    ) => {
+      if (!checkpointBackendEnabledRef.current) return;
+      try {
+        const res = await fetch(`/api/games/${id}/live/checkpoint`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(snapshot),
+          cache: "no-store",
+          keepalive: options?.keepalive,
+        });
+
+        const payload = await res.json().catch(() => null);
+        if (payload?.missingTable === true) {
+          checkpointBackendEnabledRef.current = false;
+        }
+      } catch {
+        // Ignore transient backend failures. Local checkpoint stays active.
+      }
+    },
+    [id],
+  );
+
+  const loadEventsFromBackend = useCallback(async () => {
+    const res = await fetch(`/api/games/${id}/live/events`, { cache: "no-store" });
+    const payload = await res.json().catch(() => null);
+    if (!res.ok || !Array.isArray(payload?.events)) {
+      throw new Error("live_events_load_failed");
+    }
+    return payload.events as GameEvent[];
+  }, [id]);
+
+  const insertEventsToBackend = useCallback(
+    async (eventsToInsert: LiveEventInput[]) => {
+      const res = await fetch(`/api/games/${id}/live/events`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ events: eventsToInsert }),
+      });
+      const payload = await res.json().catch(() => null);
+      if (!res.ok || !Array.isArray(payload?.events)) {
+        throw new Error(
+          (payload as { error?: string } | null)?.error || "live_events_insert_failed",
+        );
+      }
+      return payload.events as GameEvent[];
+    },
+    [id],
+  );
+
+  const deleteEventsFromBackend = useCallback(
+    async (eventIds: string[]) => {
+      const res = await fetch(`/api/games/${id}/live/events`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ eventIds }),
+      });
+      if (!res.ok) {
+        const payload = await res.json().catch(() => null);
+        throw new Error(
+          (payload as { error?: string } | null)?.error || "live_events_delete_failed",
+        );
+      }
+    },
+    [id],
+  );
+
+  const syncConvocatedPlayersFromBackend = useCallback(async () => {
+    const res = await fetch(`/api/games/${id}/convocation`, { cache: "no-store" });
+    const payload = await res.json().catch(() => null);
+    if (!res.ok || !Array.isArray(payload?.players)) {
+      throw new Error("live_convocation_sync_failed");
+    }
+
+    const rawPlayers = payload.players as Array<Player & { isConvocated?: boolean }>;
+    const convPlayers = rawPlayers
+      .filter((player) => player?.isConvocated === true)
+      .sort(
+        (a, b) =>
+          a.first_name.localeCompare(b.first_name, "pt", { sensitivity: "base" }) ||
+          a.last_name.localeCompare(b.last_name, "pt", { sensitivity: "base" }),
+      );
+
+    const rawLineup =
+      typeof payload?.lineupStatuses === "object" && payload.lineupStatuses
+        ? (payload.lineupStatuses as Record<string, string>)
+        : {};
+    const starterIdsFromBackend = Array.isArray(payload?.starterIds)
+      ? payload.starterIds.filter((value: unknown): value is string => typeof value === "string")
+      : [];
+    const onFieldIds = new Set<string>();
+    const benchIds = new Set<string>();
+    for (const [playerId, status] of Object.entries(rawLineup)) {
+      const normalized = normalizeLiveStatus(status);
+      if (normalized === "on_field") onFieldIds.add(playerId);
+      if (normalized === "substitute" || normalized === "substituted") benchIds.add(playerId);
+    }
+
+    setConvocatedPlayers(
+      convPlayers.map((player) => ({
+        ...player,
+        isOnField: onFieldIds.has(player.id),
+        isInitialBench: benchIds.has(player.id),
+      })),
+    );
+    if (starterIdsFromBackend.length > 0) {
+      setInitialStarterIds(starterIdsFromBackend);
+    } else if (phase === "pre_match" || initialStarterIds.length === 0) {
+      setInitialStarterIds(Array.from(onFieldIds));
+    }
+  }, [id, phase, initialStarterIds.length]);
+
   const loadData = useCallback(async () => {
+    setClockHydrated(false);
     const { data: gameData } = await supabase
       .from("games")
       .select("*")
@@ -199,11 +469,37 @@ export default function LiveGamePage() {
     setGame(gameData);
     if (gameData.status === "completed") {
       setPhase("completed");
-      setClockRunning(false);
-    } else {
-      setPhase("pre_match");
-      setClockRunning(false);
+      setClockState({ baseSeconds: 0, runningSinceMs: null });
+      setClockHydrated(true);
+      setLoading(false);
+      return;
     }
+    const now = Date.now();
+    setNowMs(now);
+    const backendCheckpointPromise = fetch(`/api/games/${id}/live/checkpoint`, {
+      cache: "no-store",
+    })
+      .then(async (res) => {
+        const payload = await res.json().catch(() => null);
+        if (payload?.missingTable === true) {
+          checkpointBackendEnabledRef.current = false;
+          return null;
+        }
+        if (!res.ok || !payload?.checkpoint) return null;
+        const checkpoint = payload.checkpoint as Partial<BackendCheckpointState>;
+        if (typeof checkpoint.phase !== "string") return null;
+        if (typeof checkpoint.baseSeconds !== "number") return null;
+
+        return {
+          phase: checkpoint.phase as MatchPhase,
+          baseSeconds: Math.max(0, Math.floor(checkpoint.baseSeconds)),
+          runningSinceMs:
+            typeof checkpoint.runningSinceMs === "number" ? checkpoint.runningSinceMs : null,
+          savedAt:
+            typeof checkpoint.savedAt === "number" ? checkpoint.savedAt : Date.now(),
+        } satisfies BackendCheckpointState;
+      })
+      .catch(() => null);
 
     // Fetch convocated players + lineup via server API (bypasses client-side RLS limitations)
     let enriched: LivePlayer[] = [];
@@ -224,6 +520,9 @@ export default function LiveGamePage() {
         typeof convPayload?.lineupStatuses === "object" && convPayload.lineupStatuses
           ? (convPayload.lineupStatuses as Record<string, string>)
           : {};
+      const starterIdsFromBackend = Array.isArray(convPayload?.starterIds)
+        ? convPayload.starterIds.filter((value: unknown): value is string => typeof value === "string")
+        : [];
 
       const onFieldIds = new Set<string>();
       const benchIds = new Set<string>();
@@ -241,6 +540,9 @@ export default function LiveGamePage() {
         isOnField: onFieldIds.has(player.id),
         isInitialBench: benchIds.has(player.id),
       }));
+      setInitialStarterIds(
+        starterIdsFromBackend.length > 0 ? starterIdsFromBackend : Array.from(onFieldIds),
+      );
     } else {
       // Fallback: direct queries (in case API returns error)
       const { data: convRows } = await supabase
@@ -280,6 +582,7 @@ export default function LiveGamePage() {
       const normalizedStats = (liveStats || []).map((row) => ({
         player_id: row.player_id,
         status: normalizeLiveStatus(row.status),
+        start_minute: row.start_minute,
       }));
 
       const onFieldIds = new Set(
@@ -292,35 +595,207 @@ export default function LiveGamePage() {
           .filter((s) => s.status === "substitute" || s.status === "substituted")
           .map((s) => s.player_id),
       );
+      const starterIdsFromLive = new Set(
+        normalizedStats
+          .filter((s) => s.start_minute === 0)
+          .map((s) => s.player_id),
+      );
 
       enriched = convPlayers.map((player) => ({
         ...player,
         isOnField: onFieldIds.has(player.id),
         isInitialBench: benchIds.has(player.id),
       }));
+      setInitialStarterIds(
+        starterIdsFromLive.size > 0
+          ? Array.from(starterIdsFromLive)
+          : Array.from(onFieldIds),
+      );
     }
 
     setConvocatedPlayers(enriched);
 
-    // Fetch events
-    const { data: evts } = await supabase
-      .from("game_events")
-      .select("*")
-      .eq("game_id", id)
-      .order("minute", { ascending: true });
-
-    const orderedEvents = evts || [];
+    // Fetch events (prefer backend API for consistent permissions)
+    let orderedEvents: GameEvent[] = [];
+    try {
+      orderedEvents = await loadEventsFromBackend();
+    } catch {
+      const { data: evts } = await supabase
+        .from("game_events")
+        .select("*")
+        .eq("game_id", id)
+        .order("minute", { ascending: true });
+      orderedEvents = evts || [];
+    }
     setEvents(orderedEvents);
-    const lastMinute = orderedEvents.length
+    const backendPersisted = await backendCheckpointPromise;
+    const localPersisted = loadPersistedClock(id);
+    const fallbackMinute = orderedEvents.length
       ? Math.max(...orderedEvents.map((e) => Math.max(1, e.minute || 1)))
       : 1;
-    setClockSeconds((lastMinute - 1) * 60);
+    const fallbackBaseSeconds = Math.max(0, (fallbackMinute - 1) * 60);
+
+    if (gameData.status === "completed") {
+      setPhase("completed");
+      setClockState({
+        baseSeconds: fallbackBaseSeconds,
+        runningSinceMs: null,
+      });
+    } else {
+      const persistedCandidates: PersistedClockState[] = [];
+
+      if (backendPersisted) {
+        persistedCandidates.push({
+          version: 1,
+          phase: backendPersisted.phase,
+          baseSeconds: backendPersisted.baseSeconds,
+          runningSinceMs: backendPersisted.runningSinceMs,
+          savedAt: backendPersisted.savedAt,
+        });
+      }
+      if (localPersisted) persistedCandidates.push(localPersisted);
+
+      const persisted = persistedCandidates.sort((a, b) => b.savedAt - a.savedAt)[0] ?? null;
+
+      if (persisted) {
+        const persistedPhase: MatchPhase =
+          persisted.phase === "completed" ? "review" : persisted.phase;
+        const persistedClockState: ClockState = {
+          baseSeconds: persisted.baseSeconds,
+          runningSinceMs:
+            isRunningPhase(persistedPhase)
+              ? (persisted.runningSinceMs ?? now)
+              : null,
+        };
+        const persistedSeconds = computeClockSecondsAt(persistedClockState, now);
+
+        if (persistedSeconds < fallbackBaseSeconds) {
+          // Events are ahead of local snapshot.
+          setPhase(persistedPhase);
+          setClockState({
+            baseSeconds: fallbackBaseSeconds,
+            runningSinceMs: isRunningPhase(persistedPhase) ? now : null,
+          });
+        } else {
+          setPhase(persistedPhase);
+          setClockState(persistedClockState);
+        }
+      } else {
+        setPhase("pre_match");
+        setClockState({
+          baseSeconds: fallbackBaseSeconds,
+          runningSinceMs: null,
+        });
+      }
+    }
+
+    lastCheckpointFingerprintRef.current = null;
+    setClockHydrated(true);
     setLoading(false);
-  }, [id, supabase]);
+  }, [id, supabase, loadEventsFromBackend]);
 
   useEffect(() => {
     if (id) void loadData();
   }, [id, loadData]);
+
+  useEffect(() => {
+    if (game?.status === "completed") {
+      router.replace(`/games/${id}/summary`);
+    }
+  }, [game?.status, id, router]);
+
+  useEffect(() => {
+    if (!clockHydrated) return;
+    persistClock(id, {
+      version: 1,
+      phase,
+      baseSeconds: clockState.baseSeconds,
+      runningSinceMs: clockState.runningSinceMs,
+      savedAt: Date.now(),
+    });
+  }, [id, phase, clockState.baseSeconds, clockState.runningSinceMs, clockHydrated]);
+
+  useEffect(() => {
+    if (!clockHydrated || !checkpointBackendEnabledRef.current) return;
+    const fingerprint = `${phase}|${clockState.baseSeconds}|${clockState.runningSinceMs ?? "null"}`;
+    if (lastCheckpointFingerprintRef.current === fingerprint) return;
+    lastCheckpointFingerprintRef.current = fingerprint;
+    void persistCheckpointToBackend({
+      phase,
+      baseSeconds: clockState.baseSeconds,
+      runningSinceMs: clockState.runningSinceMs,
+    });
+  }, [
+    phase,
+    clockState.baseSeconds,
+    clockState.runningSinceMs,
+    clockHydrated,
+    persistCheckpointToBackend,
+  ]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !clockHydrated || !checkpointBackendEnabledRef.current) {
+      return;
+    }
+
+    const flushOnPageHide = () => {
+      void persistCheckpointToBackend(
+        {
+          phase,
+          baseSeconds: clockState.baseSeconds,
+          runningSinceMs: clockState.runningSinceMs,
+        },
+        { keepalive: true },
+      );
+    };
+
+    window.addEventListener("pagehide", flushOnPageHide);
+    return () => window.removeEventListener("pagehide", flushOnPageHide);
+  }, [
+    phase,
+    clockState.baseSeconds,
+    clockState.runningSinceMs,
+    clockHydrated,
+    persistCheckpointToBackend,
+  ]);
+
+  const pauseClock = useCallback(() => {
+    const now = Date.now();
+    setNowMs(now);
+    setClockState((prev) => {
+      if (!prev.runningSinceMs) return prev;
+      const extra = Math.max(0, Math.floor((now - prev.runningSinceMs) / 1000));
+      return {
+        baseSeconds: prev.baseSeconds + extra,
+        runningSinceMs: null,
+      };
+    });
+  }, []);
+
+  const startClock = useCallback(() => {
+    const now = Date.now();
+    setNowMs(now);
+    setClockState((prev) => {
+      if (prev.runningSinceMs) return prev;
+      return {
+        baseSeconds: prev.baseSeconds,
+        runningSinceMs: now,
+      };
+    });
+  }, []);
+
+  const adjustClockBySeconds = useCallback((deltaSeconds: number) => {
+    const now = Date.now();
+    setNowMs(now);
+    setClockState((prev) => {
+      const current = computeClockSecondsAt(prev, now);
+      const next = Math.max(0, current + deltaSeconds);
+      return {
+        baseSeconds: next,
+        runningSinceMs: prev.runningSinceMs ? now : null,
+      };
+    });
+  }, []);
 
   const saveLivePlayerStatus = useCallback(
     async (
@@ -328,53 +803,62 @@ export default function LiveGamePage() {
       status: LiveStatus,
       options?: { startMinute?: number | null; endMinute?: number | null },
     ) => {
-      const startMinute = options?.startMinute ?? null;
-      const endMinute = options?.endMinute ?? null;
-      const payload = {
-        status: toDbLiveStatus(status, startMinute),
-        start_minute: startMinute,
-        end_minute: endMinute,
+      const updatePayload: {
+        playerId: string;
+        status: LiveStatus;
+        startMinute?: number | null;
+        endMinute?: number | null;
+      } = {
+        playerId,
+        status,
       };
 
-      const { data: existingRows, error: existingRowsError } = await supabase
-        .from("game_stats_live")
-        .select("id")
-        .eq("game_id", id)
-        .eq("player_id", playerId);
-
-      if (existingRowsError) throw existingRowsError;
-
-      if ((existingRows || []).length > 0) {
-        const { error: updateError } = await supabase
-          .from("game_stats_live")
-          .update(payload)
-          .eq("game_id", id)
-          .eq("player_id", playerId);
-
-        if (updateError) throw updateError;
-        return;
+      if (options && "startMinute" in options) {
+        updatePayload.startMinute = options.startMinute ?? null;
+      }
+      if (options && "endMinute" in options) {
+        updatePayload.endMinute = options.endMinute ?? null;
       }
 
-      const { error: insertError } = await supabase
-        .from("game_stats_live")
-        .insert({
-          game_id: id,
-          player_id: playerId,
-          ...payload,
-        });
-
-      if (insertError) throw insertError;
+      const res = await fetch(`/api/games/${id}/live/players`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ updates: [updatePayload] }),
+      });
+      if (!res.ok) {
+        const payload = await res.json().catch(() => null);
+        throw new Error(
+          (payload as { error?: string } | null)?.error || "live_player_status_save_failed",
+        );
+      }
     },
-    [id, supabase],
+    [id],
   );
 
   useEffect(() => {
-    if (!clockRunning || phase === "completed") return;
+    if (!isRunningPhase(phase) || !clockState.runningSinceMs) return;
     const interval = setInterval(() => {
-      setClockSeconds((prev) => prev + 1);
+      setNowMs(Date.now());
     }, 1000);
     return () => clearInterval(interval);
-  }, [clockRunning, phase]);
+  }, [phase, clockState.runningSinceMs]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const syncNow = () => setNowMs(Date.now());
+    const onVisibility = () => {
+      if (!document.hidden) syncNow();
+    };
+
+    window.addEventListener("focus", syncNow);
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      window.removeEventListener("focus", syncNow);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, []);
 
   // Score from events
   const score = useMemo(() => {
@@ -413,16 +897,27 @@ export default function LiveGamePage() {
   const isLivePhase = phase === "first_half" || phase === "second_half";
   const isFinalized = game?.status === "completed";
 
-  // Review: players who actually played (minutes > 0 or on field)
+  // Review: players who actually played (minutes > 0)
   const starterIds = useMemo(() => {
-    const s = new Set<string>();
-    convocatedPlayers.forEach((p) => { if (p.isOnField) s.add(p.id); });
+    const s = new Set<string>(initialStarterIds);
+    if (s.size === 0) {
+      convocatedPlayers.forEach((player) => {
+        if (player.isOnField) s.add(player.id);
+      });
+    }
     return s;
-  }, [convocatedPlayers]);
+  }, [initialStarterIds, convocatedPlayers]);
+  const minuteForComputedStats = phase === "pre_match" ? 0 : Math.max(1, currentMinute);
 
   const computedMinutes = useMemo(
-    () => computeMinutesPlayed(convocatedPlayers, events, starterIds, elapsedMinutes),
-    [convocatedPlayers, events, starterIds, elapsedMinutes],
+    () =>
+      computeMinutesPlayed(
+        convocatedPlayers,
+        events,
+        starterIds,
+        minuteForComputedStats,
+      ),
+    [convocatedPlayers, events, starterIds, minuteForComputedStats],
   );
 
   const playersWhoPlayed = useMemo(
@@ -430,10 +925,78 @@ export default function LiveGamePage() {
     [convocatedPlayers, computedMinutes],
   );
 
+  const concededGoalsByPlayer = useMemo(() => {
+    const byPlayer = new Map<string, number>();
+    events.forEach((event) => {
+      if (!event.player_id || !event.is_opponent_event || !isGoalEventType(event.event_type)) {
+        return;
+      }
+      byPlayer.set(event.player_id, (byPlayer.get(event.player_id) ?? 0) + 1);
+    });
+    return byPlayer;
+  }, [events]);
+
   const allRatingsFilled = useMemo(
     () => playersWhoPlayed.every((p) => playerRatings[p.id] !== undefined),
     [playersWhoPlayed, playerRatings],
   );
+
+  const persistInitialLineupSnapshot = useCallback(
+    async (starterPlayerIds: string[]) => {
+      const starterIdSet = new Set(starterPlayerIds);
+      const updates = convocatedPlayers.map((player) => {
+        const isStarter = starterIdSet.has(player.id);
+        return {
+          playerId: player.id,
+          status: isStarter ? ("on_field" as const) : ("substitute" as const),
+          startMinute: isStarter ? 0 : null,
+          endMinute: null,
+        };
+      });
+
+      if (updates.length === 0) return;
+
+      const res = await fetch(`/api/games/${id}/live/players`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ updates }),
+      });
+      if (!res.ok) {
+        const payload = await res.json().catch(() => null);
+        throw new Error(
+          (payload as { error?: string } | null)?.error ||
+            "live_lineup_snapshot_persist_failed",
+        );
+      }
+    },
+    [convocatedPlayers, id],
+  );
+
+  async function handleStartFirstHalf() {
+    const starterPlayerIds = playersOnField.map((player) => player.id);
+    if (starterPlayerIds.length === 0) {
+      toast.error("Seleciona pelo menos 1 titular.");
+      return;
+    }
+
+    try {
+      await persistInitialLineupSnapshot(starterPlayerIds);
+      setInitialStarterIds(starterPlayerIds);
+      setPhase("first_half");
+      startClock();
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Erro ao guardar titulares iniciais.";
+      console.error("[live.kickoff] failed to persist starters", {
+        gameId: id,
+        starterCount: starterPlayerIds.length,
+        error,
+      });
+      toast.error(`Erro ao iniciar jogo: ${message}`);
+    }
+  }
 
   // ── Event handlers ──
 
@@ -449,6 +1012,15 @@ export default function LiveGamePage() {
     setSelectedAssistID(null);
     setSelectedSubOutId(null);
     setSelectedSubInId(null);
+
+    if (type === "goal" && isOpponent) {
+      const firstOnField = playersOnField[0] ?? null;
+      const preferredGoalkeeper =
+        playersOnField.find((player) =>
+          /gr|gk|guarda/i.test(player.preferred_position ?? ""),
+        ) ?? firstOnField;
+      setSelectedScorerID(preferredGoalkeeper?.id ?? null);
+    }
   }
 
   function closeModal() {
@@ -462,25 +1034,35 @@ export default function LiveGamePage() {
 
   async function confirmGoal() {
     const goalEventType: GameEventType = modalType === "own_goal" ? "own_goal" : "goal";
-    setSavingEvent(true);
-    const { data, error: evErr } = await supabase
-      .from("game_events")
-      .insert({
-        game_id: id,
-        event_type: goalEventType,
-        player_id: selectedScorerID || null,
-        related_player_id: selectedAssistID || null,
-        minute: currentMinute,
-        is_opponent_event: modalIsOpponent,
-      })
-      .select()
-      .single();
+    if (goalEventType === "goal" && !selectedScorerID) {
+      toast.error(
+        modalIsOpponent
+          ? "Seleciona o jogador associado ao golo adversário."
+          : "Seleciona o marcador do golo.",
+      );
+      return;
+    }
+    if (goalEventType === "own_goal" && !selectedScorerID) {
+      toast.error("Seleciona o jogador do autogolo.");
+      return;
+    }
 
-    if (evErr) {
-      toast.error("Erro ao registar golo.");
-    } else if (data) {
-      setEvents((prev) => [...prev, data].sort((a, b) => a.minute - b.minute));
+    setSavingEvent(true);
+    try {
+      const inserted = await insertEventsToBackend([
+        {
+          event_type: goalEventType,
+          player_id: selectedScorerID || null,
+          related_player_id:
+            goalEventType === "goal" && !modalIsOpponent ? selectedAssistID || null : null,
+          minute: currentMinute,
+          is_opponent_event: modalIsOpponent,
+        },
+      ]);
+      setEvents((prev) => mergeEvents(prev, inserted));
       toast.success(`${EVENT_LABELS[goalEventType] ?? goalEventType} — min. ${currentMinute}`);
+    } catch {
+      toast.error("Erro ao registar golo.");
     }
     setSavingEvent(false);
     closeModal();
@@ -489,23 +1071,19 @@ export default function LiveGamePage() {
   async function confirmCard(eventType: "yellow_card" | "red_card") {
     if (!selectedScorerID && !modalIsOpponent) return;
     setSavingEvent(true);
-    const { data, error: evErr } = await supabase
-      .from("game_events")
-      .insert({
-        game_id: id,
-        event_type: eventType,
-        player_id: selectedScorerID || null,
-        minute: currentMinute,
-        is_opponent_event: modalIsOpponent,
-      })
-      .select()
-      .single();
-
-    if (evErr) {
-      toast.error("Erro ao registar cartão.");
-    } else if (data) {
-      setEvents((prev) => [...prev, data].sort((a, b) => a.minute - b.minute));
+    try {
+      const inserted = await insertEventsToBackend([
+        {
+          event_type: eventType,
+          player_id: selectedScorerID || null,
+          minute: currentMinute,
+          is_opponent_event: modalIsOpponent,
+        },
+      ]);
+      setEvents((prev) => mergeEvents(prev, inserted));
       toast.success(`${EVENT_LABELS[eventType]} — min. ${currentMinute}`);
+    } catch {
+      toast.error("Erro ao registar cartão.");
     }
     setSavingEvent(false);
     closeModal();
@@ -515,11 +1093,10 @@ export default function LiveGamePage() {
     if (!selectedSubInId || !selectedSubOutId) return;
     setSavingEvent(true);
 
-    const { data, error: evErr } = await supabase
-      .from("game_events")
-      .insert([
+    let insertedEvents: GameEvent[] = [];
+    try {
+      insertedEvents = await insertEventsToBackend([
         {
-          game_id: id,
           event_type: "substitution_out",
           player_id: selectedSubOutId,
           related_player_id: selectedSubInId,
@@ -527,18 +1104,14 @@ export default function LiveGamePage() {
           is_opponent_event: false,
         },
         {
-          game_id: id,
           event_type: "substitution_in",
           player_id: selectedSubInId,
           related_player_id: selectedSubOutId,
           minute: currentMinute,
           is_opponent_event: false,
         },
-      ])
-      .select()
-      .order("created_at", { ascending: true });
-
-    if (evErr) {
+      ]);
+    } catch {
       toast.error("Erro ao registar substituição.");
       setSavingEvent(false);
       return;
@@ -546,8 +1119,7 @@ export default function LiveGamePage() {
 
     try {
       // Update live stats (current status only — minutes calc uses events)
-      await saveLivePlayerStatus(selectedSubOutId, "substituted", {
-        startMinute: null,
+      await saveLivePlayerStatus(selectedSubOutId, "substitute", {
         endMinute: currentMinute,
       });
       await saveLivePlayerStatus(selectedSubInId, "on_field", {
@@ -568,13 +1140,14 @@ export default function LiveGamePage() {
       }),
     );
 
-    if ((data || []).length > 0) {
-      setEvents((prev) => [...prev, ...(data as GameEvent[])].sort((a, b) => a.minute - b.minute));
+    if (insertedEvents.length > 0) {
+      setEvents((prev) => mergeEvents(prev, insertedEvents));
     }
 
     toast.success(`Substituição — min. ${currentMinute}`);
     setSavingEvent(false);
     closeModal();
+    void syncConvocatedPlayersFromBackend().catch(() => null);
   }
 
   async function toggleLineup(playerId: string) {
@@ -594,13 +1167,17 @@ export default function LiveGamePage() {
       if (!res.ok) {
         throw new Error("lineup_save_failed");
       }
-      setConvocatedPlayers((prev) =>
-        prev.map((p) =>
-          p.id === playerId
-            ? { ...p, isOnField: newIsOnField, isInitialBench: !newIsOnField }
-            : p,
-        ),
+      const nextPlayers = convocatedPlayers.map((p) =>
+        p.id === playerId
+          ? { ...p, isOnField: newIsOnField, isInitialBench: !newIsOnField }
+          : p,
       );
+      setConvocatedPlayers(nextPlayers);
+      if (phase === "pre_match") {
+        setInitialStarterIds(
+          nextPlayers.filter((playerItem) => playerItem.isOnField).map((playerItem) => playerItem.id),
+        );
+      }
     } catch {
       toast.error("Erro ao guardar titular/banco.");
     }
@@ -633,78 +1210,65 @@ export default function LiveGamePage() {
       if (pair?.id) idsToDelete.add(pair.id);
     }
 
-    const { error: delErr } = await supabase
-      .from("game_events")
-      .delete()
-      .in("id", Array.from(idsToDelete));
-    if (!delErr) {
+    try {
+      await deleteEventsFromBackend(Array.from(idsToDelete));
       setEvents((prev) => prev.filter((event) => !idsToDelete.has(event.id)));
+    } catch {
+      toast.error("Erro ao apagar evento.");
     }
   }
 
-  async function persistFinalStats(finalMinute: number) {
-    await supabase.from("game_final_stats").delete().eq("game_id", id);
-
-    // Determine starters from game_stats_live (start_minute = 0)
-    const { data: liveStats } = await supabase
-      .from("game_stats_live")
-      .select("player_id, status, start_minute")
-      .eq("game_id", id);
-
-    const starterIdsFromDB = new Set(
-      (liveStats || [])
-        .filter(
-          (s) =>
-            s.start_minute === 0 ||
-            s.status === "starter" ||
-            s.status === "playing" ||
-            s.status === "on_field",
-        )
-        .map((s) => s.player_id),
-    );
-
-    // Also include anyone currently marked on field in state
-    convocatedPlayers.forEach((p) => { if (p.isOnField) starterIdsFromDB.add(p.id); });
-
+  function buildFinalStatsPayload(finalMinute: number): FinalStatPayloadRow[] {
+    const normalizedFinalMinute = Math.max(1, Math.floor(finalMinute));
     const minutesMap = computeMinutesPlayed(
       convocatedPlayers,
       events,
-      starterIdsFromDB,
-      finalMinute,
+      starterIds,
+      normalizedFinalMinute,
     );
 
-    const rows = convocatedPlayers.map((player) => {
-      const minutesPlayed = minutesMap.get(player.id) ?? 0;
-      const isStarter = starterIdsFromDB.has(player.id);
-
+    return convocatedPlayers.map((player) => {
+      const minutesPlayed = Math.max(
+        0,
+        Math.min(normalizedFinalMinute, minutesMap.get(player.id) ?? 0),
+      );
       const goals = events.filter(
-        (e) =>
-          e.player_id === player.id &&
-          !e.is_opponent_event &&
-          isGoalEventType(e.event_type),
+        (event) =>
+          event.player_id === player.id &&
+          !event.is_opponent_event &&
+          isGoalEventType(event.event_type),
       ).length;
-
+      const ownGoals = events.filter(
+        (event) =>
+          event.player_id === player.id &&
+          !event.is_opponent_event &&
+          event.event_type === "own_goal",
+      ).length;
       const assists = events.filter(
-        (e) =>
-          e.related_player_id === player.id &&
-          !e.is_opponent_event &&
-          isGoalEventType(e.event_type),
+        (event) =>
+          event.related_player_id === player.id &&
+          !event.is_opponent_event &&
+          isGoalEventType(event.event_type),
       ).length;
-
       const yellowCards = events.filter(
-        (e) => e.player_id === player.id && !e.is_opponent_event && e.event_type === "yellow_card",
+        (event) =>
+          event.player_id === player.id &&
+          !event.is_opponent_event &&
+          event.event_type === "yellow_card",
       ).length;
-
       const redCards = events.filter(
-        (e) => e.player_id === player.id && !e.is_opponent_event && e.event_type === "red_card",
+        (event) =>
+          event.player_id === player.id &&
+          !event.is_opponent_event &&
+          event.event_type === "red_card",
       ).length;
 
       return {
-        game_id: id,
         player_id: player.id,
-        lineup_type: isStarter ? "starter" : "substitute",
+        lineup_type: starterIds.has(player.id) ? "starter" : "substitute",
         minutes_played: minutesPlayed,
         goals,
+        own_goals: ownGoals,
         assists,
         yellow_cards: yellowCards,
         red_cards: redCards,
@@ -713,11 +1277,6 @@ export default function LiveGamePage() {
         is_finalized: true,
       };
     });
-
-    if (rows.length > 0) {
-      const { error: insertErr } = await supabase.from("game_final_stats").insert(rows);
-      if (insertErr) throw insertErr;
-    }
   }
 
   async function finalizeGame() {
@@ -738,21 +1297,63 @@ export default function LiveGamePage() {
 
     setFinalizing(true);
     try {
-      await persistFinalStats(elapsedMinutes);
+      const finalMinute = Math.max(1, Math.floor(currentMinute));
+      const finalStatsPayload = buildFinalStatsPayload(finalMinute);
 
-      const { error: updateErr } = await supabase
-        .from("games")
-        .update({ status: "completed", score_home: score.home, score_away: score.away })
-        .eq("id", id);
+      if (finalStatsPayload.length === 0) {
+        throw new Error("Sem jogadores convocados para fechar o jogo.");
+      }
 
-      if (updateErr) throw updateErr;
+      console.info("[live.finalize] sending payload", {
+        gameId: id,
+        finalMinute,
+        rows: finalStatsPayload.length,
+        score,
+      });
 
-      setClockRunning(false);
+      const res = await fetch(`/api/games/${id}/live/finalize`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          finalStats: finalStatsPayload,
+          score_home: score.home,
+          score_away: score.away,
+          final_minute: finalMinute,
+        }),
+      });
+      const payload = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(
+          (payload as { error?: string } | null)?.error ||
+            "Erro ao persistir estatísticas finais.",
+        );
+      }
+
+      pauseClock();
       setPhase("completed");
+      setGame((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: "completed",
+              score_home: score.home,
+              score_away: score.away,
+            }
+          : prev,
+      );
       toast.success("Jogo finalizado e estatísticas guardadas!");
-      router.push(`/games/${id}`);
-    } catch {
-      toast.error("Erro ao finalizar jogo.");
+      router.push(`/games/${id}/summary`);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Erro interno ao finalizar jogo.";
+      console.error("[live.finalize] failed", {
+        gameId: id,
+        phase,
+        minute: currentMinute,
+        players: convocatedPlayers.length,
+        error,
+      });
+      toast.error(`Erro ao finalizar jogo: ${message}`);
     } finally {
       setFinalizing(false);
     }
@@ -820,6 +1421,14 @@ export default function LiveGamePage() {
       <div className="p-4 text-center py-16">
         <AlertCircle size={40} className="text-red-400 mx-auto mb-3" />
         <p className="text-slate-700">{error || "Erro ao carregar jogo."}</p>
+      </div>
+    );
+  }
+
+  if (game.status === "completed") {
+    return (
+      <div className="p-4 md:p-8 max-w-2xl mx-auto">
+        <p className="text-sm text-slate-600">A redirecionar para o sumário do jogo...</p>
       </div>
     );
   }
@@ -945,7 +1554,7 @@ export default function LiveGamePage() {
           <div className="flex items-center gap-3">
             <span className="text-sm font-medium text-slate-600 flex-1">Minuto de jogo</span>
             <button
-              onClick={() => setClockSeconds((prev) => Math.max(0, prev - 60))}
+              onClick={() => adjustClockBySeconds(-60)}
               className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center"
             >
               <Minus size={14} />
@@ -954,7 +1563,7 @@ export default function LiveGamePage() {
               {currentMinute}&apos;
             </span>
             <button
-              onClick={() => setClockSeconds((prev) => prev + 60)}
+              onClick={() => adjustClockBySeconds(60)}
               className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center"
             >
               <Plus size={14} />
@@ -964,7 +1573,9 @@ export default function LiveGamePage() {
           <div className="grid grid-cols-1 gap-2">
             {phase === "pre_match" && (
               <Button
-                onClick={() => { setPhase("first_half"); setClockRunning(true); }}
+                onClick={() => {
+                  void handleStartFirstHalf();
+                }}
                 disabled={playersOnField.length === 0}
                 className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:text-slate-500"
               >
@@ -975,7 +1586,10 @@ export default function LiveGamePage() {
             )}
             {phase === "first_half" && (
               <Button
-                onClick={() => { setClockRunning(false); setPhase("halftime"); }}
+                onClick={() => {
+                  pauseClock();
+                  setPhase("halftime");
+                }}
                 className="w-full bg-amber-600 hover:bg-amber-700"
               >
                 Terminar 1ª parte
@@ -983,7 +1597,10 @@ export default function LiveGamePage() {
             )}
             {phase === "halftime" && (
               <Button
-                onClick={() => { setClockRunning(true); setPhase("second_half"); }}
+                onClick={() => {
+                  setPhase("second_half");
+                  startClock();
+                }}
                 className="w-full bg-blue-600 hover:bg-blue-700"
               >
                 Iniciar 2ª parte
@@ -991,13 +1608,32 @@ export default function LiveGamePage() {
             )}
             {phase === "second_half" && (
               <Button
-                onClick={() => { setClockRunning(false); setPhase("review"); }}
+                onClick={() => {
+                  pauseClock();
+                  setPhase("review");
+                }}
                 className="w-full bg-slate-800 hover:bg-slate-700"
               >
                 Terminar 2ª parte
               </Button>
             )}
           </div>
+
+          {isLivePhase && (
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (clockState.runningSinceMs) {
+                  pauseClock();
+                } else {
+                  startClock();
+                }
+              }}
+              className="w-full"
+            >
+              {clockState.runningSinceMs ? "Pausar relógio (debug)" : "Retomar relógio (debug)"}
+            </Button>
+          )}
 
           {phase === "halftime" && (
             <p className="text-xs text-center text-amber-700">
@@ -1062,6 +1698,7 @@ export default function LiveGamePage() {
           <div className="space-y-1">
             {convocatedPlayers.map((p) => {
               const mins = computedMinutes.get(p.id) ?? 0;
+              const conceded = concededGoalsByPlayer.get(p.id) ?? 0;
               return (
                 <div
                   key={p.id}
@@ -1086,6 +1723,9 @@ export default function LiveGamePage() {
                   </span>
                   {mins > 0 && (
                     <span className="text-xs text-slate-500 font-mono">{mins}&apos;</span>
+                  )}
+                  {conceded > 0 && (
+                    <span className="text-xs text-rose-600 font-mono">-{conceded} GS</span>
                   )}
                 </div>
               );
@@ -1114,7 +1754,13 @@ export default function LiveGamePage() {
                   </span>
                   <span className="text-sm flex-1">
                     {EVENT_LABELS[ev.event_type] || ev.event_type}
-                    {pl ? ` — ${pl.first_name} ${pl.last_name}` : ev.is_opponent_event ? " — Adversário" : ""}
+                    {ev.is_opponent_event
+                      ? pl
+                        ? ` — Adversário (sofreu: ${pl.first_name} ${pl.last_name})`
+                        : " — Adversário"
+                      : pl
+                        ? ` — ${pl.first_name} ${pl.last_name}`
+                        : ""}
                     {assist && ev.event_type === "goal" ? ` (🅰️ ${assist.first_name} ${assist.last_name})` : ""}
                     {ev.event_type === "substitution_out" && assist ? ` → ${assist.first_name} ${assist.last_name}` : ""}
                     {ev.event_type === "substitution_in" && assist ? ` ← ${assist.first_name} ${assist.last_name}` : ""}
@@ -1155,7 +1801,11 @@ export default function LiveGamePage() {
                     <p className="text-sm font-medium text-slate-800 truncate">
                       {p.first_name} {p.last_name}
                     </p>
-                    <p className="text-xs text-slate-400">{computedMinutes.get(p.id) ?? 0} min</p>
+                    <p className="text-xs text-slate-400">
+                      {computedMinutes.get(p.id) ?? 0} min
+                      {(concededGoalsByPlayer.get(p.id) ?? 0) > 0 &&
+                        ` · -${concededGoalsByPlayer.get(p.id)} GS`}
+                    </p>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
                     <input
@@ -1459,38 +2109,46 @@ export default function LiveGamePage() {
               {/* GOAL (opponent) / own_goal */}
               {((modalType === "goal" && modalIsOpponent) || modalType === "own_goal") && (
                 <>
-                  {modalType === "own_goal" && (
-                    <>
-                      <p className="text-xs font-semibold text-slate-500 uppercase mb-2">
-                        Jogador (autogolo)
-                      </p>
-                      {convocatedPlayers.map((p) => (
-                        <button
-                          key={p.id}
-                          onClick={() => setSelectedScorerID(p.id)}
-                          className={`w-full flex items-center gap-3 p-2.5 rounded-xl mb-1 text-left transition-colors ${
-                            selectedScorerID === p.id
-                              ? "bg-emerald-50 border-2 border-emerald-300"
-                              : "bg-slate-50 border border-slate-100"
-                          }`}
-                        >
-                          <span className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold flex-shrink-0">
-                            {p.jersey_number || "—"}
-                          </span>
-                          <span className="text-sm font-medium truncate">
-                            {p.first_name} {p.last_name}
-                          </span>
-                          {selectedScorerID === p.id && (
-                            <Check size={14} className="text-emerald-500 ml-auto" />
-                          )}
-                        </button>
-                      ))}
-                    </>
+                  <p className="text-xs font-semibold text-slate-500 uppercase mb-2">
+                    {modalType === "goal" && modalIsOpponent
+                      ? "Jogador associado ao golo sofrido"
+                      : "Jogador (autogolo)"}
+                  </p>
+                  {(modalType === "goal" && modalIsOpponent
+                    ? playersOnField.length > 0
+                      ? playersOnField
+                      : convocatedPlayers
+                    : convocatedPlayers
+                  ).map((p) => (
+                    <button
+                      key={p.id}
+                      onClick={() => setSelectedScorerID(p.id)}
+                      className={`w-full flex items-center gap-3 p-2.5 rounded-xl mb-1 text-left transition-colors ${
+                        selectedScorerID === p.id
+                          ? "bg-emerald-50 border-2 border-emerald-300"
+                          : "bg-slate-50 border border-slate-100"
+                      }`}
+                    >
+                      <span className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                        {p.jersey_number || "—"}
+                      </span>
+                      <span className="text-sm font-medium truncate">
+                        {p.first_name} {p.last_name}
+                      </span>
+                      {selectedScorerID === p.id && (
+                        <Check size={14} className="text-emerald-500 ml-auto" />
+                      )}
+                    </button>
+                  ))}
+                  {modalType === "goal" && modalIsOpponent && playersOnField.length === 0 && (
+                    <p className="text-xs text-amber-600">
+                      Sem jogadores marcados em campo. Mostramos todos os convocados.
+                    </p>
                   )}
                   <div className="flex gap-2 pt-2">
                     <Button
                       onClick={() => void confirmGoal()}
-                      disabled={savingEvent}
+                      disabled={savingEvent || !selectedScorerID}
                       className="flex-1 bg-emerald-600 hover:bg-emerald-700"
                     >
                       {savingEvent ? <Loader2 size={16} className="animate-spin" /> : "Confirmar"}

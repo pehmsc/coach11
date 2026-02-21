@@ -29,6 +29,7 @@ import type { Competition, Game } from "@/types/database";
 
 interface CompetitionWithGames extends Competition {
   games?: Game[];
+  is_active?: boolean;
 }
 
 interface CompetitionForm {
@@ -46,6 +47,17 @@ interface GameForm {
   location: string;
   round_number: string;
 }
+
+type CompetitionsPayload = {
+  success: boolean;
+  teamId: string | null;
+  ageGroup?: {
+    id?: string;
+    football_format?: string | null;
+  } | null;
+  competitions?: CompetitionWithGames[];
+  error?: string;
+};
 
 const EMPTY_COMP_FORM: CompetitionForm = {
   name: "",
@@ -94,42 +106,34 @@ export default function CompetitionsPage() {
   }, []);
 
   async function loadData() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
+    setError(null);
+    setLoading(true);
+    try {
+      const res = await fetch("/api/competitions", { cache: "no-store" });
+      const payload = (await res.json().catch(() => null)) as CompetitionsPayload | null;
 
-    const { data: ag } = await supabase
-      .from("age_groups")
-      .select("id, football_format, teams(id)")
-      .eq("coordinator_id", user.id)
-      .single();
+      if (!res.ok || !payload?.success) {
+        throw new Error(payload?.error || "Erro ao carregar competições.");
+      }
 
-    if (!ag) {
+      const resolvedTeamId = payload.teamId ?? null;
+      const resolvedAgeGroupId = payload.ageGroup?.id ?? null;
+      const resolvedFootballFormat = payload.ageGroup?.football_format ?? null;
+
+      setTeamId(resolvedTeamId);
+      setAgeGroupId(resolvedAgeGroupId);
+      setFootballFormat(resolvedFootballFormat);
+      setCompetitions(Array.isArray(payload.competitions) ? payload.competitions : []);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Erro ao carregar competições.";
+      setError(message);
+      setTeamId(null);
+      setAgeGroupId(null);
+      setFootballFormat(null);
+      setCompetitions([]);
+    } finally {
       setLoading(false);
-      return;
     }
-
-    setAgeGroupId(ag.id);
-    setFootballFormat((ag as unknown as { football_format: string }).football_format ?? null);
-    const firstTeam = (ag.teams as Array<{ id: string }>)?.[0];
-    if (!firstTeam) {
-      setLoading(false);
-      return;
-    }
-
-    setTeamId(firstTeam.id);
-
-    const { data: comps } = await supabase
-      .from("competitions")
-      .select(
-        "*, games(id, game_datetime, opponent_name, is_home, status, score_home, score_away, location, title)",
-      )
-      .eq("team_id", firstTeam.id)
-      .order("created_at", { ascending: false });
-
-    setCompetitions(comps || []);
-    setLoading(false);
   }
 
   function openCreateComp() {

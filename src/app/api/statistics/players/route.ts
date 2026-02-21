@@ -110,7 +110,7 @@ export async function GET(request: Request) {
       const { data: fs } = await admin
         .from("game_final_stats")
         .select(
-          "player_id, goals, assists, minutes_played, lineup_type, yellow_cards, red_cards, coach_rating, is_mvp, is_finalized, game_id",
+          "player_id, goals, own_goals, assists, minutes_played, lineup_type, yellow_cards, red_cards, coach_rating, is_mvp, is_finalized, game_id",
         )
         .in("player_id", playerIds)
         .eq("is_finalized", true);
@@ -147,6 +147,27 @@ export async function GET(request: Request) {
       convocationPlayers = (cpRows || []) as { player_id: string; convocation_id: string }[];
     }
 
+    // ── Goal events (for GS / goals conceded attribution) ──
+    let gameEvents: {
+      game_id: string;
+      player_id: string | null;
+      event_type: string;
+      is_opponent_event: boolean;
+    }[] = [];
+    if (gameIds.length > 0) {
+      const { data: eventRows } = await admin
+        .from("game_events")
+        .select("game_id, player_id, event_type, is_opponent_event")
+        .in("game_id", gameIds)
+        .in("event_type", ["goal", "penalty_goal", "own_goal"]);
+      gameEvents = (eventRows || []) as {
+        game_id: string;
+        player_id: string | null;
+        event_type: string;
+        is_opponent_event: boolean;
+      }[];
+    }
+
     return NextResponse.json({
       success: true,
       players: players || [],
@@ -155,6 +176,7 @@ export async function GET(request: Request) {
       convocations,
       convocationPlayers,
       gameIds,
+      gameEvents,
     });
   } catch (error) {
     console.error("Erro ao carregar estatísticas:", error);

@@ -7,10 +7,19 @@ type RouteContext = {
 };
 
 type ConvocationStatus = "draft" | "confirmed" | "closed";
+type MatchPhase = "pre_match" | "first_half" | "halftime" | "second_half" | "review" | "completed";
 
 function toConvocationStatus(value: string | null | undefined): ConvocationStatus {
   if (value === "confirmed" || value === "closed") return value;
   return "draft";
+}
+
+function isMissingCheckpointTableError(message: string | null | undefined) {
+  if (!message) return false;
+  return (
+    message.includes("game_live_checkpoints") &&
+    (message.includes("does not exist") || message.includes("relation"))
+  );
 }
 
 function normalizeLiveStatusForUi(value: string | null | undefined) {
@@ -79,6 +88,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
     }
 
     let hasAccess = false;
+    let isCoordinator = false;
     let teamId: string | null = game.team_id;
 
     if (game.age_group_id) {
@@ -89,6 +99,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
         .eq("coordinator_id", user.id)
         .maybeSingle();
       hasAccess = !!ageGroup;
+      isCoordinator = !!ageGroup;
     }
 
     if (!teamId && game.age_group_id) {
@@ -156,6 +167,32 @@ export async function GET(_request: Request, { params }: RouteContext) {
       (selectedRows || []).forEach((row) => {
         selectedIds.add(row.player_id);
       });
+    }
+
+    // Ensure all convocated players have a game_stats_live row (bench by default).
+    // This keeps lineup/states consistent after refresh and across devices.
+    if (selectedIds.size > 0) {
+      const { data: existingLiveRows, error: existingLiveRowsError } = await admin
+        .from("game_stats_live")
+        .select("player_id")
+        .eq("game_id", gameId);
+
+      if (!existingLiveRowsError) {
+        const existingLiveIds = new Set((existingLiveRows || []).map((row) => row.player_id));
+        const missingLiveRows = Array.from(selectedIds)
+          .filter((playerId) => !existingLiveIds.has(playerId))
+          .map((playerId) => ({
+            game_id: gameId,
+            player_id: playerId,
+            status: "on_bench",
+            start_minute: null,
+            end_minute: null,
+          }));
+
+        if (missingLiveRows.length > 0) {
+          await admin.from("game_stats_live").insert(missingLiveRows);
+        }
+      }
     }
 
     const playersQuery = admin
@@ -238,15 +275,24 @@ export async function GET(_request: Request, { params }: RouteContext) {
     // Lineup statuses from game_stats_live
     const { data: liveStats } = await admin
       .from("game_stats_live")
-      .select("player_id, status")
+      .select("player_id, status, start_minute")
       .eq("game_id", gameId);
     const lineupStatuses: Record<string, string> = {};
+    const starterIdsSet = new Set<string>();
     (liveStats || []).forEach((row) => {
-      const r = row as unknown as { player_id?: string; status?: string };
+      const r = row as unknown as { player_id?: string; status?: string; start_minute?: number | null };
       if (!r.player_id) return;
       const normalized = normalizeLiveStatusForUi(r.status);
       if (normalized) lineupStatuses[r.player_id] = normalized;
+      if (r.start_minute === 0 || r.status === "starter") {
+        starterIdsSet.add(r.player_id);
+      }
     });
+    if (starterIdsSet.size === 0) {
+      Object.entries(lineupStatuses).forEach(([playerId, status]) => {
+        if (status === "on_field") starterIdsSet.add(playerId);
+      });
+    }
 
     let kits: Record<string, unknown>[] = [];
     if (teamId) {
@@ -270,16 +316,51 @@ export async function GET(_request: Request, { params }: RouteContext) {
       );
     }
 
+    let liveCheckpoint: {
+      phase: MatchPhase;
+      baseSeconds: number;
+      runningSinceMs: number | null;
+      updatedAt: string;
+    } | null = null;
+
+    const activityCutoffIso = new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString();
+    const { data: checkpointRow, error: checkpointError } = await admin
+      .from("game_live_checkpoints")
+      .select("phase, base_seconds, running_since_ms, updated_at")
+      .eq("game_id", gameId)
+      .in("phase", ["first_half", "second_half"])
+      .gte("updated_at", activityCutoffIso)
+      .maybeSingle();
+
+    if (checkpointError && !isMissingCheckpointTableError(checkpointError.message)) {
+      console.error("Erro ao carregar checkpoint live:", checkpointError);
+    }
+
+    if (checkpointRow && game.status !== "completed") {
+      liveCheckpoint = {
+        phase: checkpointRow.phase as MatchPhase,
+        baseSeconds: Math.max(0, Math.floor(checkpointRow.base_seconds ?? 0)),
+        runningSinceMs:
+          typeof checkpointRow.running_since_ms === "number"
+            ? checkpointRow.running_since_ms
+            : null,
+        updatedAt: checkpointRow.updated_at,
+      };
+    }
+
     return NextResponse.json({
       success: true,
       game,
       teamId,
+      isCoordinator,
       footballFormat,
       lineupStatuses,
+      starterIds: Array.from(starterIdsSet),
       tacticalSystem: (game as unknown as { additional_info?: string }).additional_info ?? null,
       convocationStatus,
       convocationId: convocations?.[0]?.id ?? null,
       convocationCount: convocationIds.length,
+      liveCheckpoint,
       kitSelection: latestConvocation
         ? {
             fp_jersey_kit_id: latestConvocation.fp_jersey_kit_id ?? null,

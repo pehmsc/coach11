@@ -19,8 +19,10 @@ interface AttendanceStats {
 interface GameStats {
   player: Player;
   golos: number;
+  autoGolos: number;
   assistencias: number;
   minutos: number;
+  gs: number;
   titular: number;
   suplente: number;
   convocatorias: number;
@@ -51,6 +53,7 @@ interface AttendanceRow {
 interface FinalStatRow {
   player_id: string;
   goals?: number;
+  own_goals?: number;
   assists?: number;
   minutes_played?: number;
   lineup_type?: string;
@@ -70,6 +73,18 @@ interface ConvocationPlayerRow {
 interface ConvocationRow {
   id: string;
   game_id: string;
+}
+
+interface GameEventRow {
+  game_id: string;
+  player_id: string | null;
+  event_type: string;
+  is_opponent_event: boolean;
+}
+
+function isGoalkeeper(player: Player | undefined) {
+  if (!player?.preferred_position) return false;
+  return /gr|gk|guarda/i.test(player.preferred_position);
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
@@ -107,6 +122,7 @@ export default function StatisticsPage() {
         convocations?: ConvocationRow[];
         convocationPlayers?: ConvocationPlayerRow[];
         gameIds?: string[];
+        gameEvents?: GameEventRow[];
       };
 
       const rawPlayers = playersData.players ?? [];
@@ -153,8 +169,10 @@ export default function StatisticsPage() {
         gsMap.set(p.id, {
           player: p,
           golos: 0,
+          autoGolos: 0,
           assistencias: 0,
           minutos: 0,
+          gs: 0,
           titular: 0,
           suplente: 0,
           convocatorias: convGameIdsByPlayer.get(p.id)?.size ?? 0,
@@ -173,6 +191,7 @@ export default function StatisticsPage() {
           const entry = gsMap.get(s.player_id);
           if (!entry) return;
           entry.golos += s.goals ?? 0;
+          entry.autoGolos += s.own_goals ?? 0;
           entry.assistencias += s.assists ?? 0;
           entry.minutos += s.minutes_played ?? 0;
           entry.amarelos += s.yellow_cards ?? 0;
@@ -186,6 +205,50 @@ export default function StatisticsPage() {
           }
           entry.totalJogos++;
         });
+
+      // GS (golos sofridos):
+      // 1) Regra principal: usar player_id do evento adversário (is_opponent_event=true).
+      // 2) Fallback: quando não há player_id, atribuir ao GR com mais minutos nesse jogo.
+      const gameEvents = playersData.gameEvents ?? [];
+      const playerById = new Map(rawPlayers.map((player) => [player.id, player]));
+
+      // game_id -> goalkeeper with most minutes (fallback only)
+      const fallbackGoalkeeperByGame = new Map<string, string>();
+      const finalizedRows = finalStats.filter((row) => row.is_finalized);
+      const rowsByGame = new Map<string, FinalStatRow[]>();
+      finalizedRows.forEach((row) => {
+        if (!row.game_id) return;
+        if (!rowsByGame.has(row.game_id)) rowsByGame.set(row.game_id, []);
+        rowsByGame.get(row.game_id)!.push(row);
+      });
+      rowsByGame.forEach((rows, gameId) => {
+        const bestGk = [...rows]
+          .filter((row) => {
+            const player = playerById.get(row.player_id);
+            return isGoalkeeper(player);
+          })
+          .sort((a, b) => (b.minutes_played ?? 0) - (a.minutes_played ?? 0))[0];
+        if (bestGk?.player_id) {
+          fallbackGoalkeeperByGame.set(gameId, bestGk.player_id);
+        }
+      });
+
+      const isConcededEvent = (event: GameEventRow) =>
+        event.is_opponent_event &&
+        (event.event_type === "goal" || event.event_type === "penalty_goal");
+
+      gameEvents.filter(isConcededEvent).forEach((event) => {
+        const directPlayerId =
+          typeof event.player_id === "string" && event.player_id.length > 0
+            ? event.player_id
+            : null;
+        const targetPlayerId =
+          directPlayerId ?? fallbackGoalkeeperByGame.get(event.game_id) ?? null;
+        if (!targetPlayerId) return;
+        const entry = gsMap.get(targetPlayerId);
+        if (!entry) return;
+        entry.gs += 1;
+      });
 
       setGameStats(Array.from(gsMap.values()));
     } finally {
@@ -384,6 +447,7 @@ export default function StatisticsPage() {
                   <tr className="text-slate-400 border-b border-slate-100">
                     <th className="text-left pb-2 font-medium text-sm">Jogador</th>
                     <th className="text-center pb-2 font-medium px-1.5" title="Golos">⚽</th>
+                    <th className="text-center pb-2 font-medium px-1.5" title="Golos Sofridos">GS</th>
                     <th className="text-center pb-2 font-medium px-1.5" title="Assistências">🅰️</th>
                     <th className="text-center pb-2 font-medium px-1.5 whitespace-nowrap" title="Minutos totais">Min</th>
                     <th className="text-center pb-2 font-medium px-1.5" title="Jogos como titular">T</th>
@@ -424,6 +488,15 @@ export default function StatisticsPage() {
                         </td>
                         <td className="py-2 text-center font-bold text-slate-900 px-1.5">
                           {s.golos || "—"}
+                        </td>
+                        <td className="py-2 text-center px-1.5">
+                          {isGoalkeeper(s.player) ? (
+                            <span className={s.gs > 0 ? "font-semibold text-rose-600" : "text-slate-400"}>
+                              {s.gs || "0"}
+                            </span>
+                          ) : (
+                            <span className="text-slate-300">—</span>
+                          )}
                         </td>
                         <td className="py-2 text-center text-slate-600 px-1.5">
                           {s.assistencias || "—"}

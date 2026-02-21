@@ -16,11 +16,14 @@ import {
   Dumbbell,
   Shield,
   Briefcase,
+  Play,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import RedeemInviteGate from "@/components/invite/RedeemInviteGate";
 import type { TrainingSession, Game } from "@/types/database";
+
+export const dynamic = "force-dynamic";
 
 function relativeDay(dateStr: string) {
   const d = parseISO(dateStr);
@@ -53,6 +56,9 @@ export default async function DashboardPage() {
   ]);
 
   let firstTeamId: string | null = managedAgeGroups?.[0]?.teams?.[0]?.id ?? null;
+  const managedTeamIds = (managedAgeGroups || [])
+    .flatMap((ageGroup) => (ageGroup.teams || []).map((team) => team?.id).filter(Boolean))
+    .filter((teamId): teamId is string => typeof teamId === "string");
   let activeAgeGroup: {
     id: string;
     club_name: string;
@@ -97,7 +103,19 @@ export default async function DashboardPage() {
     }
   }
 
-  const hasSetup = !!firstTeamId;
+  const { data: staffTeamRows } = await (admin ?? supabase)
+    .from("team_staff")
+    .select("team_id")
+    .eq("profile_id", user.id);
+  const staffTeamIds = (staffTeamRows || [])
+    .map((row) => row.team_id)
+    .filter((teamId): teamId is string => typeof teamId === "string");
+
+  const accessibleTeamIds = Array.from(
+    new Set([...(managedTeamIds || []), ...(staffTeamIds || []), ...(firstTeamId ? [firstTeamId] : [])]),
+  );
+
+  const hasSetup = accessibleTeamIds.length > 0;
 
   const now = new Date();
   const todayDate = format(now, "yyyy-MM-dd");
@@ -107,12 +125,12 @@ export default async function DashboardPage() {
   // Próximos treinos + jogos (7 dias) — em paralelo
   let upcomingTrainings: TrainingSession[] = [];
   let upcomingGames: Game[] = [];
-  if (firstTeamId) {
+  if (accessibleTeamIds.length > 0) {
     const [{ data: trainingsData }, { data: gamesData }] = await Promise.all([
       (admin ?? supabase)
         .from("training_sessions")
         .select("*")
-        .eq("team_id", firstTeamId)
+        .in("team_id", accessibleTeamIds)
         .gte("session_date", todayDate)
         .lte("session_date", in7days)
         .neq("status", "completed")
@@ -123,7 +141,7 @@ export default async function DashboardPage() {
       (admin ?? supabase)
         .from("games")
         .select("*")
-        .eq("team_id", firstTeamId)
+        .in("team_id", accessibleTeamIds)
         .gte("game_datetime", `${todayDate}T00:00:00`)
         .lte("game_datetime", `${in7days}T23:59:59`)
         .neq("status", "completed")
@@ -132,6 +150,94 @@ export default async function DashboardPage() {
     ]);
     upcomingTrainings = trainingsData || [];
     upcomingGames = gamesData || [];
+  }
+
+  // Jogo live ativo:
+  // Critério para evitar falsos positivos:
+  // - checkpoint em first_half/second_half
+  // - checkpoint atualizado nos últimos 8h
+  // - jogo da equipa atual e não completed
+  let activeLiveGame: {
+    id: string;
+    opponent_name: string | null;
+    game_datetime: string;
+    location: string | null;
+    phase: "first_half" | "second_half";
+    minute: number;
+  } | null = null;
+
+  if (accessibleTeamIds.length > 0) {
+    const activityCutoffIso = new Date(now.getTime() - 8 * 60 * 60 * 1000).toISOString();
+    const { data: checkpointRows, error: checkpointError } = await (admin ?? supabase)
+      .from("game_live_checkpoints")
+      .select("game_id, phase, base_seconds, running_since_ms, updated_at")
+      .in("phase", ["first_half", "second_half"])
+      .gte("updated_at", activityCutoffIso)
+      .order("updated_at", { ascending: false })
+      .limit(10);
+
+    if (!checkpointError && checkpointRows && checkpointRows.length > 0) {
+      const checkpointGameIds = checkpointRows.map((row) => row.game_id);
+      const { data: liveGames } = await (admin ?? supabase)
+        .from("games")
+        .select("id, team_id, opponent_name, game_datetime, location, status")
+        .in("id", checkpointGameIds)
+        .in("team_id", accessibleTeamIds)
+        .neq("status", "completed");
+
+      const liveGameById = new Map((liveGames || []).map((row) => [row.id, row]));
+      const activeCheckpoint = checkpointRows.find((row) => liveGameById.has(row.game_id));
+
+      if (activeCheckpoint) {
+        const gameRow = liveGameById.get(activeCheckpoint.game_id);
+        if (gameRow) {
+          const baseSeconds =
+            typeof activeCheckpoint.base_seconds === "number"
+              ? Math.max(0, Math.floor(activeCheckpoint.base_seconds))
+              : 0;
+          const runningSinceMs =
+            typeof activeCheckpoint.running_since_ms === "number"
+              ? activeCheckpoint.running_since_ms
+              : null;
+          const runningExtraSeconds = runningSinceMs
+            ? Math.max(0, Math.floor((now.getTime() - runningSinceMs) / 1000))
+            : 0;
+          const totalSeconds = baseSeconds + runningExtraSeconds;
+          activeLiveGame = {
+            id: gameRow.id,
+            opponent_name: gameRow.opponent_name ?? null,
+            game_datetime: gameRow.game_datetime,
+            location: gameRow.location ?? null,
+            phase: activeCheckpoint.phase as "first_half" | "second_half",
+            minute: Math.floor(totalSeconds / 60) + 1,
+          };
+        }
+      }
+    }
+
+    // Fallback: if checkpoint query doesn't produce a live game,
+    // still show games explicitly marked as "live".
+    if (!activeLiveGame) {
+      const { data: fallbackLiveGames } = await (admin ?? supabase)
+        .from("games")
+        .select("id, opponent_name, game_datetime, location, status, updated_at")
+        .in("team_id", accessibleTeamIds)
+        .eq("status", "live")
+        .order("updated_at", { ascending: false })
+        .limit(1);
+
+      const fallbackGame = fallbackLiveGames?.[0];
+      if (fallbackGame) {
+        activeLiveGame = {
+          id: fallbackGame.id,
+          opponent_name: fallbackGame.opponent_name ?? null,
+          game_datetime: fallbackGame.game_datetime,
+          location: fallbackGame.location ?? null,
+          phase: "first_half",
+          minute: 1,
+        };
+      }
+    }
   }
 
   // Jogos com convocatória já confirmada (para não mostrar alerta)
@@ -171,7 +277,7 @@ export default async function DashboardPage() {
     { href: "/settings", icon: Settings, label: "Configurações", color: "text-slate-600" },
   ];
 
-  const hasPending = upcomingTrainings.length > 0 || upcomingGames.length > 0;
+  const hasPending = !!activeLiveGame || upcomingTrainings.length > 0 || upcomingGames.length > 0;
 
   return (
     <>
@@ -228,6 +334,27 @@ export default async function DashboardPage() {
             <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide">
               Próximos eventos
             </h2>
+
+            {activeLiveGame && (
+              <Link href={`/games/${activeLiveGame.id}/live`}>
+                <div className="flex items-center gap-3 p-4 bg-rose-50 border-2 border-rose-300 rounded-xl hover:border-rose-400 transition-colors">
+                  <Play size={20} className="text-rose-500 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-rose-900 text-sm">
+                      Jogo a decorrer
+                    </p>
+                    <p className="text-rose-700 text-xs truncate">
+                      {activeLiveGame.opponent_name
+                        ? `vs ${activeLiveGame.opponent_name}`
+                        : "Jogo"}{" "}
+                      · {activeLiveGame.phase === "first_half" ? "1ª parte" : "2ª parte"} ·{" "}
+                      {activeLiveGame.minute}&apos;
+                    </p>
+                  </div>
+                  <span className="text-rose-600 text-xs font-medium">Continuar →</span>
+                </div>
+              </Link>
+            )}
 
             {/* Presenças de hoje — se houver treino hoje */}
             {todayTraining && !todayTrainingDone && (

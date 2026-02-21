@@ -2,10 +2,11 @@ export type UserRole = "coordinator" | "coach" | "player" | "parent";
 export type PlayerStatus = "active" | "injured" | "suspended" | "inactive";
 export type AttendanceStatus = "present" | "absent" | "injured";
 export type FootballFormat = "5" | "7" | "9" | "11";
-export type EventStatus = "scheduled" | "completed" | "cancelled";
+export type EventStatus = "scheduled" | "live" | "completed" | "cancelled";
 export type ConvocationStatus = "draft" | "confirmed" | "closed";
 export type GameEventType =
   | "goal"
+  | "penalty_goal"
   | "assist"
   | "own_goal"
   | "yellow_card"
@@ -219,6 +220,22 @@ export interface GameStatsLive {
   created_at: string;
 }
 
+export interface GameLiveCheckpoint {
+  game_id: string;
+  phase:
+    | "pre_match"
+    | "first_half"
+    | "halftime"
+    | "second_half"
+    | "review"
+    | "completed";
+  base_seconds: number;
+  running_since_ms?: number | null;
+  updated_at: string;
+  updated_by?: string | null;
+  created_at: string;
+}
+
 export interface GameFinalStats {
   id: string;
   game_id: string;
@@ -226,12 +243,15 @@ export interface GameFinalStats {
   lineup_type: LineupType;
   minutes_played?: number;
   goals?: number;
+  own_goals?: number;
   assists?: number;
   yellow_cards?: number;
   red_cards?: number;
   coach_rating?: number;
+  notes?: string;
   is_mvp?: boolean;
   is_finalized: boolean;
+  finalized_at?: string;
   created_at: string;
 }
 
