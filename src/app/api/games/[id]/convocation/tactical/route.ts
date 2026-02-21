@@ -34,12 +34,17 @@ export async function POST(request: Request, { params }: RouteContext) {
       .maybeSingle();
 
     if (!game) {
-      return NextResponse.json({ error: "Jogo não encontrado." }, { status: 404 });
+      return NextResponse.json(
+        { error: "Jogo não encontrado." },
+        { status: 404 },
+      );
     }
 
     let hasAccess = false;
-    let teamId: string | null = (game as unknown as { team_id?: string }).team_id ?? null;
-    const ageGroupId = (game as unknown as { age_group_id?: string }).age_group_id ?? null;
+    let teamId: string | null =
+      (game as unknown as { team_id?: string }).team_id ?? null;
+    const ageGroupId =
+      (game as unknown as { age_group_id?: string }).age_group_id ?? null;
 
     if (ageGroupId) {
       const { data: ag } = await admin
@@ -96,7 +101,9 @@ export async function POST(request: Request, { params }: RouteContext) {
   } catch (error) {
     console.error("Erro ao guardar sistema táctico:", error);
     const message =
-      error instanceof Error ? error.message : "Erro interno ao guardar sistema táctico.";
+      error instanceof Error
+        ? error.message
+        : "Erro interno ao guardar sistema táctico.";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

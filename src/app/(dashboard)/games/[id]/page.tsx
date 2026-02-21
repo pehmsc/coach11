@@ -37,7 +37,7 @@ interface PlayerWithStatus extends Player {
 const FORMATIONS_BY_FORMAT: Record<string, string[]> = {
   "5": ["1-2-2", "1-1-3", "1-3-1"],
   "7": ["1-2-3-1", "1-3-2-1", "1-2-2-2", "1-1-3-2", "1-2-1-3"],
-  "9": ["1-3-3-2", "1-4-3-1", "1-3-4-1", "1-2-3-2", "1-4-2-2"],
+  "9": ["1-3-3-2", "1-4-3-1", "1-3-4-1", "1-2-4-2", "1-2-5-1", "1-3-2-3"],
   "11": ["4-4-2", "4-3-3", "3-5-2", "4-2-3-1", "3-4-3", "4-5-1", "5-3-2"],
 };
 
@@ -103,20 +103,27 @@ export default function GameDetailPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [confirmingConvocation, setConfirmingConvocation] = useState(false);
-  const [convocationStatus, setConvocationStatus] = useState<"draft" | "confirmed" | "closed">(
-    "draft",
-  );
+  const [convocationStatus, setConvocationStatus] = useState<
+    "draft" | "confirmed" | "closed"
+  >("draft");
   const [now, setNow] = useState(() => new Date());
   const [game, setGame] = useState<Game | null>(null);
   const [players, setPlayers] = useState<PlayerWithStatus[]>([]);
   const [teamKits, setTeamKits] = useState<KitPieceRow[]>([]);
-  const [kitSelection, setKitSelection] = useState<KitSelection>(EMPTY_KIT_SELECTION);
-  const [savingKitField, setSavingKitField] = useState<keyof KitSelection | null>(null);
+  const [kitSelection, setKitSelection] =
+    useState<KitSelection>(EMPTY_KIT_SELECTION);
+  const [savingKitField, setSavingKitField] = useState<
+    keyof KitSelection | null
+  >(null);
   const [footballFormat, setFootballFormat] = useState<string | null>(null);
   const [tacticalSystem, setTacticalSystem] = useState<string | null>(null);
-  const [lineupStatuses, setLineupStatuses] = useState<Record<string, "on_field" | "substitute">>({});
+  const [lineupStatuses, setLineupStatuses] = useState<
+    Record<string, "on_field" | "substitute">
+  >({});
   const [savingTactical, setSavingTactical] = useState(false);
-  const [savingLineupPlayer, setSavingLineupPlayer] = useState<string | null>(null);
+  const [savingLineupPlayer, setSavingLineupPlayer] = useState<string | null>(
+    null,
+  );
   const [error, setError] = useState<string | null>(null);
 
   // Game edit state
@@ -141,7 +148,9 @@ export default function GameDetailPage() {
     setError(null);
 
     try {
-      const res = await fetch(`/api/games/${id}/convocation`, { cache: "no-store" });
+      const res = await fetch(`/api/games/${id}/convocation`, {
+        cache: "no-store",
+      });
       const payload = await res.json().catch(() => ({}));
 
       if (!res.ok || !payload?.game) {
@@ -165,21 +174,35 @@ export default function GameDetailPage() {
         setConvocationStatus("draft");
       }
 
-      const sortedPlayers = (Array.isArray(payload.players) ? [...payload.players] : []).sort(
+      const sortedPlayers = (
+        Array.isArray(payload.players) ? [...payload.players] : []
+      ).sort(
         (a: PlayerWithStatus, b: PlayerWithStatus) =>
-          a.first_name.localeCompare(b.first_name, "pt", { sensitivity: "base" }) ||
+          a.first_name.localeCompare(b.first_name, "pt", {
+            sensitivity: "base",
+          }) ||
           a.last_name.localeCompare(b.last_name, "pt", { sensitivity: "base" }),
       );
       setPlayers(sortedPlayers as PlayerWithStatus[]);
-      setTeamKits((Array.isArray(payload.kits) ? payload.kits : []) as KitPieceRow[]);
+      setTeamKits(
+        (Array.isArray(payload.kits) ? payload.kits : []) as KitPieceRow[],
+      );
       setKitSelection({
         ...EMPTY_KIT_SELECTION,
         ...(typeof payload.kitSelection === "object" && payload.kitSelection
           ? (payload.kitSelection as Partial<KitSelection>)
           : {}),
       });
-      setFootballFormat(typeof payload.footballFormat === "string" ? payload.footballFormat : null);
-      setTacticalSystem(typeof payload.tacticalSystem === "string" ? payload.tacticalSystem : null);
+      setFootballFormat(
+        typeof payload.footballFormat === "string"
+          ? payload.footballFormat
+          : null,
+      );
+      setTacticalSystem(
+        typeof payload.tacticalSystem === "string"
+          ? payload.tacticalSystem
+          : null,
+      );
       const rawLineup =
         typeof payload.lineupStatuses === "object" && payload.lineupStatuses
           ? (payload.lineupStatuses as Record<string, string>)
@@ -216,7 +239,10 @@ export default function GameDetailPage() {
       });
       if (!res.ok) {
         const payload = await res.json().catch(() => ({}));
-        setError((payload as { error?: string })?.error || "Erro ao guardar sistema táctico.");
+        setError(
+          (payload as { error?: string })?.error ||
+            "Erro ao guardar sistema táctico.",
+        );
       }
     } catch {
       setError("Erro de ligação ao guardar sistema táctico.");
@@ -233,7 +259,9 @@ export default function GameDetailPage() {
     // Guard: don't exceed the format's starter count
     if (newStatus === "on_field" && footballFormat) {
       const format = parseInt(footballFormat);
-      const currentStarters = Object.values(lineupStatuses).filter((s) => s === "on_field").length;
+      const currentStarters = Object.values(lineupStatuses).filter(
+        (s) => s === "on_field",
+      ).length;
       if (currentStarters >= format) {
         toast.error(`Futebol ${footballFormat} só tem ${format} titulares`);
         return;
@@ -256,7 +284,9 @@ export default function GameDetailPage() {
           ...prev,
           [playerId]: current ?? "substitute",
         }));
-        setError((payload as { error?: string })?.error || "Erro ao guardar lineup.");
+        setError(
+          (payload as { error?: string })?.error || "Erro ao guardar lineup.",
+        );
       }
     } catch {
       setLineupStatuses((prev) => ({
@@ -274,7 +304,9 @@ export default function GameDetailPage() {
     pieceType: (typeof UI_PIECE_TYPES)[number],
   ) {
     return teamKits.filter(
-      (piece) => samePlayerType(piece.player_type, playerType) && samePieceType(piece.piece_type, pieceType),
+      (piece) =>
+        samePlayerType(piece.player_type, playerType) &&
+        samePieceType(piece.piece_type, pieceType),
     );
   }
 
@@ -300,7 +332,9 @@ export default function GameDetailPage() {
 
       if (!res.ok) {
         setKitSelection(previousSelection);
-        setError(payload?.error || "Erro ao guardar equipamentos da convocatória.");
+        setError(
+          payload?.error || "Erro ao guardar equipamentos da convocatória.",
+        );
         return;
       }
 
@@ -343,9 +377,7 @@ export default function GameDetailPage() {
         const newIsConvocated = payload.isConvocated as boolean;
         setPlayers((prev) =>
           prev.map((p) =>
-            p.id === player.id
-              ? { ...p, isConvocated: newIsConvocated }
-              : p,
+            p.id === player.id ? { ...p, isConvocated: newIsConvocated } : p,
           ),
         );
         void autoAssignLineup(player.id, newIsConvocated);
@@ -397,9 +429,13 @@ export default function GameDetailPage() {
     const payload = await res.json().catch(() => ({}));
 
     if (!res.ok) {
-      setError((payload as { error?: string }).error || "Erro ao guardar jogo.");
+      setError(
+        (payload as { error?: string }).error || "Erro ao guardar jogo.",
+      );
     } else {
-      setGame((prev) => prev ? { ...prev, ...(payload as { game: Game }).game } : prev);
+      setGame((prev) =>
+        prev ? { ...prev, ...(payload as { game: Game }).game } : prev,
+      );
       setEditingGame(false);
     }
     setSavingGameEdit(false);
@@ -431,8 +467,11 @@ export default function GameDetailPage() {
     }
 
     const format = footballFormat ? parseInt(footballFormat) : 0;
-    const currentStarters = Object.values(lineupStatuses).filter((s) => s === "on_field").length;
-    const newStatus: "on_field" | "substitute" = currentStarters < format ? "on_field" : "substitute";
+    const currentStarters = Object.values(lineupStatuses).filter(
+      (s) => s === "on_field",
+    ).length;
+    const newStatus: "on_field" | "substitute" =
+      currentStarters < format ? "on_field" : "substitute";
 
     setLineupStatuses((prev) => ({ ...prev, [playerId]: newStatus }));
     await fetch(`/api/games/${id}/convocation/lineup`, {
@@ -458,7 +497,9 @@ export default function GameDetailPage() {
       const bGk = isGkPlayer(b);
       if (aGk && !bGk) return -1;
       if (!aGk && bGk) return 1;
-      return a.first_name.localeCompare(b.first_name, "pt", { sensitivity: "base" });
+      return a.first_name.localeCompare(b.first_name, "pt", {
+        sensitivity: "base",
+      });
     });
 
   const subs = convocatedPlayers.filter(
@@ -488,7 +529,12 @@ export default function GameDetailPage() {
       <div className="p-4 md:p-8 text-center py-16">
         <AlertCircle size={40} className="text-red-400 mx-auto mb-3" />
         <p className="text-slate-700 font-semibold">{error}</p>
-        <Button variant="outline" size="sm" className="mt-4" onClick={() => router.back()}>
+        <Button
+          variant="outline"
+          size="sm"
+          className="mt-4"
+          onClick={() => router.back()}
+        >
           Voltar
         </Button>
       </div>
@@ -498,7 +544,9 @@ export default function GameDetailPage() {
   if (!game) return null;
 
   const gameDate = game.game_datetime
-    ? format(parseISO(game.game_datetime), "EEEE, d 'de' MMMM · HH:mm", { locale: pt })
+    ? format(parseISO(game.game_datetime), "EEEE, d 'de' MMMM · HH:mm", {
+        locale: pt,
+      })
     : "—";
 
   const isCompetition = !!game.competition_id;
@@ -583,7 +631,9 @@ export default function GameDetailPage() {
             </div>
             <form onSubmit={handleSaveGameEdit} className="p-5 space-y-4">
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-slate-700">Jornada / Título</label>
+                <label className="text-sm font-medium text-slate-700">
+                  Jornada / Título
+                </label>
                 <input
                   type="text"
                   value={editTitle}
@@ -593,7 +643,9 @@ export default function GameDetailPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-slate-700">Adversário *</label>
+                <label className="text-sm font-medium text-slate-700">
+                  Adversário *
+                </label>
                 <input
                   type="text"
                   value={editOpponent}
@@ -604,7 +656,9 @@ export default function GameDetailPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-slate-700">Local</label>
+                <label className="text-sm font-medium text-slate-700">
+                  Local
+                </label>
                 <input
                   type="text"
                   value={editLocation}
@@ -613,16 +667,18 @@ export default function GameDetailPage() {
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
-              {error && (
-                <p className="text-sm text-red-600">{error}</p>
-              )}
+              {error && <p className="text-sm text-red-600">{error}</p>}
               <div className="flex gap-2 pt-1">
                 <button
                   type="submit"
                   disabled={savingGameEdit}
                   className="flex-1 bg-blue-600 text-white rounded-lg py-2 text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-1"
                 >
-                  {savingGameEdit ? <Loader2 size={15} className="animate-spin" /> : "Guardar"}
+                  {savingGameEdit ? (
+                    <Loader2 size={15} className="animate-spin" />
+                  ) : (
+                    "Guardar"
+                  )}
                 </button>
                 <button
                   type="button"
@@ -683,7 +739,11 @@ export default function GameDetailPage() {
         </div>
 
         {[
-          { title: "Jogadores de campo", playerType: "field" as const, prefix: "fp" as const },
+          {
+            title: "Jogadores de campo",
+            playerType: "field" as const,
+            prefix: "fp" as const,
+          },
           {
             title: "Guarda-redes",
             playerType: "goalkeeper" as const,
@@ -696,7 +756,8 @@ export default function GameDetailPage() {
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               {UI_PIECE_TYPES.map((pieceType) => {
-                const field = `${section.prefix}_${pieceType === "shirt" ? "jersey" : pieceType}_kit_id` as keyof KitSelection;
+                const field =
+                  `${section.prefix}_${pieceType === "shirt" ? "jersey" : pieceType}_kit_id` as keyof KitSelection;
                 const options = getKitOptions(section.playerType, pieceType);
                 const selectedValue = kitSelection[field];
                 const hasSelectedOption = !selectedValue
@@ -705,10 +766,14 @@ export default function GameDetailPage() {
 
                 return (
                   <div key={pieceType} className="space-y-1">
-                    <label className="text-xs text-slate-500">{PIECE_LABEL[pieceType]}</label>
+                    <label className="text-xs text-slate-500">
+                      {PIECE_LABEL[pieceType]}
+                    </label>
                     <Select
                       value={selectedValue ?? "__none__"}
-                      onValueChange={(value) => void handleKitChange(field, value)}
+                      onValueChange={(value) =>
+                        void handleKitChange(field, value)
+                      }
                       disabled={savingKitField === field}
                     >
                       <SelectTrigger className="h-9">
@@ -717,11 +782,16 @@ export default function GameDetailPage() {
                       <SelectContent>
                         <SelectItem value="__none__">Sem seleção</SelectItem>
                         {!hasSelectedOption && selectedValue && (
-                          <SelectItem value={selectedValue}>Seleção atual (indisponível)</SelectItem>
+                          <SelectItem value={selectedValue}>
+                            Seleção atual (indisponível)
+                          </SelectItem>
                         )}
                         {options.map((piece) => {
-                          const pieceColor = (piece.color_hex || piece.color_name || "Sem cor")
-                            .toUpperCase();
+                          const pieceColor = (
+                            piece.color_hex ||
+                            piece.color_name ||
+                            "Sem cor"
+                          ).toUpperCase();
                           return (
                             <SelectItem key={piece.id} value={piece.id}>
                               Kit {piece.kit_number} · {pieceColor}
@@ -775,7 +845,9 @@ export default function GameDetailPage() {
       {players.length === 0 ? (
         <div className="text-center py-10">
           <Users size={36} className="text-slate-200 mx-auto mb-2" />
-          <p className="text-slate-400 text-sm">Sem jogadores ativos no escalão.</p>
+          <p className="text-slate-400 text-sm">
+            Sem jogadores ativos no escalão.
+          </p>
         </div>
       ) : (
         <>
@@ -783,7 +855,8 @@ export default function GameDetailPage() {
           {starters.length > 0 && (
             <div className="mb-1">
               <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide px-1 mb-2">
-                Titulares · {starters.length}{footballFormat ? `/${footballFormat}` : ""}
+                Titulares · {starters.length}
+                {footballFormat ? `/${footballFormat}` : ""}
               </p>
               {starters.map((player) => (
                 <ConvocatedRow
@@ -805,7 +878,9 @@ export default function GameDetailPage() {
           {showGkWarning && (
             <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
               <AlertCircle size={14} className="text-amber-600 flex-shrink-0" />
-              <p className="text-xs text-amber-700 font-medium">Nenhum GR no onze inicial</p>
+              <p className="text-xs text-amber-700 font-medium">
+                Nenhum GR no onze inicial
+              </p>
             </div>
           )}
 
@@ -832,28 +907,36 @@ export default function GameDetailPage() {
           )}
 
           {/* Sistema Táctico (only when there are starters) */}
-          {starters.length > 0 && footballFormat && (FORMATIONS_BY_FORMAT[footballFormat] ?? []).length > 0 && (
-            <div className="mt-3 pt-3 border-t border-slate-100">
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
-                Sistema Táctico · Futebol {footballFormat}
-              </p>
-              <Select
-                value={tacticalSystem ?? "__none__"}
-                onValueChange={(v) => void handleTacticalChange(v === "__none__" ? "" : v)}
-                disabled={savingTactical || game.status === "completed"}
-              >
-                <SelectTrigger className="h-9">
-                  <SelectValue placeholder="Seleciona a formação" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">Sem formação definida</SelectItem>
-                  {(FORMATIONS_BY_FORMAT[footballFormat] ?? []).map((f) => (
-                    <SelectItem key={f} value={f}>{f}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
+          {starters.length > 0 &&
+            footballFormat &&
+            (FORMATIONS_BY_FORMAT[footballFormat] ?? []).length > 0 && (
+              <div className="mt-3 pt-3 border-t border-slate-100">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                  Sistema Táctico · Futebol {footballFormat}
+                </p>
+                <Select
+                  value={tacticalSystem ?? "__none__"}
+                  onValueChange={(v) =>
+                    void handleTacticalChange(v === "__none__" ? "" : v)
+                  }
+                  disabled={savingTactical || game.status === "completed"}
+                >
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder="Seleciona a formação" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">
+                      Sem formação definida
+                    </SelectItem>
+                    {(FORMATIONS_BY_FORMAT[footballFormat] ?? []).map((f) => (
+                      <SelectItem key={f} value={f}>
+                        {f}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
           {/* Disponíveis (not yet convocated) */}
           {notConvocated.length > 0 && (
@@ -865,7 +948,11 @@ export default function GameDetailPage() {
                 <button
                   key={player.id}
                   onClick={() => void togglePlayer(player)}
-                  disabled={saving === player.id || player.isBlocked || game.status === "completed"}
+                  disabled={
+                    saving === player.id ||
+                    player.isBlocked ||
+                    game.status === "completed"
+                  }
                   className={`w-full flex items-center gap-3 p-3 rounded-xl mb-1.5 text-left border-2 transition-colors ${
                     player.isBlocked
                       ? "border-slate-100 bg-slate-50 opacity-50 cursor-not-allowed"
@@ -876,16 +963,25 @@ export default function GameDetailPage() {
                     {player.jersey_number || "—"}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm text-slate-600 truncate">{player.first_name} {player.last_name}</p>
+                    <p className="text-sm text-slate-600 truncate">
+                      {player.first_name} {player.last_name}
+                    </p>
                     {player.preferred_position && (
-                      <p className="text-xs text-slate-400">{player.preferred_position}</p>
+                      <p className="text-xs text-slate-400">
+                        {player.preferred_position}
+                      </p>
                     )}
                     {player.isBlocked && (
-                      <p className="text-xs text-orange-500">Jogo de competição no mesmo dia</p>
+                      <p className="text-xs text-orange-500">
+                        Jogo de competição no mesmo dia
+                      </p>
                     )}
                   </div>
                   {saving === player.id ? (
-                    <Loader2 size={16} className="text-slate-400 animate-spin flex-shrink-0" />
+                    <Loader2
+                      size={16}
+                      className="text-slate-400 animate-spin flex-shrink-0"
+                    />
                   ) : (
                     <div className="w-6 h-6 rounded-full border-2 border-slate-200 flex-shrink-0" />
                   )}
@@ -896,7 +992,8 @@ export default function GameDetailPage() {
 
           {isCompetition && (
             <p className="text-xs text-slate-400 text-center mt-4">
-              Jogadores com jogo de competição no mesmo dia não podem ser convocados.
+              Jogadores com jogo de competição no mesmo dia não podem ser
+              convocados.
             </p>
           )}
         </>
@@ -904,7 +1001,11 @@ export default function GameDetailPage() {
 
       <Button
         onClick={handleConfirmConvocation}
-        disabled={confirmingConvocation || convocatedCount === 0 || convocationStatus === "closed"}
+        disabled={
+          confirmingConvocation ||
+          convocatedCount === 0 ||
+          convocationStatus === "closed"
+        }
         className="w-full mt-5 bg-slate-900 hover:bg-slate-800"
       >
         {confirmingConvocation ? (
@@ -957,7 +1058,9 @@ function ConvocatedRow({
         {player.jersey_number || "—"}
       </div>
       <div className="flex-1 min-w-0">
-        <p className={`font-medium text-sm truncate ${isStarter ? "text-blue-900" : "text-slate-700"}`}>
+        <p
+          className={`font-medium text-sm truncate ${isStarter ? "text-blue-900" : "text-slate-700"}`}
+        >
           {player.first_name} {player.last_name}
         </p>
         {player.preferred_position && (
@@ -988,7 +1091,10 @@ function ConvocatedRow({
         {savingToggle ? (
           <Loader2 size={14} className="text-slate-300 animate-spin" />
         ) : (
-          <X size={14} className="text-slate-200 group-hover:text-red-400 transition-colors" />
+          <X
+            size={14}
+            className="text-slate-200 group-hover:text-red-400 transition-colors"
+          />
         )}
       </button>
     </div>
