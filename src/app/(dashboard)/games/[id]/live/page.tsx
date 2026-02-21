@@ -157,7 +157,6 @@ export default function LiveGamePage() {
   const [game, setGame] = useState<Game | null>(null);
   const [convocatedPlayers, setConvocatedPlayers] = useState<LivePlayer[]>([]);
   const [events, setEvents] = useState<GameEvent[]>([]);
-  const [minute, setMinute] = useState(0);
   const [clockSeconds, setClockSeconds] = useState(0);
   const [phase, setPhase] = useState<MatchPhase>("pre_match");
   const [clockRunning, setClockRunning] = useState(false);
@@ -182,6 +181,8 @@ export default function LiveGamePage() {
   // Review phase
   const [playerRatings, setPlayerRatings] = useState<Record<string, number>>({});
   const [mvpPlayerId, setMvpPlayerId] = useState<string | null>(null);
+  const elapsedMinutes = Math.floor(clockSeconds / 60);
+  const currentMinute = elapsedMinutes + 1; // 1-based minute for UI and game_events
 
   const loadData = useCallback(async () => {
     const { data: gameData } = await supabase
@@ -204,63 +205,101 @@ export default function LiveGamePage() {
       setClockRunning(false);
     }
 
-    // Fetch convocated players
-    const { data: convRows } = await supabase
-      .from("convocations")
-      .select("id, created_at")
-      .eq("game_id", id)
-      .order("created_at", { ascending: false })
-      .order("id", { ascending: false });
+    // Fetch convocated players + lineup via server API (bypasses client-side RLS limitations)
+    let enriched: LivePlayer[] = [];
+    const convRes = await fetch(`/api/games/${id}/convocation`, { cache: "no-store" });
+    const convPayload = await convRes.json().catch(() => ({}));
 
-    let convPlayers: Player[] = [];
-    const latestConvocationId = convRows?.[0]?.id ?? null;
-    if (latestConvocationId) {
-      const { data: cp } = await supabase
-        .from("convocation_players")
-        .select("player_id, players(*)")
-        .eq("convocation_id", latestConvocationId);
+    if (convRes.ok && Array.isArray(convPayload?.players)) {
+      const rawPlayers = convPayload.players as Array<Player & { isConvocated?: boolean }>;
+      const convPlayers = rawPlayers
+        .filter((player) => player?.isConvocated === true)
+        .sort(
+          (a, b) =>
+            a.first_name.localeCompare(b.first_name, "pt", { sensitivity: "base" }) ||
+            a.last_name.localeCompare(b.last_name, "pt", { sensitivity: "base" }),
+        );
 
-      const byPlayerId = new Map<string, Player>();
-      (cp || []).forEach((row) => {
-        const player = row.players as unknown as Player;
-        if (!player?.id) return;
-        byPlayerId.set(player.id, player);
-      });
+      const rawLineup =
+        typeof convPayload?.lineupStatuses === "object" && convPayload.lineupStatuses
+          ? (convPayload.lineupStatuses as Record<string, string>)
+          : {};
 
-      convPlayers = Array.from(byPlayerId.values()).sort(
-        (a, b) =>
-          a.first_name.localeCompare(b.first_name, "pt", { sensitivity: "base" }) ||
-          a.last_name.localeCompare(b.last_name, "pt", { sensitivity: "base" }),
+      const onFieldIds = new Set<string>();
+      const benchIds = new Set<string>();
+
+      for (const [playerId, status] of Object.entries(rawLineup)) {
+        const normalized = normalizeLiveStatus(status);
+        if (normalized === "on_field") onFieldIds.add(playerId);
+        if (normalized === "substitute" || normalized === "substituted") {
+          benchIds.add(playerId);
+        }
+      }
+
+      enriched = convPlayers.map((player) => ({
+        ...player,
+        isOnField: onFieldIds.has(player.id),
+        isInitialBench: benchIds.has(player.id),
+      }));
+    } else {
+      // Fallback: direct queries (in case API returns error)
+      const { data: convRows } = await supabase
+        .from("convocations")
+        .select("id, created_at")
+        .eq("game_id", id)
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false });
+
+      let convPlayers: Player[] = [];
+      const latestConvocationId = convRows?.[0]?.id ?? null;
+      if (latestConvocationId) {
+        const { data: cp } = await supabase
+          .from("convocation_players")
+          .select("player_id, players(*)")
+          .eq("convocation_id", latestConvocationId);
+
+        const byPlayerId = new Map<string, Player>();
+        (cp || []).forEach((row) => {
+          const player = row.players as unknown as Player;
+          if (!player?.id) return;
+          byPlayerId.set(player.id, player);
+        });
+
+        convPlayers = Array.from(byPlayerId.values()).sort(
+          (a, b) =>
+            a.first_name.localeCompare(b.first_name, "pt", { sensitivity: "base" }) ||
+            a.last_name.localeCompare(b.last_name, "pt", { sensitivity: "base" }),
+        );
+      }
+
+      const { data: liveStats } = await supabase
+        .from("game_stats_live")
+        .select("*")
+        .eq("game_id", id);
+
+      const normalizedStats = (liveStats || []).map((row) => ({
+        player_id: row.player_id,
+        status: normalizeLiveStatus(row.status),
+      }));
+
+      const onFieldIds = new Set(
+        normalizedStats
+          .filter((s) => s.status === "on_field")
+          .map((s) => s.player_id),
       );
+      const benchIds = new Set(
+        normalizedStats
+          .filter((s) => s.status === "substitute" || s.status === "substituted")
+          .map((s) => s.player_id),
+      );
+
+      enriched = convPlayers.map((player) => ({
+        ...player,
+        isOnField: onFieldIds.has(player.id),
+        isInitialBench: benchIds.has(player.id),
+      }));
     }
 
-    // Fetch live stats to restore field status
-    const { data: liveStats } = await supabase
-      .from("game_stats_live")
-      .select("*")
-      .eq("game_id", id);
-
-    const normalizedStats = (liveStats || []).map((row) => ({
-      player_id: row.player_id,
-      status: normalizeLiveStatus(row.status),
-    }));
-
-    const onFieldIds = new Set(
-      normalizedStats
-        .filter((s) => s.status === "on_field")
-        .map((s) => s.player_id),
-    );
-    const benchIds = new Set(
-      normalizedStats
-        .filter((s) => s.status === "substitute" || s.status === "substituted")
-        .map((s) => s.player_id),
-    );
-
-    const enriched: LivePlayer[] = convPlayers.map((p) => ({
-      ...p,
-      isOnField: onFieldIds.has(p.id),
-      isInitialBench: benchIds.has(p.id),
-    }));
     setConvocatedPlayers(enriched);
 
     // Fetch events
@@ -273,10 +312,9 @@ export default function LiveGamePage() {
     const orderedEvents = evts || [];
     setEvents(orderedEvents);
     const lastMinute = orderedEvents.length
-      ? Math.max(...orderedEvents.map((e) => e.minute || 0))
-      : 0;
-    setMinute(lastMinute);
-    setClockSeconds(lastMinute * 60);
+      ? Math.max(...orderedEvents.map((e) => Math.max(1, e.minute || 1)))
+      : 1;
+    setClockSeconds((lastMinute - 1) * 60);
     setLoading(false);
   }, [id, supabase]);
 
@@ -333,11 +371,7 @@ export default function LiveGamePage() {
   useEffect(() => {
     if (!clockRunning || phase === "completed") return;
     const interval = setInterval(() => {
-      setClockSeconds((prev) => {
-        const next = prev + 1;
-        if (next % 60 === 0) setMinute((m) => m + 1);
-        return next;
-      });
+      setClockSeconds((prev) => prev + 1);
     }, 1000);
     return () => clearInterval(interval);
   }, [clockRunning, phase]);
@@ -387,8 +421,8 @@ export default function LiveGamePage() {
   }, [convocatedPlayers]);
 
   const computedMinutes = useMemo(
-    () => computeMinutesPlayed(convocatedPlayers, events, starterIds, minute),
-    [convocatedPlayers, events, starterIds, minute],
+    () => computeMinutesPlayed(convocatedPlayers, events, starterIds, elapsedMinutes),
+    [convocatedPlayers, events, starterIds, elapsedMinutes],
   );
 
   const playersWhoPlayed = useMemo(
@@ -436,7 +470,7 @@ export default function LiveGamePage() {
         event_type: goalEventType,
         player_id: selectedScorerID || null,
         related_player_id: selectedAssistID || null,
-        minute,
+        minute: currentMinute,
         is_opponent_event: modalIsOpponent,
       })
       .select()
@@ -446,7 +480,7 @@ export default function LiveGamePage() {
       toast.error("Erro ao registar golo.");
     } else if (data) {
       setEvents((prev) => [...prev, data].sort((a, b) => a.minute - b.minute));
-      toast.success(`${EVENT_LABELS[goalEventType] ?? goalEventType} — min. ${minute}`);
+      toast.success(`${EVENT_LABELS[goalEventType] ?? goalEventType} — min. ${currentMinute}`);
     }
     setSavingEvent(false);
     closeModal();
@@ -461,7 +495,7 @@ export default function LiveGamePage() {
         game_id: id,
         event_type: eventType,
         player_id: selectedScorerID || null,
-        minute,
+        minute: currentMinute,
         is_opponent_event: modalIsOpponent,
       })
       .select()
@@ -471,7 +505,7 @@ export default function LiveGamePage() {
       toast.error("Erro ao registar cartão.");
     } else if (data) {
       setEvents((prev) => [...prev, data].sort((a, b) => a.minute - b.minute));
-      toast.success(`${EVENT_LABELS[eventType]} — min. ${minute}`);
+      toast.success(`${EVENT_LABELS[eventType]} — min. ${currentMinute}`);
     }
     setSavingEvent(false);
     closeModal();
@@ -489,7 +523,7 @@ export default function LiveGamePage() {
           event_type: "substitution_out",
           player_id: selectedSubOutId,
           related_player_id: selectedSubInId,
-          minute,
+          minute: currentMinute,
           is_opponent_event: false,
         },
         {
@@ -497,7 +531,7 @@ export default function LiveGamePage() {
           event_type: "substitution_in",
           player_id: selectedSubInId,
           related_player_id: selectedSubOutId,
-          minute,
+          minute: currentMinute,
           is_opponent_event: false,
         },
       ])
@@ -514,10 +548,10 @@ export default function LiveGamePage() {
       // Update live stats (current status only — minutes calc uses events)
       await saveLivePlayerStatus(selectedSubOutId, "substituted", {
         startMinute: null,
-        endMinute: minute,
+        endMinute: currentMinute,
       });
       await saveLivePlayerStatus(selectedSubInId, "on_field", {
-        startMinute: minute,
+        startMinute: currentMinute,
         endMinute: null,
       });
     } catch {
@@ -538,7 +572,7 @@ export default function LiveGamePage() {
       setEvents((prev) => [...prev, ...(data as GameEvent[])].sort((a, b) => a.minute - b.minute));
     }
 
-    toast.success(`Substituição — min. ${minute}`);
+    toast.success(`Substituição — min. ${currentMinute}`);
     setSavingEvent(false);
     closeModal();
   }
@@ -549,14 +583,17 @@ export default function LiveGamePage() {
     setSavingLineup(playerId);
 
     const newIsOnField = !player.isOnField;
-    const newStatus: LiveStatus = newIsOnField ? "on_field" : "substitute";
+    const newStatus = newIsOnField ? "on_field" : "substitute";
 
     try {
-      await saveLivePlayerStatus(playerId, newStatus, {
-        startMinute: newIsOnField ? 0 : null,
-        endMinute: null,
+      const res = await fetch(`/api/games/${id}/convocation/lineup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ playerId, lineupStatus: newStatus }),
       });
-
+      if (!res.ok) {
+        throw new Error("lineup_save_failed");
+      }
       setConvocatedPlayers((prev) =>
         prev.map((p) =>
           p.id === playerId
@@ -701,7 +738,7 @@ export default function LiveGamePage() {
 
     setFinalizing(true);
     try {
-      await persistFinalStats(minute);
+      await persistFinalStats(elapsedMinutes);
 
       const { error: updateErr } = await supabase
         .from("games")
@@ -829,7 +866,7 @@ export default function LiveGamePage() {
           {score.home} – {score.away}
         </div>
         <p className="text-slate-300 text-sm mt-2">
-          Relógio: {formatClock(clockSeconds)} · Minuto {minute}&apos;
+          Relógio: {formatClock(clockSeconds)} · Minuto {currentMinute}&apos;
         </p>
         {isFinalized && (
           <span className="mt-2 inline-block text-xs bg-emerald-500 text-white px-3 py-0.5 rounded-full">
@@ -908,16 +945,16 @@ export default function LiveGamePage() {
           <div className="flex items-center gap-3">
             <span className="text-sm font-medium text-slate-600 flex-1">Minuto de jogo</span>
             <button
-              onClick={() => setMinute((m) => Math.max(0, m - 1))}
+              onClick={() => setClockSeconds((prev) => Math.max(0, prev - 60))}
               className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center"
             >
               <Minus size={14} />
             </button>
             <span className="w-10 text-center font-bold text-lg text-slate-900">
-              {minute}&apos;
+              {currentMinute}&apos;
             </span>
             <button
-              onClick={() => setMinute((m) => m + 1)}
+              onClick={() => setClockSeconds((prev) => prev + 60)}
               className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center"
             >
               <Plus size={14} />
