@@ -638,7 +638,7 @@ export default function CalendarPage() {
               </button>
             </div>
 
-            <div className="p-5 space-y-5">
+            <div className="p-5 pb-10 space-y-5">
               {/* Erro visível */}
               {opError && (
                 <div className="flex items-start gap-2 bg-red-50 border border-red-200 text-red-700 text-sm p-3 rounded-xl">

@@ -102,6 +102,7 @@ const EMPTY_STAFF_FORM = {
 export default function TeamSetupPage() {
   const supabase = useMemo(() => createClient(), []);
   const logoRef = useRef<HTMLInputElement>(null);
+  const kitSaveTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
 
   // Escalão
   const [loading, setLoading] = useState(true);
