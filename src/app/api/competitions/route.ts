@@ -1,162 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { resolveUserTeamContext } from "@/lib/auth/team-context";
 import { NextResponse } from "next/server";
-
-type AgeGroupContext = {
-  id: string;
-  club_name: string;
-  name: string;
-  football_format: string | null;
-};
-
-async function pickPreferredTeamId(
-  admin: ReturnType<typeof createAdminClient>,
-  teamIds: string[],
-) {
-  if (teamIds.length === 0) return null;
-
-  const { data: latestCompetition } = await admin
-    .from("competitions")
-    .select("team_id")
-    .in("team_id", teamIds)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (latestCompetition?.team_id && teamIds.includes(latestCompetition.team_id)) {
-    return latestCompetition.team_id;
-  }
-
-  return teamIds[0] ?? null;
-}
-
-async function resolveTeamContext(
-  admin: ReturnType<typeof createAdminClient>,
-  userId: string,
-) {
-  const { data: managedAgeGroups, error: managedAgeGroupError } = await admin
-    .from("age_groups")
-    .select("id, club_name, name, football_format")
-    .eq("coordinator_id", userId)
-    .order("created_at", { ascending: true })
-    .limit(20);
-
-  if (managedAgeGroupError) {
-    return {
-      ok: false as const,
-      response: NextResponse.json({ error: "Erro ao validar contexto do utilizador." }, { status: 500 }),
-    };
-  }
-
-  if ((managedAgeGroups || []).length > 0) {
-    const ageGroups = (managedAgeGroups || []) as AgeGroupContext[];
-    const ageGroupIds = ageGroups.map((row) => row.id);
-
-    const { data: teams, error: teamError } = await admin
-      .from("teams")
-      .select("id, age_group_id")
-      .in("age_group_id", ageGroupIds)
-      .order("created_at", { ascending: true })
-      .limit(100);
-
-    if (teamError) {
-      return {
-        ok: false as const,
-        response: NextResponse.json({ error: "Erro ao carregar equipa do coordenador." }, { status: 500 }),
-      };
-    }
-
-    const teamRows = teams || [];
-    const teamIds = teamRows.map((row) => row.id).filter((value): value is string => typeof value === "string");
-    const preferredTeamId = await pickPreferredTeamId(admin, teamIds);
-    const preferredTeam = teamRows.find((row) => row.id === preferredTeamId) || teamRows[0] || null;
-    const preferredAgeGroup =
-      ageGroups.find((row) => row.id === preferredTeam?.age_group_id) ||
-      ageGroups[0] ||
-      null;
-
-    return {
-      ok: true as const,
-      teamId: preferredTeam?.id ?? null,
-      ageGroup: preferredAgeGroup,
-      isCoordinator: true,
-    };
-  }
-
-  const { data: staffLinks, error: staffLinkError } = await admin
-    .from("team_staff")
-    .select("team_id")
-    .eq("profile_id", userId)
-    .order("created_at", { ascending: true })
-    .limit(20);
-
-  if (staffLinkError) {
-    return {
-      ok: false as const,
-      response: NextResponse.json({ error: "Erro ao validar equipa técnica." }, { status: 500 }),
-    };
-  }
-
-  const staffTeamIds = (staffLinks || [])
-    .map((row) => row.team_id)
-    .filter((value): value is string => typeof value === "string");
-
-  if (staffTeamIds.length === 0) {
-    return {
-      ok: true as const,
-      teamId: null,
-      ageGroup: null,
-      isCoordinator: false,
-    };
-  }
-
-  const preferredStaffTeamId = await pickPreferredTeamId(admin, staffTeamIds);
-  if (!preferredStaffTeamId) {
-    return {
-      ok: true as const,
-      teamId: null,
-      ageGroup: null,
-      isCoordinator: false,
-    };
-  }
-
-  const { data: staffTeam, error: staffTeamError } = await admin
-    .from("teams")
-    .select("age_group_id")
-    .eq("id", preferredStaffTeamId)
-    .maybeSingle();
-
-  if (staffTeamError) {
-    return {
-      ok: false as const,
-      response: NextResponse.json({ error: "Erro ao carregar equipa." }, { status: 500 }),
-    };
-  }
-
-  let ageGroup: AgeGroupContext | null = null;
-  if (staffTeam?.age_group_id) {
-    const { data: staffAgeGroup, error: staffAgeGroupError } = await admin
-      .from("age_groups")
-      .select("id, club_name, name, football_format")
-      .eq("id", staffTeam.age_group_id)
-      .maybeSingle();
-
-    if (staffAgeGroupError) {
-      return {
-        ok: false as const,
-        response: NextResponse.json({ error: "Erro ao carregar escalão da equipa." }, { status: 500 }),
-      };
-    }
-    if (staffAgeGroup) ageGroup = staffAgeGroup as AgeGroupContext;
-  }
-
-  return {
-    ok: true as const,
-    teamId: preferredStaffTeamId,
-    ageGroup,
-    isCoordinator: false,
-  };
-}
 
 export async function GET() {
   try {
@@ -170,16 +15,16 @@ export async function GET() {
     }
 
     const admin = createAdminClient();
-    const context = await resolveTeamContext(admin, user.id);
-    if (!context.ok) return context.response;
+    const context = await resolveUserTeamContext(admin, user.id);
+    const isCoordinator = context.source === "coordinator";
 
-    if (!context.teamId) {
+    if (!context.ageGroup || !context.teamId) {
       return NextResponse.json(
         {
           success: true,
-          teamId: null,
+          teamId: context.teamId,
           ageGroup: context.ageGroup,
-          isCoordinator: context.isCoordinator,
+          isCoordinator,
           competitions: [],
         },
         {
@@ -192,7 +37,9 @@ export async function GET() {
 
     const competitionsRes = await admin
       .from("competitions")
-      .select("id, team_id, name, season, phase, num_opponents, total_rounds, has_two_legs, created_at")
+      .select(
+        "id, team_id, name, season, phase, num_opponents, total_rounds, has_two_legs, created_at",
+      )
       .eq("team_id", context.teamId)
       .order("created_at", { ascending: false });
 
@@ -244,7 +91,7 @@ export async function GET() {
         success: true,
         teamId: context.teamId,
         ageGroup: context.ageGroup,
-        isCoordinator: context.isCoordinator,
+        isCoordinator,
         competitions: enrichedCompetitions,
       },
       {

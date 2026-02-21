@@ -1,11 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { resolveUserTeamContext } from "@/lib/auth/team-context";
 import { NextResponse } from "next/server";
-
-type TeamRow = {
-  id: string;
-  age_group_id: string | null;
-};
 
 export async function GET(request: Request) {
   try {
@@ -28,45 +24,9 @@ export async function GET(request: Request) {
     }
 
     const admin = createAdminClient();
+    const context = await resolveUserTeamContext(admin, user.id);
 
-    const [managedAgeGroupsRes, staffLinksRes] = await Promise.all([
-      admin
-        .from("age_groups")
-        .select("id, club_name, name")
-        .eq("coordinator_id", user.id),
-      admin
-        .from("team_staff")
-        .select("team_id")
-        .eq("profile_id", user.id),
-    ]);
-
-    const managedAgeGroups = managedAgeGroupsRes.data || [];
-    const managedAgeGroupIds = managedAgeGroups
-      .map((row) => row.id)
-      .filter((value): value is string => typeof value === "string");
-
-    const staffTeamIds = (staffLinksRes.data || [])
-      .map((row) => row.team_id)
-      .filter((value): value is string => typeof value === "string");
-
-    let staffTeams: TeamRow[] = [];
-    if (staffTeamIds.length > 0) {
-      const { data } = await admin
-        .from("teams")
-        .select("id, age_group_id")
-        .in("id", staffTeamIds);
-      staffTeams = (data || []) as TeamRow[];
-    }
-
-    const staffAgeGroupIds = staffTeams
-      .map((row) => row.age_group_id)
-      .filter((value): value is string => typeof value === "string");
-
-    const accessibleAgeGroupIds = Array.from(
-      new Set([...(managedAgeGroupIds || []), ...(staffAgeGroupIds || [])]),
-    );
-
-    if (accessibleAgeGroupIds.length === 0) {
+    if (context.accessibleAgeGroupIds.length === 0) {
       return NextResponse.json(
         {
           success: true,
@@ -83,21 +43,22 @@ export async function GET(request: Request) {
     }
 
     const targetAgeGroupId =
-      requestedAgeGroupId && accessibleAgeGroupIds.includes(requestedAgeGroupId)
+      requestedAgeGroupId && context.accessibleAgeGroupIds.includes(requestedAgeGroupId)
         ? requestedAgeGroupId
-        : accessibleAgeGroupIds[0];
+        : context.ageGroup?.id || context.accessibleAgeGroupIds[0];
 
     let ageGroupName = "";
-    const managedMatch = managedAgeGroups.find((row) => row.id === targetAgeGroupId);
-    if (managedMatch) {
-      ageGroupName = `${managedMatch.club_name} · ${managedMatch.name}`;
+    if (targetAgeGroupId === context.ageGroup?.id && context.ageGroup) {
+      ageGroupName = `${context.ageGroup.club_name} · ${context.ageGroup.name}`;
     } else {
       const { data: ageGroup } = await admin
         .from("age_groups")
         .select("club_name, name")
         .eq("id", targetAgeGroupId)
         .maybeSingle();
-      if (ageGroup) ageGroupName = `${ageGroup.club_name} · ${ageGroup.name}`;
+      if (ageGroup) {
+        ageGroupName = `${ageGroup.club_name} · ${ageGroup.name}`;
+      }
     }
 
     const [{ data: sessions, error: sessionsError }, { data: games, error: gamesError }] =
@@ -128,8 +89,14 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Erro ao carregar jogos do calendário." }, { status: 500 });
     }
 
+    const currentTeamAgeGroupId =
+      context.teamId && context.accessibleTeams.find((row) => row.id === context.teamId)
+        ? context.accessibleTeams.find((row) => row.id === context.teamId)?.age_group_id
+        : null;
+    const fallbackTeamId =
+      context.accessibleTeams.find((row) => row.age_group_id === targetAgeGroupId)?.id ?? null;
     const targetTeamId =
-      staffTeams.find((row) => row.age_group_id === targetAgeGroupId)?.id ?? null;
+      currentTeamAgeGroupId === targetAgeGroupId ? context.teamId : fallbackTeamId;
 
     return NextResponse.json(
       {
