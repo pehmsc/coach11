@@ -123,6 +123,7 @@ export default function TeamSetupPage() {
 
   // Kits
   const [kitPieces, setKitPieces] = useState<KitPiece[]>([]);
+  const [kitColors, setKitColors] = useState<Record<string, string>>({});
   const [savingKit, setSavingKit] = useState<string | null>(null);
   const [kitsExpanded, setKitsExpanded] = useState(false);
 
@@ -146,6 +147,17 @@ export default function TeamSetupPage() {
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Sync kit colors from kitPieces whenever they change
+  useEffect(() => {
+    const colorMap: Record<string, string> = {};
+    kitPieces.forEach((piece) => {
+      const normalizedType = normalizePieceTypeForComparison(piece.piece_type);
+      const key = `${piece.kit_number}-${piece.player_type}-${normalizedType}`;
+      if (piece.color_hex) colorMap[key] = piece.color_hex.toLowerCase();
+    });
+    setKitColors(colorMap);
+  }, [kitPieces]);
 
   async function loadData() {
     setLoading(true);
@@ -728,6 +740,7 @@ export default function TeamSetupPage() {
                           {PIECE_TYPES.map((pieceType) => {
                             const piece = getKitPiece(kitNum, playerType, pieceType);
                             const key = `${kitNum}-${playerType}-${pieceType}`;
+                            const displayColor = kitColors[key] ?? normalizeColorHex(piece?.color_hex);
                             return (
                               <div key={pieceType} className="space-y-1">
                                 <Label className="text-xs text-slate-500">
@@ -736,15 +749,19 @@ export default function TeamSetupPage() {
                                 <div className="flex items-center gap-2">
                                   <input
                                     type="color"
-                                    value={normalizeColorHex(piece?.color_hex)}
-                                    onChange={(e) =>
-                                      handleKitColorChange(
+                                    value={displayColor}
+                                    onChange={(e) => {
+                                      const newColor = e.target.value;
+                                      setKitColors((prev) => ({ ...prev, [key]: newColor }));
+                                    }}
+                                    onBlur={(e) => {
+                                      void handleKitColorChange(
                                         kitNum,
                                         playerType,
                                         pieceType,
                                         e.target.value,
-                                      )
-                                    }
+                                      );
+                                    }}
                                     className="w-9 h-9 rounded-lg border border-slate-200 cursor-pointer p-0.5 bg-white"
                                     title={`${KIT_LABELS[kitNum]} · ${PLAYER_TYPE_LABELS[playerType]} · ${PIECE_LABELS[pieceType]}`}
                                   />
@@ -752,7 +769,7 @@ export default function TeamSetupPage() {
                                     {savingKit === key ? (
                                       <Loader2 size={12} className="animate-spin" />
                                     ) : (
-                                      normalizeColorHex(piece?.color_hex).toUpperCase()
+                                      displayColor.toUpperCase()
                                     )}
                                   </span>
                                 </div>

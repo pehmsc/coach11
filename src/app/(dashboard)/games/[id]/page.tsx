@@ -31,6 +31,13 @@ interface PlayerWithStatus extends Player {
   isBlocked: boolean; // já convocado noutro jogo de competição no mesmo dia
 }
 
+const FORMATIONS_BY_FORMAT: Record<string, string[]> = {
+  "5": ["1-2-2", "1-1-3", "1-3-1"],
+  "7": ["1-2-3-1", "1-3-2-1", "1-2-2-2", "1-1-3-2", "1-2-1-3"],
+  "9": ["1-3-3-2", "1-4-3-1", "1-3-4-1", "1-2-3-2", "1-4-2-2"],
+  "11": ["4-4-2", "4-3-3", "3-5-2", "4-2-3-1", "3-4-3", "4-5-1", "5-3-2"],
+};
+
 interface KitPieceRow {
   id: string;
   kit_number: number;
@@ -92,6 +99,11 @@ export default function GameDetailPage() {
   const [teamKits, setTeamKits] = useState<KitPieceRow[]>([]);
   const [kitSelection, setKitSelection] = useState<KitSelection>(EMPTY_KIT_SELECTION);
   const [savingKitField, setSavingKitField] = useState<keyof KitSelection | null>(null);
+  const [footballFormat, setFootballFormat] = useState<string | null>(null);
+  const [tacticalSystem, setTacticalSystem] = useState<string | null>(null);
+  const [lineupStatuses, setLineupStatuses] = useState<Record<string, "on_field" | "substitute">>({});
+  const [savingTactical, setSavingTactical] = useState(false);
+  const [savingLineupPlayer, setSavingLineupPlayer] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -146,6 +158,19 @@ export default function GameDetailPage() {
           ? (payload.kitSelection as Partial<KitSelection>)
           : {}),
       });
+      setFootballFormat(typeof payload.footballFormat === "string" ? payload.footballFormat : null);
+      setTacticalSystem(typeof payload.tacticalSystem === "string" ? payload.tacticalSystem : null);
+      const rawLineup =
+        typeof payload.lineupStatuses === "object" && payload.lineupStatuses
+          ? (payload.lineupStatuses as Record<string, string>)
+          : {};
+      const normalizedLineup: Record<string, "on_field" | "substitute"> = {};
+      for (const [pid, status] of Object.entries(rawLineup)) {
+        if (status === "on_field" || status === "substitute") {
+          normalizedLineup[pid] = status;
+        }
+      }
+      setLineupStatuses(normalizedLineup);
     } catch {
       setGame(null);
       setPlayers([]);
@@ -155,6 +180,62 @@ export default function GameDetailPage() {
       setError("Erro de ligação ao carregar jogo.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleTacticalChange(formation: string) {
+    setSavingTactical(true);
+    setError(null);
+    setTacticalSystem(formation || null);
+
+    try {
+      const res = await fetch(`/api/games/${id}/convocation/tactical`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tacticalSystem: formation }),
+      });
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        setError((payload as { error?: string })?.error || "Erro ao guardar sistema táctico.");
+      }
+    } catch {
+      setError("Erro de ligação ao guardar sistema táctico.");
+    } finally {
+      setSavingTactical(false);
+    }
+  }
+
+  async function handleLineupToggle(playerId: string) {
+    const current = lineupStatuses[playerId];
+    const newStatus: "on_field" | "substitute" =
+      current === "on_field" ? "substitute" : "on_field";
+
+    setSavingLineupPlayer(playerId);
+    setError(null);
+    setLineupStatuses((prev) => ({ ...prev, [playerId]: newStatus }));
+
+    try {
+      const res = await fetch(`/api/games/${id}/convocation/lineup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ playerId, lineupStatus: newStatus }),
+      });
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        setLineupStatuses((prev) => ({
+          ...prev,
+          [playerId]: current ?? "substitute",
+        }));
+        setError((payload as { error?: string })?.error || "Erro ao guardar lineup.");
+      }
+    } catch {
+      setLineupStatuses((prev) => ({
+        ...prev,
+        [playerId]: current ?? "substitute",
+      }));
+      setError("Erro de ligação ao guardar lineup.");
+    } finally {
+      setSavingLineupPlayer(null);
     }
   }
 
@@ -534,6 +615,107 @@ export default function GameDetailPage() {
         <p className="text-xs text-slate-400 text-center mt-6">
           Jogadores com jogo de competição no mesmo dia não podem ser convocados.
         </p>
+      )}
+
+      {/* Onze Inicial + Sistema Táctico — aparece quando há convocados */}
+      {convocatedCount > 0 && (
+        <div className="mt-5 rounded-xl border border-slate-200 bg-white p-4 space-y-5">
+          {/* Sistema Táctico */}
+          {footballFormat && (FORMATIONS_BY_FORMAT[footballFormat] ?? []).length > 0 && (
+            <div>
+              <h2 className="font-bold text-slate-900 mb-1">Sistema Táctico</h2>
+              <p className="text-xs text-slate-500 mb-2">
+                Formação para Futebol {footballFormat}
+              </p>
+              <Select
+                value={tacticalSystem ?? "__none__"}
+                onValueChange={(v) => void handleTacticalChange(v === "__none__" ? "" : v)}
+                disabled={savingTactical || game.status === "completed"}
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="Seleciona a formação" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Sem formação definida</SelectItem>
+                  {(FORMATIONS_BY_FORMAT[footballFormat] ?? []).map((f) => (
+                    <SelectItem key={f} value={f}>
+                      {f}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {/* Onze Inicial */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="font-bold text-slate-900">Onze Inicial</h2>
+              {footballFormat && (
+                <span className="text-xs text-slate-500">
+                  {Object.values(lineupStatuses).filter((s) => s === "on_field").length}
+                  {" / "}
+                  {footballFormat} titulares
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-slate-500 mb-3">
+              Toca num convocado para alternar Titular ↔ Suplente
+            </p>
+            <div className="space-y-1.5">
+              {players
+                .filter((p) => p.isConvocated)
+                .map((player) => {
+                  const status = lineupStatuses[player.id];
+                  const isStarter = status === "on_field";
+                  const isSaving = savingLineupPlayer === player.id;
+                  return (
+                    <button
+                      key={player.id}
+                      onClick={() => void handleLineupToggle(player.id)}
+                      disabled={isSaving || game.status === "completed"}
+                      className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 text-left transition-colors ${
+                        isStarter
+                          ? "border-blue-300 bg-blue-50"
+                          : "border-slate-100 bg-white hover:border-blue-200"
+                      }`}
+                    >
+                      <div
+                        className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                          isStarter ? "bg-blue-500 text-white" : "bg-slate-100 text-slate-500"
+                        }`}
+                      >
+                        {player.jersey_number || "—"}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p
+                          className={`font-medium text-sm truncate ${
+                            isStarter ? "text-blue-900" : "text-slate-800"
+                          }`}
+                        >
+                          {player.first_name} {player.last_name}
+                        </p>
+                        {player.preferred_position && (
+                          <p className="text-xs text-slate-400">{player.preferred_position}</p>
+                        )}
+                      </div>
+                      {isSaving ? (
+                        <Loader2 size={16} className="text-slate-400 animate-spin flex-shrink-0" />
+                      ) : (
+                        <span
+                          className={`text-xs font-semibold flex-shrink-0 ${
+                            isStarter ? "text-blue-600" : "text-slate-400"
+                          }`}
+                        >
+                          {isStarter ? "Titular" : "Suplente"}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+            </div>
+          </div>
+        </div>
       )}
 
       <Button

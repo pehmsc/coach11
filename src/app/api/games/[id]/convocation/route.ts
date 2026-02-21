@@ -188,6 +188,28 @@ export async function GET(_request: Request, { params }: RouteContext) {
       };
     });
 
+    // Football format from age_group
+    let footballFormat: string | null = null;
+    if (game.age_group_id) {
+      const { data: ag } = await admin
+        .from("age_groups")
+        .select("football_format")
+        .eq("id", game.age_group_id)
+        .maybeSingle();
+      footballFormat = (ag as unknown as { football_format?: string } | null)?.football_format ?? null;
+    }
+
+    // Lineup statuses from game_stats_live
+    const { data: liveStats } = await admin
+      .from("game_stats_live")
+      .select("player_id, status")
+      .eq("game_id", gameId);
+    const lineupStatuses: Record<string, string> = {};
+    (liveStats || []).forEach((row) => {
+      const r = row as unknown as { player_id?: string; status?: string };
+      if (r.player_id) lineupStatuses[r.player_id] = r.status ?? "substitute";
+    });
+
     let kits: Record<string, unknown>[] = [];
     if (teamId) {
       const { data: kitRows, error: kitsError } = await admin
@@ -212,6 +234,9 @@ export async function GET(_request: Request, { params }: RouteContext) {
       success: true,
       game,
       teamId,
+      footballFormat,
+      lineupStatuses,
+      tacticalSystem: (game as unknown as { additional_info?: string }).additional_info ?? null,
       convocationStatus,
       convocationId: convocations?.[0]?.id ?? null,
       convocationCount: convocationIds.length,

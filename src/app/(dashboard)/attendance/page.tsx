@@ -379,12 +379,13 @@ export default function AttendancePage() {
       </div>
 
       <div className="sticky bottom-20 md:bottom-4">
-        {saved ? (
-          <div className="bg-emerald-50 border-2 border-emerald-200 text-emerald-700 p-4 rounded-xl text-center font-semibold">
-            ✓ Presenças guardadas! ({counts.present} presentes · {counts.absent} ausentes ·{" "}
+        {saved && (
+          <div className="bg-emerald-50 border-2 border-emerald-200 text-emerald-700 p-3 rounded-xl text-center font-semibold text-sm mb-2">
+            ✓ {sessionClosed ? "Atualizado" : "Presenças guardadas"}! ({counts.present} presentes · {counts.absent} ausentes ·{" "}
             {counts.injured} lesionados)
           </div>
-        ) : (
+        )}
+        {(!saved || sessionClosed) && (
           <Button
             onClick={handleSave}
             className="w-full bg-emerald-600 hover:bg-emerald-700 h-14 text-base font-semibold rounded-xl shadow-lg"
