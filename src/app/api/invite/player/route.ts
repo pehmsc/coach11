@@ -1,4 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { resolveUserTeamContext } from "@/lib/auth/team-context";
 import { Resend } from "resend";
 import { NextResponse } from "next/server";
 
@@ -23,10 +25,13 @@ export async function POST(request: Request) {
     );
   }
 
-  // Buscar dados do jogador e do escalão
-  const { data: player } = await supabase
+  const admin = createAdminClient();
+  const context = await resolveUserTeamContext(admin, user.id);
+
+  // Buscar dados do jogador
+  const { data: player } = await admin
     .from("players")
-    .select("*, age_groups(id, name, club_name, coordinator_id)")
+    .select("*")
     .eq("id", playerId)
     .single();
 
@@ -37,17 +42,15 @@ export async function POST(request: Request) {
     );
   }
 
-  // Verificar que o jogador pertence ao escalão do utilizador autenticado
-  const ageGroup = player.age_groups as {
-    id: string;
-    name: string;
-    club_name: string;
-    coordinator_id: string;
-  } | null;
-
-  if (!ageGroup || ageGroup.coordinator_id !== user.id) {
+  if (!context.accessibleAgeGroupIds.includes(player.age_group_id)) {
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
   }
+
+  const { data: ageGroup } = await admin
+    .from("age_groups")
+    .select("id, name, club_name")
+    .eq("id", player.age_group_id)
+    .maybeSingle();
 
   if (!player.email) {
     return NextResponse.json({ error: "Atleta sem email" }, { status: 400 });
@@ -61,7 +64,7 @@ export async function POST(request: Request) {
   ).join("");
 
   // Guardar código na DB
-  await supabase
+  await admin
     .from("players")
     .update({
       invite_code: inviteCode,
@@ -71,7 +74,7 @@ export async function POST(request: Request) {
     .eq("id", playerId);
 
   // Buscar nome do coordinator
-  const { data: profile } = await supabase
+  const { data: profile } = await admin
     .from("profiles")
     .select("full_name")
     .eq("id", user.id)

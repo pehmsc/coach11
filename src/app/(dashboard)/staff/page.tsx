@@ -490,38 +490,43 @@ export default function StaffPage() {
       {/* Modal: Novo convite */}
       {showForm && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-end md:items-center justify-center p-4" onClick={() => setShowForm(false)}>
-          <div className="bg-white rounded-2xl w-full max-w-md shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-between items-center p-5 border-b">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-xl max-h-[calc(100dvh-1rem)] md:max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center p-5 border-b shrink-0">
               <h3 className="font-bold text-slate-900">Convidar Treinador</h3>
               <button onClick={() => setShowForm(false)}><X size={20} className="text-slate-400" /></button>
             </div>
-            <form onSubmit={handleSendInvite} className="p-5 space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label>Nome *</Label>
-                  <Input value={form.firstName} onChange={(e) => setForm((f) => ({ ...f, firstName: e.target.value }))} placeholder="Nome" required />
+            <form onSubmit={handleSendInvite} className="flex flex-col min-h-0">
+              <div
+                className="p-5 space-y-4 overflow-y-auto flex-1 pb-[max(1.25rem,env(safe-area-inset-bottom))]"
+                style={{ WebkitOverflowScrolling: "touch" }}
+              >
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label>Nome *</Label>
+                    <Input value={form.firstName} onChange={(e) => setForm((f) => ({ ...f, firstName: e.target.value }))} placeholder="Nome" required />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Apelido *</Label>
+                    <Input value={form.lastName} onChange={(e) => setForm((f) => ({ ...f, lastName: e.target.value }))} placeholder="Apelido" required />
+                  </div>
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Apelido *</Label>
-                  <Input value={form.lastName} onChange={(e) => setForm((f) => ({ ...f, lastName: e.target.value }))} placeholder="Apelido" required />
+                  <Label>Email *</Label>
+                  <Input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} placeholder="email@exemplo.com" required />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Função *</Label>
+                  <Select value={form.role} onValueChange={(v) => setForm((f) => ({ ...f, role: v }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {INVITE_ROLE_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
-              <div className="space-y-1.5">
-                <Label>Email *</Label>
-                <Input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} placeholder="email@exemplo.com" required />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Função *</Label>
-                <Select value={form.role} onValueChange={(v) => setForm((f) => ({ ...f, role: v }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {INVITE_ROLE_OPTIONS.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex gap-2 pt-2">
+              <div className="flex gap-2 p-5 pt-3 border-t bg-white shrink-0 pb-[max(1rem,env(safe-area-inset-bottom))]">
                 <Button type="submit" className="flex-1 bg-emerald-600 hover:bg-emerald-700" disabled={sending}>
                   {sending ? <Loader2 size={16} className="animate-spin" /> : "Enviar convite"}
                 </Button>
@@ -539,66 +544,71 @@ export default function StaffPage() {
           onClick={closeEditMember}
         >
           <div
-            className="bg-white rounded-2xl w-full max-w-md shadow-xl"
+            className="bg-white rounded-2xl w-full max-w-md shadow-xl max-h-[calc(100dvh-1rem)] md:max-h-[90vh] overflow-hidden flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex justify-between items-center p-5 border-b">
+            <div className="flex justify-between items-center p-5 border-b shrink-0">
               <h3 className="font-bold text-slate-900">Editar membro</h3>
               <button onClick={closeEditMember}>
                 <X size={20} className="text-slate-400" />
               </button>
             </div>
-            <form onSubmit={handleSaveMember} className="p-5 space-y-4">
-              <div className="space-y-1.5">
-                <Label>Nome</Label>
-                <Input value={editingMember.full_name} disabled />
+            <form onSubmit={handleSaveMember} className="flex flex-col min-h-0">
+              <div
+                className="p-5 space-y-4 overflow-y-auto flex-1 pb-[max(1.25rem,env(safe-area-inset-bottom))]"
+                style={{ WebkitOverflowScrolling: "touch" }}
+              >
+                <div className="space-y-1.5">
+                  <Label>Nome</Label>
+                  <Input value={editingMember.full_name} disabled />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Cargo *</Label>
+                  <Select
+                    value={editForm.role}
+                    onValueChange={(value) =>
+                      setEditForm((prev) => ({ ...prev, role: value }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {STAFF_ROLE_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Email</Label>
+                  <Input
+                    type="email"
+                    value={editForm.email}
+                    onChange={(e) =>
+                      setEditForm((prev) => ({ ...prev, email: e.target.value }))
+                    }
+                    placeholder="email@exemplo.com"
+                  />
+                  <p className="text-[11px] text-slate-400">
+                    Em contas Google, o email de login pode continuar gerido pelo fornecedor.
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Telemóvel</Label>
+                  <Input
+                    type="tel"
+                    value={editForm.phone}
+                    onChange={(e) =>
+                      setEditForm((prev) => ({ ...prev, phone: e.target.value }))
+                    }
+                    placeholder="9XX XXX XXX"
+                  />
+                </div>
               </div>
-              <div className="space-y-1.5">
-                <Label>Cargo *</Label>
-                <Select
-                  value={editForm.role}
-                  onValueChange={(value) =>
-                    setEditForm((prev) => ({ ...prev, role: value }))
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {STAFF_ROLE_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Email</Label>
-                <Input
-                  type="email"
-                  value={editForm.email}
-                  onChange={(e) =>
-                    setEditForm((prev) => ({ ...prev, email: e.target.value }))
-                  }
-                  placeholder="email@exemplo.com"
-                />
-                <p className="text-[11px] text-slate-400">
-                  Em contas Google, o email de login pode continuar gerido pelo fornecedor.
-                </p>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Telemóvel</Label>
-                <Input
-                  type="tel"
-                  value={editForm.phone}
-                  onChange={(e) =>
-                    setEditForm((prev) => ({ ...prev, phone: e.target.value }))
-                  }
-                  placeholder="9XX XXX XXX"
-                />
-              </div>
-              <div className="flex gap-2 pt-2">
+              <div className="flex gap-2 p-5 pt-3 border-t bg-white shrink-0 pb-[max(1rem,env(safe-area-inset-bottom))]">
                 <Button
                   type="submit"
                   className="flex-1 bg-emerald-600 hover:bg-emerald-700"

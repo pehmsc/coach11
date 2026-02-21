@@ -25,7 +25,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { PostgrestError } from "@supabase/supabase-js";
 
 const DAY_NAMES = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 
@@ -303,76 +302,54 @@ export default function CalendarPage() {
     const isEditing =
       modalMode === "edit_training" || modalMode === "edit_game";
 
-    let dbError: PostgrestError | null = null;
-
-    if (isTraining) {
-      const payload = {
-        age_group_id: ageGroupId,
-        team_id: teamId,
-        title: form.title || "Treino",
-        session_date: form.date,
-        start_time: form.start_time || null,
-        end_time: form.end_time || null,
-        location: form.location || null,
-        location_address: form.location_address || null,
-        notes: form.notes || null,
-        image_url: form.image_url || null,
-        status: "scheduled",
+    try {
+      const endpoint = "/api/calendar/events";
+      const eventType = isTraining ? "training" : "game";
+      const requestBody = {
+        id: isEditing ? selectedEvent?.id || null : null,
+        type: eventType,
+        ageGroupId,
+        teamId,
+        payload: {
+          title: form.title,
+          date: form.date,
+          start_time: form.start_time,
+          end_time: form.end_time,
+          opponent_name: form.opponent_name,
+          location: form.location,
+          location_address: form.location_address,
+          is_home: form.is_home,
+          notes: form.notes,
+          image_url: form.image_url,
+        },
       };
 
-      if (isEditing && selectedEvent) {
-        const { error } = await supabase
-          .from("training_sessions")
-          .update(payload)
-          .eq("id", selectedEvent.id);
-        dbError = error;
-      } else {
-        const { error } = await supabase
-          .from("training_sessions")
-          .insert(payload);
-        dbError = error;
-      }
-    } else {
-      const datetime = `${form.date}T${form.start_time || "00:00"}:00`;
-      const payload = {
-        age_group_id: ageGroupId,
-        team_id: teamId,
-        title:
-          form.title ||
-          (form.opponent_name ? `vs ${form.opponent_name}` : "Jogo"),
-        game_datetime: datetime,
-        opponent_name: form.opponent_name || null,
-        location: form.location || null,
-        location_address: form.location_address || null,
-        is_home: form.is_home,
-        notes: form.notes || null,
-        image_url: form.image_url || null,
-        status: "scheduled",
-        game_type: "league",
-      };
+      const res = await fetch(endpoint, {
+        method: isEditing ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody),
+      });
+      const payload = (await res.json().catch(() => null)) as
+        | { success?: boolean; error?: string; teamId?: string | null }
+        | null;
 
-      if (isEditing && selectedEvent) {
-        const { error } = await supabase
-          .from("games")
-          .update(payload)
-          .eq("id", selectedEvent.id);
-        dbError = error;
-      } else {
-        const { error } = await supabase.from("games").insert(payload);
-        dbError = error;
+      if (!res.ok || !payload?.success) {
+        setOpError(payload?.error || "Erro ao guardar evento.");
+        setSaving(false);
+        return;
       }
-    }
 
-    if (dbError) {
-      console.error("Erro ao guardar:", dbError);
-      setOpError(`Erro ao guardar: ${dbError.message}`);
+      if (typeof payload.teamId === "string") {
+        setTeamId(payload.teamId);
+      }
+
+      await loadEvents();
+      closeModal();
+    } catch {
+      setOpError("Erro de ligação ao guardar evento.");
+    } finally {
       setSaving(false);
-      return;
     }
-
-    await loadEvents();
-    closeModal();
-    setSaving(false);
   }
 
   async function deleteEvent() {
@@ -380,27 +357,34 @@ export default function CalendarPage() {
     setSaving(true);
     setOpError(null);
 
-    const table =
-      selectedEvent.type === "training" ? "training_sessions" : "games";
-    const { error } = await supabase
-      .from(table)
-      .delete()
-      .eq("id", selectedEvent.id);
+    try {
+      const res = await fetch("/api/calendar/events", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: selectedEvent.id,
+          type: selectedEvent.type,
+          ageGroupId,
+        }),
+      });
+      const payload = (await res.json().catch(() => null)) as
+        | { success?: boolean; error?: string }
+        | null;
 
-    if (error) {
-      console.error("Erro ao apagar:", error);
-      setOpError(`Erro ao apagar: ${error.message}`);
+      if (!res.ok || !payload?.success) {
+        setOpError(payload?.error || "Erro ao apagar evento.");
+        setSaving(false);
+        return;
+      }
+
+      setEvents((prev) => prev.filter((e) => e.id !== selectedEvent.id));
+      closeModal();
+      void loadEvents();
+    } catch {
+      setOpError("Erro de ligação ao apagar evento.");
+    } finally {
       setSaving(false);
-      return;
     }
-
-    // Remove imediatamente do estado local — UI responde sem esperar pela DB
-    setEvents((prev) => prev.filter((e) => e.id !== selectedEvent.id));
-    closeModal();
-    setSaving(false);
-
-    // Confirma sincronização com a DB em background
-    loadEvents();
   }
 
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
@@ -616,11 +600,11 @@ export default function CalendarPage() {
           onClick={closeModal}
         >
           <div
-            className="bg-white rounded-2xl w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto"
+            className="bg-white rounded-2xl w-full max-w-md shadow-xl max-h-[calc(100dvh-1rem)] md:max-h-[90vh] overflow-hidden flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header do modal */}
-            <div className="flex justify-between items-center p-5 border-b sticky top-0 bg-white z-10">
+            <div className="flex justify-between items-center p-5 border-b bg-white z-10 shrink-0">
               <h3 className="font-bold text-slate-900">
                 {modalMode === "add_training" && "🏃 Novo Treino"}
                 {modalMode === "add_game" && "⚽ Novo Jogo"}
@@ -632,7 +616,10 @@ export default function CalendarPage() {
               </button>
             </div>
 
-            <div className="p-5 pb-10 space-y-5">
+            <div
+              className="p-5 space-y-5 flex-1 overflow-y-auto pb-[max(6rem,env(safe-area-inset-bottom))]"
+              style={{ WebkitOverflowScrolling: "touch" }}
+            >
               {/* Erro visível */}
               {opError && (
                 <div className="flex items-start gap-2 bg-red-50 border border-red-200 text-red-700 text-sm p-3 rounded-xl">
@@ -834,9 +821,10 @@ export default function CalendarPage() {
                   className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                 />
               </div>
+            </div>
 
-              {/* Botões */}
-              <div className="flex gap-2 pt-2">
+            <div className="border-t bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shrink-0">
+              <div className="flex gap-2">
                 <Button
                   onClick={saveEvent}
                   disabled={saving || uploading || !form.date}
