@@ -33,7 +33,15 @@ function OAuthCallbackClientContent() {
       let sessionEstablished = false;
       let lastErrorCode: string | null = null;
 
-      for (let attempt = 0; attempt < 8; attempt += 1) {
+      // Fast-path: server-side route may have already exchanged the code and set a session cookie.
+      // Check for an existing authenticated user before attempting another exchange (which would fail
+      // with "code already used" if the server already consumed it).
+      const { data: { user: existingUser } } = await supabase.auth.getUser();
+      if (existingUser) {
+        sessionEstablished = true;
+      }
+
+      for (let attempt = 0; attempt < 8 && !sessionEstablished; attempt += 1) {
         const { data, error } = await supabase.auth.exchangeCodeForSession(oauthCode);
 
         if (!error && data.session) {

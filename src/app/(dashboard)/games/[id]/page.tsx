@@ -14,6 +14,8 @@ import {
   Check,
   Play,
   Loader2,
+  Pencil,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -105,6 +107,13 @@ export default function GameDetailPage() {
   const [savingTactical, setSavingTactical] = useState(false);
   const [savingLineupPlayer, setSavingLineupPlayer] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Game edit state
+  const [editingGame, setEditingGame] = useState(false);
+  const [editTitle, setEditTitle] = useState("");
+  const [editOpponent, setEditOpponent] = useState("");
+  const [editLocation, setEditLocation] = useState("");
+  const [savingGameEdit, setSavingGameEdit] = useState(false);
 
   useEffect(() => {
     if (id) loadData();
@@ -310,13 +319,15 @@ export default function GameDetailPage() {
         setError(payload?.error || "Erro ao atualizar convocatória.");
       } else {
         setConvocationStatus("draft");
+        const newIsConvocated = payload.isConvocated as boolean;
         setPlayers((prev) =>
           prev.map((p) =>
             p.id === player.id
-              ? { ...p, isConvocated: payload.isConvocated as boolean }
+              ? { ...p, isConvocated: newIsConvocated }
               : p,
           ),
         );
+        void autoAssignLineup(player.id, newIsConvocated);
       }
     } catch {
       setError("Erro de ligação ao atualizar convocatória.");
@@ -348,7 +359,85 @@ export default function GameDetailPage() {
     }
   }
 
+  async function handleSaveGameEdit(e: { preventDefault(): void }) {
+    e.preventDefault();
+    setSavingGameEdit(true);
+    setError(null);
+
+    const res = await fetch(`/api/games/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: editTitle.trim() || null,
+        opponent_name: editOpponent.trim(),
+        location: editLocation.trim() || null,
+      }),
+    });
+    const payload = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      setError((payload as { error?: string }).error || "Erro ao guardar jogo.");
+    } else {
+      setGame((prev) => prev ? { ...prev, ...(payload as { game: Game }).game } : prev);
+      setEditingGame(false);
+    }
+    setSavingGameEdit(false);
+  }
+
+  function openEditGame() {
+    if (!game) return;
+    setEditTitle(game.title ?? "");
+    setEditOpponent(game.opponent_name ?? "");
+    setEditLocation(game.location ?? "");
+    setEditingGame(true);
+  }
+
+  // Auto-assign lineup when player is convocated: fills starters up to format number
+  async function autoAssignLineup(playerId: string, isConvocated: boolean) {
+    if (!isConvocated) {
+      // Remove from lineup
+      setLineupStatuses((prev) => {
+        const next = { ...prev };
+        delete next[playerId];
+        return next;
+      });
+      await fetch(`/api/games/${id}/convocation/lineup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ playerId, lineupStatus: "substitute" }),
+      }).catch(() => null);
+      return;
+    }
+
+    const format = footballFormat ? parseInt(footballFormat) : 0;
+    const currentStarters = Object.values(lineupStatuses).filter((s) => s === "on_field").length;
+    const newStatus: "on_field" | "substitute" = currentStarters < format ? "on_field" : "substitute";
+
+    setLineupStatuses((prev) => ({ ...prev, [playerId]: newStatus }));
+    await fetch(`/api/games/${id}/convocation/lineup`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ playerId, lineupStatus: newStatus }),
+    }).catch(() => null);
+  }
+
   const convocatedCount = players.filter((p) => p.isConvocated).length;
+
+  // GK check: warn if no goalkeeper in starting XI
+  const starterIds = new Set(
+    Object.entries(lineupStatuses)
+      .filter(([, s]) => s === "on_field")
+      .map(([pid]) => pid),
+  );
+  const convocatedPlayers = players.filter((p) => p.isConvocated);
+  const hasGkInStarting = convocatedPlayers.some(
+    (p) =>
+      starterIds.has(p.id) &&
+      p.preferred_position != null &&
+      /gr|gk|guarda/i.test(p.preferred_position),
+  );
+  const showGkWarning =
+    starterIds.size > 0 && !hasGkInStarting && convocatedCount > 0;
 
   if (loading) {
     return (
@@ -400,7 +489,16 @@ export default function GameDetailPage() {
       </button>
 
       {/* Game header */}
-      <div className="rounded-2xl bg-blue-600 text-white p-5 mb-5">
+      <div className="rounded-2xl bg-blue-600 text-white p-5 mb-5 relative">
+        {game.status !== "completed" && (
+          <button
+            onClick={openEditGame}
+            className="absolute top-3 right-3 p-1.5 rounded-full bg-white/20 hover:bg-white/30 transition-colors"
+            title="Editar jogo"
+          >
+            <Pencil size={14} />
+          </button>
+        )}
         <div className="flex items-center gap-2 mb-1">
           <span className="text-xs font-medium bg-white/20 px-2 py-0.5 rounded-full">
             {game.is_home ? "Casa" : "Fora"}
@@ -413,6 +511,11 @@ export default function GameDetailPage() {
           {!isCompetition && (
             <span className="text-xs font-medium bg-white/20 px-2 py-0.5 rounded-full">
               Amigável
+            </span>
+          )}
+          {game.title && (
+            <span className="text-xs font-medium bg-white/20 px-2 py-0.5 rounded-full">
+              {game.title}
             </span>
           )}
         </div>
@@ -430,6 +533,78 @@ export default function GameDetailPage() {
           )}
         </div>
       </div>
+
+      {/* Edit game modal */}
+      {editingGame && (
+        <div
+          className="fixed inset-0 bg-black/50 z-50 flex items-end md:items-center justify-center p-4"
+          onClick={() => setEditingGame(false)}
+        >
+          <div
+            className="bg-white rounded-2xl w-full max-w-md shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-5 border-b">
+              <h3 className="font-bold text-slate-900">Editar jogo</h3>
+              <button onClick={() => setEditingGame(false)}>
+                <X size={20} className="text-slate-400" />
+              </button>
+            </div>
+            <form onSubmit={handleSaveGameEdit} className="p-5 space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-slate-700">Jornada / Título</label>
+                <input
+                  type="text"
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  placeholder="ex: Jornada 3, Taça, Final"
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-slate-700">Adversário *</label>
+                <input
+                  type="text"
+                  value={editOpponent}
+                  onChange={(e) => setEditOpponent(e.target.value)}
+                  placeholder="Nome do adversário"
+                  required
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-slate-700">Local</label>
+                <input
+                  type="text"
+                  value={editLocation}
+                  onChange={(e) => setEditLocation(e.target.value)}
+                  placeholder="Nome do campo ou local"
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              {error && (
+                <p className="text-sm text-red-600">{error}</p>
+              )}
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="submit"
+                  disabled={savingGameEdit}
+                  className="flex-1 bg-blue-600 text-white rounded-lg py-2 text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-1"
+                >
+                  {savingGameEdit ? <Loader2 size={15} className="animate-spin" /> : "Guardar"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditingGame(false)}
+                  className="px-4 border border-slate-200 rounded-lg py-2 text-sm text-slate-600 hover:bg-slate-50"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Live stats button — só disponível se jogo agendado */}
       {game.status === "scheduled" && (
@@ -659,9 +834,15 @@ export default function GameDetailPage() {
                 </span>
               )}
             </div>
-            <p className="text-xs text-slate-500 mb-3">
+            <p className="text-xs text-slate-500 mb-2">
               Toca num convocado para alternar Titular ↔ Suplente
             </p>
+            {showGkWarning && (
+              <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
+                <AlertCircle size={14} className="text-amber-600 flex-shrink-0" />
+                <p className="text-xs text-amber-700 font-medium">Nenhum GR no onze inicial</p>
+              </div>
+            )}
             <div className="space-y-1.5">
               {players
                 .filter((p) => p.isConvocated)

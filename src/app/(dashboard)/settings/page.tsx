@@ -60,7 +60,17 @@ export default function SettingsPage() {
       .maybeSingle();
 
     if (data) {
-      setProfile(data as Profile);
+      // Fallback: use Google/OAuth avatar from auth metadata if profile has none
+      const metaAvatarUrl = (user.user_metadata?.avatar_url as string | undefined) ?? null;
+      const resolvedAvatarUrl = (data as Profile).avatar_url || metaAvatarUrl;
+
+      // Sync missing avatar_url to profiles table (once)
+      if (!data.avatar_url && metaAvatarUrl) {
+        void supabase.from("profiles").update({ avatar_url: metaAvatarUrl }).eq("id", user.id);
+      }
+
+      const merged: Profile = { ...(data as Profile), avatar_url: resolvedAvatarUrl ?? undefined };
+      setProfile(merged);
       setFullName(data.full_name || "");
       setPhone((data as Profile & { phone?: string }).phone || "");
     }

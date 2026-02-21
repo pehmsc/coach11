@@ -106,7 +106,7 @@ export async function GET() {
       teamId
         ? admin
             .from("team_staff")
-            .select("profile_id")
+            .select("id, profile_id, role")
             .eq("team_id", teamId)
         : Promise.resolve({ data: [], error: null }),
       admin
@@ -116,6 +116,27 @@ export async function GET() {
         .order("created_at", { ascending: false }),
     ]);
 
+    // Fetch full profiles for staff members using admin client (bypasses RLS)
+    const rawStaffRows = (staffRes.data || []) as Array<{ id: string; profile_id: string; role: string | null }>;
+    const staffProfileIds = rawStaffRows.map((r) => r.profile_id);
+    let staffProfilesData: Array<{ id: string; full_name: string | null; email: string | null; avatar_url: string | null }> = [];
+    if (staffProfileIds.length > 0) {
+      const { data: pData } = await admin
+        .from("profiles")
+        .select("id, full_name, email, avatar_url")
+        .in("id", staffProfileIds);
+      staffProfilesData = (pData || []) as typeof staffProfilesData;
+    }
+    const staffProfileMap = new Map(staffProfilesData.map((p) => [p.id, p]));
+    const staffMembers = rawStaffRows.map((row) => ({
+      id: row.id,
+      profile_id: row.profile_id,
+      role: row.role || "staff",
+      full_name: staffProfileMap.get(row.profile_id)?.full_name || null,
+      email: staffProfileMap.get(row.profile_id)?.email || null,
+      avatar_url: staffProfileMap.get(row.profile_id)?.avatar_url || null,
+    }));
+
     return NextResponse.json({
       success: true,
       linked: true,
@@ -124,7 +145,8 @@ export async function GET() {
       teamRole,
       ageGroup,
       kits: kitsRes.data || [],
-      activeStaffProfileIds: (staffRes.data || []).map((row) => row.profile_id),
+      activeStaffProfileIds: staffProfileIds,
+      staffMembers,
       staffInvites: invitesRes.data || [],
       profile: profile || null,
     });

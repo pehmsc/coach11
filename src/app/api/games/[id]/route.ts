@@ -1,0 +1,108 @@
+import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
+import { NextResponse } from "next/server";
+
+type RouteContext = {
+  params: Promise<{ id: string }>;
+};
+
+export async function PATCH(request: Request, { params }: RouteContext) {
+  try {
+    const { id: gameId } = await params;
+
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+    }
+
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body !== "object") {
+      return NextResponse.json({ error: "Dados inválidos." }, { status: 400 });
+    }
+
+    const admin = createAdminClient();
+
+    // Verify game exists and get team/age_group
+    const { data: game } = await admin
+      .from("games")
+      .select("id, team_id, age_group_id")
+      .eq("id", gameId)
+      .maybeSingle();
+
+    if (!game) {
+      return NextResponse.json({ error: "Jogo não encontrado." }, { status: 404 });
+    }
+
+    // Check access: coordinator or staff
+    let hasAccess = false;
+    const ageGroupId = (game as unknown as { age_group_id?: string }).age_group_id ?? null;
+    let teamId: string | null = (game as unknown as { team_id?: string }).team_id ?? null;
+
+    if (ageGroupId) {
+      const { data: ag } = await admin
+        .from("age_groups")
+        .select("id")
+        .eq("id", ageGroupId)
+        .eq("coordinator_id", user.id)
+        .maybeSingle();
+      hasAccess = !!ag;
+    }
+
+    if (!teamId && ageGroupId) {
+      const { data: ft } = await admin
+        .from("teams")
+        .select("id")
+        .eq("age_group_id", ageGroupId)
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      teamId = (ft as unknown as { id?: string } | null)?.id ?? null;
+    }
+
+    if (!hasAccess && teamId) {
+      const { data: sl } = await admin
+        .from("team_staff")
+        .select("id")
+        .eq("team_id", teamId)
+        .eq("profile_id", user.id)
+        .maybeSingle();
+      hasAccess = !!sl;
+    }
+
+    if (!hasAccess) {
+      return NextResponse.json({ error: "Sem permissões." }, { status: 403 });
+    }
+
+    // Only allow safe fields to be updated
+    const updates: Record<string, unknown> = {};
+    if (typeof body.title === "string" || body.title === null) updates.title = body.title || null;
+    if (typeof body.opponent_name === "string") updates.opponent_name = body.opponent_name;
+    if (typeof body.location === "string" || body.location === null) updates.location = body.location || null;
+    if (typeof body.game_datetime === "string") updates.game_datetime = body.game_datetime;
+    if (typeof body.is_home === "boolean") updates.is_home = body.is_home;
+
+    if (Object.keys(updates).length === 0) {
+      return NextResponse.json({ error: "Sem campos para atualizar." }, { status: 400 });
+    }
+
+    const { data: updated, error: updateError } = await admin
+      .from("games")
+      .update(updates)
+      .eq("id", gameId)
+      .select()
+      .single();
+
+    if (updateError) {
+      return NextResponse.json({ error: updateError.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true, game: updated });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Erro interno.";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}

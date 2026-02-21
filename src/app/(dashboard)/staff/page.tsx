@@ -106,33 +106,21 @@ export default function StaffPage() {
     // Invites from context
     setInvites((ctx?.staffInvites as StaffInvite[]) || []);
 
-    // Active staff: query team_staff + profiles
-    if (tid && user) {
-      const { data: staffRows } = await supabase
-        .from("team_staff")
-        .select("id, profile_id, role")
-        .eq("team_id", tid);
-
-      if (staffRows && staffRows.length > 0) {
-        const profileIds = staffRows.map((s) => s.profile_id);
-        const { data: profiles } = await supabase
-          .from("profiles")
-          .select("id, full_name, email, avatar_url")
-          .in("id", profileIds);
-
-        const profileMap = new Map((profiles || []).map((p) => [p.id, p]));
-        const members: StaffMember[] = staffRows
-          .filter((s) => s.profile_id !== user.id) // exclude self
-          .map((s) => ({
-            id: s.id,
-            profile_id: s.profile_id,
-            role: s.role || "staff",
-            full_name: (profileMap.get(s.profile_id)?.full_name as string) || "Sem nome",
-            email: profileMap.get(s.profile_id)?.email as string | undefined,
-            avatar_url: profileMap.get(s.profile_id)?.avatar_url as string | undefined,
-          }));
-        setStaff(members);
-      }
+    // Staff members from context (fetched via admin client — bypasses RLS)
+    if (user) {
+      type CtxStaffMember = { id: string; profile_id: string; role: string; full_name: string | null; email: string | null; avatar_url: string | null };
+      const rawMembers = (ctx?.staffMembers as CtxStaffMember[]) || [];
+      const members: StaffMember[] = rawMembers
+        .filter((s) => s.profile_id !== user.id) // exclude self
+        .map((s) => ({
+          id: s.id,
+          profile_id: s.profile_id,
+          role: s.role || "staff",
+          full_name: s.full_name || "Sem nome",
+          email: s.email || undefined,
+          avatar_url: s.avatar_url || undefined,
+        }));
+      setStaff(members);
     }
 
     setLoading(false);
