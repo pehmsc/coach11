@@ -26,6 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { toast } from "sonner";
 import type { Game, Player } from "@/types/database";
 
 interface PlayerWithStatus extends Player {
@@ -218,6 +219,16 @@ export default function GameDetailPage() {
     const current = lineupStatuses[playerId];
     const newStatus: "on_field" | "substitute" =
       current === "on_field" ? "substitute" : "on_field";
+
+    // Guard: don't exceed the format's starter count
+    if (newStatus === "on_field" && footballFormat) {
+      const format = parseInt(footballFormat);
+      const currentStarters = Object.values(lineupStatuses).filter((s) => s === "on_field").length;
+      if (currentStarters >= format) {
+        toast.error(`Futebol ${footballFormat} só tem ${format} titulares`);
+        return;
+      }
+    }
 
     setSavingLineupPlayer(playerId);
     setError(null);
@@ -423,21 +434,31 @@ export default function GameDetailPage() {
 
   const convocatedCount = players.filter((p) => p.isConvocated).length;
 
-  // GK check: warn if no goalkeeper in starting XI
-  const starterIds = new Set(
-    Object.entries(lineupStatuses)
-      .filter(([, s]) => s === "on_field")
-      .map(([pid]) => pid),
-  );
+  // Helpers for display
+  const isGkPlayer = (p: PlayerWithStatus) =>
+    p.preferred_position != null && /gr|gk|guarda/i.test(p.preferred_position);
+
   const convocatedPlayers = players.filter((p) => p.isConvocated);
-  const hasGkInStarting = convocatedPlayers.some(
-    (p) =>
-      starterIds.has(p.id) &&
-      p.preferred_position != null &&
-      /gr|gk|guarda/i.test(p.preferred_position),
+
+  const starters = convocatedPlayers
+    .filter((p) => lineupStatuses[p.id] === "on_field")
+    .sort((a, b) => {
+      // GK always first in starters list
+      const aGk = isGkPlayer(a);
+      const bGk = isGkPlayer(b);
+      if (aGk && !bGk) return -1;
+      if (!aGk && bGk) return 1;
+      return a.first_name.localeCompare(b.first_name, "pt", { sensitivity: "base" });
+    });
+
+  const subs = convocatedPlayers.filter(
+    (p) => lineupStatuses[p.id] === "substitute" || !lineupStatuses[p.id],
   );
+
+  const notConvocated = players.filter((p) => !p.isConvocated);
+
   const showGkWarning =
-    starterIds.size > 0 && !hasGkInStarting && convocatedCount > 0;
+    starters.length > 0 && !starters.some((p) => isGkPlayer(p));
 
   if (loading) {
     return (
@@ -747,60 +768,64 @@ export default function GameDetailPage() {
           <p className="text-slate-400 text-sm">Sem jogadores ativos no escalão.</p>
         </div>
       ) : (
-        <div className="space-y-2">
-          {players.filter((p) => p.isConvocated).length > 0 && (
-            <div>
-              <p className="text-xs font-semibold text-emerald-600 uppercase tracking-wide mb-2">
-                Convocados ({players.filter((p) => p.isConvocated).length})
+        <>
+          {/* Titulares */}
+          {starters.length > 0 && (
+            <div className="mb-1">
+              <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide px-1 mb-2">
+                Titulares · {starters.length}{footballFormat ? `/${footballFormat}` : ""}
               </p>
-              {players
-                .filter((p) => p.isConvocated)
-                .map((player) => (
-                  <PlayerRow
-                    key={player.id}
-                    player={player}
-                    saving={saving === player.id}
-                    onToggle={() => togglePlayer(player)}
-                  />
-                ))}
+              {starters.map((player) => (
+                <ConvocatedRow
+                  key={player.id}
+                  player={player}
+                  isGk={isGkPlayer(player)}
+                  isStarter={true}
+                  onToggleLineup={() => void handleLineupToggle(player.id)}
+                  onRemove={() => void togglePlayer(player)}
+                  savingToggle={saving === player.id}
+                  savingLineup={savingLineupPlayer === player.id}
+                  disabled={game.status === "completed"}
+                />
+              ))}
             </div>
           )}
 
-          {players.filter((p) => !p.isConvocated).length > 0 && (
-            <div className="mt-4">
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">
-                Não convocados
-              </p>
-              {players
-                .filter((p) => !p.isConvocated)
-                .map((player) => (
-                  <PlayerRow
-                    key={player.id}
-                    player={player}
-                    saving={saving === player.id}
-                    onToggle={() => togglePlayer(player)}
-                  />
-                ))}
+          {/* GK warning */}
+          {showGkWarning && (
+            <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
+              <AlertCircle size={14} className="text-amber-600 flex-shrink-0" />
+              <p className="text-xs text-amber-700 font-medium">Nenhum GR no onze inicial</p>
             </div>
           )}
-        </div>
-      )}
 
-      {isCompetition && (
-        <p className="text-xs text-slate-400 text-center mt-6">
-          Jogadores com jogo de competição no mesmo dia não podem ser convocados.
-        </p>
-      )}
+          {/* Suplentes */}
+          {subs.length > 0 && (
+            <div className="mb-1 mt-3">
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide px-1 mb-2">
+                Suplentes · {subs.length}
+              </p>
+              {subs.map((player) => (
+                <ConvocatedRow
+                  key={player.id}
+                  player={player}
+                  isGk={false}
+                  isStarter={false}
+                  onToggleLineup={() => void handleLineupToggle(player.id)}
+                  onRemove={() => void togglePlayer(player)}
+                  savingToggle={saving === player.id}
+                  savingLineup={savingLineupPlayer === player.id}
+                  disabled={game.status === "completed"}
+                />
+              ))}
+            </div>
+          )}
 
-      {/* Onze Inicial + Sistema Táctico — aparece quando há convocados */}
-      {convocatedCount > 0 && (
-        <div className="mt-5 rounded-xl border border-slate-200 bg-white p-4 space-y-5">
-          {/* Sistema Táctico */}
-          {footballFormat && (FORMATIONS_BY_FORMAT[footballFormat] ?? []).length > 0 && (
-            <div>
-              <h2 className="font-bold text-slate-900 mb-1">Sistema Táctico</h2>
-              <p className="text-xs text-slate-500 mb-2">
-                Formação para Futebol {footballFormat}
+          {/* Sistema Táctico (only when there are starters) */}
+          {starters.length > 0 && footballFormat && (FORMATIONS_BY_FORMAT[footballFormat] ?? []).length > 0 && (
+            <div className="mt-3 pt-3 border-t border-slate-100">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                Sistema Táctico · Futebol {footballFormat}
               </p>
               <Select
                 value={tacticalSystem ?? "__none__"}
@@ -813,90 +838,58 @@ export default function GameDetailPage() {
                 <SelectContent>
                   <SelectItem value="__none__">Sem formação definida</SelectItem>
                   {(FORMATIONS_BY_FORMAT[footballFormat] ?? []).map((f) => (
-                    <SelectItem key={f} value={f}>
-                      {f}
-                    </SelectItem>
+                    <SelectItem key={f} value={f}>{f}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
           )}
 
-          {/* Onze Inicial */}
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <h2 className="font-bold text-slate-900">Onze Inicial</h2>
-              {footballFormat && (
-                <span className="text-xs text-slate-500">
-                  {Object.values(lineupStatuses).filter((s) => s === "on_field").length}
-                  {" / "}
-                  {footballFormat} titulares
-                </span>
-              )}
+          {/* Disponíveis (not yet convocated) */}
+          {notConvocated.length > 0 && (
+            <div className="mt-4">
+              <p className="text-xs font-semibold text-slate-300 uppercase tracking-wide px-1 mb-2">
+                Disponíveis · {notConvocated.length}
+              </p>
+              {notConvocated.map((player) => (
+                <button
+                  key={player.id}
+                  onClick={() => void togglePlayer(player)}
+                  disabled={saving === player.id || player.isBlocked || game.status === "completed"}
+                  className={`w-full flex items-center gap-3 p-3 rounded-xl mb-1.5 text-left border-2 transition-colors ${
+                    player.isBlocked
+                      ? "border-slate-100 bg-slate-50 opacity-50 cursor-not-allowed"
+                      : "border-slate-100 bg-white hover:border-emerald-200 hover:bg-emerald-50"
+                  }`}
+                >
+                  <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                    {player.jersey_number || "—"}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-slate-600 truncate">{player.first_name} {player.last_name}</p>
+                    {player.preferred_position && (
+                      <p className="text-xs text-slate-400">{player.preferred_position}</p>
+                    )}
+                    {player.isBlocked && (
+                      <p className="text-xs text-orange-500">Jogo de competição no mesmo dia</p>
+                    )}
+                  </div>
+                  {saving === player.id ? (
+                    <Loader2 size={16} className="text-slate-400 animate-spin flex-shrink-0" />
+                  ) : (
+                    <div className="w-6 h-6 rounded-full border-2 border-slate-200 flex-shrink-0" />
+                  )}
+                </button>
+              ))}
             </div>
-            <p className="text-xs text-slate-500 mb-2">
-              Toca num convocado para alternar Titular ↔ Suplente
+          )}
+
+          {isCompetition && (
+            <p className="text-xs text-slate-400 text-center mt-4">
+              Jogadores com jogo de competição no mesmo dia não podem ser convocados.
             </p>
-            {showGkWarning && (
-              <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
-                <AlertCircle size={14} className="text-amber-600 flex-shrink-0" />
-                <p className="text-xs text-amber-700 font-medium">Nenhum GR no onze inicial</p>
-              </div>
-            )}
-            <div className="space-y-1.5">
-              {players
-                .filter((p) => p.isConvocated)
-                .map((player) => {
-                  const status = lineupStatuses[player.id];
-                  const isStarter = status === "on_field";
-                  const isSaving = savingLineupPlayer === player.id;
-                  return (
-                    <button
-                      key={player.id}
-                      onClick={() => void handleLineupToggle(player.id)}
-                      disabled={isSaving || game.status === "completed"}
-                      className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 text-left transition-colors ${
-                        isStarter
-                          ? "border-blue-300 bg-blue-50"
-                          : "border-slate-100 bg-white hover:border-blue-200"
-                      }`}
-                    >
-                      <div
-                        className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
-                          isStarter ? "bg-blue-500 text-white" : "bg-slate-100 text-slate-500"
-                        }`}
-                      >
-                        {player.jersey_number || "—"}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p
-                          className={`font-medium text-sm truncate ${
-                            isStarter ? "text-blue-900" : "text-slate-800"
-                          }`}
-                        >
-                          {player.first_name} {player.last_name}
-                        </p>
-                        {player.preferred_position && (
-                          <p className="text-xs text-slate-400">{player.preferred_position}</p>
-                        )}
-                      </div>
-                      {isSaving ? (
-                        <Loader2 size={16} className="text-slate-400 animate-spin flex-shrink-0" />
-                      ) : (
-                        <span
-                          className={`text-xs font-semibold flex-shrink-0 ${
-                            isStarter ? "text-blue-600" : "text-slate-400"
-                          }`}
-                        >
-                          {isStarter ? "Titular" : "Suplente"}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-            </div>
-          </div>
-        </div>
+          )}
+        </>
       )}
 
       <Button
@@ -915,69 +908,79 @@ export default function GameDetailPage() {
   );
 }
 
-function PlayerRow({
+function ConvocatedRow({
   player,
-  saving,
-  onToggle,
+  isGk,
+  isStarter,
+  onToggleLineup,
+  onRemove,
+  savingToggle,
+  savingLineup,
+  disabled,
 }: {
   player: PlayerWithStatus;
-  saving: boolean;
-  onToggle: () => void;
+  isGk: boolean;
+  isStarter: boolean;
+  onToggleLineup: () => void;
+  onRemove: () => void;
+  savingToggle: boolean;
+  savingLineup: boolean;
+  disabled: boolean;
 }) {
+  const badgeLabel = isGk ? "GR" : isStarter ? "Titular" : "Suplente";
+
   return (
-    <button
-      onClick={onToggle}
-      disabled={saving || player.isBlocked}
-      className={`w-full flex items-center gap-3 p-3 rounded-xl mb-1.5 transition-colors text-left border-2 ${
-        player.isConvocated
-          ? "border-emerald-300 bg-emerald-50"
-          : player.isBlocked
-            ? "border-slate-100 bg-slate-50 opacity-50 cursor-not-allowed"
-            : "border-slate-100 bg-white hover:border-emerald-200 hover:bg-emerald-50"
+    <div
+      className={`flex items-center gap-3 p-3 rounded-xl mb-1.5 border-2 ${
+        isStarter ? "border-blue-200 bg-blue-50" : "border-slate-100 bg-white"
       }`}
     >
-      {/* Número */}
       <div
         className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
-          player.isConvocated
-            ? "bg-emerald-500 text-white"
-            : "bg-slate-100 text-slate-500"
+          isGk
+            ? "bg-yellow-500 text-white"
+            : isStarter
+              ? "bg-blue-500 text-white"
+              : "bg-slate-200 text-slate-500"
         }`}
       >
         {player.jersey_number || "—"}
       </div>
-
-      {/* Nome */}
       <div className="flex-1 min-w-0">
-        <p
-          className={`font-medium text-sm truncate ${
-            player.isConvocated ? "text-emerald-900" : "text-slate-800"
-          }`}
-        >
+        <p className={`font-medium text-sm truncate ${isStarter ? "text-blue-900" : "text-slate-700"}`}>
           {player.first_name} {player.last_name}
         </p>
         {player.preferred_position && (
           <p className="text-xs text-slate-400">{player.preferred_position}</p>
         )}
-        {player.isBlocked && (
-          <p className="text-xs text-orange-500">Jogo de competição no mesmo dia</p>
-        )}
       </div>
-
-      {/* Estado */}
-      <div className="flex-shrink-0">
-        {saving ? (
-          <Loader2 size={18} className="text-slate-400 animate-spin" />
-        ) : player.isConvocated ? (
-          <div className="w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center">
-            <Check size={14} className="text-white" />
-          </div>
-        ) : player.isBlocked ? (
-          <AlertCircle size={18} className="text-orange-400" />
+      {/* Toggle lineup badge */}
+      <button
+        onClick={onToggleLineup}
+        disabled={savingLineup || disabled}
+        className={`text-xs font-semibold px-2.5 py-1 rounded-full flex-shrink-0 transition-colors ${
+          isGk
+            ? "bg-yellow-100 text-yellow-700 hover:bg-yellow-200"
+            : isStarter
+              ? "bg-blue-100 text-blue-700 hover:bg-blue-200"
+              : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+        }`}
+      >
+        {savingLineup ? "..." : badgeLabel}
+      </button>
+      {/* Remove from convocatória */}
+      <button
+        onClick={onRemove}
+        disabled={savingToggle || disabled}
+        className="p-1 hover:bg-red-50 rounded-lg group flex-shrink-0"
+        title="Remover da convocatória"
+      >
+        {savingToggle ? (
+          <Loader2 size={14} className="text-slate-300 animate-spin" />
         ) : (
-          <div className="w-6 h-6 rounded-full border-2 border-slate-200" />
+          <X size={14} className="text-slate-200 group-hover:text-red-400 transition-colors" />
         )}
-      </div>
-    </button>
+      </button>
+    </div>
   );
 }
