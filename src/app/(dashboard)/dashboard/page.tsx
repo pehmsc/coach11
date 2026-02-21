@@ -12,6 +12,10 @@ import {
   BarChart2,
   Settings,
   AlertCircle,
+  Sword,
+  Dumbbell,
+  Shield,
+  Briefcase,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -130,6 +134,21 @@ export default async function DashboardPage() {
     upcomingGames = gamesData || [];
   }
 
+  // Jogos com convocatória já confirmada (para não mostrar alerta)
+  const confirmedGameIds = new Set<string>();
+  if (upcomingGames.length > 0) {
+    const upcomingGameIds = upcomingGames.map((g) => g.id);
+    const { data: existingConvocations } = await (admin ?? supabase)
+      .from("convocations")
+      .select("game_id, status")
+      .in("game_id", upcomingGameIds)
+      .in("status", ["confirmed", "closed", "draft"]);
+    (existingConvocations || []).forEach((c) => {
+      // Qualquer convocatória existente (mesmo draft) fecha o alerta
+      if (c.game_id) confirmedGameIds.add(c.game_id);
+    });
+  }
+
   // Treino de hoje especificamente (para presenças)
   const todayTrainings = upcomingTrainings.filter((t) => t.session_date === todayDate);
   const todayTraining =
@@ -142,30 +161,14 @@ export default async function DashboardPage() {
 
   const navCards = [
     { href: "/players", icon: Users, label: "Plantel", color: "text-blue-600" },
-    {
-      href: "/calendar",
-      icon: Calendar,
-      label: "Calendário",
-      color: "text-purple-600",
-    },
-    {
-      href: "/competitions",
-      icon: Trophy,
-      label: "Competições",
-      color: "text-amber-600",
-    },
-    {
-      href: "/statistics",
-      icon: BarChart2,
-      label: "Estatísticas",
-      color: "text-emerald-600",
-    },
-    {
-      href: "/team/setup",
-      icon: Settings,
-      label: "Configurações",
-      color: "text-slate-600",
-    },
+    { href: "/games", icon: Sword, label: "Jogos", color: "text-indigo-600" },
+    { href: "/trainings", icon: Dumbbell, label: "Treinos", color: "text-emerald-600" },
+    { href: "/calendar", icon: Calendar, label: "Calendário", color: "text-purple-600" },
+    { href: "/competitions", icon: Trophy, label: "Competições", color: "text-amber-600" },
+    { href: "/team", icon: Shield, label: "Equipa", color: "text-teal-600" },
+    { href: "/staff", icon: Briefcase, label: "Equipa Técnica", color: "text-rose-600" },
+    { href: "/statistics", icon: BarChart2, label: "Estatísticas", color: "text-orange-600" },
+    { href: "/settings", icon: Settings, label: "Configurações", color: "text-slate-600" },
   ];
 
   const hasPending = upcomingTrainings.length > 0 || upcomingGames.length > 0;
@@ -295,7 +298,8 @@ export default async function DashboardPage() {
             {/* Próximos jogos */}
             {upcomingGames.map((game) => {
               const gameDate = game.game_datetime ? parseISO(game.game_datetime) : null;
-              const needsConvocation = gameDate && gameDate <= in48h && gameDate >= now;
+              const needsConvocation =
+                gameDate && gameDate <= in48h && gameDate >= now && !confirmedGameIds.has(game.id);
               return (
                 <div key={game.id} className="space-y-1">
                   <Link href={`/games/${game.id}`}>

@@ -44,6 +44,7 @@ interface GameForm {
   game_datetime: string;
   is_home: boolean;
   location: string;
+  round_number: string;
 }
 
 const EMPTY_COMP_FORM: CompetitionForm = {
@@ -59,6 +60,7 @@ const EMPTY_GAME_FORM: GameForm = {
   game_datetime: "",
   is_home: true,
   location: "",
+  round_number: "",
 };
 
 export default function CompetitionsPage() {
@@ -121,7 +123,7 @@ export default function CompetitionsPage() {
     const { data: comps } = await supabase
       .from("competitions")
       .select(
-        "*, games(id, game_datetime, opponent_name, is_home, status, score_home, score_away, location)",
+        "*, games(id, game_datetime, opponent_name, is_home, status, score_home, score_away, location, title)",
       )
       .eq("team_id", firstTeam.id)
       .order("created_at", { ascending: false });
@@ -235,6 +237,7 @@ export default function CompetitionsPage() {
       team_id: teamId,
       age_group_id: ageGroupId,
       competition_id: addingGameToCompId,
+      title: gameForm.round_number ? `Jornada ${gameForm.round_number}` : null,
       opponent_name: gameForm.opponent_name,
       game_datetime: gameForm.game_datetime,
       is_home: gameForm.is_home,
@@ -418,10 +421,17 @@ export default function CompetitionsPage() {
                         className="text-blue-500 flex-shrink-0"
                       />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-800 truncate">
-                          {game.is_home ? "vs" : "@"}{" "}
-                          {game.opponent_name || "Adversário"}
-                        </p>
+                        <div className="flex items-center gap-1.5">
+                          {game.title && (
+                            <span className="text-[10px] font-bold bg-blue-100 text-blue-700 rounded px-1 py-0.5 flex-shrink-0">
+                              {game.title.replace("Jornada ", "J")}
+                            </span>
+                          )}
+                          <p className="text-sm font-medium text-slate-800 truncate">
+                            {game.is_home ? "vs" : "@"}{" "}
+                            {game.opponent_name || "Adversário"}
+                          </p>
+                        </div>
                         <p className="text-xs text-slate-400">
                           {format(
                             parseISO(game.game_datetime),
@@ -455,10 +465,17 @@ export default function CompetitionsPage() {
                           ✓
                         </span>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-slate-600 truncate">
-                            {game.is_home ? "vs" : "@"}{" "}
-                            {game.opponent_name || "Adversário"}
-                          </p>
+                          <div className="flex items-center gap-1.5">
+                            {game.title && (
+                              <span className="text-[10px] font-bold bg-slate-100 text-slate-500 rounded px-1 py-0.5 flex-shrink-0">
+                                {game.title.replace("Jornada ", "J")}
+                              </span>
+                            )}
+                            <p className="text-sm font-medium text-slate-600 truncate">
+                              {game.is_home ? "vs" : "@"}{" "}
+                              {game.opponent_name || "Adversário"}
+                            </p>
+                          </div>
                           <p className="text-xs text-slate-400">
                             {format(parseISO(game.game_datetime), "d MMM", {
                               locale: pt,
@@ -486,20 +503,38 @@ export default function CompetitionsPage() {
                         </button>
                       </div>
                       <form onSubmit={handleSaveGame} className="space-y-2">
-                        <div>
-                          <Label className="text-xs">Adversário *</Label>
-                          <Input
-                            value={gameForm.opponent_name}
-                            onChange={(e) =>
-                              setGameForm((f) => ({
-                                ...f,
-                                opponent_name: e.target.value,
-                              }))
-                            }
-                            placeholder="Nome do adversário"
-                            required
-                            className="text-sm h-8"
-                          />
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <Label className="text-xs">Adversário *</Label>
+                            <Input
+                              value={gameForm.opponent_name}
+                              onChange={(e) =>
+                                setGameForm((f) => ({
+                                  ...f,
+                                  opponent_name: e.target.value,
+                                }))
+                              }
+                              placeholder="Nome do adversário"
+                              required
+                              className="text-sm h-8"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-xs">Jornada</Label>
+                            <Input
+                              type="number"
+                              min="1"
+                              value={gameForm.round_number}
+                              onChange={(e) =>
+                                setGameForm((f) => ({
+                                  ...f,
+                                  round_number: e.target.value,
+                                }))
+                              }
+                              placeholder="ex: 3"
+                              className="text-sm h-8"
+                            />
+                          </div>
                         </div>
                         <div className="grid grid-cols-2 gap-2">
                           <div>

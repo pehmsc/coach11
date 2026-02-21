@@ -20,7 +20,7 @@ const navItems = [
   { href: "/calendar", icon: Calendar, label: "Calendário" },
   { href: "/competitions", icon: Trophy, label: "Competições" },
   { href: "/statistics", icon: BarChart2, label: "Estatísticas" },
-  { href: "/team/setup", icon: Settings, label: "Configurações" },
+  { href: "/settings", icon: Settings, label: "Configurações" },
 ];
 
 interface SidebarProps {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { format, addDays, subDays, parseISO, isToday } from "date-fns";
 import { pt } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,7 @@ function isValidStatus(value: unknown): value is AttendanceStatus {
 }
 
 export default function AttendancePage() {
+  const router = useRouter();
   const todayStr = format(new Date(), "yyyy-MM-dd");
   const [selectedDate, setSelectedDate] = useState(todayStr);
 
@@ -163,6 +165,7 @@ export default function AttendancePage() {
 
       setSaved(true);
       setSessionClosed(true);
+      router.refresh(); // Invalidar cache RSC do dashboard
     } catch {
       setError("Erro de ligação ao guardar presenças.");
     } finally {

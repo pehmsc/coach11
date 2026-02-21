@@ -83,12 +83,25 @@ export async function GET(request: Request) {
 
     let attendanceRows: { player_id: string; status: string }[] = [];
     if (sessionIds.length > 0 && playerIds.length > 0) {
-      const { data: attRows } = await admin
-        .from("attendance_records")
-        .select("player_id, status")
-        .in("training_session_id", sessionIds)
-        .in("player_id", playerIds);
-      attendanceRows = (attRows || []) as { player_id: string; status: string }[];
+      // Tentar ambas as tabelas: attendance_records e training_attendance (schema pode variar)
+      const tables = ["attendance_records", "training_attendance"] as const;
+      const fks = ["training_session_id", "session_id"] as const;
+
+      for (const table of tables) {
+        for (const fk of fks) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data, error } = await (admin as any)
+            .from(table)
+            .select("player_id, status")
+            .in(fk, sessionIds)
+            .in("player_id", playerIds);
+          if (!error && data && (data as unknown[]).length > 0) {
+            attendanceRows = data as { player_id: string; status: string }[];
+            break;
+          }
+        }
+        if (attendanceRows.length > 0) break;
+      }
     }
 
     // ── Game final stats ──
