@@ -754,14 +754,23 @@ export default function TeamSetupPage() {
                                     onChange={(e) => {
                                       const newColor = e.target.value;
                                       setKitColors((prev) => ({ ...prev, [key]: newColor }));
+                                      // Debounce: cancel any pending save and schedule a new one
+                                      const existing = kitSaveTimers.current.get(key);
+                                      if (existing) clearTimeout(existing);
+                                      const timer = setTimeout(() => {
+                                        void handleKitColorChange(kitNum, playerType, pieceType, newColor);
+                                        kitSaveTimers.current.delete(key);
+                                      }, 600);
+                                      kitSaveTimers.current.set(key, timer);
                                     }}
                                     onBlur={(e) => {
-                                      void handleKitColorChange(
-                                        kitNum,
-                                        playerType,
-                                        pieceType,
-                                        e.target.value,
-                                      );
+                                      // Cancel debounce and save immediately on blur
+                                      const existing = kitSaveTimers.current.get(key);
+                                      if (existing) {
+                                        clearTimeout(existing);
+                                        kitSaveTimers.current.delete(key);
+                                      }
+                                      void handleKitColorChange(kitNum, playerType, pieceType, e.target.value);
                                     }}
                                     className="w-9 h-9 rounded-lg border border-slate-200 cursor-pointer p-0.5 bg-white"
                                     title={`${KIT_LABELS[kitNum]} · ${PLAYER_TYPE_LABELS[playerType]} · ${PIECE_LABELS[pieceType]}`}
