@@ -98,6 +98,7 @@ export default function CalendarPage() {
   const [ageGroupId, setAgeGroupId] = useState<string | null>(null);
   const [teamId, setTeamId] = useState<string | null>(null);
   const [ageGroupName, setAgeGroupName] = useState("");
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const [modalMode, setModalMode] = useState<ModalMode | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<CalEvent | null>(null);
@@ -111,134 +112,118 @@ export default function CalendarPage() {
     const from = format(weekStart, "yyyy-MM-dd");
     const to = format(addDays(weekStart, 6), "yyyy-MM-dd");
 
-    const { data: sessions, error: sessErr } = await supabase
-      .from("training_sessions")
-      .select("*")
-      .eq("age_group_id", ageGroupId)
-      .gte("session_date", from)
-      .lte("session_date", to)
-      .order("session_date", { ascending: true })
-      .order("start_time", { ascending: true, nullsFirst: false })
-      .order("created_at", { ascending: true });
+    setLoadError(null);
+    try {
+      const res = await fetch(
+        `/api/calendar/events?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&ageGroupId=${encodeURIComponent(ageGroupId)}`,
+        { cache: "no-store" },
+      );
+      const payload = (await res.json().catch(() => null)) as
+        | {
+            success?: boolean;
+            ageGroupName?: string;
+            teamId?: string | null;
+            sessions?: Array<Record<string, unknown>>;
+            games?: Array<Record<string, unknown>>;
+            error?: string;
+          }
+        | null;
 
-    if (sessErr) console.error("Erro training_sessions:", sessErr);
+      if (!res.ok || !payload?.success) {
+        setEvents([]);
+        setLoadError(payload?.error || "Erro ao carregar calendário.");
+        return;
+      }
 
-    const { data: games, error: gamesErr } = await supabase
-      .from("games")
-      .select("*")
-      .eq("age_group_id", ageGroupId)
-      .gte("game_datetime", `${from}T00:00:00`)
-      .lte("game_datetime", `${to}T23:59:59`)
-      .order("game_datetime", { ascending: true })
-      .order("created_at", { ascending: true });
+      if (typeof payload.ageGroupName === "string" && payload.ageGroupName.trim()) {
+        setAgeGroupName(payload.ageGroupName);
+      }
+      if (typeof payload.teamId === "string") {
+        setTeamId(payload.teamId);
+      }
 
-    if (gamesErr) console.error("Erro games:", gamesErr);
+      const sessions = payload.sessions || [];
+      const games = payload.games || [];
 
-    const sessionEvents: CalEvent[] = (sessions || []).map((s) => ({
-      id: s.id,
-      type: "training" as const,
-      date: s.session_date,
-      title: s.title || "Treino",
-      start_time: s.start_time,
-      notes: s.notes,
-      status: s.status,
-      location: s.location,
-      location_address: s.location_address,
-      image_url: s.image_url,
-    }));
+      const sessionEvents: CalEvent[] = (sessions || []).map((s) => ({
+        id: String(s.id),
+        type: "training" as const,
+        date: String(s.session_date || ""),
+        title: typeof s.title === "string" ? s.title : "Treino",
+        start_time: typeof s.start_time === "string" ? s.start_time : undefined,
+        notes: typeof s.notes === "string" ? s.notes : undefined,
+        status: typeof s.status === "string" ? s.status : undefined,
+        location: typeof s.location === "string" ? s.location : undefined,
+        location_address:
+          typeof s.location_address === "string" ? s.location_address : undefined,
+        image_url: typeof s.image_url === "string" ? s.image_url : undefined,
+      }));
 
-    const gameEvents: CalEvent[] = (games || []).map((g) => ({
-      id: g.id,
-      type: "game" as const,
-      date: g.game_datetime?.split("T")[0] || "",
-      title: g.title || (g.opponent_name ? `vs ${g.opponent_name}` : "Jogo"),
-      start_time: g.game_datetime?.split("T")[1]?.substring(0, 5),
-      opponent_name: g.opponent_name,
-      location: g.location,
-      location_address: g.location_address,
-      is_home: g.is_home,
-      status: g.status,
-      image_url: g.image_url,
-      notes: g.notes,
-    }));
+      const gameEvents: CalEvent[] = (games || []).map((g) => ({
+        id: String(g.id),
+        type: "game" as const,
+        date:
+          typeof g.game_datetime === "string" ? g.game_datetime.split("T")[0] : "",
+        title:
+          typeof g.title === "string"
+            ? g.title
+            : typeof g.opponent_name === "string"
+              ? `vs ${g.opponent_name}`
+              : "Jogo",
+        start_time:
+          typeof g.game_datetime === "string"
+            ? g.game_datetime.split("T")[1]?.substring(0, 5)
+            : undefined,
+        opponent_name:
+          typeof g.opponent_name === "string" ? g.opponent_name : undefined,
+        location: typeof g.location === "string" ? g.location : undefined,
+        location_address:
+          typeof g.location_address === "string" ? g.location_address : undefined,
+        is_home: typeof g.is_home === "boolean" ? g.is_home : undefined,
+        status: typeof g.status === "string" ? g.status : undefined,
+        image_url: typeof g.image_url === "string" ? g.image_url : undefined,
+        notes: typeof g.notes === "string" ? g.notes : undefined,
+      }));
 
-    setEvents([...sessionEvents, ...gameEvents].sort(compareEventsByDateTime));
-  }, [ageGroupId, weekStart, supabase]);
+      setEvents([...sessionEvents, ...gameEvents].sort(compareEventsByDateTime));
+    } catch {
+      setEvents([]);
+      setLoadError("Erro de ligação ao carregar calendário.");
+    }
+  }, [ageGroupId, weekStart]);
 
   useEffect(() => {
     async function loadTeam() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
-        setLoading(false);
-        return;
-      }
-
-      let resolvedAgeGroupId: string | null = null;
-      let resolvedTeamId: string | null = null;
-      let resolvedAgeGroupName = "";
-
-      // Conta coordenador
-      const { data: managedAgeGroup } = await supabase
-        .from("age_groups")
-        .select("id, club_name, name, teams(id)")
-        .eq("coordinator_id", user.id)
-        .limit(1)
-        .maybeSingle();
-
-      if (managedAgeGroup) {
-        resolvedAgeGroupId = managedAgeGroup.id;
-        resolvedTeamId = managedAgeGroup.teams?.[0]?.id ?? null;
-        resolvedAgeGroupName = `${managedAgeGroup.club_name} · ${managedAgeGroup.name}`;
-      }
-
-      // Conta staff convidado
-      if (!resolvedAgeGroupId) {
-        const { data: staffTeam } = await supabase
-          .from("team_staff")
-          .select("team_id")
-          .eq("profile_id", user.id)
-          .limit(1)
-          .maybeSingle();
-
-        if (staffTeam?.team_id) {
-          const { data: team } = await supabase
-            .from("teams")
-            .select("id, age_group_id")
-            .eq("id", staffTeam.team_id)
-            .maybeSingle();
-
-          if (team?.age_group_id) {
-            const { data: staffAgeGroup } = await supabase
-              .from("age_groups")
-              .select("id, club_name, name")
-              .eq("id", team.age_group_id)
-              .maybeSingle();
-
-            if (staffAgeGroup) {
-              resolvedAgeGroupId = staffAgeGroup.id;
-              resolvedTeamId = team.id;
-              resolvedAgeGroupName = `${staffAgeGroup.club_name} · ${staffAgeGroup.name}`;
-            }
+      setLoadError(null);
+      const res = await fetch("/api/me/context", { cache: "no-store" });
+      const payload = (await res.json().catch(() => null)) as
+        | {
+            ageGroup?: { id?: string; club_name?: string; name?: string } | null;
+            teamId?: string | null;
+            error?: string;
           }
-        }
-      }
+        | null;
 
-      if (!resolvedAgeGroupId) {
-        console.error("Erro ao carregar escalão: utilizador sem equipa associada.");
+      if (!res.ok) {
+        setLoadError(payload?.error || "Erro ao carregar contexto do calendário.");
         setLoading(false);
         return;
       }
+
+      const resolvedAgeGroupId = payload?.ageGroup?.id ?? null;
+      const resolvedAgeGroupName =
+        payload?.ageGroup?.club_name && payload?.ageGroup?.name
+          ? `${payload.ageGroup.club_name} · ${payload.ageGroup.name}`
+          : "";
 
       setAgeGroupId(resolvedAgeGroupId);
       setAgeGroupName(resolvedAgeGroupName);
-      if (resolvedTeamId) setTeamId(resolvedTeamId);
+      setTeamId(payload?.teamId ?? null);
       setLoading(false);
     }
 
-    loadTeam();
-  }, [supabase]);
+    void loadTeam();
+  }, []);
 
   // Efeito de bootstrap/sincronização de dados com o backend.
   useEffect(() => {
@@ -433,6 +418,15 @@ export default function CalendarPage() {
     return (
       <div className="p-4 md:p-8 flex items-center justify-center min-h-[50vh]">
         <p className="text-slate-500">A carregar...</p>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="p-4 md:p-8 text-center py-16">
+        <AlertCircle size={40} className="text-red-300 mx-auto mb-3" />
+        <p className="text-slate-700 text-sm">{loadError}</p>
       </div>
     );
   }

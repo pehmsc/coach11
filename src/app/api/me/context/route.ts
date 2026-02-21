@@ -2,6 +2,13 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 
+type AgeGroupContext = {
+  id: string;
+  club_name: string;
+  name: string;
+  football_format: string | null;
+};
+
 function normalizeKitRowForUi(row: Record<string, unknown>) {
   const playerType =
     typeof row.player_type === "string" && row.player_type === "field_player"
@@ -16,6 +23,174 @@ function normalizeKitRowForUi(row: Record<string, unknown>) {
     ...row,
     player_type: playerType,
     piece_type: pieceType,
+  };
+}
+
+async function pickPreferredTeamId(
+  admin: ReturnType<typeof createAdminClient>,
+  teamIds: string[],
+) {
+  if (teamIds.length === 0) return null;
+
+  const { data: latestGame } = await admin
+    .from("games")
+    .select("team_id")
+    .in("team_id", teamIds)
+    .order("game_datetime", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (latestGame?.team_id && teamIds.includes(latestGame.team_id)) {
+    return latestGame.team_id;
+  }
+
+  const { data: latestCompetition } = await admin
+    .from("competitions")
+    .select("team_id")
+    .in("team_id", teamIds)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (latestCompetition?.team_id && teamIds.includes(latestCompetition.team_id)) {
+    return latestCompetition.team_id;
+  }
+
+  return teamIds[0] ?? null;
+}
+
+async function resolveManagedContext(
+  admin: ReturnType<typeof createAdminClient>,
+  userId: string,
+) {
+  const { data: managedAgeGroups } = await admin
+    .from("age_groups")
+    .select("id, club_name, name, football_format")
+    .eq("coordinator_id", userId)
+    .order("created_at", { ascending: true })
+    .limit(20);
+
+  if (!managedAgeGroups || managedAgeGroups.length === 0) {
+    return null;
+  }
+
+  const ageGroups = managedAgeGroups as AgeGroupContext[];
+  const ageGroupIds = ageGroups.map((row) => row.id);
+
+  const { data: teams } = await admin
+    .from("teams")
+    .select("id, age_group_id")
+    .in("age_group_id", ageGroupIds)
+    .order("created_at", { ascending: true })
+    .limit(100);
+
+  const teamRows = teams || [];
+  const teamIds = teamRows
+    .map((row) => row.id)
+    .filter((value): value is string => typeof value === "string");
+  const preferredTeamId = await pickPreferredTeamId(admin, teamIds);
+  const preferredTeam =
+    teamRows.find((row) => row.id === preferredTeamId) || teamRows[0] || null;
+  const preferredAgeGroup =
+    ageGroups.find((row) => row.id === preferredTeam?.age_group_id) ||
+    ageGroups[0] ||
+    null;
+
+  return {
+    source: "coordinator" as const,
+    teamId: preferredTeam?.id ?? null,
+    teamRole: "coordinator" as const,
+    ageGroup: preferredAgeGroup,
+    accessibleTeamIds: teamIds,
+  };
+}
+
+async function resolveStaffContext(
+  admin: ReturnType<typeof createAdminClient>,
+  userId: string,
+) {
+  const { data: staffLinks } = await admin
+    .from("team_staff")
+    .select("team_id, role, created_at")
+    .eq("profile_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(20);
+
+  if (!staffLinks || staffLinks.length === 0) {
+    return null;
+  }
+
+  const orderedTeamIds = Array.from(
+    new Set(
+      staffLinks
+        .map((row) => row.team_id)
+        .filter((value): value is string => typeof value === "string"),
+    ),
+  );
+  if (orderedTeamIds.length === 0) {
+    return null;
+  }
+
+  const { data: teams } = await admin
+    .from("teams")
+    .select("id, age_group_id")
+    .in("id", orderedTeamIds);
+
+  const teamsById = new Map(
+    (teams || [])
+      .filter((row) => typeof row.id === "string")
+      .map((row) => [row.id, row]),
+  );
+  const preferredTeamId = await pickPreferredTeamId(admin, orderedTeamIds);
+  const candidateTeamIds = [
+    ...(preferredTeamId ? [preferredTeamId] : []),
+    ...orderedTeamIds.filter((id) => id !== preferredTeamId),
+  ];
+
+  const ageGroupIds = Array.from(
+    new Set(
+      (teams || [])
+        .map((row) => row.age_group_id)
+        .filter((value): value is string => typeof value === "string"),
+    ),
+  );
+  let ageGroupsById = new Map<string, AgeGroupContext>();
+  if (ageGroupIds.length > 0) {
+    const { data: ageGroupRows } = await admin
+      .from("age_groups")
+      .select("id, club_name, name, football_format")
+      .in("id", ageGroupIds);
+    ageGroupsById = new Map(
+      ((ageGroupRows || []) as AgeGroupContext[]).map((row) => [row.id, row]),
+    );
+  }
+
+  let resolvedTeamId: string | null = null;
+  let resolvedAgeGroup: AgeGroupContext | null = null;
+  for (const teamId of candidateTeamIds) {
+    const teamRow = teamsById.get(teamId);
+    if (!teamRow?.age_group_id) continue;
+    const ageGroupRow = ageGroupsById.get(teamRow.age_group_id);
+    if (!ageGroupRow) continue;
+    resolvedTeamId = teamId;
+    resolvedAgeGroup = ageGroupRow;
+    break;
+  }
+
+  if (!resolvedTeamId) {
+    resolvedTeamId = candidateTeamIds[0] ?? null;
+  }
+
+  const resolvedRole =
+    staffLinks.find((row) => row.team_id === resolvedTeamId)?.role ?? null;
+
+  return {
+    source: "staff" as const,
+    teamId: resolvedTeamId,
+    teamRole: typeof resolvedRole === "string" ? resolvedRole : null,
+    ageGroup: resolvedAgeGroup,
+    accessibleTeamIds: orderedTeamIds,
   };
 }
 
@@ -38,71 +213,28 @@ export async function GET() {
       .eq("id", user.id)
       .maybeSingle();
 
-    let source: "coordinator" | "staff" | "none" = "none";
-    let teamRole: string | null = null;
-    let teamId: string | null = null;
-    let ageGroup: Record<string, unknown> | null = null;
+    const managedContext = await resolveManagedContext(admin, user.id);
+    const staffContext = managedContext
+      ? null
+      : await resolveStaffContext(admin, user.id);
 
-    const { data: managedAgeGroup } = await admin
-      .from("age_groups")
-      .select("*")
-      .eq("coordinator_id", user.id)
-      .order("created_at", { ascending: true })
-      .limit(1)
-      .maybeSingle();
-
-    if (managedAgeGroup) {
-      source = "coordinator";
-      ageGroup = managedAgeGroup;
-
-      const { data: firstTeam } = await admin
-        .from("teams")
-        .select("*")
-        .eq("age_group_id", managedAgeGroup.id)
-        .order("created_at", { ascending: true })
-        .limit(1)
-        .maybeSingle();
-
-      teamId = firstTeam?.id ?? null;
-    } else {
-      const { data: staffLink } = await admin
-        .from("team_staff")
-        .select("team_id, role")
-        .eq("profile_id", user.id)
-        .order("created_at", { ascending: true })
-        .limit(1)
-        .maybeSingle();
-
-      if (staffLink?.team_id) {
-        source = "staff";
-        teamRole = staffLink.role ?? null;
-        teamId = staffLink.team_id;
-
-        const { data: team } = await admin
-          .from("teams")
-          .select("age_group_id")
-          .eq("id", staffLink.team_id)
-          .maybeSingle();
-
-        if (team?.age_group_id) {
-          const { data: staffAgeGroup } = await admin
-            .from("age_groups")
-            .select("*")
-            .eq("id", team.age_group_id)
-            .maybeSingle();
-          ageGroup = staffAgeGroup || null;
-        }
-      }
-    }
+    const source = managedContext?.source ?? staffContext?.source ?? "none";
+    const teamRole = managedContext?.teamRole ?? staffContext?.teamRole ?? null;
+    const teamId = managedContext?.teamId ?? staffContext?.teamId ?? null;
+    const ageGroup = managedContext?.ageGroup ?? staffContext?.ageGroup ?? null;
+    const accessibleTeamIds = managedContext?.accessibleTeamIds ??
+      staffContext?.accessibleTeamIds ??
+      [];
 
     if (!ageGroup) {
       return NextResponse.json({
         success: true,
         linked: false,
         source,
-        teamId: null,
-        teamRole: null,
+        teamId,
+        teamRole,
         ageGroup: null,
+        accessibleTeamIds,
         kits: [],
         activeStaffProfileIds: [],
         staffInvites: [],
@@ -129,14 +261,23 @@ export async function GET() {
       admin
         .from("staff_invites")
         .select("*")
-        .eq("age_group_id", String((ageGroup as { id: string }).id))
+        .eq("age_group_id", ageGroup.id)
         .order("created_at", { ascending: false }),
     ]);
 
-    // Fetch full profiles for staff members using admin client (bypasses RLS)
-    const rawStaffRows = (staffRes.data || []) as Array<{ id: string; profile_id: string; role: string | null }>;
-    const staffProfileIds = rawStaffRows.map((r) => r.profile_id);
-    let staffProfilesData: Array<{ id: string; full_name: string | null; email: string | null; avatar_url: string | null }> = [];
+    const rawStaffRows = (staffRes.data || []) as Array<{
+      id: string;
+      profile_id: string;
+      role: string | null;
+    }>;
+    const staffProfileIds = rawStaffRows.map((row) => row.profile_id);
+
+    let staffProfilesData: Array<{
+      id: string;
+      full_name: string | null;
+      email: string | null;
+      avatar_url: string | null;
+    }> = [];
     if (staffProfileIds.length > 0) {
       const { data: pData } = await admin
         .from("profiles")
@@ -144,6 +285,7 @@ export async function GET() {
         .in("id", staffProfileIds);
       staffProfilesData = (pData || []) as typeof staffProfilesData;
     }
+
     const staffProfileMap = new Map(staffProfilesData.map((p) => [p.id, p]));
     const staffMembers = rawStaffRows.map((row) => ({
       id: row.id,
@@ -161,6 +303,7 @@ export async function GET() {
       teamId,
       teamRole,
       ageGroup,
+      accessibleTeamIds,
       kits: ((kitsRes.data || []) as Record<string, unknown>[]).map((row) =>
         normalizeKitRowForUi(row),
       ),

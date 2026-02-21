@@ -1,11 +1,10 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import { format, parseISO, isToday, isFuture, isPast } from "date-fns";
 import { pt } from "date-fns/locale";
-import { Loader2, Sword, Home, Plane, ChevronRight } from "lucide-react";
+import { Loader2, Sword, Home, Plane, ChevronRight, AlertCircle } from "lucide-react";
 
 interface GameRow {
   id: string;
@@ -49,10 +48,11 @@ function statusBadge(game: GameRow) {
 }
 
 export default function GamesPage() {
-  const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [games, setGames] = useState<GameRow[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [hasContext, setHasContext] = useState(true);
 
   useEffect(() => {
     void loadGames();
@@ -61,23 +61,28 @@ export default function GamesPage() {
 
   async function loadGames() {
     setLoading(true);
+    setLoadError(null);
+    setHasContext(true);
 
-    const res = await fetch("/api/me/context", { cache: "no-store" });
-    const ctx = await res.json().catch(() => ({}));
-    if (!res.ok || !ctx?.ageGroup?.id) {
+    const res = await fetch("/api/games", { cache: "no-store" });
+    const payload = (await res.json().catch(() => null)) as
+      | { success?: boolean; linked?: boolean; games?: GameRow[]; error?: string }
+      | null;
+
+    if (!res.ok || !payload) {
+      setLoadError(payload?.error || "Erro ao carregar jogos.");
       setLoading(false);
       return;
     }
 
-    const agId: string = (ctx.ageGroup as { id: string }).id;
+    if (payload.linked === false) {
+      setHasContext(false);
+      setGames([]);
+      setLoading(false);
+      return;
+    }
 
-    const { data } = await supabase
-      .from("games")
-      .select("id, game_datetime, opponent_name, is_home, status, score_home, score_away, location, title, competition_id")
-      .eq("age_group_id", agId)
-      .order("game_datetime", { ascending: false });
-
-    setGames((data as GameRow[]) || []);
+    setGames(Array.isArray(payload.games) ? payload.games : []);
     setLoading(false);
   }
 
@@ -91,6 +96,27 @@ export default function GamesPage() {
     return (
       <div className="p-4 md:p-8 max-w-2xl mx-auto flex items-center justify-center py-16">
         <Loader2 size={28} className="animate-spin text-slate-400" />
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="p-4 md:p-8 max-w-2xl mx-auto text-center py-16">
+        <AlertCircle size={40} className="text-red-300 mx-auto mb-3" />
+        <p className="text-slate-700 text-sm">{loadError}</p>
+      </div>
+    );
+  }
+
+  if (!hasContext) {
+    return (
+      <div className="p-4 md:p-8 max-w-2xl mx-auto text-center py-16">
+        <Sword size={40} className="text-slate-200 mx-auto mb-3" />
+        <p className="text-slate-700 font-semibold mb-2">Sem escalão configurado</p>
+        <p className="text-slate-500 text-sm">
+          Configura o teu escalão em Configurações antes de gerir jogos.
+        </p>
       </div>
     );
   }
