@@ -455,19 +455,24 @@ export default function LiveGamePage() {
 
   const loadData = useCallback(async () => {
     setClockHydrated(false);
-    const { data: gameData } = await supabase
-      .from("games")
-      .select("*")
-      .eq("id", id)
-      .single();
+    setError(null);
+
+    const convRes = await fetch(`/api/games/${id}/convocation`, { cache: "no-store" });
+    const convPayload = await convRes.json().catch(() => ({}));
+    const gameData =
+      convRes.ok && convPayload?.game ? (convPayload.game as Game) : null;
 
     if (!gameData) {
-      setError("Jogo não encontrado.");
+      setGame(null);
+      setError(
+        (convPayload as { error?: string } | null)?.error || "Jogo não encontrado.",
+      );
       setLoading(false);
       return;
     }
     setGame(gameData);
-    if (gameData.status === "completed") {
+    const gameStatus = (gameData as { status?: string }).status ?? null;
+    if (gameStatus === "completed") {
       setPhase("completed");
       setClockState({ baseSeconds: 0, runningSinceMs: null });
       setClockHydrated(true);
@@ -501,12 +506,10 @@ export default function LiveGamePage() {
       })
       .catch(() => null);
 
-    // Fetch convocated players + lineup via server API (bypasses client-side RLS limitations)
+    // Players + lineup already come from convocation API (bypasses client-side RLS limitations)
     let enriched: LivePlayer[] = [];
-    const convRes = await fetch(`/api/games/${id}/convocation`, { cache: "no-store" });
-    const convPayload = await convRes.json().catch(() => ({}));
 
-    if (convRes.ok && Array.isArray(convPayload?.players)) {
+    if (Array.isArray(convPayload?.players)) {
       const rawPlayers = convPayload.players as Array<Player & { isConvocated?: boolean }>;
       const convPlayers = rawPlayers
         .filter((player) => player?.isConvocated === true)
@@ -635,7 +638,7 @@ export default function LiveGamePage() {
       : 1;
     const fallbackBaseSeconds = Math.max(0, (fallbackMinute - 1) * 60);
 
-    if (gameData.status === "completed") {
+    if (gameStatus === "completed") {
       setPhase("completed");
       setClockState({
         baseSeconds: fallbackBaseSeconds,

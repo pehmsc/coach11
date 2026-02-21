@@ -13,17 +13,34 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, Plus, X, Copy, Check, Users, Mail, Trash2 } from "lucide-react";
+import {
+  Loader2,
+  Plus,
+  X,
+  Copy,
+  Check,
+  Users,
+  Mail,
+  Trash2,
+  Pencil,
+} from "lucide-react";
 import { toast } from "sonner";
 
-const ROLE_OPTIONS = [
+const INVITE_ROLE_OPTIONS = [
   { value: "coach", label: "Treinador Principal" },
+  { value: "assistant_coach", label: "Treinador Adjunto" },
+  { value: "coordinator", label: "Coordenador" },
+];
+
+const STAFF_ROLE_OPTIONS = [
+  { value: "head_coach", label: "Treinador Principal" },
   { value: "assistant_coach", label: "Treinador Adjunto" },
   { value: "coordinator", label: "Coordenador" },
 ];
 
 const ROLE_LABELS: Record<string, string> = {
   coach: "Treinador Principal",
+  head_coach: "Treinador Principal",
   assistant_coach: "Treinador Adjunto",
   coordinator: "Coordenador",
   staff: "Equipa Técnica",
@@ -35,6 +52,7 @@ interface StaffMember {
   role: string;
   full_name: string;
   email?: string;
+  phone?: string;
   avatar_url?: string;
 }
 
@@ -57,12 +75,17 @@ const EMPTY_FORM = {
   role: "assistant_coach",
 };
 
+const EMPTY_EDIT_FORM = {
+  role: "assistant_coach",
+  email: "",
+  phone: "",
+};
+
 export default function StaffPage() {
   const supabase = useMemo(() => createClient(), []);
 
   const [loading, setLoading] = useState(true);
   const [accountRole, setAccountRole] = useState("coordinator");
-  const [teamId, setTeamId] = useState<string | null>(null);
 
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [invites, setInvites] = useState<StaffInvite[]>([]);
@@ -77,6 +100,9 @@ export default function StaffPage() {
   const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
   const [deletingInviteId, setDeletingInviteId] = useState<string | null>(null);
   const [confirmDeleteInviteId, setConfirmDeleteInviteId] = useState<string | null>(null);
+  const [editingMember, setEditingMember] = useState<StaffMember | null>(null);
+  const [editForm, setEditForm] = useState(EMPTY_EDIT_FORM);
+  const [savingEdit, setSavingEdit] = useState(false);
 
   useEffect(() => {
     void loadData();
@@ -100,15 +126,21 @@ export default function StaffPage() {
 
     const incomingRole = ctx?.profile?.role ?? "coordinator";
     setAccountRole(incomingRole);
-    const tid = typeof ctx?.teamId === "string" ? ctx.teamId : null;
-    setTeamId(tid);
 
     // Invites from context
     setInvites((ctx?.staffInvites as StaffInvite[]) || []);
 
     // Staff members from context (fetched via admin client — bypasses RLS)
     if (user) {
-      type CtxStaffMember = { id: string; profile_id: string; role: string; full_name: string | null; email: string | null; avatar_url: string | null };
+      type CtxStaffMember = {
+        id: string;
+        profile_id: string;
+        role: string;
+        full_name: string | null;
+        email: string | null;
+        phone: string | null;
+        avatar_url: string | null;
+      };
       const rawMembers = (ctx?.staffMembers as CtxStaffMember[]) || [];
       const members: StaffMember[] = rawMembers
         .filter((s) => s.profile_id !== user.id) // exclude self
@@ -118,6 +150,7 @@ export default function StaffPage() {
           role: s.role || "staff",
           full_name: s.full_name || "Sem nome",
           email: s.email || undefined,
+          phone: s.phone || undefined,
           avatar_url: s.avatar_url || undefined,
         }));
       setStaff(members);
@@ -153,17 +186,98 @@ export default function StaffPage() {
   }
 
   async function handleRemoveStaff(staffId: string) {
+    if (accountRole !== "coordinator") {
+      toast.error("Apenas o coordenador pode gerir a equipa técnica.");
+      return;
+    }
     setRemovingId(staffId);
     setConfirmRemoveId(null);
 
-    const { error } = await supabase.from("team_staff").delete().eq("id", staffId);
-    if (error) {
-      toast.error("Erro ao remover: " + error.message);
+    const res = await fetch(`/api/staff/${staffId}`, { method: "DELETE" });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      toast.error(data?.error || "Erro ao remover membro.");
     } else {
       setStaff((prev) => prev.filter((s) => s.id !== staffId));
       toast.success("Membro removido da equipa");
     }
     setRemovingId(null);
+  }
+
+  function openEditMember(member: StaffMember) {
+    if (accountRole !== "coordinator") return;
+    const normalizedRole =
+      member.role === "coach"
+        ? "head_coach"
+        : STAFF_ROLE_OPTIONS.some((option) => option.value === member.role)
+          ? member.role
+          : "assistant_coach";
+    setEditingMember(member);
+    setEditForm({
+      role: normalizedRole,
+      email: member.email || "",
+      phone: member.phone || "",
+    });
+  }
+
+  function closeEditMember() {
+    setEditingMember(null);
+    setEditForm(EMPTY_EDIT_FORM);
+  }
+
+  async function handleSaveMember(e: { preventDefault(): void }) {
+    e.preventDefault();
+    if (!editingMember || accountRole !== "coordinator") return;
+
+    setSavingEdit(true);
+    try {
+      const res = await fetch(`/api/staff/${editingMember.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          role: editForm.role,
+          email: editForm.email,
+          phone: editForm.phone,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || !data?.staffMember) {
+        toast.error(data?.error || "Erro ao atualizar membro.");
+        return;
+      }
+
+      const updated = data.staffMember as StaffMember;
+      setStaff((prev) =>
+        prev.map((member) =>
+          member.id === updated.id
+            ? {
+                ...member,
+                role: updated.role,
+                email: updated.email,
+                phone: updated.phone,
+              }
+            : member,
+        ),
+      );
+
+      if (data.authEmailSync === "provider_managed" && data.authEmailSyncMessage) {
+        toast.warning(data.authEmailSyncMessage);
+      } else if (data.authEmailSync === "failed") {
+        toast.warning(
+          data.authEmailSyncMessage ||
+            "Email de contacto atualizado, mas sem sincronização no Auth.",
+        );
+      } else {
+        toast.success("Membro atualizado.");
+      }
+
+      closeEditMember();
+    } catch {
+      toast.error("Erro de ligação ao atualizar membro.");
+    } finally {
+      setSavingEdit(false);
+    }
   }
 
   async function handleDeleteInvite(inviteId: string) {
@@ -237,9 +351,25 @@ export default function StaffPage() {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-slate-800 truncate">{member.full_name}</p>
                   <p className="text-xs text-slate-500">{ROLE_LABELS[member.role] || member.role}</p>
+                  {(member.email || member.phone) && (
+                    <p className="text-xs text-slate-400 truncate">
+                      {member.email || "Sem email"}
+                      {member.phone ? ` · ${member.phone}` : ""}
+                    </p>
+                  )}
                 </div>
                 {accountRole === "coordinator" && (
                   <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => openEditMember(member)}
+                      className="p-1.5 hover:bg-blue-50 rounded-lg group"
+                      title="Editar membro"
+                    >
+                      <Pencil
+                        size={14}
+                        className="text-slate-300 group-hover:text-blue-500 transition-colors"
+                      />
+                    </button>
                     {confirmRemoveId === member.id ? (
                       <>
                         <button
@@ -385,7 +515,7 @@ export default function StaffPage() {
                 <Select value={form.role} onValueChange={(v) => setForm((f) => ({ ...f, role: v }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {ROLE_OPTIONS.map((opt) => (
+                    {INVITE_ROLE_OPTIONS.map((opt) => (
                       <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                     ))}
                   </SelectContent>
@@ -396,6 +526,98 @@ export default function StaffPage() {
                   {sending ? <Loader2 size={16} className="animate-spin" /> : "Enviar convite"}
                 </Button>
                 <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Editar membro */}
+      {editingMember && (
+        <div
+          className="fixed inset-0 bg-black/50 z-50 flex items-end md:items-center justify-center p-4"
+          onClick={closeEditMember}
+        >
+          <div
+            className="bg-white rounded-2xl w-full max-w-md shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center p-5 border-b">
+              <h3 className="font-bold text-slate-900">Editar membro</h3>
+              <button onClick={closeEditMember}>
+                <X size={20} className="text-slate-400" />
+              </button>
+            </div>
+            <form onSubmit={handleSaveMember} className="p-5 space-y-4">
+              <div className="space-y-1.5">
+                <Label>Nome</Label>
+                <Input value={editingMember.full_name} disabled />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Cargo *</Label>
+                <Select
+                  value={editForm.role}
+                  onValueChange={(value) =>
+                    setEditForm((prev) => ({ ...prev, role: value }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {STAFF_ROLE_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Email</Label>
+                <Input
+                  type="email"
+                  value={editForm.email}
+                  onChange={(e) =>
+                    setEditForm((prev) => ({ ...prev, email: e.target.value }))
+                  }
+                  placeholder="email@exemplo.com"
+                />
+                <p className="text-[11px] text-slate-400">
+                  Em contas Google, o email de login pode continuar gerido pelo fornecedor.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Telemóvel</Label>
+                <Input
+                  type="tel"
+                  value={editForm.phone}
+                  onChange={(e) =>
+                    setEditForm((prev) => ({ ...prev, phone: e.target.value }))
+                  }
+                  placeholder="9XX XXX XXX"
+                />
+              </div>
+              <div className="flex gap-2 pt-2">
+                <Button
+                  type="submit"
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                  disabled={savingEdit}
+                >
+                  {savingEdit ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : (
+                    "Guardar alterações"
+                  )}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={closeEditMember}
+                  disabled={savingEdit}
+                >
+                  Cancelar
+                </Button>
               </div>
             </form>
           </div>

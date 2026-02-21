@@ -35,7 +35,7 @@ export async function GET() {
 
     const { data: profile } = await admin
       .from("profiles")
-      .select("id, full_name, role, email")
+      .select("id, full_name, role, email, phone")
       .eq("id", user.id)
       .maybeSingle();
 
@@ -91,12 +91,13 @@ export async function GET() {
       id: string;
       full_name: string | null;
       email: string | null;
+      phone: string | null;
       avatar_url: string | null;
     }> = [];
     if (staffProfileIds.length > 0) {
       const { data: pData } = await admin
         .from("profiles")
-        .select("id, full_name, email, avatar_url")
+        .select("id, full_name, email, phone, avatar_url")
         .in("id", staffProfileIds);
       staffProfilesData = (pData || []) as typeof staffProfilesData;
     }
@@ -108,6 +109,7 @@ export async function GET() {
       role: row.role || "staff",
       full_name: staffProfileMap.get(row.profile_id)?.full_name || null,
       email: staffProfileMap.get(row.profile_id)?.email || null,
+      phone: staffProfileMap.get(row.profile_id)?.phone || null,
       avatar_url: staffProfileMap.get(row.profile_id)?.avatar_url || null,
     }));
 

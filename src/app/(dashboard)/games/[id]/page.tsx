@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { differenceInMinutes, format, parseISO, subMinutes } from "date-fns";
 import { pt } from "date-fns/locale";
@@ -112,9 +112,10 @@ export default function GameDetailPage() {
   const [teamKits, setTeamKits] = useState<KitPieceRow[]>([]);
   const [kitSelection, setKitSelection] =
     useState<KitSelection>(EMPTY_KIT_SELECTION);
-  const [savingKitField, setSavingKitField] = useState<
-    keyof KitSelection | null
-  >(null);
+  const [kitDraftSelection, setKitDraftSelection] =
+    useState<KitSelection>(EMPTY_KIT_SELECTION);
+  const [kitEditorOpen, setKitEditorOpen] = useState(false);
+  const [savingKitSelection, setSavingKitSelection] = useState(false);
   const [footballFormat, setFootballFormat] = useState<string | null>(null);
   const [tacticalSystem, setTacticalSystem] = useState<string | null>(null);
   const [lineupStatuses, setLineupStatuses] = useState<
@@ -202,12 +203,15 @@ export default function GameDetailPage() {
       setTeamKits(
         (Array.isArray(payload.kits) ? payload.kits : []) as KitPieceRow[],
       );
-      setKitSelection({
+      const loadedKitSelection: KitSelection = {
         ...EMPTY_KIT_SELECTION,
         ...(typeof payload.kitSelection === "object" && payload.kitSelection
           ? (payload.kitSelection as Partial<KitSelection>)
           : {}),
-      });
+      };
+      setKitSelection(loadedKitSelection);
+      setKitDraftSelection(loadedKitSelection);
+      setKitEditorOpen(false);
       setFootballFormat(
         typeof payload.footballFormat === "string"
           ? payload.footballFormat
@@ -336,17 +340,38 @@ export default function GameDetailPage() {
     );
   }
 
-  async function handleKitChange(field: keyof KitSelection, value: string) {
-    const normalizedValue = value === "__none__" ? null : value;
-    const previousSelection = kitSelection;
-    const nextSelection: KitSelection = {
-      ...kitSelection,
-      [field]: normalizedValue,
-    };
+  const kitById = useMemo(
+    () => new Map(teamKits.map((piece) => [piece.id, piece])),
+    [teamKits],
+  );
 
-    setSavingKitField(field);
+  const hasKitDraftChanges = useMemo(
+    () => JSON.stringify(kitDraftSelection) !== JSON.stringify(kitSelection),
+    [kitDraftSelection, kitSelection],
+  );
+
+  function getKitColor(piece: KitPieceRow | null | undefined) {
+    const hex = piece?.color_hex?.trim() || "";
+    return /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(hex) ? hex : "#e2e8f0";
+  }
+
+  function handleKitDraftChange(field: keyof KitSelection, value: string) {
+    const normalizedValue = value === "__none__" ? null : value;
+    setKitDraftSelection((prev) => ({
+      ...prev,
+      [field]: normalizedValue,
+    }));
+  }
+
+  function closeKitEditor() {
+    setKitDraftSelection(kitSelection);
+    setKitEditorOpen(false);
+  }
+
+  async function saveKitSelection() {
+    const nextSelection = { ...kitDraftSelection };
+    setSavingKitSelection(true);
     setError(null);
-    setKitSelection(nextSelection);
 
     try {
       const res = await fetch(`/api/games/${id}/convocation/kits`, {
@@ -357,7 +382,6 @@ export default function GameDetailPage() {
       const payload = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        setKitSelection(previousSelection);
         setError(
           payload?.error || "Erro ao guardar equipamentos da convocatória.",
         );
@@ -369,16 +393,19 @@ export default function GameDetailPage() {
           ? (payload.kitSelection as Partial<KitSelection>)
           : null;
 
-      setKitSelection({
+      const savedSelection: KitSelection = {
         ...nextSelection,
         ...(responseSelection || {}),
-      });
+      };
+
+      setKitSelection(savedSelection);
+      setKitDraftSelection(savedSelection);
+      setKitEditorOpen(false);
       setConvocationStatus("draft");
     } catch {
-      setKitSelection(previousSelection);
       setError("Erro de ligação ao guardar equipamentos da convocatória.");
     } finally {
-      setSavingKitField(null);
+      setSavingKitSelection(false);
     }
   }
 
@@ -760,81 +787,175 @@ export default function GameDetailPage() {
 
       {/* Equipamento por jogo */}
       <div className="mb-5 rounded-xl border border-slate-200 bg-white p-4 space-y-4">
-        <div>
-          <h2 className="font-bold text-slate-900">Equipamento do jogo</h2>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Seleciona camisola, calções e meias de forma independente.
-          </p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="font-bold text-slate-900">Equipamento do jogo</h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Seleciona camisola, calções e meias de forma independente.
+            </p>
+          </div>
+          {kitEditorOpen ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={closeKitEditor}
+              disabled={savingKitSelection}
+            >
+              Fechar
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setKitDraftSelection(kitSelection);
+                setKitEditorOpen(true);
+              }}
+            >
+              Editar kit
+            </Button>
+          )}
         </div>
 
-        {[
-          {
-            title: "Jogadores de campo",
-            playerType: "field" as const,
-            prefix: "fp" as const,
-          },
-          {
-            title: "Guarda-redes",
-            playerType: "goalkeeper" as const,
-            prefix: "gk" as const,
-          },
-        ].map((section) => (
-          <div key={section.prefix} className="space-y-2">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
-              {section.title}
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              {UI_PIECE_TYPES.map((pieceType) => {
-                const field =
-                  `${section.prefix}_${pieceType === "shirt" ? "jersey" : pieceType}_kit_id` as keyof KitSelection;
-                const options = getKitOptions(section.playerType, pieceType);
-                const selectedValue = kitSelection[field];
-                const hasSelectedOption = !selectedValue
-                  ? true
-                  : options.some((option) => option.id === selectedValue);
+        {!kitEditorOpen && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {[
+              {
+                title: "Jogadores de campo",
+                prefix: "fp" as const,
+              },
+              {
+                title: "Guarda-redes",
+                prefix: "gk" as const,
+              },
+            ].map((section) => (
+              <div
+                key={section.prefix}
+                className="rounded-lg border border-slate-100 bg-slate-50 p-3 space-y-2"
+              >
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                  {section.title}
+                </p>
+                {UI_PIECE_TYPES.map((pieceType) => {
+                  const field =
+                    `${section.prefix}_${pieceType === "shirt" ? "jersey" : pieceType}_kit_id` as keyof KitSelection;
+                  const selectedPiece = kitById.get(kitSelection[field] || "");
 
-                return (
-                  <div key={pieceType} className="space-y-1">
-                    <label className="text-xs text-slate-500">
-                      {PIECE_LABEL[pieceType]}
-                    </label>
-                    <Select
-                      value={selectedValue ?? "__none__"}
-                      onValueChange={(value) =>
-                        void handleKitChange(field, value)
-                      }
-                      disabled={savingKitField === field}
+                  return (
+                    <div
+                      key={`${section.prefix}-${pieceType}`}
+                      className="flex items-center justify-between gap-2 text-xs"
                     >
-                      <SelectTrigger className="h-9">
-                        <SelectValue placeholder="Sem seleção" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">Sem seleção</SelectItem>
-                        {!hasSelectedOption && selectedValue && (
-                          <SelectItem value={selectedValue}>
-                            Seleção atual (indisponível)
-                          </SelectItem>
-                        )}
-                        {options.map((piece) => {
-                          const pieceColor = (
-                            piece.color_hex ||
-                            piece.color_name ||
-                            "Sem cor"
-                          ).toUpperCase();
-                          return (
-                            <SelectItem key={piece.id} value={piece.id}>
-                              Kit {piece.kit_number} · {pieceColor}
-                            </SelectItem>
-                          );
-                        })}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                );
-              })}
-            </div>
+                      <span className="text-slate-500">{PIECE_LABEL[pieceType]}</span>
+                      <span className="inline-flex items-center gap-2 text-slate-700">
+                        <span
+                          className="inline-block h-3 w-3 rounded-full border border-slate-300"
+                          style={{ backgroundColor: getKitColor(selectedPiece) }}
+                        />
+                        {selectedPiece ? `Kit ${selectedPiece.kit_number}` : "Sem seleção"}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
           </div>
-        ))}
+        )}
+
+        {kitEditorOpen &&
+          [
+            {
+              title: "Jogadores de campo",
+              playerType: "field" as const,
+              prefix: "fp" as const,
+            },
+            {
+              title: "Guarda-redes",
+              playerType: "goalkeeper" as const,
+              prefix: "gk" as const,
+            },
+          ].map((section) => (
+            <div key={section.prefix} className="space-y-2">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                {section.title}
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                {UI_PIECE_TYPES.map((pieceType) => {
+                  const field =
+                    `${section.prefix}_${pieceType === "shirt" ? "jersey" : pieceType}_kit_id` as keyof KitSelection;
+                  const options = getKitOptions(section.playerType, pieceType);
+                  const selectedValue = kitDraftSelection[field];
+                  const hasSelectedOption = !selectedValue
+                    ? true
+                    : options.some((option) => option.id === selectedValue);
+
+                  return (
+                    <div key={pieceType} className="space-y-1">
+                      <label className="text-xs text-slate-500">
+                        {PIECE_LABEL[pieceType]}
+                      </label>
+                      <Select
+                        value={selectedValue ?? "__none__"}
+                        onValueChange={(value) => handleKitDraftChange(field, value)}
+                        disabled={savingKitSelection}
+                      >
+                        <SelectTrigger className="h-9">
+                          <SelectValue placeholder="Sem seleção" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">Sem seleção</SelectItem>
+                          {!hasSelectedOption && selectedValue && (
+                            <SelectItem value={selectedValue}>
+                              Seleção atual (indisponível)
+                            </SelectItem>
+                          )}
+                          {options.map((piece) => (
+                            <SelectItem key={piece.id} value={piece.id}>
+                              <span className="inline-flex items-center gap-2">
+                                <span
+                                  className="inline-block h-3 w-3 rounded-full border border-slate-300"
+                                  style={{ backgroundColor: getKitColor(piece) }}
+                                />
+                                Kit {piece.kit_number}
+                              </span>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+
+        {kitEditorOpen && (
+          <div className="flex gap-2 pt-1">
+            <Button
+              type="button"
+              className="bg-slate-900 hover:bg-slate-800"
+              onClick={() => void saveKitSelection()}
+              disabled={savingKitSelection || !hasKitDraftChanges}
+            >
+              {savingKitSelection ? (
+                <Loader2 size={15} className="mr-2 animate-spin" />
+              ) : (
+                <Check size={15} className="mr-2" />
+              )}
+              Guardar equipamento
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={closeKitEditor}
+              disabled={savingKitSelection}
+            >
+              Cancelar
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Convocatória */}

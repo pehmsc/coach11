@@ -349,181 +349,189 @@ export default function PlayersPage() {
 
       {/* Formulário */}
       {showForm && (
-        <Card className="mb-6 border-emerald-200">
-          <CardContent className="pt-6">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="font-semibold">
-                {editingPlayer
-                  ? `Editar — ${editingPlayer.first_name} ${editingPlayer.last_name}`
-                  : "Novo Atleta"}
-              </h3>
-              <button onClick={closeForm}>
-                <X size={18} className="text-slate-400 hover:text-slate-600" />
-              </button>
-            </div>
-            {error && (
-              <div className="bg-red-50 text-red-700 text-sm p-3 rounded-md mb-4">
-                {error}
+        <div
+          className="fixed inset-0 bg-black/50 z-50 flex items-end md:items-center justify-center p-4"
+          onClick={closeForm}
+        >
+          <Card
+            className="w-full max-w-xl border-emerald-200 max-h-[92vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <CardContent className="pt-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="font-semibold">
+                  {editingPlayer
+                    ? `Editar — ${editingPlayer.first_name} ${editingPlayer.last_name}`
+                    : "Novo Atleta"}
+                </h3>
+                <button type="button" onClick={closeForm}>
+                  <X size={18} className="text-slate-400 hover:text-slate-600" />
+                </button>
               </div>
-            )}
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label>Primeiro nome *</Label>
-                  <Input
-                    value={form.firstName}
-                    required
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, firstName: e.target.value }))
-                    }
-                    placeholder="João"
-                  />
+              {error && (
+                <div className="bg-red-50 text-red-700 text-sm p-3 rounded-md mb-4">
+                  {error}
                 </div>
-                <div className="space-y-1">
-                  <Label>Apelido *</Label>
-                  <Input
-                    value={form.lastName}
-                    required
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, lastName: e.target.value }))
-                    }
-                    placeholder="Silva"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label>Posição</Label>
-                  <Select
-                    value={form.position}
-                    onValueChange={(v) =>
-                      setForm((f) => ({ ...f, position: v }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Posição" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {POSITIONS.map((p) => (
-                        <SelectItem key={p} value={p}>
-                          {p}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <Label>Nº Camisola</Label>
-                  <Input
-                    type="number"
-                    value={form.jerseyNumber}
-                    min={1}
-                    max={99}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, jerseyNumber: e.target.value }))
-                    }
-                    placeholder="ex: 10"
-                  />
-                </div>
-              </div>
-              <div className="space-y-1">
-                <Label>Data de Nascimento</Label>
-                <Input
-                  type="date"
-                  value={form.birthDate}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, birthDate: e.target.value }))
-                  }
-                />
-              </div>
-              <div className="space-y-1">
-                <Label>Telemóvel</Label>
-                <Input
-                  type="tel"
-                  value={form.phone}
-                  placeholder="9XX XXX XXX"
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, phone: e.target.value }))
-                  }
-                />
-              </div>
-              <div className="space-y-1">
-                <Label>Email</Label>
-                <Input
-                  type="email"
-                  value={form.email}
-                  placeholder="jogador@email.com"
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, email: e.target.value }))
-                  }
-                />
-              </div>
-              <div className="flex gap-3 pt-2">
-                <Button
-                  type="submit"
-                  className="flex-1 bg-emerald-600 hover:bg-emerald-700"
-                  disabled={saving}
-                >
-                  {saving
-                    ? "A guardar..."
-                    : editingPlayer
-                      ? "Guardar alterações"
-                      : "Adicionar"}
-                </Button>
-                <Button type="button" variant="outline" onClick={closeForm}>
-                  Cancelar
-                </Button>
-              </div>
-
-              {/* Convite */}
-              {editingPlayer && !editingPlayer.invite_sent_at && (
-                <div className="border-t pt-4 mt-2">
-                  <p className="text-sm text-slate-500 mb-3">
-                    Convidar atleta para criar perfil na app:
-                  </p>
-                  <div className="flex gap-2">
-                    {editingPlayer.email && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => sendInvite(editingPlayer, "email")}
-                        className="flex-1"
-                      >
-                        <Mail size={14} className="mr-1" /> Email
-                      </Button>
-                    )}
-                    {editingPlayer.phone && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => sendInvite(editingPlayer, "phone")}
-                        className="flex-1"
-                      >
-                        <Phone size={14} className="mr-1" /> Telemóvel
-                      </Button>
-                    )}
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => sendInvite(editingPlayer, "code")}
-                      className="flex-1"
-                    >
-                      Gerar código
-                    </Button>
+              )}
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label>Primeiro nome *</Label>
+                    <Input
+                      value={form.firstName}
+                      required
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, firstName: e.target.value }))
+                      }
+                      placeholder="João"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Apelido *</Label>
+                    <Input
+                      value={form.lastName}
+                      required
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, lastName: e.target.value }))
+                      }
+                      placeholder="Silva"
+                    />
                   </div>
                 </div>
-              )}
-              {editingPlayer?.invite_sent_at && (
-                <p className="text-xs text-emerald-600 text-center pt-2">
-                  ✓ Convite enviado · Código: {editingPlayer.invite_code}
-                </p>
-              )}
-            </form>
-          </CardContent>
-        </Card>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label>Posição</Label>
+                    <Select
+                      value={form.position}
+                      onValueChange={(v) =>
+                        setForm((f) => ({ ...f, position: v }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Posição" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {POSITIONS.map((p) => (
+                          <SelectItem key={p} value={p}>
+                            {p}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Nº Camisola</Label>
+                    <Input
+                      type="number"
+                      value={form.jerseyNumber}
+                      min={1}
+                      max={99}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, jerseyNumber: e.target.value }))
+                      }
+                      placeholder="ex: 10"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <Label>Data de Nascimento</Label>
+                  <Input
+                    type="date"
+                    value={form.birthDate}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, birthDate: e.target.value }))
+                    }
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>Telemóvel</Label>
+                  <Input
+                    type="tel"
+                    value={form.phone}
+                    placeholder="9XX XXX XXX"
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, phone: e.target.value }))
+                    }
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>Email</Label>
+                  <Input
+                    type="email"
+                    value={form.email}
+                    placeholder="jogador@email.com"
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, email: e.target.value }))
+                    }
+                  />
+                </div>
+                <div className="flex gap-3 pt-2">
+                  <Button
+                    type="submit"
+                    className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                    disabled={saving}
+                  >
+                    {saving
+                      ? "A guardar..."
+                      : editingPlayer
+                        ? "Guardar alterações"
+                        : "Adicionar"}
+                  </Button>
+                  <Button type="button" variant="outline" onClick={closeForm}>
+                    Cancelar
+                  </Button>
+                </div>
+
+                {/* Convite */}
+                {editingPlayer && !editingPlayer.invite_sent_at && (
+                  <div className="border-t pt-4 mt-2">
+                    <p className="text-sm text-slate-500 mb-3">
+                      Convidar atleta para criar perfil na app:
+                    </p>
+                    <div className="flex gap-2">
+                      {editingPlayer.email && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => sendInvite(editingPlayer, "email")}
+                          className="flex-1"
+                        >
+                          <Mail size={14} className="mr-1" /> Email
+                        </Button>
+                      )}
+                      {editingPlayer.phone && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => sendInvite(editingPlayer, "phone")}
+                          className="flex-1"
+                        >
+                          <Phone size={14} className="mr-1" /> Telemóvel
+                        </Button>
+                      )}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => sendInvite(editingPlayer, "code")}
+                        className="flex-1"
+                      >
+                        Gerar código
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                {editingPlayer?.invite_sent_at && (
+                  <p className="text-xs text-emerald-600 text-center pt-2">
+                    ✓ Convite enviado · Código: {editingPlayer.invite_code}
+                  </p>
+                )}
+              </form>
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       {/* Lista */}
