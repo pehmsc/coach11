@@ -15,6 +15,7 @@ import {
   AlertCircle,
   ArrowLeftRight,
   FileDown,
+  Star,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -24,12 +25,7 @@ import type { Game, Player, GameEvent, GameEventType } from "@/types/database";
 
 interface LivePlayer extends Player {
   isOnField: boolean;
-  isSubstitute: boolean;
-}
-
-interface EventModal {
-  type: GameEventType | "substitution";
-  isOpponent: boolean;
+  isInitialBench: boolean; // was set as bench in pre-match
 }
 
 type MatchPhase =
@@ -57,6 +53,48 @@ function formatClock(totalSeconds: number) {
   return `${min}:${sec}`;
 }
 
+/** Calculates minutes played per player from game_events substitution events */
+function computeMinutesPlayed(
+  players: LivePlayer[],
+  events: GameEvent[],
+  starterIds: Set<string>,
+  finalMinute: number,
+): Map<string, number> {
+  const subEvents = events
+    .filter((e) => e.event_type === "substitution" && !e.is_opponent_event)
+    .sort((a, b) => a.minute - b.minute);
+
+  const result = new Map<string, number>();
+
+  for (const player of players) {
+    const periods: [number, number][] = [];
+    let currentStart: number | null = starterIds.has(player.id) ? 0 : null;
+
+    for (const ev of subEvents) {
+      if (ev.player_id === player.id) {
+        // Player entered
+        currentStart = ev.minute;
+      } else if (ev.related_player_id === player.id) {
+        // Player exited
+        if (currentStart !== null) {
+          periods.push([currentStart, ev.minute]);
+          currentStart = null;
+        }
+      }
+    }
+
+    // Still on field at end
+    if (currentStart !== null) {
+      periods.push([currentStart, finalMinute]);
+    }
+
+    const total = periods.reduce((acc, [s, e]) => acc + Math.max(0, e - s), 0);
+    result.set(player.id, total);
+  }
+
+  return result;
+}
+
 export default function LiveGamePage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -70,14 +108,27 @@ export default function LiveGamePage() {
   const [clockSeconds, setClockSeconds] = useState(0);
   const [phase, setPhase] = useState<MatchPhase>("pre_match");
   const [clockRunning, setClockRunning] = useState(false);
-  const [eventModal, setEventModal] = useState<EventModal | null>(null);
-  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
-  const [selectedSubOutId, setSelectedSubOutId] = useState<string | null>(null);
   const [savingEvent, setSavingEvent] = useState(false);
   const [savingLineup, setSavingLineup] = useState<string | null>(null);
   const [finalizing, setFinalizing] = useState(false);
   const [exportingPDF, setExportingPDF] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Event modal state
+  type ModalType = GameEventType | "substitution";
+  const [modalType, setModalType] = useState<ModalType | null>(null);
+  const [modalIsOpponent, setModalIsOpponent] = useState(false);
+  // Goal flow: step 1 = scorer, step 2 = assist
+  const [goalStep, setGoalStep] = useState<"scorer" | "assist">("scorer");
+  const [selectedScorerID, setSelectedScorerID] = useState<string | null>(null);
+  const [selectedAssistID, setSelectedAssistID] = useState<string | null>(null);
+  // Substitution
+  const [selectedSubOutId, setSelectedSubOutId] = useState<string | null>(null);
+  const [selectedSubInId, setSelectedSubInId] = useState<string | null>(null);
+
+  // Review phase
+  const [playerRatings, setPlayerRatings] = useState<Record<string, number>>({});
+  const [mvpPlayerId, setMvpPlayerId] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     const { data: gameData } = await supabase
@@ -100,7 +151,7 @@ export default function LiveGamePage() {
       setClockRunning(false);
     }
 
-    // Buscar convocatórias (pode haver duplicados em ambientes antigos).
+    // Fetch convocated players
     const { data: convRows } = await supabase
       .from("convocations")
       .select("id, created_at")
@@ -130,33 +181,27 @@ export default function LiveGamePage() {
       );
     }
 
-    // Buscar stats live existentes para saber quem está em campo
+    // Fetch live stats to restore field status
     const { data: liveStats } = await supabase
       .from("game_stats_live")
       .select("*")
       .eq("game_id", id);
 
     const onFieldIds = new Set(
-      (liveStats || [])
-        .filter((s) => s.status === "on_field")
-        .map((s) => s.player_id),
+      (liveStats || []).filter((s) => s.status === "on_field").map((s) => s.player_id),
     );
-    const subIds = new Set(
-      (liveStats || [])
-        .filter((s) => s.status === "substitute")
-        .map((s) => s.player_id),
+    const benchIds = new Set(
+      (liveStats || []).filter((s) => s.status === "substitute").map((s) => s.player_id),
     );
 
-    // Se não houver stats live ainda, todos os convocados começam como possíveis
     const enriched: LivePlayer[] = convPlayers.map((p) => ({
       ...p,
-      isOnField: onFieldIds.size > 0 ? onFieldIds.has(p.id) : false,
-      isSubstitute: subIds.has(p.id),
+      isOnField: onFieldIds.has(p.id),
+      isInitialBench: benchIds.has(p.id),
     }));
-
     setConvocatedPlayers(enriched);
 
-    // Buscar eventos
+    // Fetch events
     const { data: evts } = await supabase
       .from("game_events")
       .select("*")
@@ -174,26 +219,22 @@ export default function LiveGamePage() {
   }, [id, supabase]);
 
   useEffect(() => {
-    if (id) loadData();
+    if (id) void loadData();
   }, [id, loadData]);
 
   useEffect(() => {
     if (!clockRunning || phase === "completed") return;
-
     const interval = setInterval(() => {
       setClockSeconds((prev) => {
         const next = prev + 1;
-        if (next % 60 === 0) {
-          setMinute((m) => m + 1);
-        }
+        if (next % 60 === 0) setMinute((m) => m + 1);
         return next;
       });
     }, 1000);
-
     return () => clearInterval(interval);
   }, [clockRunning, phase]);
 
-  // Calcular marcador a partir dos eventos
+  // Score from events
   const score = useMemo(() => {
     let home = 0;
     let away = 0;
@@ -201,10 +242,7 @@ export default function LiveGamePage() {
       if (e.event_type === "own_goal") {
         if (e.is_opponent_event) home++;
         else away++;
-      } else if (
-        e.event_type === "goal" ||
-        e.event_type === "penalty_goal"
-      ) {
+      } else if (e.event_type === "goal" || e.event_type === "penalty_goal") {
         if (e.is_opponent_event) away++;
         else home++;
       }
@@ -212,95 +250,147 @@ export default function LiveGamePage() {
     return { home, away };
   }, [events]);
 
-  async function addEvent(
-    eventType: GameEventType,
-    isOpponent: boolean,
-    playerId?: string,
-    relatedPlayerId?: string,
-  ) {
+  const playersOnField = convocatedPlayers.filter((p) => p.isOnField);
+  // ALL not-on-field players are available to enter (revolving subs)
+  const playersAvailableToEnter = convocatedPlayers.filter((p) => !p.isOnField);
+
+  const isLivePhase = phase === "first_half" || phase === "second_half";
+  const isFinalized = game?.status === "completed";
+
+  // Review: players who actually played (minutes > 0 or on field)
+  const starterIds = useMemo(() => {
+    const s = new Set<string>();
+    convocatedPlayers.forEach((p) => { if (p.isOnField) s.add(p.id); });
+    return s;
+  }, [convocatedPlayers]);
+
+  const computedMinutes = useMemo(
+    () => computeMinutesPlayed(convocatedPlayers, events, starterIds, minute),
+    [convocatedPlayers, events, starterIds, minute],
+  );
+
+  const playersWhoPlayed = useMemo(
+    () => convocatedPlayers.filter((p) => (computedMinutes.get(p.id) ?? 0) > 0),
+    [convocatedPlayers, computedMinutes],
+  );
+
+  const allRatingsFilled = useMemo(
+    () => playersWhoPlayed.every((p) => playerRatings[p.id] !== undefined),
+    [playersWhoPlayed, playerRatings],
+  );
+
+  // ── Event handlers ──
+
+  function openModal(type: ModalType, isOpponent: boolean) {
     if (phase !== "first_half" && phase !== "second_half") {
       toast.error("Inicia a 1ª ou 2ª parte para registar eventos.");
       return;
     }
+    setModalType(type);
+    setModalIsOpponent(isOpponent);
+    setGoalStep("scorer");
+    setSelectedScorerID(null);
+    setSelectedAssistID(null);
+    setSelectedSubOutId(null);
+    setSelectedSubInId(null);
+  }
 
+  function closeModal() {
+    setModalType(null);
+    setGoalStep("scorer");
+    setSelectedScorerID(null);
+    setSelectedAssistID(null);
+    setSelectedSubOutId(null);
+    setSelectedSubInId(null);
+  }
+
+  async function confirmGoal() {
     setSavingEvent(true);
-    const { data, error } = await supabase
+    const { data, error: evErr } = await supabase
       .from("game_events")
       .insert({
         game_id: id,
-        event_type: eventType,
-        player_id: playerId || null,
-        related_player_id: relatedPlayerId || null,
+        event_type: modalType as GameEventType,
+        player_id: selectedScorerID || null,
+        related_player_id: selectedAssistID || null,
         minute,
-        is_opponent_event: isOpponent,
+        is_opponent_event: modalIsOpponent,
       })
       .select()
       .single();
 
-    if (error) {
-      toast.error("Erro ao registar evento.");
+    if (evErr) {
+      toast.error("Erro ao registar golo.");
     } else if (data) {
-      setEvents((prev) =>
-        [...prev, data].sort((a, b) => a.minute - b.minute),
-      );
-      toast.success(`${EVENT_LABELS[eventType] || eventType} — min. ${minute}`);
+      setEvents((prev) => [...prev, data].sort((a, b) => a.minute - b.minute));
+      toast.success(`${EVENT_LABELS[modalType!] ?? modalType} — min. ${minute}`);
     }
-
     setSavingEvent(false);
-    setEventModal(null);
-    setSelectedPlayerId(null);
-    setSelectedSubOutId(null);
+    closeModal();
   }
 
-  async function handleSubstitution() {
-    if (phase !== "first_half" && phase !== "second_half") {
-      toast.error("Apenas durante a 1ª/2ª parte podes registar substituições.");
-      return;
-    }
+  async function confirmCard(eventType: GameEventType) {
+    if (!selectedScorerID && !modalIsOpponent) return;
+    setSavingEvent(true);
+    const { data, error: evErr } = await supabase
+      .from("game_events")
+      .insert({
+        game_id: id,
+        event_type: eventType,
+        player_id: selectedScorerID || null,
+        minute,
+        is_opponent_event: modalIsOpponent,
+      })
+      .select()
+      .single();
 
-    if (!selectedPlayerId || !selectedSubOutId) return;
+    if (evErr) {
+      toast.error("Erro ao registar cartão.");
+    } else if (data) {
+      setEvents((prev) => [...prev, data].sort((a, b) => a.minute - b.minute));
+      toast.success(`${EVENT_LABELS[eventType]} — min. ${minute}`);
+    }
+    setSavingEvent(false);
+    closeModal();
+  }
+
+  async function confirmSubstitution() {
+    if (!selectedSubInId || !selectedSubOutId) return;
     setSavingEvent(true);
 
-    // Registar evento de substituição
-    const { data, error } = await supabase
+    const { data, error: evErr } = await supabase
       .from("game_events")
       .insert({
         game_id: id,
         event_type: "substitution",
-        player_id: selectedPlayerId, // entra
-        related_player_id: selectedSubOutId, // sai
+        player_id: selectedSubInId,       // enters
+        related_player_id: selectedSubOutId, // exits
         minute,
         is_opponent_event: false,
       })
       .select()
       .single();
 
-    if (error) {
+    if (evErr) {
       toast.error("Erro ao registar substituição.");
       setSavingEvent(false);
       return;
     }
 
-    // Atualizar stats live
-    await supabase
-      .from("game_stats_live")
-      .upsert(
-        { game_id: id, player_id: selectedSubOutId, status: "substituted", end_minute: minute },
-        { onConflict: "game_id,player_id" },
-      );
-    await supabase
-      .from("game_stats_live")
-      .upsert(
-        { game_id: id, player_id: selectedPlayerId, status: "on_field", start_minute: minute },
-        { onConflict: "game_id,player_id" },
-      );
+    // Update live stats (current status only — minutes calc uses events)
+    await supabase.from("game_stats_live").upsert(
+      { game_id: id, player_id: selectedSubOutId, status: "substituted", end_minute: minute },
+      { onConflict: "game_id,player_id" },
+    );
+    await supabase.from("game_stats_live").upsert(
+      { game_id: id, player_id: selectedSubInId, status: "on_field", start_minute: minute },
+      { onConflict: "game_id,player_id" },
+    );
 
     setConvocatedPlayers((prev) =>
       prev.map((p) => {
-        if (p.id === selectedSubOutId)
-          return { ...p, isOnField: false, isSubstitute: false };
-        if (p.id === selectedPlayerId)
-          return { ...p, isOnField: true, isSubstitute: false };
+        if (p.id === selectedSubOutId) return { ...p, isOnField: false };
+        if (p.id === selectedSubInId) return { ...p, isOnField: true };
         return p;
       }),
     );
@@ -311,9 +401,7 @@ export default function LiveGamePage() {
 
     toast.success(`Substituição — min. ${minute}`);
     setSavingEvent(false);
-    setEventModal(null);
-    setSelectedPlayerId(null);
-    setSelectedSubOutId(null);
+    closeModal();
   }
 
   async function toggleLineup(playerId: string) {
@@ -325,19 +413,14 @@ export default function LiveGamePage() {
     const newStatus = newIsOnField ? "on_field" : "substitute";
 
     await supabase.from("game_stats_live").upsert(
-      {
-        game_id: id,
-        player_id: playerId,
-        status: newStatus,
-        start_minute: newIsOnField ? 0 : null,
-      },
+      { game_id: id, player_id: playerId, status: newStatus, start_minute: newIsOnField ? 0 : null },
       { onConflict: "game_id,player_id" },
     );
 
     setConvocatedPlayers((prev) =>
       prev.map((p) =>
         p.id === playerId
-          ? { ...p, isOnField: newIsOnField, isSubstitute: !newIsOnField }
+          ? { ...p, isOnField: newIsOnField, isInitialBench: !newIsOnField }
           : p,
       ),
     );
@@ -345,12 +428,122 @@ export default function LiveGamePage() {
   }
 
   async function deleteEvent(eventId: string) {
-    const { error } = await supabase
+    const { error: delErr } = await supabase
       .from("game_events")
       .delete()
       .eq("id", eventId);
-    if (!error) {
+    if (!delErr) {
       setEvents((prev) => prev.filter((e) => e.id !== eventId));
+    }
+  }
+
+  async function persistFinalStats(finalMinute: number) {
+    await supabase.from("game_final_stats").delete().eq("game_id", id);
+
+    // Determine starters from game_stats_live (start_minute = 0)
+    const { data: liveStats } = await supabase
+      .from("game_stats_live")
+      .select("player_id, status, start_minute")
+      .eq("game_id", id);
+
+    const starterIdsFromDB = new Set(
+      (liveStats || [])
+        .filter((s) => s.start_minute === 0 || s.status === "on_field")
+        .map((s) => s.player_id),
+    );
+
+    // Also include anyone currently marked on field in state
+    convocatedPlayers.forEach((p) => { if (p.isOnField) starterIdsFromDB.add(p.id); });
+
+    const minutesMap = computeMinutesPlayed(
+      convocatedPlayers,
+      events,
+      starterIdsFromDB,
+      finalMinute,
+    );
+
+    const rows = convocatedPlayers.map((player) => {
+      const minutesPlayed = minutesMap.get(player.id) ?? 0;
+      const isStarter = starterIdsFromDB.has(player.id);
+
+      const goals = events.filter(
+        (e) =>
+          e.player_id === player.id &&
+          !e.is_opponent_event &&
+          (e.event_type === "goal" || e.event_type === "penalty_goal"),
+      ).length;
+
+      const assists = events.filter(
+        (e) =>
+          e.related_player_id === player.id &&
+          !e.is_opponent_event &&
+          (e.event_type === "goal" || e.event_type === "penalty_goal"),
+      ).length;
+
+      const yellowCards = events.filter(
+        (e) => e.player_id === player.id && !e.is_opponent_event && e.event_type === "yellow_card",
+      ).length;
+
+      const redCards = events.filter(
+        (e) => e.player_id === player.id && !e.is_opponent_event && e.event_type === "red_card",
+      ).length;
+
+      return {
+        game_id: id,
+        player_id: player.id,
+        lineup_type: isStarter ? "starter" : "substitute",
+        minutes_played: minutesPlayed,
+        goals,
+        assists,
+        yellow_cards: yellowCards,
+        red_cards: redCards,
+        coach_rating: playerRatings[player.id] ?? null,
+        is_mvp: player.id === mvpPlayerId,
+        is_finalized: true,
+      };
+    });
+
+    if (rows.length > 0) {
+      const { error: insertErr } = await supabase.from("game_final_stats").insert(rows);
+      if (insertErr) throw insertErr;
+    }
+  }
+
+  async function finalizeGame() {
+    if (!game || phase !== "review") {
+      toast.error("Termina a 2ª parte antes de finalizar o jogo.");
+      return;
+    }
+
+    if (!allRatingsFilled) {
+      toast.error("Preenche a nota (0–10) de todos os jogadores que participaram.");
+      return;
+    }
+
+    const confirmSave = window.confirm(
+      "Confirmas que os eventos, notas e MVP estão corretos para gravar as estatísticas?",
+    );
+    if (!confirmSave) return;
+
+    setFinalizing(true);
+    try {
+      await persistFinalStats(minute);
+
+      const { error: updateErr } = await supabase
+        .from("games")
+        .update({ status: "completed", score_home: score.home, score_away: score.away })
+        .eq("id", id);
+
+      if (updateErr) throw updateErr;
+
+      setClockRunning(false);
+      setPhase("completed");
+      toast.success("Jogo finalizado e estatísticas guardadas!");
+      router.push(`/games/${id}`);
+    } catch {
+      toast.error("Erro ao finalizar jogo.");
+    } finally {
+      setFinalizing(false);
     }
   }
 
@@ -378,11 +571,11 @@ export default function LiveGamePage() {
           jersey_number: p.jersey_number,
           name: `${p.first_name} ${p.last_name}`,
           goals: events.filter(
-            (e) =>
-              e.player_id === p.id &&
-              (e.event_type === "goal" || e.event_type === "penalty_goal"),
+            (e) => e.player_id === p.id && (e.event_type === "goal" || e.event_type === "penalty_goal"),
           ).length,
-          assists: 0,
+          assists: events.filter(
+            (e) => e.related_player_id === p.id && (e.event_type === "goal" || e.event_type === "penalty_goal"),
+          ).length,
           yellow_cards: events.filter(
             (e) => e.player_id === p.id && e.event_type === "yellow_card",
           ).length,
@@ -397,130 +590,7 @@ export default function LiveGamePage() {
     setExportingPDF(false);
   }
 
-  async function persistFinalStats(finalMinute: number) {
-    // Recriar estatísticas finais do jogo para manter consistência.
-    await supabase.from("game_final_stats").delete().eq("game_id", id);
-
-    const { data: liveStats } = await supabase
-      .from("game_stats_live")
-      .select("player_id, status, start_minute, end_minute")
-      .eq("game_id", id);
-
-    const liveMap = new Map<
-      string,
-      { status: string; start_minute: number | null; end_minute: number | null }
-    >();
-
-    (liveStats || []).forEach((row) => {
-      liveMap.set(row.player_id, {
-        status: row.status || "",
-        start_minute: row.start_minute ?? null,
-        end_minute: row.end_minute ?? null,
-      });
-    });
-
-    const rows = convocatedPlayers.map((player) => {
-      const liveRow = liveMap.get(player.id);
-      const startMinute = liveRow?.start_minute ?? (player.isOnField ? 0 : null);
-      const endMinute =
-        liveRow?.end_minute ??
-        (player.isOnField || liveRow?.status === "on_field" ? finalMinute : null);
-
-      let minutesPlayed = 0;
-      if (startMinute !== null && endMinute !== null) {
-        minutesPlayed = Math.max(0, endMinute - startMinute);
-      } else if (player.isOnField) {
-        minutesPlayed = finalMinute;
-      }
-
-      const goals = events.filter(
-        (e) =>
-          e.player_id === player.id &&
-          !e.is_opponent_event &&
-          (e.event_type === "goal" || e.event_type === "penalty_goal"),
-      ).length;
-
-      const yellowCards = events.filter(
-        (e) =>
-          e.player_id === player.id &&
-          !e.is_opponent_event &&
-          e.event_type === "yellow_card",
-      ).length;
-
-      const redCards = events.filter(
-        (e) =>
-          e.player_id === player.id &&
-          !e.is_opponent_event &&
-          e.event_type === "red_card",
-      ).length;
-
-      return {
-        game_id: id,
-        player_id: player.id,
-        lineup_type: startMinute === 0 ? "starter" : "substitute",
-        minutes_played: minutesPlayed,
-        goals,
-        assists: 0,
-        yellow_cards: yellowCards,
-        red_cards: redCards,
-        is_finalized: true,
-      };
-    });
-
-    if (rows.length > 0) {
-      const { error } = await supabase.from("game_final_stats").insert(rows);
-      if (error) {
-        throw error;
-      }
-    }
-  }
-
-  async function finalizeGame() {
-    if (!game) return;
-    if (phase !== "review") {
-      toast.error("Termina a 2ª parte antes de finalizar o jogo.");
-      return;
-    }
-
-    const confirmSave = window.confirm(
-      "Confirmas que os eventos e o marcador estão corretos para guardar nas estatísticas?",
-    );
-
-    if (!confirmSave) return;
-
-    setFinalizing(true);
-
-    try {
-      await persistFinalStats(minute);
-
-      const { error } = await supabase
-        .from("games")
-        .update({
-          status: "completed",
-          score_home: score.home,
-          score_away: score.away,
-        })
-        .eq("id", id);
-
-      if (error) {
-        throw error;
-      }
-
-      setClockRunning(false);
-      setPhase("completed");
-      toast.success("Jogo finalizado e estatísticas guardadas!");
-      router.push(`/games/${id}`);
-    } catch {
-      toast.error("Erro ao finalizar jogo.");
-    } finally {
-      setFinalizing(false);
-    }
-  }
-
-  const playersOnField = convocatedPlayers.filter((p) => p.isOnField);
-  const playersOnBench = convocatedPlayers.filter(
-    (p) => !p.isOnField && !p.isSubstitute,
-  );
+  // ── Loading / error states ──
 
   if (loading) {
     return (
@@ -543,10 +613,10 @@ export default function LiveGamePage() {
     );
   }
 
-  const isFinalized = game.status === "completed";
-  const isLivePhase = phase === "first_half" || phase === "second_half";
   const gameStartAt = game.game_datetime ? parseISO(game.game_datetime) : null;
-  const liveUnlocked = gameStartAt ? new Date() >= new Date(gameStartAt.getTime() - 10 * 60 * 1000) : true;
+  const liveUnlocked = gameStartAt
+    ? new Date() >= new Date(gameStartAt.getTime() - 10 * 60 * 1000)
+    : true;
 
   if (!isFinalized && !liveUnlocked) {
     return (
@@ -574,7 +644,7 @@ export default function LiveGamePage() {
         <ArrowLeft size={16} /> Voltar
       </button>
 
-      {/* Marcador */}
+      {/* Scoreboard */}
       <div className="rounded-2xl bg-slate-900 text-white p-5 mb-5 text-center">
         <p className="text-slate-400 text-sm mb-1">
           {game.opponent_name ? `vs ${game.opponent_name}` : "Jogo"}
@@ -594,7 +664,7 @@ export default function LiveGamePage() {
         )}
       </div>
 
-      {/* ── Seleção de titulares (pré-jogo) ── */}
+      {/* ── PRE-MATCH: Lineup selection ── */}
       {phase === "pre_match" && convocatedPlayers.length > 0 && (
         <div className="mb-5 rounded-xl border border-slate-200 bg-white overflow-hidden">
           <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
@@ -605,10 +675,12 @@ export default function LiveGamePage() {
             <div className="text-right">
               <span className="text-sm font-bold text-emerald-600">{playersOnField.length}</span>
               <span className="text-xs text-slate-400"> titulares</span>
-              {playersOnBench.length > 0 && (
+              {playersAvailableToEnter.length > 0 && (
                 <>
                   <span className="text-slate-300 mx-1">·</span>
-                  <span className="text-sm font-bold text-slate-500">{playersOnBench.length}</span>
+                  <span className="text-sm font-bold text-slate-500">
+                    {playersAvailableToEnter.length}
+                  </span>
                   <span className="text-xs text-slate-400"> banco</span>
                 </>
               )}
@@ -656,13 +728,11 @@ export default function LiveGamePage() {
         </div>
       )}
 
-      {/* Minuto */}
+      {/* ── Clock + Phase controls ── */}
       {!isFinalized && (
         <div className="mb-5 p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
           <div className="flex items-center gap-3">
-            <span className="text-sm font-medium text-slate-600 flex-1">
-              Minuto de jogo
-            </span>
+            <span className="text-sm font-medium text-slate-600 flex-1">Minuto de jogo</span>
             <button
               onClick={() => setMinute((m) => Math.max(0, m - 1))}
               className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center"
@@ -683,10 +753,7 @@ export default function LiveGamePage() {
           <div className="grid grid-cols-1 gap-2">
             {phase === "pre_match" && (
               <Button
-                onClick={() => {
-                  setPhase("first_half");
-                  setClockRunning(true);
-                }}
+                onClick={() => { setPhase("first_half"); setClockRunning(true); }}
                 disabled={playersOnField.length === 0}
                 className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:text-slate-500"
               >
@@ -695,37 +762,25 @@ export default function LiveGamePage() {
                   : `Iniciar 1ª parte (${playersOnField.length} titulares)`}
               </Button>
             )}
-
             {phase === "first_half" && (
               <Button
-                onClick={() => {
-                  setClockRunning(false);
-                  setPhase("halftime");
-                }}
+                onClick={() => { setClockRunning(false); setPhase("halftime"); }}
                 className="w-full bg-amber-600 hover:bg-amber-700"
               >
                 Terminar 1ª parte
               </Button>
             )}
-
             {phase === "halftime" && (
               <Button
-                onClick={() => {
-                  setClockRunning(true);
-                  setPhase("second_half");
-                }}
+                onClick={() => { setClockRunning(true); setPhase("second_half"); }}
                 className="w-full bg-blue-600 hover:bg-blue-700"
               >
                 Iniciar 2ª parte
               </Button>
             )}
-
             {phase === "second_half" && (
               <Button
-                onClick={() => {
-                  setClockRunning(false);
-                  setPhase("review");
-                }}
+                onClick={() => { setClockRunning(false); setPhase("review"); }}
                 className="w-full bg-slate-800 hover:bg-slate-700"
               >
                 Terminar 2ª parte
@@ -735,108 +790,100 @@ export default function LiveGamePage() {
 
           {phase === "halftime" && (
             <p className="text-xs text-center text-amber-700">
-              Intervalo ativo. Retoma o jogo para continuar a registar eventos.
+              Intervalo. Retoma o jogo para continuar a registar eventos.
             </p>
           )}
           {phase === "review" && (
             <p className="text-xs text-center text-slate-600">
-              Revê os dados e finaliza para gravar estatísticas.
+              Revê os dados, preenche notas e MVP, depois finaliza.
             </p>
           )}
         </div>
       )}
 
-      {/* Botões de evento */}
+      {/* ── Event buttons ── */}
       {!isFinalized && (
         <div className="grid grid-cols-2 gap-2 mb-5">
           <button
-            onClick={() =>
-              setEventModal({ type: "goal", isOpponent: false })
-            }
+            onClick={() => openModal("goal", false)}
             disabled={!isLivePhase}
-            className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm font-medium hover:bg-emerald-100 transition-colors"
+            className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm font-medium hover:bg-emerald-100 transition-colors disabled:opacity-40"
           >
             ⚽ Golo nosso
           </button>
           <button
-            onClick={() =>
-              setEventModal({ type: "goal", isOpponent: true })
-            }
+            onClick={() => openModal("goal", true)}
             disabled={!isLivePhase}
-            className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm font-medium hover:bg-red-100 transition-colors"
+            className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm font-medium hover:bg-red-100 transition-colors disabled:opacity-40"
           >
             ⚽ Golo adversário
           </button>
           <button
-            onClick={() =>
-              setEventModal({ type: "yellow_card", isOpponent: false })
-            }
+            onClick={() => openModal("yellow_card", false)}
             disabled={!isLivePhase}
-            className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 text-sm font-medium hover:bg-amber-100 transition-colors"
+            className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 text-sm font-medium hover:bg-amber-100 transition-colors disabled:opacity-40"
           >
             🟨 Amarelo
           </button>
           <button
-            onClick={() =>
-              setEventModal({ type: "red_card", isOpponent: false })
-            }
+            onClick={() => openModal("red_card", false)}
             disabled={!isLivePhase}
-            className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm font-medium hover:bg-red-100 transition-colors"
+            className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm font-medium hover:bg-red-100 transition-colors disabled:opacity-40"
           >
             🟥 Vermelho
           </button>
           <button
-            onClick={() =>
-              setEventModal({ type: "substitution", isOpponent: false })
-            }
+            onClick={() => openModal("substitution", false)}
             disabled={!isLivePhase}
-            className="col-span-2 p-3 rounded-xl bg-blue-50 border border-blue-200 text-blue-700 text-sm font-medium hover:bg-blue-100 transition-colors"
+            className="col-span-2 p-3 rounded-xl bg-blue-50 border border-blue-200 text-blue-700 text-sm font-medium hover:bg-blue-100 transition-colors disabled:opacity-40"
           >
             🔄 Substituição
           </button>
         </div>
       )}
 
-      {/* Jogadores em campo */}
-      {convocatedPlayers.length > 0 && (
+      {/* ── Players list (mid-game / completed) ── */}
+      {phase !== "pre_match" && convocatedPlayers.length > 0 && (
         <div className="mb-5">
           <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">
             Convocados ({convocatedPlayers.length})
           </h3>
           <div className="space-y-1">
-            {convocatedPlayers.map((p) => (
-              <div
-                key={p.id}
-                className={`flex items-center gap-3 p-2.5 rounded-xl text-sm ${
-                  p.isOnField
-                    ? "bg-emerald-50 border border-emerald-200"
-                    : p.isSubstitute
-                      ? "bg-slate-100 border border-slate-200 opacity-60"
-                      : "bg-white border border-slate-100"
-                }`}
-              >
-                <span
-                  className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+            {convocatedPlayers.map((p) => {
+              const mins = computedMinutes.get(p.id) ?? 0;
+              return (
+                <div
+                  key={p.id}
+                  className={`flex items-center gap-3 p-2.5 rounded-xl text-sm ${
                     p.isOnField
-                      ? "bg-emerald-500 text-white"
-                      : "bg-slate-200 text-slate-500"
+                      ? "bg-emerald-50 border border-emerald-200"
+                      : "bg-white border border-slate-100"
                   }`}
                 >
-                  {p.jersey_number || "—"}
-                </span>
-                <span className="flex-1 font-medium text-slate-800 truncate">
-                  {p.first_name} {p.last_name}
-                </span>
-                <span className="text-xs text-slate-400">
-                  {p.isOnField ? "Em campo" : p.isSubstitute ? "Saiu" : "Banco"}
-                </span>
-              </div>
-            ))}
+                  <span
+                    className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                      p.isOnField ? "bg-emerald-500 text-white" : "bg-slate-200 text-slate-500"
+                    }`}
+                  >
+                    {p.jersey_number || "—"}
+                  </span>
+                  <span className="flex-1 font-medium text-slate-800 truncate">
+                    {p.first_name} {p.last_name}
+                  </span>
+                  <span className="text-xs text-slate-400">
+                    {p.isOnField ? "Em campo" : "Banco"}
+                  </span>
+                  {mins > 0 && (
+                    <span className="text-xs text-slate-500 font-mono">{mins}&apos;</span>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
 
-      {/* Eventos / Relatório */}
+      {/* ── Events log ── */}
       {events.length > 0 && (
         <div className="mb-5">
           <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">
@@ -844,9 +891,8 @@ export default function LiveGamePage() {
           </h3>
           <div className="space-y-1">
             {events.map((ev) => {
-              const playerName = convocatedPlayers.find(
-                (p) => p.id === ev.player_id,
-              );
+              const pl = convocatedPlayers.find((p) => p.id === ev.player_id);
+              const assist = convocatedPlayers.find((p) => p.id === ev.related_player_id);
               return (
                 <div
                   key={ev.id}
@@ -857,21 +903,16 @@ export default function LiveGamePage() {
                   </span>
                   <span className="text-sm flex-1">
                     {EVENT_LABELS[ev.event_type] || ev.event_type}
-                    {playerName
-                      ? ` — ${playerName.first_name} ${playerName.last_name}`
-                      : ev.is_opponent_event
-                        ? " — Adversário"
-                        : ""}
+                    {pl ? ` — ${pl.first_name} ${pl.last_name}` : ev.is_opponent_event ? " — Adversário" : ""}
+                    {assist && ev.event_type !== "substitution" ? ` (🅰️ ${assist.first_name} ${assist.last_name})` : ""}
+                    {ev.event_type === "substitution" && assist ? ` ← ${assist.first_name} ${assist.last_name}` : ""}
                   </span>
                   {!isFinalized && (
                     <button
-                      onClick={() => deleteEvent(ev.id)}
+                      onClick={() => void deleteEvent(ev.id)}
                       className="p-1 hover:bg-red-50 rounded-lg transition-colors group"
                     >
-                      <X
-                        size={14}
-                        className="text-slate-300 group-hover:text-red-500"
-                      />
+                      <X size={14} className="text-slate-300 group-hover:text-red-500" />
                     </button>
                   )}
                 </div>
@@ -881,11 +922,102 @@ export default function LiveGamePage() {
         </div>
       )}
 
-      {/* Finalizar */}
+      {/* ── REVIEW: Ratings + MVP ── */}
+      {phase === "review" && playersWhoPlayed.length > 0 && (
+        <>
+          {/* Notas */}
+          <div className="mb-5 rounded-xl border border-slate-200 overflow-hidden">
+            <div className="px-4 py-3 bg-slate-50 border-b border-slate-100">
+              <p className="font-bold text-slate-900 text-sm">Notas dos jogadores</p>
+              <p className="text-xs text-slate-500">
+                Obrigatório para todos que participaram · {playersWhoPlayed.filter(p => playerRatings[p.id] !== undefined).length}/{playersWhoPlayed.length} preenchidos
+              </p>
+            </div>
+            <div className="divide-y divide-slate-50">
+              {playersWhoPlayed.map((p) => (
+                <div key={p.id} className="flex items-center gap-3 px-4 py-3">
+                  <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-500 flex-shrink-0">
+                    {p.jersey_number || "—"}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-slate-800 truncate">
+                      {p.first_name} {p.last_name}
+                    </p>
+                    <p className="text-xs text-slate-400">{computedMinutes.get(p.id) ?? 0} min</p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <input
+                      type="number"
+                      min="0"
+                      max="10"
+                      step="0.5"
+                      placeholder="—"
+                      value={playerRatings[p.id] ?? ""}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value);
+                        if (!isNaN(val) && val >= 0 && val <= 10) {
+                          setPlayerRatings((prev) => ({ ...prev, [p.id]: val }));
+                        } else if (e.target.value === "") {
+                          setPlayerRatings((prev) => {
+                            const next = { ...prev };
+                            delete next[p.id];
+                            return next;
+                          });
+                        }
+                      }}
+                      className="w-16 text-center border border-slate-200 rounded-lg px-2 py-1.5 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                    <span className="text-xs text-slate-400">/10</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* MVP */}
+          <div className="mb-5 rounded-xl border border-slate-200 overflow-hidden">
+            <div className="px-4 py-3 bg-slate-50 border-b border-slate-100">
+              <p className="font-bold text-slate-900 text-sm">MVP do jogo</p>
+              <p className="text-xs text-slate-500">Seleciona o melhor jogador</p>
+            </div>
+            <div className="divide-y divide-slate-50">
+              {playersWhoPlayed.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => setMvpPlayerId((prev) => (prev === p.id ? null : p.id))}
+                  className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
+                    mvpPlayerId === p.id
+                      ? "bg-amber-50 hover:bg-amber-100"
+                      : "bg-white hover:bg-slate-50"
+                  }`}
+                >
+                  <div
+                    className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                      mvpPlayerId === p.id ? "bg-amber-400 text-white" : "bg-slate-100 text-slate-400"
+                    }`}
+                  >
+                    {mvpPlayerId === p.id ? <Star size={14} /> : (p.jersey_number || "—")}
+                  </div>
+                  <span className="flex-1 text-sm font-medium text-slate-800 truncate">
+                    {p.first_name} {p.last_name}
+                  </span>
+                  {mvpPlayerId === p.id && (
+                    <span className="text-xs font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full">
+                      MVP
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── Finalize button ── */}
       {!isFinalized && (
         <Button
-          onClick={finalizeGame}
-          disabled={finalizing || phase !== "review"}
+          onClick={() => void finalizeGame()}
+          disabled={finalizing || phase !== "review" || !allRatingsFilled}
           className="w-full bg-slate-900 hover:bg-slate-800"
         >
           {finalizing ? (
@@ -893,13 +1025,17 @@ export default function LiveGamePage() {
           ) : (
             <Check size={16} className="mr-2" />
           )}
-          Finalizar jogo ({score.home}–{score.away})
+          {phase !== "review"
+            ? "Termina a 2ª parte para finalizar"
+            : !allRatingsFilled
+              ? `Faltam notas (${playersWhoPlayed.length - playersWhoPlayed.filter(p => playerRatings[p.id] !== undefined).length} em falta)`
+              : `Finalizar jogo (${score.home}–${score.away})`}
         </Button>
       )}
 
       {isFinalized && (
         <Button
-          onClick={handleExportPDF}
+          onClick={() => void handleExportPDF()}
           disabled={exportingPDF}
           variant="outline"
           className="w-full"
@@ -913,15 +1049,11 @@ export default function LiveGamePage() {
         </Button>
       )}
 
-      {/* ── MODAL DE EVENTO ── */}
-      {eventModal && (
+      {/* ── EVENT MODAL ── */}
+      {modalType && (
         <div
           className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center p-4"
-          onClick={() => {
-            setEventModal(null);
-            setSelectedPlayerId(null);
-            setSelectedSubOutId(null);
-          }}
+          onClick={closeModal}
         >
           <div
             className="bg-white rounded-2xl w-full max-w-md shadow-xl max-h-[80vh] overflow-y-auto"
@@ -929,40 +1061,36 @@ export default function LiveGamePage() {
           >
             <div className="flex justify-between items-center p-4 border-b sticky top-0 bg-white">
               <h3 className="font-bold text-slate-900">
-                {eventModal.type === "substitution"
+                {modalType === "substitution"
                   ? "🔄 Substituição"
-                  : eventModal.isOpponent
-                    ? `${EVENT_LABELS[eventModal.type]} — Adversário`
-                    : EVENT_LABELS[eventModal.type]}
+                  : modalIsOpponent
+                    ? `${EVENT_LABELS[modalType]} — Adversário`
+                    : EVENT_LABELS[modalType] ?? modalType}
+                {modalType === "goal" && !modalIsOpponent && goalStep === "assist"
+                  ? " — Assistência?"
+                  : ""}
               </h3>
-              <button
-                onClick={() => {
-                  setEventModal(null);
-                  setSelectedPlayerId(null);
-                  setSelectedSubOutId(null);
-                }}
-              >
+              <button onClick={closeModal}>
                 <X size={20} className="text-slate-400" />
               </button>
             </div>
 
             <div className="p-4 space-y-3">
-              {eventModal.type === "substitution" ? (
+              {/* SUBSTITUTION */}
+              {modalType === "substitution" && (
                 <>
                   <div>
                     <p className="text-xs font-semibold text-slate-500 uppercase mb-2">
                       Sai (em campo)
                     </p>
                     {playersOnField.length === 0 ? (
-                      <p className="text-xs text-slate-400">
-                        Nenhum jogador marcado como em campo.
-                      </p>
+                      <p className="text-xs text-slate-400">Nenhum jogador em campo.</p>
                     ) : (
                       playersOnField.map((p) => (
                         <button
                           key={p.id}
                           onClick={() => setSelectedSubOutId(p.id)}
-                          className={`w-full flex items-center gap-3 p-2.5 rounded-xl mb-1 transition-colors text-left ${
+                          className={`w-full flex items-center gap-3 p-2.5 rounded-xl mb-1 text-left transition-colors ${
                             selectedSubOutId === p.id
                               ? "bg-red-50 border-2 border-red-300"
                               : "bg-slate-50 border border-slate-100"
@@ -975,10 +1103,7 @@ export default function LiveGamePage() {
                             {p.first_name} {p.last_name}
                           </span>
                           {selectedSubOutId === p.id && (
-                            <ArrowLeftRight
-                              size={14}
-                              className="text-red-500 ml-auto"
-                            />
+                            <ArrowLeftRight size={14} className="text-red-500 ml-auto" />
                           )}
                         </button>
                       ))
@@ -988,55 +1113,56 @@ export default function LiveGamePage() {
                     <p className="text-xs font-semibold text-slate-500 uppercase mb-2">
                       Entra (banco)
                     </p>
-                    {playersOnBench.map((p) => (
-                      <button
-                        key={p.id}
-                        onClick={() => setSelectedPlayerId(p.id)}
-                        className={`w-full flex items-center gap-3 p-2.5 rounded-xl mb-1 transition-colors text-left ${
-                          selectedPlayerId === p.id
-                            ? "bg-emerald-50 border-2 border-emerald-300"
-                            : "bg-slate-50 border border-slate-100"
-                        }`}
-                      >
-                        <span className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold flex-shrink-0">
-                          {p.jersey_number || "—"}
-                        </span>
-                        <span className="text-sm font-medium">
-                          {p.first_name} {p.last_name}
-                        </span>
-                        {selectedPlayerId === p.id && (
-                          <Check size={14} className="text-emerald-500 ml-auto" />
-                        )}
-                      </button>
-                    ))}
+                    {playersAvailableToEnter.length === 0 ? (
+                      <p className="text-xs text-slate-400">Todos os jogadores estão em campo.</p>
+                    ) : (
+                      playersAvailableToEnter.map((p) => (
+                        <button
+                          key={p.id}
+                          onClick={() => setSelectedSubInId(p.id)}
+                          className={`w-full flex items-center gap-3 p-2.5 rounded-xl mb-1 text-left transition-colors ${
+                            selectedSubInId === p.id
+                              ? "bg-emerald-50 border-2 border-emerald-300"
+                              : "bg-slate-50 border border-slate-100"
+                          }`}
+                        >
+                          <span className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                            {p.jersey_number || "—"}
+                          </span>
+                          <span className="text-sm font-medium">
+                            {p.first_name} {p.last_name}
+                          </span>
+                          {selectedSubInId === p.id && (
+                            <Check size={14} className="text-emerald-500 ml-auto" />
+                          )}
+                        </button>
+                      ))
+                    )}
                   </div>
                   <Button
-                    onClick={handleSubstitution}
-                    disabled={
-                      savingEvent || !selectedPlayerId || !selectedSubOutId
-                    }
+                    onClick={() => void confirmSubstitution()}
+                    disabled={savingEvent || !selectedSubInId || !selectedSubOutId}
                     className="w-full bg-blue-600 hover:bg-blue-700"
                   >
-                    {savingEvent ? (
-                      <Loader2 size={16} className="animate-spin" />
-                    ) : (
-                      "Confirmar substituição"
-                    )}
+                    {savingEvent ? <Loader2 size={16} className="animate-spin" /> : "Confirmar substituição"}
                   </Button>
                 </>
-              ) : (
+              )}
+
+              {/* GOAL (own team) — 2-step: scorer → assist */}
+              {(modalType === "goal" || modalType === "penalty_goal") && !modalIsOpponent && (
                 <>
-                  {!eventModal.isOpponent && (
+                  {goalStep === "scorer" && (
                     <>
                       <p className="text-xs font-semibold text-slate-500 uppercase mb-2">
-                        Seleciona o jogador
+                        Marcador
                       </p>
                       {convocatedPlayers.map((p) => (
                         <button
                           key={p.id}
-                          onClick={() => setSelectedPlayerId(p.id)}
-                          className={`w-full flex items-center gap-3 p-2.5 rounded-xl mb-1 transition-colors text-left ${
-                            selectedPlayerId === p.id
+                          onClick={() => setSelectedScorerID(p.id)}
+                          className={`w-full flex items-center gap-3 p-2.5 rounded-xl mb-1 text-left transition-colors ${
+                            selectedScorerID === p.id
                               ? "bg-emerald-50 border-2 border-emerald-300"
                               : "bg-slate-50 border border-slate-100"
                           }`}
@@ -1047,42 +1173,159 @@ export default function LiveGamePage() {
                           <span className="text-sm font-medium truncate">
                             {p.first_name} {p.last_name}
                           </span>
-                          {selectedPlayerId === p.id && (
+                          {selectedScorerID === p.id && (
+                            <Check size={14} className="text-emerald-500 ml-auto" />
+                          )}
+                        </button>
+                      ))}
+                      <div className="flex gap-2 pt-1">
+                        <Button
+                          onClick={() => setGoalStep("assist")}
+                          disabled={!selectedScorerID}
+                          className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                        >
+                          Seguinte →
+                        </Button>
+                        <Button variant="outline" onClick={closeModal}>
+                          Cancelar
+                        </Button>
+                      </div>
+                    </>
+                  )}
+
+                  {goalStep === "assist" && (
+                    <>
+                      <p className="text-xs font-semibold text-slate-500 uppercase mb-2">
+                        Assistência (opcional)
+                      </p>
+                      {convocatedPlayers
+                        .filter((p) => p.id !== selectedScorerID)
+                        .map((p) => (
+                          <button
+                            key={p.id}
+                            onClick={() =>
+                              setSelectedAssistID((prev) => (prev === p.id ? null : p.id))
+                            }
+                            className={`w-full flex items-center gap-3 p-2.5 rounded-xl mb-1 text-left transition-colors ${
+                              selectedAssistID === p.id
+                                ? "bg-blue-50 border-2 border-blue-300"
+                                : "bg-slate-50 border border-slate-100"
+                            }`}
+                          >
+                            <span className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                              {p.jersey_number || "—"}
+                            </span>
+                            <span className="text-sm font-medium truncate">
+                              {p.first_name} {p.last_name}
+                            </span>
+                            {selectedAssistID === p.id && (
+                              <Check size={14} className="text-blue-500 ml-auto" />
+                            )}
+                          </button>
+                        ))}
+                      <div className="flex gap-2 pt-1">
+                        <Button
+                          onClick={() => void confirmGoal()}
+                          disabled={savingEvent}
+                          className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                        >
+                          {savingEvent ? (
+                            <Loader2 size={16} className="animate-spin" />
+                          ) : (
+                            "Confirmar golo"
+                          )}
+                        </Button>
+                        <Button variant="outline" onClick={() => setGoalStep("scorer")}>
+                          ← Voltar
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
+
+              {/* GOAL (opponent) / own_goal */}
+              {((modalType === "goal" && modalIsOpponent) || modalType === "own_goal") && (
+                <>
+                  {modalType === "own_goal" && (
+                    <>
+                      <p className="text-xs font-semibold text-slate-500 uppercase mb-2">
+                        Jogador (autogolo)
+                      </p>
+                      {convocatedPlayers.map((p) => (
+                        <button
+                          key={p.id}
+                          onClick={() => setSelectedScorerID(p.id)}
+                          className={`w-full flex items-center gap-3 p-2.5 rounded-xl mb-1 text-left transition-colors ${
+                            selectedScorerID === p.id
+                              ? "bg-emerald-50 border-2 border-emerald-300"
+                              : "bg-slate-50 border border-slate-100"
+                          }`}
+                        >
+                          <span className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                            {p.jersey_number || "—"}
+                          </span>
+                          <span className="text-sm font-medium truncate">
+                            {p.first_name} {p.last_name}
+                          </span>
+                          {selectedScorerID === p.id && (
                             <Check size={14} className="text-emerald-500 ml-auto" />
                           )}
                         </button>
                       ))}
                     </>
                   )}
-
                   <div className="flex gap-2 pt-2">
                     <Button
-                      onClick={() =>
-                        addEvent(
-                          eventModal.type as GameEventType,
-                          eventModal.isOpponent,
-                          selectedPlayerId || undefined,
-                        )
-                      }
-                      disabled={
-                        savingEvent ||
-                        (!eventModal.isOpponent && !selectedPlayerId)
-                      }
+                      onClick={() => void confirmGoal()}
+                      disabled={savingEvent}
                       className="flex-1 bg-emerald-600 hover:bg-emerald-700"
                     >
-                      {savingEvent ? (
-                        <Loader2 size={16} className="animate-spin" />
-                      ) : (
-                        "Confirmar"
-                      )}
+                      {savingEvent ? <Loader2 size={16} className="animate-spin" /> : "Confirmar"}
                     </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        setEventModal(null);
-                        setSelectedPlayerId(null);
-                      }}
+                    <Button variant="outline" onClick={closeModal}>
+                      Cancelar
+                    </Button>
+                  </div>
+                </>
+              )}
+
+              {/* YELLOW / RED CARD */}
+              {(modalType === "yellow_card" || modalType === "red_card") && (
+                <>
+                  <p className="text-xs font-semibold text-slate-500 uppercase mb-2">
+                    Jogador
+                  </p>
+                  {convocatedPlayers.map((p) => (
+                    <button
+                      key={p.id}
+                      onClick={() => setSelectedScorerID(p.id)}
+                      className={`w-full flex items-center gap-3 p-2.5 rounded-xl mb-1 text-left transition-colors ${
+                        selectedScorerID === p.id
+                          ? "bg-emerald-50 border-2 border-emerald-300"
+                          : "bg-slate-50 border border-slate-100"
+                      }`}
                     >
+                      <span className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                        {p.jersey_number || "—"}
+                      </span>
+                      <span className="text-sm font-medium truncate">
+                        {p.first_name} {p.last_name}
+                      </span>
+                      {selectedScorerID === p.id && (
+                        <Check size={14} className="text-emerald-500 ml-auto" />
+                      )}
+                    </button>
+                  ))}
+                  <div className="flex gap-2 pt-2">
+                    <Button
+                      onClick={() => void confirmCard(modalType)}
+                      disabled={savingEvent || !selectedScorerID}
+                      className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                    >
+                      {savingEvent ? <Loader2 size={16} className="animate-spin" /> : "Confirmar"}
+                    </Button>
+                    <Button variant="outline" onClick={closeModal}>
                       Cancelar
                     </Button>
                   </div>

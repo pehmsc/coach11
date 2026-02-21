@@ -229,6 +229,7 @@ export interface GameFinalStats {
   yellow_cards?: number;
   red_cards?: number;
   coach_rating?: number;
+  is_mvp?: boolean;
   is_finalized: boolean;
   created_at: string;
 }

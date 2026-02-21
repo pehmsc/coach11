@@ -1,208 +1,262 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { createClient } from "@/lib/supabase/client";
-import { BarChart2, AlertTriangle, Trophy, Target } from "lucide-react";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { BarChart2, AlertTriangle, Users, Trophy } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Player } from "@/types/database";
 
-interface PlayerStats {
+// ── Types ──────────────────────────────────────────────────────────────────
+
+interface AttendanceStats {
   player: Player;
-  goals: number;
-  assists: number;
-  yellow_cards: number;
-  red_cards: number;
-  games_played: number;
-  minutes_played: number;
+  presencas: number;
+  ausencias: number;
+  lesionados: number;
+  minutos: number; // presencas * 60
 }
 
-type SortKey = "goals" | "assists" | "yellow_cards" | "games_played";
+interface GameStats {
+  player: Player;
+  golos: number;
+  assistencias: number;
+  minutos: number;
+  titular: number;
+  suplente: number;
+  convocatorias: number;
+  mvp: number;
+  amarelos: number;
+  vermelhos: number;
+  totalJogos: number; // jogos com is_finalized
+  mediaNotaSum: number;
+  mediaNotaCount: number;
+}
 
-const SORT_LABELS: Record<SortKey, string> = {
-  goals: "Golos",
-  assists: "Assistências",
-  yellow_cards: "Amarelos",
-  games_played: "Jogos",
-};
+type Tab = "attendance" | "game";
+
+// ── API helpers ──────────────────────────────────────────────────────────────
+
+interface ContextResponse {
+  ageGroupId?: string;
+  ageGroup?: { id: string } | null;
+  teamId?: string;
+  error?: string;
+}
+
+interface AttendanceRow {
+  player_id: string;
+  status: string;
+}
+
+interface FinalStatRow {
+  player_id: string;
+  goals?: number;
+  assists?: number;
+  minutes_played?: number;
+  lineup_type?: string;
+  yellow_cards?: number;
+  red_cards?: number;
+  coach_rating?: number;
+  is_mvp?: boolean;
+  is_finalized?: boolean;
+  game_id?: string;
+}
+
+interface ConvocationPlayerRow {
+  player_id: string;
+  convocation_id: string;
+}
+
+interface ConvocationRow {
+  id: string;
+  game_id: string;
+}
+
+// ── Component ────────────────────────────────────────────────────────────────
 
 export default function StatisticsPage() {
-  const supabase = useMemo(() => createClient(), []);
-
+  const [activeTab, setActiveTab] = useState<Tab>("attendance");
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState<PlayerStats[]>([]);
-  const [sortBy, setSortBy] = useState<SortKey>("goals");
   const [ageGroupId, setAgeGroupId] = useState<string | null>(null);
-  const [noData, setNoData] = useState(false);
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [attendanceStats, setAttendanceStats] = useState<AttendanceStats[]>([]);
+  const [gameStats, setGameStats] = useState<GameStats[]>([]);
 
   useEffect(() => {
-    loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    void loadAll();
   }, []);
 
-  async function loadData() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
+  async function loadAll() {
+    setLoading(true);
+    try {
+      // Get age group context (works for both coordinators and coaches)
+      const ctxRes = await fetch("/api/me/context", { cache: "no-store", credentials: "include" });
+      const ctx = (await ctxRes.json().catch(() => ({}))) as ContextResponse;
+      const agId = ctx.ageGroupId ?? ctx.ageGroup?.id ?? null;
+      if (!agId) { setLoading(false); return; }
+      setAgeGroupId(agId);
 
-    const { data: ag } = await supabase
-      .from("age_groups")
-      .select("id")
-      .eq("coordinator_id", user.id)
-      .single();
-
-    if (!ag) {
-      setNoData(true);
-      setLoading(false);
-      return;
-    }
-
-    setAgeGroupId(ag.id);
-
-    // Buscar jogadores ativos
-    const { data: players } = await supabase
-      .from("players")
-      .select("*")
-      .eq("age_group_id", ag.id)
-      .eq("status", "active");
-
-    if (!players || players.length === 0) {
-      setNoData(true);
-      setLoading(false);
-      return;
-    }
-
-    // Buscar stats finais de todos os jogos
-    const { data: finalStats } = await supabase
-      .from("game_final_stats")
-      .select("*")
-      .in(
-        "player_id",
-        players.map((p) => p.id),
-      );
-
-    // Buscar eventos (para golos/assistências se não houver game_final_stats)
-    const { data: gameEvents } = await supabase
-      .from("game_events")
-      .select("*")
-      .in(
-        "player_id",
-        players.map((p) => p.id),
-      )
-      .eq("is_opponent_event", false);
-
-    // Agregar estatísticas por jogador
-    const statsMap = new Map<string, PlayerStats>();
-
-    players.forEach((p) => {
-      statsMap.set(p.id, {
-        player: p,
-        goals: 0,
-        assists: 0,
-        yellow_cards: 0,
-        red_cards: 0,
-        games_played: 0,
-        minutes_played: 0,
+      // Fetch players
+      const playersRes = await fetch(`/api/statistics/players?ageGroupId=${agId}`, {
+        credentials: "include",
       });
-    });
+      const playersData = await playersRes.json().catch(() => ({ players: [] })) as {
+        players?: Player[];
+        attendanceRows?: AttendanceRow[];
+        finalStats?: FinalStatRow[];
+        convocations?: ConvocationRow[];
+        convocationPlayers?: ConvocationPlayerRow[];
+        gameIds?: string[];
+      };
 
-    // Usar game_final_stats se disponível
-    if (finalStats && finalStats.length > 0) {
-      finalStats.forEach((s) => {
-        const entry = statsMap.get(s.player_id);
-        if (!entry) return;
-        entry.goals += s.goals || 0;
-        entry.assists += s.assists || 0;
-        entry.yellow_cards += s.yellow_cards || 0;
-        entry.red_cards += s.red_cards || 0;
-        entry.games_played += 1;
-        entry.minutes_played += s.minutes_played || 0;
+      const rawPlayers = playersData.players ?? [];
+      setPlayers(rawPlayers);
+
+      // ── Attendance ──
+      const attRows = playersData.attendanceRows ?? [];
+      const attMap = new Map<string, AttendanceStats>();
+      rawPlayers.forEach((p) => {
+        attMap.set(p.id, { player: p, presencas: 0, ausencias: 0, lesionados: 0, minutos: 0 });
       });
-    } else if (gameEvents) {
-      // Fallback: calcular a partir de game_events
-      gameEvents.forEach((e) => {
-        const entry = statsMap.get(e.player_id || "");
+      attRows.forEach((r) => {
+        const entry = attMap.get(r.player_id);
         if (!entry) return;
-        if (e.event_type === "goal" || e.event_type === "penalty_goal") {
-          entry.goals += 1;
+        if (r.status === "present") entry.presencas++;
+        else if (r.status === "absent") entry.ausencias++;
+        else if (r.status === "injured") entry.lesionados++;
+      });
+      attMap.forEach((entry) => { entry.minutos = entry.presencas * 60; });
+      setAttendanceStats(Array.from(attMap.values()));
+
+      // ── Game stats ──
+      const finalStats = playersData.finalStats ?? [];
+      const convocations = playersData.convocations ?? [];
+      const convPlayers = playersData.convocationPlayers ?? [];
+
+      // Build: player → set of game_ids convocated
+      const convGameIdsByPlayer = new Map<string, Set<string>>();
+      // convocation_id → game_id
+      const convGameMap = new Map<string, string>();
+      convocations.forEach((c) => convGameMap.set(c.id, c.game_id));
+
+      convPlayers.forEach((cp) => {
+        const gameId = convGameMap.get(cp.convocation_id);
+        if (!gameId) return;
+        if (!convGameIdsByPlayer.has(cp.player_id)) {
+          convGameIdsByPlayer.set(cp.player_id, new Set());
         }
-        if (e.event_type === "yellow_card") entry.yellow_cards += 1;
-        if (e.event_type === "red_card") entry.red_cards += 1;
+        convGameIdsByPlayer.get(cp.player_id)!.add(gameId);
       });
+
+      const gsMap = new Map<string, GameStats>();
+      rawPlayers.forEach((p) => {
+        gsMap.set(p.id, {
+          player: p,
+          golos: 0,
+          assistencias: 0,
+          minutos: 0,
+          titular: 0,
+          suplente: 0,
+          convocatorias: convGameIdsByPlayer.get(p.id)?.size ?? 0,
+          mvp: 0,
+          amarelos: 0,
+          vermelhos: 0,
+          totalJogos: 0,
+          mediaNotaSum: 0,
+          mediaNotaCount: 0,
+        });
+      });
+
+      finalStats
+        .filter((s) => s.is_finalized)
+        .forEach((s) => {
+          const entry = gsMap.get(s.player_id);
+          if (!entry) return;
+          entry.golos += s.goals ?? 0;
+          entry.assistencias += s.assists ?? 0;
+          entry.minutos += s.minutes_played ?? 0;
+          entry.amarelos += s.yellow_cards ?? 0;
+          entry.vermelhos += s.red_cards ?? 0;
+          if (s.lineup_type === "starter") entry.titular++;
+          else entry.suplente++;
+          if (s.is_mvp) entry.mvp++;
+          if (s.coach_rating !== null && s.coach_rating !== undefined) {
+            entry.mediaNotaSum += s.coach_rating;
+            entry.mediaNotaCount++;
+          }
+          entry.totalJogos++;
+        });
+
+      setGameStats(Array.from(gsMap.values()));
+    } finally {
+      setLoading(false);
     }
-
-    const result = Array.from(statsMap.values()).filter(
-      (s) =>
-        s.goals > 0 ||
-        s.assists > 0 ||
-        s.yellow_cards > 0 ||
-        s.red_cards > 0 ||
-        s.games_played > 0,
-    );
-
-    setStats(result);
-    setLoading(false);
   }
 
-  const sorted = useMemo(
-    () => [...stats].sort((a, b) => b[sortBy] - a[sortBy]),
-    [stats, sortBy],
+  // Yellow card alerts
+  const yellowAlerts = useMemo(
+    () => gameStats.filter((s) => s.amarelos >= 3),
+    [gameStats],
   );
 
-  // Alertas: 3 cartões amarelos → provável suspensão
-  const yellowAlert = stats.filter((s) => s.yellow_cards >= 3);
+  // ── Sorting for game stats ──
+  const sortedGameStats = useMemo(
+    () =>
+      [...gameStats].sort(
+        (a, b) => b.golos - a.golos || b.assistencias - a.assistencias || b.minutos - a.minutos,
+      ),
+    [gameStats],
+  );
+
+  const sortedAttendance = useMemo(
+    () =>
+      [...attendanceStats].sort(
+        (a, b) => b.presencas - a.presencas || a.player.first_name.localeCompare(b.player.first_name),
+      ),
+    [attendanceStats],
+  );
+
+  // ── Render ──
 
   if (loading) {
     return (
-      <div className="p-4 md:p-8 max-w-2xl mx-auto space-y-4">
+      <div className="p-4 md:p-8 max-w-4xl mx-auto space-y-4">
         <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-20 w-full rounded-xl" />
+        <Skeleton className="h-10 w-full rounded-xl" />
         <Skeleton className="h-64 w-full rounded-xl" />
       </div>
     );
   }
 
-  if (noData || !ageGroupId) {
+  if (!ageGroupId || players.length === 0) {
     return (
       <div className="p-4 md:p-8 text-center py-16">
         <BarChart2 size={40} className="text-slate-300 mx-auto mb-3" />
         <p className="text-slate-700 font-semibold mb-2">Sem dados disponíveis</p>
         <p className="text-slate-500 text-sm">
-          Regista jogos e estatísticas para ver os dados aqui.
+          Adiciona jogadores ao plantel para ver estatísticas.
         </p>
       </div>
     );
   }
 
   return (
-    <div className="p-4 md:p-8 max-w-2xl mx-auto space-y-5">
+    <div className="p-4 md:p-8 max-w-4xl mx-auto space-y-5">
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Estatísticas</h1>
-        <p className="text-slate-500 text-sm">Época 2025/2026</p>
       </div>
 
-      {/* Alerta cartões amarelos */}
-      {yellowAlert.length > 0 && (
+      {/* Yellow card alert — only shown in game tab */}
+      {activeTab === "game" && yellowAlerts.length > 0 && (
         <Card className="border-amber-200 bg-amber-50">
           <CardContent className="pt-4 pb-4">
             <div className="flex items-start gap-3">
               <AlertTriangle size={18} className="text-amber-500 flex-shrink-0 mt-0.5" />
               <div>
-                <p className="font-semibold text-amber-900 text-sm">
-                  Alerta de cartões amarelos
-                </p>
+                <p className="font-semibold text-amber-900 text-sm">Alerta de cartões amarelos</p>
                 <p className="text-amber-700 text-xs mt-0.5">
-                  {yellowAlert
-                    .map(
-                      (s) =>
-                        `${s.player.first_name} ${s.player.last_name} (${s.yellow_cards}🟨)`,
-                    )
+                  {yellowAlerts
+                    .map((s) => `${s.player.first_name} ${s.player.last_name} (${s.amarelos}🟨)`)
                     .join(", ")}{" "}
                   — próximo do limite de suspensão.
                 </p>
@@ -212,122 +266,36 @@ export default function StatisticsPage() {
         </Card>
       )}
 
-      {/* Totais rápidos */}
-      <div className="grid grid-cols-3 gap-3">
-        <Card>
-          <CardContent className="pt-4 pb-3 text-center">
-            <p className="text-2xl font-black text-slate-900">
-              {stats.reduce((s, p) => s + p.goals, 0)}
-            </p>
-            <p className="text-xs text-slate-500 mt-0.5">Golos</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4 pb-3 text-center">
-            <p className="text-2xl font-black text-slate-900">
-              {stats.reduce((s, p) => s + p.assists, 0)}
-            </p>
-            <p className="text-xs text-slate-500 mt-0.5">Assistências</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4 pb-3 text-center">
-            <p className="text-2xl font-black text-slate-900">
-              {stats.reduce((s, p) => s + p.games_played, 0) > 0
-                ? Math.max(...stats.map((s) => s.games_played))
-                : 0}
-            </p>
-            <p className="text-xs text-slate-500 mt-0.5">Jogos</p>
-          </CardContent>
-        </Card>
+      {/* Tabs */}
+      <div className="flex gap-1 p-1 bg-slate-100 rounded-xl">
+        <button
+          onClick={() => setActiveTab("attendance")}
+          className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
+            activeTab === "attendance"
+              ? "bg-white text-slate-900 shadow-sm"
+              : "text-slate-500 hover:text-slate-700"
+          }`}
+        >
+          <Users size={15} /> Mapa de Presenças
+        </button>
+        <button
+          onClick={() => setActiveTab("game")}
+          className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
+            activeTab === "game"
+              ? "bg-white text-slate-900 shadow-sm"
+              : "text-slate-500 hover:text-slate-700"
+          }`}
+        >
+          <Trophy size={15} /> Estatísticas de Jogo
+        </button>
       </div>
 
-      {/* Rankings */}
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Trophy size={16} className="text-amber-500" /> Rankings
-            </CardTitle>
-            <div className="flex flex-wrap gap-1">
-              {(Object.keys(SORT_LABELS) as SortKey[]).map((key) => (
-                <button
-                  key={key}
-                  onClick={() => setSortBy(key)}
-                  className={`text-xs px-2 py-1 rounded-lg transition-colors ${
-                    sortBy === key
-                      ? "bg-slate-900 text-white"
-                      : "text-slate-500 hover:bg-slate-100"
-                  }`}
-                >
-                  {SORT_LABELS[key]}
-                </button>
-              ))}
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="pt-0">
-          {sorted.length === 0 ? (
-            <p className="text-sm text-slate-400 text-center py-6">
-              Sem estatísticas registadas ainda.
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {sorted
-                .filter((s) => s[sortBy] > 0)
-                .slice(0, 10)
-                .map((s, i) => (
-                  <div
-                    key={s.player.id}
-                    className="flex items-center gap-3 p-2.5 rounded-xl bg-slate-50 border border-slate-100"
-                  >
-                    <span className="text-sm font-bold text-slate-400 w-5 text-right">
-                      {i + 1}
-                    </span>
-                    <div
-                      className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
-                        i === 0
-                          ? "bg-amber-400 text-white"
-                          : i === 1
-                            ? "bg-slate-300 text-white"
-                            : i === 2
-                              ? "bg-orange-400 text-white"
-                              : "bg-slate-100 text-slate-500"
-                      }`}
-                    >
-                      {s.player.jersey_number || "—"}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-slate-800 text-sm truncate">
-                        {s.player.first_name} {s.player.last_name}
-                      </p>
-                      <p className="text-xs text-slate-400">
-                        {s.games_played} jogo{s.games_played !== 1 ? "s" : ""}
-                        {s.yellow_cards > 0 ? ` · ${s.yellow_cards}🟨` : ""}
-                        {s.red_cards > 0 ? ` · ${s.red_cards}🟥` : ""}
-                      </p>
-                    </div>
-                    <div className="text-right flex-shrink-0">
-                      <p className="text-lg font-black text-slate-900">
-                        {s[sortBy]}
-                      </p>
-                      <p className="text-xs text-slate-400">
-                        {SORT_LABELS[sortBy]}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Tabela completa */}
-      {stats.length > 0 && (
+      {/* ── TAB: MAPA DE PRESENÇAS ── */}
+      {activeTab === "attendance" && (
         <Card>
-          <CardHeader className="pb-3">
+          <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center gap-2">
-              <Target size={16} /> Todos os jogadores
+              <Users size={16} className="text-slate-500" /> Mapa de Presenças
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-0 overflow-x-auto">
@@ -335,51 +303,183 @@ export default function StatisticsPage() {
               <thead>
                 <tr className="text-xs text-slate-400 border-b border-slate-100">
                   <th className="text-left pb-2 font-medium">Jogador</th>
-                  <th className="text-center pb-2 font-medium px-2">J</th>
-                  <th className="text-center pb-2 font-medium px-2">⚽</th>
-                  <th className="text-center pb-2 font-medium px-2">🅰️</th>
-                  <th className="text-center pb-2 font-medium px-2">🟨</th>
-                  <th className="text-center pb-2 font-medium px-2">🟥</th>
+                  <th className="text-center pb-2 font-medium px-2 whitespace-nowrap">Min</th>
+                  <th className="text-center pb-2 font-medium px-2 whitespace-nowrap">✅ Pres.</th>
+                  <th className="text-center pb-2 font-medium px-2 whitespace-nowrap">❌ Aus.</th>
+                  <th className="text-center pb-2 font-medium px-2 whitespace-nowrap">🤕 Les.</th>
                 </tr>
               </thead>
               <tbody>
-                {stats
-                  .sort((a, b) => b.goals - a.goals || b.assists - a.assists)
-                  .map((s) => (
-                    <tr
-                      key={s.player.id}
-                      className="border-b border-slate-50 last:border-0"
-                    >
-                      <td className="py-2 font-medium text-slate-800 truncate max-w-[120px]">
+                {sortedAttendance.map((s) => (
+                  <tr key={s.player.id} className="border-b border-slate-50 last:border-0">
+                    <td className="py-2 font-medium text-slate-800 truncate max-w-[130px]">
+                      <span className="block truncate">
                         {s.player.first_name} {s.player.last_name}
-                      </td>
-                      <td className="py-2 text-center text-slate-500 px-2">
-                        {s.games_played}
-                      </td>
-                      <td className="py-2 text-center font-bold text-slate-900 px-2">
-                        {s.goals || "—"}
-                      </td>
-                      <td className="py-2 text-center text-slate-600 px-2">
-                        {s.assists || "—"}
-                      </td>
-                      <td
-                        className={`py-2 text-center px-2 ${
-                          s.yellow_cards >= 3
-                            ? "font-bold text-amber-600"
-                            : "text-slate-500"
-                        }`}
-                      >
-                        {s.yellow_cards || "—"}
-                      </td>
-                      <td className="py-2 text-center text-red-600 px-2">
-                        {s.red_cards || "—"}
-                      </td>
-                    </tr>
-                  ))}
+                      </span>
+                      {s.player.preferred_position && (
+                        <span className="text-xs text-slate-400">{s.player.preferred_position}</span>
+                      )}
+                    </td>
+                    <td className="py-2 text-center text-slate-500 px-2 font-mono text-xs">
+                      {s.minutos}
+                    </td>
+                    <td className="py-2 text-center font-bold text-emerald-600 px-2">
+                      {s.presencas || "—"}
+                    </td>
+                    <td className="py-2 text-center text-red-500 px-2">
+                      {s.ausencias || "—"}
+                    </td>
+                    <td className="py-2 text-center text-orange-500 px-2">
+                      {s.lesionados || "—"}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </CardContent>
         </Card>
+      )}
+
+      {/* ── TAB: ESTATÍSTICAS DE JOGO ── */}
+      {activeTab === "game" && (
+        <>
+          {/* Quick totals */}
+          <div className="grid grid-cols-3 gap-3">
+            <Card>
+              <CardContent className="pt-4 pb-3 text-center">
+                <p className="text-2xl font-black text-slate-900">
+                  {gameStats.reduce((s, p) => s + p.golos, 0)}
+                </p>
+                <p className="text-xs text-slate-500 mt-0.5">Golos</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-4 pb-3 text-center">
+                <p className="text-2xl font-black text-slate-900">
+                  {gameStats.reduce((s, p) => s + p.assistencias, 0)}
+                </p>
+                <p className="text-xs text-slate-500 mt-0.5">Assistências</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-4 pb-3 text-center">
+                <p className="text-2xl font-black text-slate-900">
+                  {gameStats.length > 0 ? Math.max(...gameStats.map((s) => s.totalJogos)) : 0}
+                </p>
+                <p className="text-xs text-slate-500 mt-0.5">Jogos</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Full stats table */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Trophy size={16} className="text-amber-500" /> Plantel completo
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0 overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-slate-400 border-b border-slate-100">
+                    <th className="text-left pb-2 font-medium text-sm">Jogador</th>
+                    <th className="text-center pb-2 font-medium px-1.5" title="Golos">⚽</th>
+                    <th className="text-center pb-2 font-medium px-1.5" title="Assistências">🅰️</th>
+                    <th className="text-center pb-2 font-medium px-1.5 whitespace-nowrap" title="Minutos totais">Min</th>
+                    <th className="text-center pb-2 font-medium px-1.5" title="Jogos como titular">T</th>
+                    <th className="text-center pb-2 font-medium px-1.5" title="Jogos como suplente">S</th>
+                    <th className="text-center pb-2 font-medium px-1.5" title="Convocatórias">Conv</th>
+                    <th className="text-center pb-2 font-medium px-1.5" title="MVP">⭐</th>
+                    <th className="text-center pb-2 font-medium px-1.5 whitespace-nowrap" title="Média MVP">%MVP</th>
+                    <th className="text-center pb-2 font-medium px-1.5 whitespace-nowrap" title="Média Nota">Nota</th>
+                    <th className="text-center pb-2 font-medium px-1.5 whitespace-nowrap" title="Média minutos/jogo">Min/J</th>
+                    <th className="text-center pb-2 font-medium px-1.5" title="Cartões Amarelos">🟨</th>
+                    <th className="text-center pb-2 font-medium px-1.5" title="Cartões Vermelhos">🟥</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedGameStats.map((s) => {
+                    const mediaMVP =
+                      s.totalJogos > 0
+                        ? ((s.mvp / s.totalJogos) * 100).toFixed(0)
+                        : "—";
+                    const mediaNota =
+                      s.mediaNotaCount > 0
+                        ? (s.mediaNotaSum / s.mediaNotaCount).toFixed(1)
+                        : "—";
+                    const mediaMin =
+                      s.totalJogos > 0
+                        ? (s.minutos / s.totalJogos).toFixed(0)
+                        : "—";
+
+                    return (
+                      <tr
+                        key={s.player.id}
+                        className="border-b border-slate-50 last:border-0"
+                      >
+                        <td className="py-2 font-medium text-slate-800 text-sm">
+                          <span className="block truncate max-w-[100px]">
+                            {s.player.first_name} {s.player.last_name}
+                          </span>
+                        </td>
+                        <td className="py-2 text-center font-bold text-slate-900 px-1.5">
+                          {s.golos || "—"}
+                        </td>
+                        <td className="py-2 text-center text-slate-600 px-1.5">
+                          {s.assistencias || "—"}
+                        </td>
+                        <td className="py-2 text-center text-slate-500 px-1.5 font-mono">
+                          {s.minutos || "—"}
+                        </td>
+                        <td className="py-2 text-center text-emerald-600 px-1.5">
+                          {s.titular || "—"}
+                        </td>
+                        <td className="py-2 text-center text-slate-500 px-1.5">
+                          {s.suplente || "—"}
+                        </td>
+                        <td className="py-2 text-center text-slate-500 px-1.5">
+                          {s.convocatorias || "—"}
+                        </td>
+                        <td className="py-2 text-center text-amber-500 px-1.5">
+                          {s.mvp || "—"}
+                        </td>
+                        <td className="py-2 text-center text-slate-500 px-1.5">
+                          {mediaMVP === "—" ? "—" : `${mediaMVP}%`}
+                        </td>
+                        <td className="py-2 text-center px-1.5">
+                          <span
+                            className={
+                              mediaNota !== "—" && parseFloat(mediaNota) >= 7
+                                ? "font-bold text-emerald-600"
+                                : mediaNota !== "—" && parseFloat(mediaNota) < 5
+                                  ? "text-red-500"
+                                  : "text-slate-600"
+                            }
+                          >
+                            {mediaNota}
+                          </span>
+                        </td>
+                        <td className="py-2 text-center text-slate-500 px-1.5 font-mono">
+                          {mediaMin}
+                        </td>
+                        <td
+                          className={`py-2 text-center px-1.5 ${
+                            s.amarelos >= 3 ? "font-bold text-amber-600" : "text-slate-500"
+                          }`}
+                        >
+                          {s.amarelos || "—"}
+                        </td>
+                        <td className="py-2 text-center text-red-600 px-1.5">
+                          {s.vermelhos || "—"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </CardContent>
+          </Card>
+        </>
       )}
     </div>
   );
