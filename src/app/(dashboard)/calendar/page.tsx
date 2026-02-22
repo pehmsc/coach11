@@ -25,6 +25,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  isValidManualShortName,
+  normalizeManualShortName,
+} from "@/lib/football/short-name";
 
 const DAY_NAMES = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 
@@ -37,6 +41,7 @@ interface CalEvent {
   notes?: string;
   status?: string;
   opponent_name?: string;
+  opponent_short_name?: string;
   location?: string;
   location_address?: string;
   is_home?: boolean;
@@ -51,6 +56,7 @@ interface EventForm {
   start_time: string;
   end_time: string;
   opponent_name: string;
+  opponent_short_name: string;
   location: string;
   location_address: string;
   is_home: boolean;
@@ -64,6 +70,7 @@ const EMPTY_FORM: EventForm = {
   start_time: "18:00",
   end_time: "",
   opponent_name: "",
+  opponent_short_name: "",
   location: "",
   location_address: "",
   is_home: true,
@@ -180,6 +187,10 @@ export default function CalendarPage() {
             : undefined,
         opponent_name:
           typeof g.opponent_name === "string" ? g.opponent_name : undefined,
+        opponent_short_name:
+          typeof g.opponent_short_name === "string"
+            ? g.opponent_short_name
+            : undefined,
         location: typeof g.location === "string" ? g.location : undefined,
         location_address:
           typeof g.location_address === "string" ? g.location_address : undefined,
@@ -255,6 +266,7 @@ export default function CalendarPage() {
       start_time: event.start_time || "18:00",
       end_time: "",
       opponent_name: event.opponent_name || "",
+      opponent_short_name: event.opponent_short_name || "",
       location: event.location || "",
       location_address: event.location_address || "",
       is_home: event.is_home ?? true,
@@ -299,6 +311,13 @@ export default function CalendarPage() {
 
   async function saveEvent() {
     if (!ageGroupId || !form.date) return;
+    if (
+      !isTrainingModal &&
+      !isValidManualShortName(form.opponent_short_name, 2, 5)
+    ) {
+      setOpError("A sigla do adversário deve ter entre 2 e 5 caracteres.");
+      return;
+    }
     setSaving(true);
     setOpError(null);
 
@@ -321,6 +340,10 @@ export default function CalendarPage() {
           start_time: form.start_time,
           end_time: form.end_time,
           opponent_name: form.opponent_name,
+          opponent_short_name: normalizeManualShortName(
+            form.opponent_short_name,
+            5,
+          ),
           location: form.location,
           location_address: form.location_address,
           is_home: form.is_home,
@@ -709,6 +732,22 @@ export default function CalendarPage() {
                         setForm((f) => ({
                           ...f,
                           opponent_name: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Sigla do adversário</Label>
+                    <Input
+                      value={form.opponent_short_name}
+                      placeholder="ex: SCP"
+                      maxLength={5}
+                      className="uppercase"
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          opponent_short_name:
+                            normalizeManualShortName(e.target.value, 5) || "",
                         }))
                       }
                     />

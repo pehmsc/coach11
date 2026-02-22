@@ -68,6 +68,11 @@ const EVENT_LABELS: Record<string, string> = {
 };
 
 type LiveStatus = "on_field" | "substitute" | "substituted";
+type PlayerAvailabilityLabel = "Em campo" | "Banco" | "Expulso";
+type PlayerAvailability = {
+  label: PlayerAvailabilityLabel;
+  selectable: boolean;
+};
 
 function normalizeLiveStatus(value: string | null | undefined): LiveStatus | null {
   if (!value) return null;
@@ -93,6 +98,12 @@ function normalizeLiveStatus(value: string | null | undefined): LiveStatus | nul
 
 function isGoalEventType(eventType: string | null | undefined) {
   return eventType === "goal" || eventType === "penalty_goal";
+}
+
+function getAvailabilityBadgeClasses(label: PlayerAvailabilityLabel) {
+  if (label === "Expulso") return "bg-red-100 text-red-600";
+  if (label === "Em campo") return "bg-emerald-100 text-emerald-700";
+  return "bg-slate-100 text-slate-500";
 }
 
 function formatClock(totalSeconds: number) {
@@ -948,17 +959,29 @@ export default function LiveGamePage() {
   const score = useMemo(() => {
     let home = 0;
     let away = 0;
+    const ourTeamIsHome = game?.is_home ?? true;
+
+    const incrementScore = (isOurTeamGoal: boolean) => {
+      if (ourTeamIsHome) {
+        if (isOurTeamGoal) home++;
+        else away++;
+      } else {
+        if (isOurTeamGoal) away++;
+        else home++;
+      }
+    };
+
     events.forEach((e) => {
       if (e.event_type === "own_goal") {
-        if (e.is_opponent_event) home++;
-        else away++;
+        // Opponent own goal => our goal; own team own goal => opponent goal.
+        incrementScore(e.is_opponent_event);
       } else if (isGoalEventType(e.event_type)) {
-        if (e.is_opponent_event) away++;
-        else home++;
+        // Normal goal events follow event side: opponent vs our team.
+        incrementScore(!e.is_opponent_event);
       }
     });
     return { home, away };
-  }, [events]);
+  }, [events, game?.is_home]);
 
   const displayEvents = useMemo(() => {
     const sorted = [...events].sort((a, b) => a.minute - b.minute);
@@ -999,18 +1022,42 @@ export default function LiveGamePage() {
     return set;
   }, [events, yellowCardsByPlayer]);
 
+  const availabilityByPlayerId = useMemo(() => {
+    const map = new Map<string, PlayerAvailability>();
+    convocatedPlayers.forEach((player) => {
+      if (sentOffPlayerIds.has(player.id)) {
+        map.set(player.id, { label: "Expulso", selectable: false });
+        return;
+      }
+      map.set(player.id, {
+        label: player.isOnField ? "Em campo" : "Banco",
+        selectable: true,
+      });
+    });
+    return map;
+  }, [convocatedPlayers, sentOffPlayerIds]);
+
+  const getPlayerAvailability = useCallback(
+    (playerId: string | null | undefined): PlayerAvailability => {
+      if (!playerId) return { label: "Banco", selectable: false };
+      return availabilityByPlayerId.get(playerId) ?? { label: "Banco", selectable: false };
+    },
+    [availabilityByPlayerId],
+  );
+
   const playersOnField = sortPlayersByName(
-    convocatedPlayers.filter((player) => player.isOnField),
+    convocatedPlayers.filter(
+      (player) => player.isOnField && !sentOffPlayerIds.has(player.id),
+    ),
+  );
+  const playersOnBench = sortPlayersByName(
+    convocatedPlayers.filter((player) => !player.isOnField),
   );
   const playersAvailableToEnter = sortPlayersByName(
-    convocatedPlayers.filter(
-      (player) => !player.isOnField && !sentOffPlayerIds.has(player.id),
-    ),
+    playersOnBench.filter((player) => !sentOffPlayerIds.has(player.id)),
   );
   const suspendedBenchPlayers = sortPlayersByName(
-    convocatedPlayers.filter(
-      (player) => !player.isOnField && sentOffPlayerIds.has(player.id),
-    ),
+    playersOnBench.filter((player) => sentOffPlayerIds.has(player.id)),
   );
 
   const isLivePhase = phase === "first_half" || phase === "second_half";
@@ -1146,6 +1193,36 @@ export default function LiveGamePage() {
     setSelectedSubInId(null);
   }
 
+  useEffect(() => {
+    if (!modalType) return;
+
+    if (selectedScorerID && !getPlayerAvailability(selectedScorerID).selectable) {
+      setSelectedScorerID(null);
+    }
+    if (selectedAssistID && !getPlayerAvailability(selectedAssistID).selectable) {
+      setSelectedAssistID(null);
+    }
+    if (selectedSubOutId) {
+      const availability = getPlayerAvailability(selectedSubOutId);
+      if (!availability.selectable || availability.label !== "Em campo") {
+        setSelectedSubOutId(null);
+      }
+    }
+    if (selectedSubInId) {
+      const availability = getPlayerAvailability(selectedSubInId);
+      if (!availability.selectable || availability.label !== "Banco") {
+        setSelectedSubInId(null);
+      }
+    }
+  }, [
+    modalType,
+    selectedScorerID,
+    selectedAssistID,
+    selectedSubOutId,
+    selectedSubInId,
+    getPlayerAvailability,
+  ]);
+
   async function confirmGoal() {
     if (modalType !== "goal") return;
     if (!goalTeamSide || !goalKind) {
@@ -1187,6 +1264,15 @@ export default function LiveGamePage() {
 
     if (!eventType) {
       toast.error("Tipo de golo inválido.");
+      return;
+    }
+
+    if (playerId && !getPlayerAvailability(playerId).selectable) {
+      toast.error("Jogador expulso não pode ser selecionado.");
+      return;
+    }
+    if (relatedPlayerId && !getPlayerAvailability(relatedPlayerId).selectable) {
+      toast.error("Jogador expulso não pode ser selecionado.");
       return;
     }
 
@@ -1232,6 +1318,10 @@ export default function LiveGamePage() {
   async function confirmCard(eventType: "yellow_card" | "red_card") {
     if (!selectedScorerID) {
       toast.error("Seleciona um jogador.");
+      return;
+    }
+    if (!getPlayerAvailability(selectedScorerID).selectable) {
+      toast.error("Jogador expulso não pode ser selecionado.");
       return;
     }
     setSavingEvent(true);
@@ -1288,6 +1378,19 @@ export default function LiveGamePage() {
 
   async function confirmSubstitution() {
     if (!selectedSubInId || !selectedSubOutId) return;
+
+    const outAvailability = getPlayerAvailability(selectedSubOutId);
+    if (!outAvailability.selectable || outAvailability.label !== "Em campo") {
+      toast.error("Jogador de saída tem de estar em campo e elegível.");
+      return;
+    }
+
+    const inAvailability = getPlayerAvailability(selectedSubInId);
+    if (!inAvailability.selectable || inAvailability.label !== "Banco") {
+      toast.error("Jogador de entrada tem de estar no banco e elegível.");
+      return;
+    }
+
     setSavingEvent(true);
 
     let insertedEvents: GameEvent[] = [];
@@ -1657,12 +1760,18 @@ export default function LiveGamePage() {
   const matchMetaLabel = game.location
     ? `${matchDateTimeLabel} · ${game.location}`
     : matchDateTimeLabel;
-  const homeShortName = resolveShortName(homeClubShortName, homeClubName || "Casa", "CASA");
-  const awayShortName = resolveShortName(
+  const ourTeamShortName = resolveShortName(
+    homeClubShortName,
+    homeClubName || "Casa",
+    "CASA",
+  );
+  const opponentTeamShortName = resolveShortName(
     game.opponent_short_name,
     game.opponent_name || "Adversário",
     "FORA",
   );
+  const homeShortName = game.is_home ? ourTeamShortName : opponentTeamShortName;
+  const awayShortName = game.is_home ? opponentTeamShortName : ourTeamShortName;
 
   return (
     <div className="p-4 md:p-8 max-w-2xl mx-auto pb-24">
@@ -2108,59 +2217,83 @@ export default function LiveGamePage() {
                     {playersOnField.length === 0 ? (
                       <p className="text-xs text-slate-400">Nenhum jogador em campo.</p>
                     ) : (
-                      playersOnField.map((p) => (
-                        <button
-                          key={p.id}
-                          onClick={() => setSelectedSubOutId(p.id)}
-                          className={`w-full flex items-center gap-3 p-2.5 rounded-xl mb-1 text-left transition-colors ${
-                            selectedSubOutId === p.id
-                              ? "bg-red-50 border-2 border-red-300"
-                              : "bg-slate-50 border border-slate-100"
-                          }`}
-                        >
-                          <span className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold flex-shrink-0">
-                            {p.jersey_number || "—"}
-                          </span>
-                          <span className="text-sm font-medium">
-                            {p.first_name} {p.last_name}
-                          </span>
-                          {selectedSubOutId === p.id && (
-                            <ArrowLeftRight size={14} className="text-red-500 ml-auto" />
-                          )}
-                        </button>
-                      ))
+                      playersOnField.map((p) => {
+                        const availability = getPlayerAvailability(p.id);
+                        const isDisabled =
+                          !availability.selectable || availability.label !== "Em campo";
+                        const isSelected = selectedSubOutId === p.id;
+
+                        return (
+                          <button
+                            key={p.id}
+                            onClick={() => setSelectedSubOutId(p.id)}
+                            disabled={isDisabled}
+                            className={`w-full flex items-center gap-3 p-2.5 rounded-xl mb-1 text-left transition-colors ${
+                              isSelected
+                                ? "bg-red-50 border-2 border-red-300"
+                                : "bg-slate-50 border border-slate-100"
+                            } ${isDisabled ? "opacity-50 cursor-not-allowed" : ""}`}
+                          >
+                            <span className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                              {p.jersey_number || "—"}
+                            </span>
+                            <span className="text-sm font-medium">
+                              {p.first_name} {p.last_name}
+                            </span>
+                            <span
+                              className={`ml-auto inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${getAvailabilityBadgeClasses(availability.label)}`}
+                            >
+                              {availability.label}
+                            </span>
+                            {isSelected && (
+                              <ArrowLeftRight size={14} className="text-red-500" />
+                            )}
+                          </button>
+                        );
+                      })
                     )}
                   </div>
                   <div>
                     <p className="text-xs font-semibold text-slate-500 uppercase mb-2">
                       Entra (banco)
                     </p>
-                    {playersAvailableToEnter.length === 0 ? (
-                      <p className="text-xs text-slate-400">
-                        Sem suplentes elegíveis para entrar.
-                      </p>
+                    {playersOnBench.length === 0 ? (
+                      <p className="text-xs text-slate-400">Nenhum jogador no banco.</p>
                     ) : (
-                      playersAvailableToEnter.map((p) => (
-                        <button
-                          key={p.id}
-                          onClick={() => setSelectedSubInId(p.id)}
-                          className={`w-full flex items-center gap-3 p-2.5 rounded-xl mb-1 text-left transition-colors ${
-                            selectedSubInId === p.id
-                              ? "bg-emerald-50 border-2 border-emerald-300"
-                              : "bg-slate-50 border border-slate-100"
-                          }`}
-                        >
-                          <span className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold flex-shrink-0">
-                            {p.jersey_number || "—"}
-                          </span>
-                          <span className="text-sm font-medium">
-                            {p.first_name} {p.last_name}
-                          </span>
-                          {selectedSubInId === p.id && (
-                            <Check size={14} className="text-emerald-500 ml-auto" />
-                          )}
-                        </button>
-                      ))
+                      playersOnBench.map((p) => {
+                        const availability = getPlayerAvailability(p.id);
+                        const isDisabled =
+                          !availability.selectable || availability.label !== "Banco";
+                        const isSelected = selectedSubInId === p.id;
+
+                        return (
+                          <button
+                            key={p.id}
+                            onClick={() => setSelectedSubInId(p.id)}
+                            disabled={isDisabled}
+                            className={`w-full flex items-center gap-3 p-2.5 rounded-xl mb-1 text-left transition-colors ${
+                              isSelected
+                                ? "bg-emerald-50 border-2 border-emerald-300"
+                                : "bg-slate-50 border border-slate-100"
+                            } ${isDisabled ? "opacity-50 cursor-not-allowed" : ""}`}
+                          >
+                            <span className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                              {p.jersey_number || "—"}
+                            </span>
+                            <span className="text-sm font-medium">
+                              {p.first_name} {p.last_name}
+                            </span>
+                            <span
+                              className={`ml-auto inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${getAvailabilityBadgeClasses(availability.label)}`}
+                            >
+                              {availability.label}
+                            </span>
+                            {isSelected && (
+                              <Check size={14} className="text-emerald-500" />
+                            )}
+                          </button>
+                        );
+                      })
                     )}
                     {suspendedBenchPlayers.length > 0 && (
                       <p className="text-xs text-red-600 mt-1">
@@ -2198,7 +2331,7 @@ export default function LiveGamePage() {
                           }}
                           className="bg-emerald-600 hover:bg-emerald-700"
                         >
-                          Nosso
+                          {ourTeamShortName}
                         </Button>
                         <Button
                           onClick={() => {
@@ -2210,7 +2343,7 @@ export default function LiveGamePage() {
                           }}
                           className="bg-red-600 hover:bg-red-700"
                         >
-                          Adversário
+                          {opponentTeamShortName}
                         </Button>
                       </div>
                     </>
@@ -2271,27 +2404,39 @@ export default function LiveGamePage() {
                           <p className="text-xs font-semibold text-slate-500 uppercase mb-2">
                             Marcador
                           </p>
-                          {sortPlayersByName(convocatedPlayers).map((player) => (
-                            <button
-                              key={player.id}
-                              onClick={() => setSelectedScorerID(player.id)}
-                              className={`w-full flex items-center gap-3 p-2.5 rounded-xl mb-1 text-left transition-colors ${
-                                selectedScorerID === player.id
-                                  ? "bg-emerald-50 border-2 border-emerald-300"
-                                  : "bg-slate-50 border border-slate-100"
-                              }`}
-                            >
-                              <span className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold flex-shrink-0">
-                                {player.jersey_number || "—"}
-                              </span>
-                              <span className="text-sm font-medium truncate">
-                                {player.first_name} {player.last_name}
-                              </span>
-                              {selectedScorerID === player.id && (
-                                <Check size={14} className="text-emerald-500 ml-auto" />
-                              )}
-                            </button>
-                          ))}
+                          {sortPlayersByName(convocatedPlayers).map((player) => {
+                            const availability = getPlayerAvailability(player.id);
+                            const isDisabled = !availability.selectable;
+                            const isSelected = selectedScorerID === player.id;
+
+                            return (
+                              <button
+                                key={player.id}
+                                onClick={() => setSelectedScorerID(player.id)}
+                                disabled={isDisabled}
+                                className={`w-full flex items-center gap-3 p-2.5 rounded-xl mb-1 text-left transition-colors ${
+                                  isSelected
+                                    ? "bg-emerald-50 border-2 border-emerald-300"
+                                    : "bg-slate-50 border border-slate-100"
+                                } ${isDisabled ? "opacity-50 cursor-not-allowed" : ""}`}
+                              >
+                                <span className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                                  {player.jersey_number || "—"}
+                                </span>
+                                <span className="text-sm font-medium truncate">
+                                  {player.first_name} {player.last_name}
+                                </span>
+                                <span
+                                  className={`ml-auto inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${getAvailabilityBadgeClasses(availability.label)}`}
+                                >
+                                  {availability.label}
+                                </span>
+                                {isSelected && (
+                                  <Check size={14} className="text-emerald-500" />
+                                )}
+                              </button>
+                            );
+                          })}
                           <div className="flex gap-2 pt-1">
                             <Button
                               onClick={() => setGoalStep("assist")}
@@ -2321,31 +2466,43 @@ export default function LiveGamePage() {
                           </p>
                           {sortPlayersByName(
                             convocatedPlayers.filter((player) => player.id !== selectedScorerID),
-                          ).map((player) => (
-                            <button
-                              key={player.id}
-                              onClick={() =>
-                                setSelectedAssistID((prev) =>
-                                  prev === player.id ? null : player.id,
-                                )
-                              }
-                              className={`w-full flex items-center gap-3 p-2.5 rounded-xl mb-1 text-left transition-colors ${
-                                selectedAssistID === player.id
-                                  ? "bg-blue-50 border-2 border-blue-300"
-                                  : "bg-slate-50 border border-slate-100"
-                              }`}
-                            >
-                              <span className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold flex-shrink-0">
-                                {player.jersey_number || "—"}
-                              </span>
-                              <span className="text-sm font-medium truncate">
-                                {player.first_name} {player.last_name}
-                              </span>
-                              {selectedAssistID === player.id && (
-                                <Check size={14} className="text-blue-500 ml-auto" />
-                              )}
-                            </button>
-                          ))}
+                          ).map((player) => {
+                            const availability = getPlayerAvailability(player.id);
+                            const isDisabled = !availability.selectable;
+                            const isSelected = selectedAssistID === player.id;
+
+                            return (
+                              <button
+                                key={player.id}
+                                onClick={() =>
+                                  setSelectedAssistID((prev) =>
+                                    prev === player.id ? null : player.id,
+                                  )
+                                }
+                                disabled={isDisabled}
+                                className={`w-full flex items-center gap-3 p-2.5 rounded-xl mb-1 text-left transition-colors ${
+                                  isSelected
+                                    ? "bg-blue-50 border-2 border-blue-300"
+                                    : "bg-slate-50 border border-slate-100"
+                                } ${isDisabled ? "opacity-50 cursor-not-allowed" : ""}`}
+                              >
+                                <span className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                                  {player.jersey_number || "—"}
+                                </span>
+                                <span className="text-sm font-medium truncate">
+                                  {player.first_name} {player.last_name}
+                                </span>
+                                <span
+                                  className={`ml-auto inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${getAvailabilityBadgeClasses(availability.label)}`}
+                                >
+                                  {availability.label}
+                                </span>
+                                {isSelected && (
+                                  <Check size={14} className="text-blue-500" />
+                                )}
+                              </button>
+                            );
+                          })}
                           <div className="flex gap-2 pt-1">
                             <Button
                               onClick={() => void confirmGoal()}
@@ -2407,31 +2564,43 @@ export default function LiveGamePage() {
                       {(playersOnField.length > 0
                         ? playersOnField
                         : sortPlayersByName(convocatedPlayers)
-                      ).map((player) => (
-                        <button
-                          key={player.id}
-                          onClick={() =>
-                            setSelectedScorerID((prev) =>
-                              prev === player.id ? null : player.id,
-                            )
-                          }
-                          className={`w-full flex items-center gap-3 p-2.5 rounded-xl mb-1 text-left transition-colors ${
-                            selectedScorerID === player.id
-                              ? "bg-rose-50 border-2 border-rose-300"
-                              : "bg-slate-50 border border-slate-100"
-                          }`}
-                        >
-                          <span className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold flex-shrink-0">
-                            {player.jersey_number || "—"}
-                          </span>
-                          <span className="text-sm font-medium truncate">
-                            {player.first_name} {player.last_name}
-                          </span>
-                          {selectedScorerID === player.id && (
-                            <Check size={14} className="text-rose-500 ml-auto" />
-                          )}
-                        </button>
-                      ))}
+                      ).map((player) => {
+                        const availability = getPlayerAvailability(player.id);
+                        const isDisabled = !availability.selectable;
+                        const isSelected = selectedScorerID === player.id;
+
+                        return (
+                          <button
+                            key={player.id}
+                            onClick={() =>
+                              setSelectedScorerID((prev) =>
+                                prev === player.id ? null : player.id,
+                              )
+                            }
+                            disabled={isDisabled}
+                            className={`w-full flex items-center gap-3 p-2.5 rounded-xl mb-1 text-left transition-colors ${
+                              isSelected
+                                ? "bg-rose-50 border-2 border-rose-300"
+                                : "bg-slate-50 border border-slate-100"
+                            } ${isDisabled ? "opacity-50 cursor-not-allowed" : ""}`}
+                          >
+                            <span className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                              {player.jersey_number || "—"}
+                            </span>
+                            <span className="text-sm font-medium truncate">
+                              {player.first_name} {player.last_name}
+                            </span>
+                            <span
+                              className={`ml-auto inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${getAvailabilityBadgeClasses(availability.label)}`}
+                            >
+                              {availability.label}
+                            </span>
+                            {isSelected && (
+                              <Check size={14} className="text-rose-500" />
+                            )}
+                          </button>
+                        );
+                      })}
                       <div className="flex gap-2 pt-1">
                         <Button
                           onClick={() => void confirmGoal()}
@@ -2462,27 +2631,39 @@ export default function LiveGamePage() {
                       <p className="text-xs font-semibold text-slate-500 uppercase mb-2">
                         Jogador que marcou autogolo
                       </p>
-                      {sortPlayersByName(convocatedPlayers).map((player) => (
-                        <button
-                          key={player.id}
-                          onClick={() => setSelectedScorerID(player.id)}
-                          className={`w-full flex items-center gap-3 p-2.5 rounded-xl mb-1 text-left transition-colors ${
-                            selectedScorerID === player.id
-                              ? "bg-red-50 border-2 border-red-300"
-                              : "bg-slate-50 border border-slate-100"
-                          }`}
-                        >
-                          <span className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold flex-shrink-0">
-                            {player.jersey_number || "—"}
-                          </span>
-                          <span className="text-sm font-medium truncate">
-                            {player.first_name} {player.last_name}
-                          </span>
-                          {selectedScorerID === player.id && (
-                            <Check size={14} className="text-red-500 ml-auto" />
-                          )}
-                        </button>
-                      ))}
+                      {sortPlayersByName(convocatedPlayers).map((player) => {
+                        const availability = getPlayerAvailability(player.id);
+                        const isDisabled = !availability.selectable;
+                        const isSelected = selectedScorerID === player.id;
+
+                        return (
+                          <button
+                            key={player.id}
+                            onClick={() => setSelectedScorerID(player.id)}
+                            disabled={isDisabled}
+                            className={`w-full flex items-center gap-3 p-2.5 rounded-xl mb-1 text-left transition-colors ${
+                              isSelected
+                                ? "bg-red-50 border-2 border-red-300"
+                                : "bg-slate-50 border border-slate-100"
+                            } ${isDisabled ? "opacity-50 cursor-not-allowed" : ""}`}
+                          >
+                            <span className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                              {player.jersey_number || "—"}
+                            </span>
+                            <span className="text-sm font-medium truncate">
+                              {player.first_name} {player.last_name}
+                            </span>
+                            <span
+                              className={`ml-auto inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${getAvailabilityBadgeClasses(availability.label)}`}
+                            >
+                              {availability.label}
+                            </span>
+                            {isSelected && (
+                              <Check size={14} className="text-red-500" />
+                            )}
+                          </button>
+                        );
+                      })}
                       <div className="flex gap-2 pt-1">
                         <Button
                           onClick={() => void confirmGoal()}
@@ -2516,34 +2697,39 @@ export default function LiveGamePage() {
                   <p className="text-xs font-semibold text-slate-500 uppercase mb-2">
                     Jogador
                   </p>
-                  {sortPlayersByName(convocatedPlayers).map((p) => (
-                    <button
-                      key={p.id}
-                      onClick={() => setSelectedScorerID(p.id)}
-                      className={`w-full flex items-center gap-3 p-2.5 rounded-xl mb-1 text-left transition-colors ${
-                        selectedScorerID === p.id
-                          ? "bg-emerald-50 border-2 border-emerald-300"
-                          : "bg-slate-50 border border-slate-100"
-                      }`}
-                    >
-                      <span className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold flex-shrink-0">
-                        {p.jersey_number || "—"}
-                      </span>
-                      <span className="text-sm font-medium truncate">
-                        {p.first_name} {p.last_name}
-                      </span>
-                      <span className="text-[10px] text-slate-400">
-                        {sentOffPlayerIds.has(p.id)
-                          ? "Expulso"
-                          : p.isOnField
-                            ? "Em campo"
-                            : "Banco"}
-                      </span>
-                      {selectedScorerID === p.id && (
-                        <Check size={14} className="text-emerald-500 ml-auto" />
-                      )}
-                    </button>
-                  ))}
+                  {sortPlayersByName(convocatedPlayers).map((p) => {
+                    const availability = getPlayerAvailability(p.id);
+                    const isDisabled = !availability.selectable;
+                    const isSelected = selectedScorerID === p.id;
+
+                    return (
+                      <button
+                        key={p.id}
+                        onClick={() => setSelectedScorerID(p.id)}
+                        disabled={isDisabled}
+                        className={`w-full flex items-center gap-3 p-2.5 rounded-xl mb-1 text-left transition-colors ${
+                          isSelected
+                            ? "bg-emerald-50 border-2 border-emerald-300"
+                            : "bg-slate-50 border border-slate-100"
+                        } ${isDisabled ? "opacity-50 cursor-not-allowed" : ""}`}
+                      >
+                        <span className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                          {p.jersey_number || "—"}
+                        </span>
+                        <span className="text-sm font-medium truncate">
+                          {p.first_name} {p.last_name}
+                        </span>
+                        <span
+                          className={`ml-auto inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${getAvailabilityBadgeClasses(availability.label)}`}
+                        >
+                          {availability.label}
+                        </span>
+                        {isSelected && (
+                          <Check size={14} className="text-emerald-500" />
+                        )}
+                      </button>
+                    );
+                  })}
                   <div className="flex gap-2 pt-2">
                     <Button
                       onClick={() => void confirmCard(modalType)}

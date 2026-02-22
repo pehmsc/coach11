@@ -125,6 +125,37 @@ function isValidEventInput(value: unknown): value is EventInput {
   return true;
 }
 
+function isDbOnFieldStatus(value: string | null | undefined) {
+  if (!value) return false;
+  return value === "starter" || value === "playing" || value === "on_field" || value === "titular";
+}
+
+function computeSentOffPlayers(events: Array<{
+  event_type?: string | null;
+  player_id?: string | null;
+  is_opponent_event?: boolean | null;
+}>) {
+  const yellowByPlayer = new Map<string, number>();
+  const sentOff = new Set<string>();
+
+  events.forEach((event) => {
+    const playerId = typeof event.player_id === "string" ? event.player_id : null;
+    if (!playerId || event.is_opponent_event) return;
+
+    if (event.event_type === "red_card") {
+      sentOff.add(playerId);
+      return;
+    }
+    if (event.event_type === "yellow_card") {
+      const next = (yellowByPlayer.get(playerId) ?? 0) + 1;
+      yellowByPlayer.set(playerId, next);
+      if (next >= 2) sentOff.add(playerId);
+    }
+  });
+
+  return { sentOff, yellowByPlayer };
+}
+
 export async function GET(_: Request, { params }: RouteContext) {
   try {
     const { id: gameId } = await params;
@@ -198,6 +229,124 @@ export async function POST(request: Request, { params }: RouteContext) {
         { error: "Só o coordenador pode editar jogos terminados." },
         { status: 403 },
       );
+    }
+
+    const [{ data: liveRows, error: liveRowsError }, { data: existingEvents, error: existingEventsError }] =
+      await Promise.all([
+        admin.from("game_stats_live").select("player_id, status").eq("game_id", gameId),
+        admin
+          .from("game_events")
+          .select("event_type, player_id, is_opponent_event, minute, created_at")
+          .eq("game_id", gameId)
+          .order("minute", { ascending: true })
+          .order("created_at", { ascending: true }),
+      ]);
+
+    if (liveRowsError || existingEventsError) {
+      return NextResponse.json(
+        { error: "Erro ao validar disponibilidade dos jogadores." },
+        { status: 500 },
+      );
+    }
+
+    const onFieldPlayerIds = new Set<string>();
+    (liveRows || []).forEach((row) => {
+      const playerId = typeof row.player_id === "string" ? row.player_id : null;
+      if (!playerId) return;
+      if (isDbOnFieldStatus(typeof row.status === "string" ? row.status : null)) {
+        onFieldPlayerIds.add(playerId);
+      }
+    });
+
+    const { sentOff: sentOffPlayerIds, yellowByPlayer } = computeSentOffPlayers(
+      (existingEvents || []) as Array<{
+        event_type?: string | null;
+        player_id?: string | null;
+        is_opponent_event?: boolean | null;
+      }>,
+    );
+    sentOffPlayerIds.forEach((playerId) => onFieldPlayerIds.delete(playerId));
+
+    for (const row of rows) {
+      const playerId = typeof row.player_id === "string" ? row.player_id : null;
+      const relatedPlayerId =
+        typeof row.related_player_id === "string" ? row.related_player_id : null;
+
+      if (playerId && sentOffPlayerIds.has(playerId)) {
+        return NextResponse.json(
+          { error: "Jogador expulso não pode ser selecionado para eventos." },
+          { status: 400 },
+        );
+      }
+      if (relatedPlayerId && sentOffPlayerIds.has(relatedPlayerId)) {
+        return NextResponse.json(
+          { error: "Jogador expulso não pode ser selecionado para eventos." },
+          { status: 400 },
+        );
+      }
+
+      if (row.event_type === "substitution_out") {
+        if (row.is_opponent_event) {
+          return NextResponse.json(
+            { error: "Substituições da equipa adversária não são suportadas." },
+            { status: 400 },
+          );
+        }
+        if (!playerId || !relatedPlayerId) {
+          return NextResponse.json(
+            { error: "Substituição inválida: faltam jogadores de saída/entrada." },
+            { status: 400 },
+          );
+        }
+        if (!onFieldPlayerIds.has(playerId)) {
+          return NextResponse.json(
+            { error: "Jogador de saída não está em campo." },
+            { status: 400 },
+          );
+        }
+        if (onFieldPlayerIds.has(relatedPlayerId)) {
+          return NextResponse.json(
+            { error: "Jogador de entrada já está em campo." },
+            { status: 400 },
+          );
+        }
+        onFieldPlayerIds.delete(playerId);
+        onFieldPlayerIds.add(relatedPlayerId);
+        continue;
+      }
+
+      if (row.event_type === "substitution_in") {
+        if (row.is_opponent_event) {
+          return NextResponse.json(
+            { error: "Substituições da equipa adversária não são suportadas." },
+            { status: 400 },
+          );
+        }
+        if (!playerId || !relatedPlayerId) {
+          return NextResponse.json(
+            { error: "Substituição inválida: faltam jogadores de saída/entrada." },
+            { status: 400 },
+          );
+        }
+        continue;
+      }
+
+      if (!row.is_opponent_event && playerId) {
+        if (row.event_type === "red_card") {
+          sentOffPlayerIds.add(playerId);
+          onFieldPlayerIds.delete(playerId);
+          continue;
+        }
+
+        if (row.event_type === "yellow_card") {
+          const next = (yellowByPlayer.get(playerId) ?? 0) + 1;
+          yellowByPlayer.set(playerId, next);
+          if (next >= 2) {
+            sentOffPlayerIds.add(playerId);
+            onFieldPlayerIds.delete(playerId);
+          }
+        }
+      }
     }
 
     const payload = rows.map((row) => ({

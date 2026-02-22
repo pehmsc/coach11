@@ -122,6 +122,32 @@ function isValidUpdate(value: unknown): value is PlayerLiveUpdate {
   return true;
 }
 
+function computeSentOffPlayerIds(events: Array<{
+  event_type?: string | null;
+  player_id?: string | null;
+  is_opponent_event?: boolean | null;
+}>) {
+  const sentOff = new Set<string>();
+  const yellowByPlayer = new Map<string, number>();
+
+  events.forEach((event) => {
+    const playerId = typeof event.player_id === "string" ? event.player_id : null;
+    if (!playerId || event.is_opponent_event) return;
+
+    if (event.event_type === "red_card") {
+      sentOff.add(playerId);
+      return;
+    }
+    if (event.event_type === "yellow_card") {
+      const next = (yellowByPlayer.get(playerId) ?? 0) + 1;
+      yellowByPlayer.set(playerId, next);
+      if (next >= 2) sentOff.add(playerId);
+    }
+  });
+
+  return sentOff;
+}
+
 export async function POST(request: Request, { params }: RouteContext) {
   try {
     const { id: gameId } = await params;
@@ -156,7 +182,36 @@ export async function POST(request: Request, { params }: RouteContext) {
       );
     }
 
+    const { data: eventsData, error: eventsError } = await admin
+      .from("game_events")
+      .select("event_type, player_id, is_opponent_event")
+      .eq("game_id", gameId)
+      .order("minute", { ascending: true })
+      .order("created_at", { ascending: true });
+
+    if (eventsError) {
+      return NextResponse.json(
+        { error: "Erro ao validar estado disciplinar dos jogadores." },
+        { status: 500 },
+      );
+    }
+
+    const sentOffPlayerIds = computeSentOffPlayerIds(
+      (eventsData || []) as Array<{
+        event_type?: string | null;
+        player_id?: string | null;
+        is_opponent_event?: boolean | null;
+      }>,
+    );
+
     for (const update of updates) {
+      if (update.status === "on_field" && sentOffPlayerIds.has(update.playerId)) {
+        return NextResponse.json(
+          { error: "Jogador expulso não pode voltar a entrar em campo." },
+          { status: 400 },
+        );
+      }
+
       const payload: {
         status: string;
         start_minute?: number | null;

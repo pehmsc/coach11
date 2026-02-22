@@ -27,6 +27,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import {
+  isValidManualShortName,
+  normalizeManualShortName,
+} from "@/lib/football/short-name";
 import type { Game, Player } from "@/types/database";
 
 interface PlayerWithStatus extends Player {
@@ -514,6 +518,15 @@ export default function GameDetailPage() {
     e.preventDefault();
     setSavingGameEdit(true);
     setError(null);
+    if (!isValidManualShortName(editOpponentShortName, 2, 5)) {
+      setError("A sigla do adversário deve ter entre 2 e 5 caracteres.");
+      setSavingGameEdit(false);
+      return;
+    }
+    const normalizedOpponentShortName = normalizeManualShortName(
+      editOpponentShortName,
+      5,
+    );
 
     const res = await fetch(`/api/games/${id}`, {
       method: "PATCH",
@@ -521,7 +534,7 @@ export default function GameDetailPage() {
       body: JSON.stringify({
         title: editTitle.trim() || null,
         opponent_name: editOpponent.trim(),
-        opponent_short_name: editOpponentShortName.trim() || null,
+        opponent_short_name: normalizedOpponentShortName || null,
         location: editLocation.trim() || null,
       }),
     });
@@ -544,7 +557,9 @@ export default function GameDetailPage() {
     if (!game) return;
     setEditTitle(game.title ?? "");
     setEditOpponent(game.opponent_name ?? "");
-    setEditOpponentShortName(game.opponent_short_name ?? "");
+    setEditOpponentShortName(
+      normalizeManualShortName(game.opponent_short_name, 5) || "",
+    );
     setEditLocation(game.location ?? "");
     setEditingGame(true);
   }
@@ -772,10 +787,7 @@ export default function GameDetailPage() {
                   value={editOpponentShortName}
                   onChange={(e) =>
                     setEditOpponentShortName(
-                      e.target.value
-                        .toUpperCase()
-                        .replace(/[^A-Z0-9]/g, "")
-                        .slice(0, 5),
+                      normalizeManualShortName(e.target.value, 5) || "",
                     )
                   }
                   placeholder="ex: SCP"

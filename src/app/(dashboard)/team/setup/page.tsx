@@ -33,6 +33,10 @@ import {
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
+import {
+  isValidManualShortName,
+  normalizeManualShortName,
+} from "@/lib/football/short-name";
 import type { AgeGroup, KitPiece, KitNumber, PlayerType, PieceType } from "@/types/database";
 
 const FOOTBALL_FORMATS = [
@@ -202,7 +206,7 @@ export default function TeamSetupPage() {
 
       setExistingAgeGroup(ag);
       setClubName(ag.club_name);
-      setClubShortName(ag.club_short_name || "");
+      setClubShortName(normalizeManualShortName(ag.club_short_name, 5) || "");
       setAgeGroupName(ag.name);
       setFootballFormat(ag.football_format);
       setSeason(ag.season);
@@ -239,6 +243,12 @@ export default function TeamSetupPage() {
     e.preventDefault();
     setSaving(true);
     setError(null);
+    const normalizedClubShortName = normalizeManualShortName(clubShortName, 5);
+    if (!isValidManualShortName(clubShortName, 2, 5)) {
+      setError("A sigla deve ter entre 2 e 5 caracteres.");
+      setSaving(false);
+      return;
+    }
 
     const {
       data: { user },
@@ -259,7 +269,7 @@ export default function TeamSetupPage() {
         .from("age_groups")
         .update({
           club_name: clubName,
-          club_short_name: clubShortName || null,
+          club_short_name: normalizedClubShortName || null,
           name: ageGroupName,
           football_format: footballFormat,
           season,
@@ -275,7 +285,7 @@ export default function TeamSetupPage() {
           ? {
               ...prev,
               club_name: clubName,
-              club_short_name: clubShortName || undefined,
+              club_short_name: normalizedClubShortName || undefined,
               name: ageGroupName,
             }
           : prev,
@@ -286,7 +296,7 @@ export default function TeamSetupPage() {
         .insert({
           coordinator_id: user.id,
           club_name: clubName,
-          club_short_name: clubShortName || null,
+          club_short_name: normalizedClubShortName || null,
           name: ageGroupName,
           football_format: footballFormat,
           season,
@@ -587,10 +597,7 @@ export default function TeamSetupPage() {
                   value={clubShortName}
                   onChange={(e) =>
                     setClubShortName(
-                      e.target.value
-                        .toUpperCase()
-                        .replace(/[^A-Z0-9]/g, "")
-                        .slice(0, 5),
+                      normalizeManualShortName(e.target.value, 5) || "",
                     )
                   }
                   placeholder="ex: EFB"

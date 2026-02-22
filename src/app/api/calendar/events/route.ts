@@ -2,6 +2,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { resolveUserTeamContext } from "@/lib/auth/team-context";
 import { deleteGameCascade, deleteTrainingSessionCascade } from "@/lib/events/delete-cascade";
+import {
+  isValidManualShortName,
+  normalizeManualShortName,
+} from "@/lib/football/short-name";
 import { NextResponse } from "next/server";
 
 type CalendarEventType = "training" | "game";
@@ -52,13 +56,14 @@ function normalizeEventType(value: unknown): CalendarEventType | null {
 function normalizePayload(value: unknown): CalendarPayload {
   if (!value || typeof value !== "object") return {};
   const row = value as Record<string, unknown>;
+  const opponentShortNameRaw = normalizeOptionalText(row.opponent_short_name);
   return {
     title: normalizeOptionalText(row.title),
     date: normalizeDate(row.date),
     start_time: normalizeTime(row.start_time),
     end_time: normalizeTime(row.end_time),
     opponent_name: normalizeOptionalText(row.opponent_name),
-    opponent_short_name: normalizeOptionalText(row.opponent_short_name),
+    opponent_short_name: normalizeManualShortName(opponentShortNameRaw, 5),
     location: normalizeOptionalText(row.location),
     location_address: normalizeOptionalText(row.location_address),
     is_home: typeof row.is_home === "boolean" ? row.is_home : undefined,
@@ -282,6 +287,12 @@ export async function POST(request: Request) {
     if (!eventType || !payload.date) {
       return NextResponse.json({ error: "Dados inválidos para criar evento." }, { status: 400 });
     }
+    if (eventType === "game" && !isValidManualShortName(payload.opponent_short_name, 2, 5)) {
+      return NextResponse.json(
+        { error: "A sigla do adversário deve ter entre 2 e 5 caracteres." },
+        { status: 400 },
+      );
+    }
 
     const targetAgeGroupId = resolveTargetAgeGroupId(context, body?.ageGroupId);
     if (!targetAgeGroupId) {
@@ -389,6 +400,12 @@ export async function PATCH(request: Request) {
     if (!id || !eventType || !payload.date) {
       return NextResponse.json(
         { error: "Dados inválidos para editar evento." },
+        { status: 400 },
+      );
+    }
+    if (eventType === "game" && !isValidManualShortName(payload.opponent_short_name, 2, 5)) {
+      return NextResponse.json(
+        { error: "A sigla do adversário deve ter entre 2 e 5 caracteres." },
         { status: 400 },
       );
     }

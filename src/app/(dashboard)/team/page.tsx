@@ -15,6 +15,10 @@ import {
 } from "@/components/ui/select";
 import { Loader2, ImageIcon, ChevronDown, ChevronUp } from "lucide-react";
 import { toast } from "sonner";
+import {
+  isValidManualShortName,
+  normalizeManualShortName,
+} from "@/lib/football/short-name";
 import type {
   AgeGroup,
   KitPiece,
@@ -182,7 +186,7 @@ export default function TeamPage() {
 
     setExistingAgeGroup(ag);
     setClubName(ag.club_name);
-    setClubShortName(ag.club_short_name || "");
+    setClubShortName(normalizeManualShortName(ag.club_short_name, 5) || "");
     setAgeGroupName(ag.name);
     setFootballFormat(ag.football_format);
     setSeason(ag.season);
@@ -216,13 +220,18 @@ export default function TeamPage() {
   async function handleSaveSetup(e: { preventDefault(): void }) {
     e.preventDefault();
     if (!existingAgeGroup) return;
+    const normalizedClubShortName = normalizeManualShortName(clubShortName, 5);
+    if (!isValidManualShortName(clubShortName, 2, 5)) {
+      toast.error("A sigla deve ter entre 2 e 5 caracteres.");
+      return;
+    }
     setSaving(true);
 
     const { error } = await supabase
       .from("age_groups")
       .update({
         club_name: clubName,
-        club_short_name: clubShortName || null,
+        club_short_name: normalizedClubShortName || null,
         name: ageGroupName,
         football_format: footballFormat,
         season,
@@ -238,7 +247,7 @@ export default function TeamPage() {
           ? {
               ...prev,
               club_name: clubName,
-              club_short_name: clubShortName || undefined,
+              club_short_name: normalizedClubShortName || undefined,
               name: ageGroupName,
             }
           : prev,
@@ -433,12 +442,7 @@ export default function TeamPage() {
                 <Input
                   value={clubShortName}
                   onChange={(e) =>
-                    setClubShortName(
-                      e.target.value
-                        .toUpperCase()
-                        .replace(/[^A-Z0-9]/g, "")
-                        .slice(0, 5),
-                    )
+                    setClubShortName(normalizeManualShortName(e.target.value, 5) || "")
                   }
                   placeholder="ex: SCP"
                   maxLength={5}

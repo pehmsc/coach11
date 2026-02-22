@@ -1,4 +1,8 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  isValidManualShortName,
+  normalizeManualShortName,
+} from "@/lib/football/short-name";
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 
@@ -92,7 +96,14 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     if (typeof body.title === "string" || body.title === null) updates.title = body.title || null;
     if (typeof body.opponent_name === "string") updates.opponent_name = body.opponent_name;
     if (typeof body.opponent_short_name === "string" || body.opponent_short_name === null) {
-      updates.opponent_short_name = body.opponent_short_name || null;
+      if (!isValidManualShortName(body.opponent_short_name, 2, 5)) {
+        return NextResponse.json(
+          { error: "A sigla do adversário deve ter entre 2 e 5 caracteres." },
+          { status: 400 },
+        );
+      }
+      updates.opponent_short_name =
+        normalizeManualShortName(body.opponent_short_name, 5) || null;
     }
     if (typeof body.location === "string" || body.location === null) updates.location = body.location || null;
     if (typeof body.game_datetime === "string") updates.game_datetime = body.game_datetime;

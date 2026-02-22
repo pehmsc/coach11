@@ -15,6 +15,10 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  isValidManualShortName,
+  normalizeManualShortName,
+} from "@/lib/football/short-name";
 
 interface GameRow {
   id: string;
@@ -121,9 +125,17 @@ export default function GamesPage() {
       setCreateError("Preenche adversário, data e hora.");
       return;
     }
+    if (!isValidManualShortName(newOpponentShortName, 2, 5)) {
+      setCreateError("A sigla do adversário deve ter entre 2 e 5 caracteres.");
+      return;
+    }
 
     setCreatingGame(true);
     setCreateError(null);
+    const normalizedOpponentShortName = normalizeManualShortName(
+      newOpponentShortName,
+      5,
+    );
     try {
       const res = await fetch("/api/calendar/events", {
         method: "POST",
@@ -132,7 +144,7 @@ export default function GamesPage() {
           type: "game",
           payload: {
             opponent_name: newOpponentName.trim(),
-            opponent_short_name: newOpponentShortName.trim() || null,
+            opponent_short_name: normalizedOpponentShortName || null,
             date: newGameDate,
             start_time: newGameTime,
             location: newGameLocation.trim() || null,
@@ -289,7 +301,11 @@ export default function GamesPage() {
                 <input
                   type="text"
                   value={newOpponentShortName}
-                  onChange={(event) => setNewOpponentShortName(event.target.value.toUpperCase())}
+                  onChange={(event) =>
+                    setNewOpponentShortName(
+                      normalizeManualShortName(event.target.value, 5) || "",
+                    )
+                  }
                   placeholder="ex: SCP"
                   maxLength={5}
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm uppercase"
