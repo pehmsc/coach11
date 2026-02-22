@@ -96,6 +96,14 @@ function samePlayerType(
   return dbPlayerType === requestedPlayerType;
 }
 
+function normalizePlayerTypeForKitKey(value: KitPieceRow["player_type"]) {
+  return value === "field_player" ? "field" : value;
+}
+
+function normalizePieceTypeForKitKey(value: KitPieceRow["piece_type"]) {
+  return value === "jersey" ? "shirt" : value;
+}
+
 export default function GameDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -336,12 +344,45 @@ export default function GameDetailPage() {
   function getKitOptions(
     playerType: "field" | "goalkeeper",
     pieceType: (typeof UI_PIECE_TYPES)[number],
+    preferredId?: string | null,
   ) {
-    return teamKits.filter(
+    const filtered = teamKits.filter(
       (piece) =>
         samePlayerType(piece.player_type, playerType) &&
         samePieceType(piece.piece_type, pieceType),
     );
+
+    const seenIds = new Set<string>();
+    const uniqueByKey = new Map<string, KitPieceRow>();
+
+    for (const piece of filtered) {
+      if (seenIds.has(piece.id)) continue;
+      seenIds.add(piece.id);
+
+      const key = `${normalizePlayerTypeForKitKey(piece.player_type)}:${normalizePieceTypeForKitKey(piece.piece_type)}:${piece.kit_number}`;
+      const existing = uniqueByKey.get(key);
+
+      if (!existing) {
+        uniqueByKey.set(key, piece);
+        continue;
+      }
+
+      // Se houver peças duplicadas para o mesmo kit/pedaço, prefere a já selecionada.
+      const shouldPreferCurrent =
+        typeof preferredId === "string" &&
+        preferredId.length > 0 &&
+        piece.id === preferredId &&
+        existing.id !== preferredId;
+
+      if (shouldPreferCurrent) {
+        uniqueByKey.set(key, piece);
+      }
+    }
+
+    return Array.from(uniqueByKey.values()).sort((a, b) => {
+      if (a.kit_number !== b.kit_number) return a.kit_number - b.kit_number;
+      return a.id.localeCompare(b.id);
+    });
   }
 
   const kitById = useMemo(
@@ -920,8 +961,12 @@ export default function GameDetailPage() {
                 {UI_PIECE_TYPES.map((pieceType) => {
                   const field =
                     `${section.prefix}_${pieceType === "shirt" ? "jersey" : pieceType}_kit_id` as keyof KitSelection;
-                  const options = getKitOptions(section.playerType, pieceType);
                   const selectedValue = kitDraftSelection[field];
+                  const options = getKitOptions(
+                    section.playerType,
+                    pieceType,
+                    selectedValue,
+                  );
                   const hasSelectedOption = !selectedValue
                     ? true
                     : options.some((option) => option.id === selectedValue);
