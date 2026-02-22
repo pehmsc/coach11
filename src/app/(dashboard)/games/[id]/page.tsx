@@ -890,10 +890,6 @@ export default function GameDetailPage() {
                             backgroundColor: getKitColor(selectedPiece),
                           }}
                         />
-                        {PIECE_LABEL[pieceType]}
-                        {selectedPiece
-                          ? ` · Kit ${selectedPiece.kit_number}`
-                          : ""}
                       </span>
                     );
                   })}
