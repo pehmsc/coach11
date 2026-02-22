@@ -38,7 +38,17 @@ function LoginForm() {
       password,
     });
     if (error) {
-      setError("Email ou password incorretos.");
+      const message = error.message.toLowerCase();
+      if (message.includes("email not confirmed")) {
+        setError("Confirma o teu email antes de entrar.");
+      } else if (
+        message.includes("invalid login credentials") ||
+        message.includes("invalid_credentials")
+      ) {
+        setError("Email ou password incorretos.");
+      } else {
+        setError(error.message || "Não foi possível entrar. Tenta novamente.");
+      }
       setLoading(false);
       return;
     }
@@ -54,7 +64,7 @@ function LoginForm() {
 
     // Preservar o código de convite através do OAuth passando-o no next param
     const next = inviteCode ? `/dashboard?code=${inviteCode}` : "/dashboard";
-    const callbackUrl = new URL("/auth/callback", window.location.origin);
+    const callbackUrl = new URL("/auth/callback/client", window.location.origin);
     callbackUrl.searchParams.set("next", next);
 
     await supabase.auth.signInWithOAuth({
@@ -83,6 +93,16 @@ function LoginForm() {
           {sp.get("error") === "exchange_failed" && (
             <div className="bg-amber-50 text-amber-700 text-sm p-3 rounded-md border border-amber-200">
               Ocorreu um problema com o Google. Por favor tenta novamente.
+            </div>
+          )}
+          {sp.get("error") === "verify_failed" && (
+            <div className="bg-amber-50 text-amber-700 text-sm p-3 rounded-md border border-amber-200">
+              Não foi possível concluir a confirmação do email. Tenta abrir novamente o link de confirmação.
+            </div>
+          )}
+          {sp.get("error") === "invalid_callback" && (
+            <div className="bg-amber-50 text-amber-700 text-sm p-3 rounded-md border border-amber-200">
+              O link de autenticação é inválido ou expirou. Tenta novamente.
             </div>
           )}
 

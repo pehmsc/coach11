@@ -674,7 +674,7 @@ export default function GameDetailPage() {
           onClick={() => setEditingGame(false)}
         >
           <div
-            className="bg-white rounded-2xl w-full max-w-md shadow-xl"
+            className="bg-white rounded-2xl w-full max-w-md shadow-xl max-h-[calc(100dvh-1rem)] md:max-h-[90vh] overflow-hidden flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between p-5 border-b">
@@ -683,7 +683,11 @@ export default function GameDetailPage() {
                 <X size={20} className="text-slate-400" />
               </button>
             </div>
-            <form onSubmit={handleSaveGameEdit} className="p-5 space-y-4">
+            <form
+              onSubmit={handleSaveGameEdit}
+              className="p-5 space-y-4 overflow-y-auto flex-1 pb-[max(1.25rem,env(safe-area-inset-bottom))]"
+              style={{ WebkitOverflowScrolling: "touch" }}
+            >
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-slate-700">
                   Jornada / Título

@@ -25,6 +25,7 @@ function RegisterForm() {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const inviteCode = sp.get("code") ?? sp.get("inviteCode") ?? null;
 
@@ -32,23 +33,37 @@ function RegisterForm() {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setNotice(null);
     if (password.length < 6) {
       setError("A password deve ter pelo menos 6 caracteres.");
       setLoading(false);
       return;
     }
     const supabase = createClient();
-    const { error } = await supabase.auth.signUp({
+    const next = inviteCode ? `/dashboard?code=${inviteCode}` : "/dashboard";
+    const callbackUrl = new URL("/auth/callback/client", window.location.origin);
+    callbackUrl.searchParams.set("next", next);
+
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { full_name: fullName, role: "coordinator" } },
+      options: {
+        data: { full_name: fullName, role: "coordinator" },
+        emailRedirectTo: callbackUrl.toString(),
+      },
     });
     if (error) {
       setError("Erro ao criar conta. Verifica os dados.");
       setLoading(false);
       return;
     }
-    const dest = inviteCode ? `/dashboard?code=${inviteCode}` : "/dashboard";
+    if (!data.session) {
+      setNotice("Conta criada. Confirma o teu email para concluir o registo e entrar.");
+      setLoading(false);
+      return;
+    }
+
+    const dest = next;
     router.push(dest);
     router.refresh();
   }
@@ -59,7 +74,7 @@ function RegisterForm() {
 
     // Preservar o código de convite através do OAuth passando-o no next param
     const next = inviteCode ? `/dashboard?code=${inviteCode}` : "/dashboard";
-    const callbackUrl = new URL("/auth/callback", window.location.origin);
+    const callbackUrl = new URL("/auth/callback/client", window.location.origin);
     callbackUrl.searchParams.set("next", next);
 
     await supabase.auth.signInWithOAuth({
@@ -86,6 +101,11 @@ function RegisterForm() {
           {error && (
             <div className="bg-red-50 text-red-700 text-sm p-3 rounded-md border border-red-200">
               {error}
+            </div>
+          )}
+          {notice && (
+            <div className="bg-blue-50 text-blue-700 text-sm p-3 rounded-md border border-blue-200">
+              {notice}
             </div>
           )}
 

@@ -262,7 +262,7 @@ export default function TrainingsPage() {
           onClick={() => setSelectedSession(null)}
         >
           <div
-            className="bg-white rounded-2xl w-full max-w-md shadow-xl max-h-[85vh] flex flex-col"
+            className="bg-white rounded-2xl w-full max-w-md shadow-xl max-h-[calc(100dvh-1rem)] md:max-h-[85vh] overflow-hidden flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}

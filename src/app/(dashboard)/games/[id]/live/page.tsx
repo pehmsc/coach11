@@ -106,6 +106,21 @@ function isRunningPhase(phase: MatchPhase) {
   return phase === "first_half" || phase === "second_half";
 }
 
+function parseMatchPhase(value: unknown): MatchPhase | null {
+  if (typeof value !== "string") return null;
+  if (
+    value === "pre_match" ||
+    value === "first_half" ||
+    value === "halftime" ||
+    value === "second_half" ||
+    value === "review" ||
+    value === "completed"
+  ) {
+    return value;
+  }
+  return null;
+}
+
 function computeClockSecondsAt(state: ClockState, atMs: number) {
   if (!state.runningSinceMs) return Math.max(0, state.baseSeconds);
   const runningSeconds = Math.max(0, Math.floor((atMs - state.runningSinceMs) / 1000));
@@ -123,11 +138,12 @@ function loadPersistedClock(gameId: string): PersistedClockState | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<PersistedClockState>;
     if (parsed.version !== 1) return null;
-    if (typeof parsed.phase !== "string") return null;
+    const parsedPhase = parseMatchPhase(parsed.phase);
+    if (!parsedPhase) return null;
     if (typeof parsed.baseSeconds !== "number") return null;
     return {
       version: 1,
-      phase: parsed.phase as MatchPhase,
+      phase: parsedPhase,
       baseSeconds: Math.max(0, Math.floor(parsed.baseSeconds)),
       runningSinceMs: typeof parsed.runningSinceMs === "number" ? parsed.runningSinceMs : null,
       savedAt: typeof parsed.savedAt === "number" ? parsed.savedAt : Date.now(),
@@ -481,6 +497,45 @@ export default function LiveGamePage() {
     }
     const now = Date.now();
     setNowMs(now);
+    const convocationCheckpointRaw =
+      convPayload && typeof convPayload === "object" && "liveCheckpoint" in convPayload
+        ? (convPayload as { liveCheckpoint?: unknown }).liveCheckpoint
+        : null;
+    const convocationPersisted =
+      convocationCheckpointRaw && typeof convocationCheckpointRaw === "object"
+        ? (() => {
+            const row = convocationCheckpointRaw as {
+              phase?: unknown;
+              baseSeconds?: unknown;
+              runningSinceMs?: unknown;
+              updatedAt?: unknown;
+            };
+            const parsedPhase = parseMatchPhase(row.phase);
+            if (!parsedPhase) return null;
+            if (typeof row.baseSeconds !== "number" || !Number.isFinite(row.baseSeconds)) {
+              return null;
+            }
+            if (
+              row.runningSinceMs !== null &&
+              row.runningSinceMs !== undefined &&
+              (typeof row.runningSinceMs !== "number" || !Number.isFinite(row.runningSinceMs))
+            ) {
+              return null;
+            }
+            const savedAtMs =
+              typeof row.updatedAt === "string" && row.updatedAt
+                ? new Date(row.updatedAt).getTime()
+                : Date.now();
+            return {
+              version: 1 as const,
+              phase: parsedPhase,
+              baseSeconds: Math.max(0, Math.floor(row.baseSeconds)),
+              runningSinceMs:
+                typeof row.runningSinceMs === "number" ? Math.floor(row.runningSinceMs) : null,
+              savedAt: Number.isFinite(savedAtMs) ? savedAtMs : Date.now(),
+            } satisfies PersistedClockState;
+          })()
+        : null;
     const backendCheckpointPromise = fetch(`/api/games/${id}/live/checkpoint`, {
       cache: "no-store",
     })
@@ -492,11 +547,12 @@ export default function LiveGamePage() {
         }
         if (!res.ok || !payload?.checkpoint) return null;
         const checkpoint = payload.checkpoint as Partial<BackendCheckpointState>;
-        if (typeof checkpoint.phase !== "string") return null;
+        const parsedPhase = parseMatchPhase(checkpoint.phase);
+        if (!parsedPhase) return null;
         if (typeof checkpoint.baseSeconds !== "number") return null;
 
         return {
-          phase: checkpoint.phase as MatchPhase,
+          phase: parsedPhase,
           baseSeconds: Math.max(0, Math.floor(checkpoint.baseSeconds)),
           runningSinceMs:
             typeof checkpoint.runningSinceMs === "number" ? checkpoint.runningSinceMs : null,
@@ -655,6 +711,9 @@ export default function LiveGamePage() {
           runningSinceMs: backendPersisted.runningSinceMs,
           savedAt: backendPersisted.savedAt,
         });
+      }
+      if (convocationPersisted) {
+        persistedCandidates.push(convocationPersisted);
       }
       if (localPersisted) persistedCandidates.push(localPersisted);
 
@@ -898,6 +957,7 @@ export default function LiveGamePage() {
   const playersAvailableToEnter = convocatedPlayers.filter((p) => !p.isOnField);
 
   const isLivePhase = phase === "first_half" || phase === "second_half";
+  const canRegisterEvents = isLivePhase || !!clockState.runningSinceMs;
   const isFinalized = game?.status === "completed";
 
   // Review: players who actually played (minutes > 0)
@@ -1004,7 +1064,7 @@ export default function LiveGamePage() {
   // ── Event handlers ──
 
   function openModal(type: ModalType, isOpponent: boolean) {
-    if (phase !== "first_half" && phase !== "second_half") {
+    if (!canRegisterEvents) {
       toast.error("Inicia a 1ª ou 2ª parte para registar eventos.");
       return;
     }
@@ -1656,35 +1716,35 @@ export default function LiveGamePage() {
         <div className="grid grid-cols-2 gap-2 mb-5">
           <button
             onClick={() => openModal("goal", false)}
-            disabled={!isLivePhase}
+            disabled={!canRegisterEvents}
             className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm font-medium hover:bg-emerald-100 transition-colors disabled:opacity-40"
           >
             ⚽ Golo nosso
           </button>
           <button
             onClick={() => openModal("goal", true)}
-            disabled={!isLivePhase}
+            disabled={!canRegisterEvents}
             className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm font-medium hover:bg-red-100 transition-colors disabled:opacity-40"
           >
             ⚽ Golo adversário
           </button>
           <button
             onClick={() => openModal("yellow_card", false)}
-            disabled={!isLivePhase}
+            disabled={!canRegisterEvents}
             className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 text-sm font-medium hover:bg-amber-100 transition-colors disabled:opacity-40"
           >
             🟨 Amarelo
           </button>
           <button
             onClick={() => openModal("red_card", false)}
-            disabled={!isLivePhase}
+            disabled={!canRegisterEvents}
             className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm font-medium hover:bg-red-100 transition-colors disabled:opacity-40"
           >
             🟥 Vermelho
           </button>
           <button
             onClick={() => openModal("substitution", false)}
-            disabled={!isLivePhase}
+            disabled={!canRegisterEvents}
             className="col-span-2 p-3 rounded-xl bg-blue-50 border border-blue-200 text-blue-700 text-sm font-medium hover:bg-blue-100 transition-colors disabled:opacity-40"
           >
             🔄 Substituição
@@ -1917,14 +1977,14 @@ export default function LiveGamePage() {
       {/* ── EVENT MODAL ── */}
       {modalType && (
         <div
-          className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center p-4"
+          className="fixed inset-0 bg-black/50 z-50 flex items-end md:items-center justify-center p-4"
           onClick={closeModal}
         >
           <div
-            className="bg-white rounded-2xl w-full max-w-md shadow-xl max-h-[80vh] overflow-y-auto"
+            className="bg-white rounded-2xl w-full max-w-md shadow-xl max-h-[calc(100dvh-1rem)] md:max-h-[90vh] overflow-hidden flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex justify-between items-center p-4 border-b sticky top-0 bg-white">
+            <div className="flex justify-between items-center p-4 border-b bg-white shrink-0">
               <h3 className="font-bold text-slate-900">
                 {modalType === "substitution"
                   ? "🔄 Substituição"
@@ -1940,7 +2000,10 @@ export default function LiveGamePage() {
               </button>
             </div>
 
-            <div className="p-4 space-y-3">
+            <div
+              className="p-4 space-y-3 flex-1 overflow-y-auto pb-[max(1.25rem,env(safe-area-inset-bottom))]"
+              style={{ WebkitOverflowScrolling: "touch" }}
+            >
               {/* SUBSTITUTION */}
               {modalType === "substitution" && (
                 <>

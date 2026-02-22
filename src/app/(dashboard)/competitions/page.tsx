@@ -637,10 +637,10 @@ export default function CompetitionsPage() {
           onClick={closeCompForm}
         >
           <div
-            className="bg-white rounded-2xl w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto"
+            className="bg-white rounded-2xl w-full max-w-md shadow-xl max-h-[calc(100dvh-1rem)] md:max-h-[90vh] overflow-hidden flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex justify-between items-center p-5 border-b sticky top-0 bg-white z-10">
+            <div className="flex justify-between items-center p-5 border-b bg-white shrink-0">
               <h3 className="font-bold text-slate-900">
                 {editingId ? "Editar competição" : "Nova competição"}
               </h3>
@@ -649,7 +649,11 @@ export default function CompetitionsPage() {
               </button>
             </div>
 
-            <form onSubmit={handleSaveComp} className="p-5 space-y-4">
+            <form
+              onSubmit={handleSaveComp}
+              className="p-5 space-y-4 overflow-y-auto flex-1 pb-[max(1.25rem,env(safe-area-inset-bottom))]"
+              style={{ WebkitOverflowScrolling: "touch" }}
+            >
               {error && (
                 <div className="bg-red-50 text-red-700 text-sm p-3 rounded-lg border border-red-200">
                   {error}
