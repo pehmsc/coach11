@@ -26,6 +26,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  GameFormFields,
+  type GameCompetitionOption,
+  type SharedGameFormValues,
+} from "@/components/games/game-form-fields";
+import {
   isValidManualShortName,
   normalizeManualShortName,
 } from "@/lib/football/short-name";
@@ -42,6 +47,7 @@ interface CalEvent {
   status?: string;
   opponent_name?: string;
   opponent_short_name?: string;
+  competition_id?: string;
   location?: string;
   location_address?: string;
   is_home?: boolean;
@@ -50,19 +56,13 @@ interface CalEvent {
 
 type ModalMode = "add_training" | "add_game" | "edit_training" | "edit_game";
 
-interface EventForm {
+type EventForm = SharedGameFormValues & {
   title: string;
-  date: string;
-  start_time: string;
   end_time: string;
-  opponent_name: string;
-  opponent_short_name: string;
-  location: string;
   location_address: string;
-  is_home: boolean;
   notes: string;
   image_url: string;
-}
+};
 
 const EMPTY_FORM: EventForm = {
   title: "",
@@ -71,6 +71,7 @@ const EMPTY_FORM: EventForm = {
   end_time: "",
   opponent_name: "",
   opponent_short_name: "",
+  competition_id: "",
   location: "",
   location_address: "",
   is_home: true,
@@ -110,6 +111,7 @@ export default function CalendarPage() {
   const [modalMode, setModalMode] = useState<ModalMode | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<CalEvent | null>(null);
   const [form, setForm] = useState<EventForm>(EMPTY_FORM);
+  const [competitionOptions, setCompetitionOptions] = useState<GameCompetitionOption[]>([]);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [opError, setOpError] = useState<string | null>(null);
@@ -191,6 +193,8 @@ export default function CalendarPage() {
           typeof g.opponent_short_name === "string"
             ? g.opponent_short_name
             : undefined,
+        competition_id:
+          typeof g.competition_id === "string" ? g.competition_id : undefined,
         location: typeof g.location === "string" ? g.location : undefined,
         location_address:
           typeof g.location_address === "string" ? g.location_address : undefined,
@@ -210,16 +214,31 @@ export default function CalendarPage() {
   useEffect(() => {
     async function loadTeam() {
       setLoadError(null);
-      const res = await fetch("/api/me/context", { cache: "no-store" });
-      const payload = (await res.json().catch(() => null)) as
+      const [contextRes, competitionsRes] = await Promise.all([
+        fetch("/api/me/context", { cache: "no-store" }),
+        fetch("/api/competitions", { cache: "no-store" }),
+      ]);
+      const payload = (await contextRes.json().catch(() => null)) as
         | {
             ageGroup?: { id?: string; club_name?: string; name?: string } | null;
             teamId?: string | null;
             error?: string;
           }
         | null;
+      const competitionsPayload = (await competitionsRes.json().catch(() => null)) as
+        | {
+            success?: boolean;
+            competitions?: Array<{
+              id?: string;
+              name?: string;
+              season?: string | null;
+              team_label?: string | null;
+              is_active?: boolean;
+            }>;
+          }
+        | null;
 
-      if (!res.ok) {
+      if (!contextRes.ok) {
         setLoadError(payload?.error || "Erro ao carregar contexto do calendário.");
         setLoading(false);
         return;
@@ -234,6 +253,16 @@ export default function CalendarPage() {
       setAgeGroupId(resolvedAgeGroupId);
       setAgeGroupName(resolvedAgeGroupName);
       setTeamId(payload?.teamId ?? null);
+
+      const options = (competitionsPayload?.competitions || [])
+        .filter((competition) => !!competition.id && competition.is_active !== false)
+        .map((competition) => ({
+          id: competition.id as string,
+          name: competition.name || "Competição",
+          season: competition.season || null,
+          team_label: competition.team_label || null,
+        }));
+      setCompetitionOptions(options);
       setLoading(false);
     }
 
@@ -267,6 +296,7 @@ export default function CalendarPage() {
       end_time: "",
       opponent_name: event.opponent_name || "",
       opponent_short_name: event.opponent_short_name || "",
+      competition_id: event.competition_id || "",
       location: event.location || "",
       location_address: event.location_address || "",
       is_home: event.is_home ?? true,
@@ -281,6 +311,16 @@ export default function CalendarPage() {
     setSelectedEvent(null);
     setForm(EMPTY_FORM);
     setOpError(null);
+  }
+
+  function handleGameFieldChange(
+    field: keyof SharedGameFormValues,
+    value: string | boolean,
+  ) {
+    setForm((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
   }
 
   async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -344,6 +384,7 @@ export default function CalendarPage() {
             form.opponent_short_name,
             5,
           ),
+          competition_id: form.competition_id || null,
           location: form.location,
           location_address: form.location_address,
           is_home: form.is_home,
@@ -722,112 +763,60 @@ export default function CalendarPage() {
 
               {/* Só jogos: adversário + casa/fora */}
               {!isTrainingModal && (
-                <>
-                  <div className="space-y-1">
-                    <Label>Adversário</Label>
-                    <Input
-                      value={form.opponent_name}
-                      placeholder="ex: Sporting CP"
-                      onChange={(e) =>
-                        setForm((f) => ({
-                          ...f,
-                          opponent_name: e.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Sigla do adversário</Label>
-                    <Input
-                      value={form.opponent_short_name}
-                      placeholder="ex: SCP"
-                      maxLength={5}
-                      className="uppercase"
-                      onChange={(e) =>
-                        setForm((f) => ({
-                          ...f,
-                          opponent_short_name:
-                            normalizeManualShortName(e.target.value, 5) || "",
-                        }))
-                      }
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Casa ou Fora?</Label>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setForm((f) => ({ ...f, is_home: true }))
-                        }
-                        className={`flex-1 py-2.5 rounded-xl text-sm font-medium border-2 transition-colors ${
-                          form.is_home
-                            ? "border-emerald-500 bg-emerald-50 text-emerald-700"
-                            : "border-slate-200 text-slate-500"
-                        }`}
-                      >
-                        🏠 Casa
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setForm((f) => ({ ...f, is_home: false }))
-                        }
-                        className={`flex-1 py-2.5 rounded-xl text-sm font-medium border-2 transition-colors ${
-                          !form.is_home
-                            ? "border-blue-500 bg-blue-50 text-blue-700"
-                            : "border-slate-200 text-slate-500"
-                        }`}
-                      >
-                        ✈️ Fora
-                      </button>
-                    </div>
-                  </div>
-                </>
+                <GameFormFields
+                  values={form}
+                  onFieldChange={handleGameFieldChange}
+                  competitionOptions={competitionOptions}
+                  showCompetitionSelect
+                />
               )}
 
               {/* Data e hora */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label>
-                    <Clock size={12} className="inline mr-1" />
-                    Data *
-                  </Label>
-                  <Input
-                    type="date"
-                    value={form.date}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, date: e.target.value }))
-                    }
-                  />
+              {isTrainingModal && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label>
+                      <Clock size={12} className="inline mr-1" />
+                      Data *
+                    </Label>
+                    <Input
+                      type="date"
+                      value={form.date}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, date: e.target.value }))
+                      }
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Hora</Label>
+                    <Input
+                      type="time"
+                      value={form.start_time}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, start_time: e.target.value }))
+                      }
+                    />
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <Label>Hora</Label>
-                  <Input
-                    type="time"
-                    value={form.start_time}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, start_time: e.target.value }))
-                    }
-                  />
-                </div>
-              </div>
+              )}
 
               {/* Local */}
               <div className="space-y-3">
-                <div className="space-y-1">
-                  <Label>
-                    <MapPin size={12} className="inline mr-1" />
-                    Nome do local
-                  </Label>
-                  <Input
-                    value={form.location}
-                    placeholder="ex: Campo 1, Complexo Desportivo"
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, location: e.target.value }))
-                    }
-                  />
-                </div>
+                {isTrainingModal && (
+                  <div className="space-y-1">
+                    <Label>
+                      <MapPin size={12} className="inline mr-1" />
+                      Nome do local
+                    </Label>
+                    <Input
+                      value={form.location}
+                      placeholder="ex: Campo 1, Complexo Desportivo"
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, location: e.target.value }))
+                      }
+                    />
+                  </div>
+                )}
                 <div className="space-y-1">
                   <Label>Morada completa</Label>
                   <Input

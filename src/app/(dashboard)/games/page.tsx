@@ -16,6 +16,11 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
+  GameFormFields,
+  type GameCompetitionOption,
+  type SharedGameFormValues,
+} from "@/components/games/game-form-fields";
+import {
   isValidManualShortName,
   normalizeManualShortName,
 } from "@/lib/football/short-name";
@@ -33,6 +38,17 @@ interface GameRow {
   title?: string;
   competition_id?: string;
 }
+
+type CompetitionsResponse = {
+  success?: boolean;
+  competitions?: Array<{
+    id?: string;
+    name?: string;
+    season?: string | null;
+    team_label?: string | null;
+    is_active?: boolean;
+  }>;
+};
 
 function groupByMonth(games: GameRow[]): { label: string; games: GameRow[] }[] {
   const map = new Map<string, GameRow[]>();
@@ -69,15 +85,19 @@ export default function GamesPage() {
   const [creatingGame, setCreatingGame] = useState(false);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
-  const [newOpponentName, setNewOpponentName] = useState("");
-  const [newOpponentShortName, setNewOpponentShortName] = useState("");
-  const [newGameDate, setNewGameDate] = useState("");
-  const [newGameTime, setNewGameTime] = useState("15:00");
-  const [newGameLocation, setNewGameLocation] = useState("");
-  const [newIsHome, setNewIsHome] = useState(true);
+  const [competitionOptions, setCompetitionOptions] = useState<GameCompetitionOption[]>([]);
+  const [gameForm, setGameForm] = useState<SharedGameFormValues>({
+    opponent_name: "",
+    opponent_short_name: "",
+    date: "",
+    start_time: "15:00",
+    location: "",
+    is_home: true,
+    competition_id: "",
+  });
 
   useEffect(() => {
-    void loadGames();
+    void Promise.all([loadGames(), loadCompetitions()]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -108,24 +128,57 @@ export default function GamesPage() {
     setLoading(false);
   }
 
+  async function loadCompetitions() {
+    const res = await fetch("/api/competitions", { cache: "no-store" });
+    const payload = (await res.json().catch(() => null)) as CompetitionsResponse | null;
+    if (!res.ok || !payload?.success) {
+      setCompetitionOptions([]);
+      return;
+    }
+
+    const options = (payload.competitions || [])
+      .filter((competition) => !!competition.id && competition.is_active !== false)
+      .map((competition) => ({
+        id: competition.id as string,
+        name: competition.name || "Competição",
+        season: competition.season || null,
+        team_label: competition.team_label || null,
+      }));
+
+    setCompetitionOptions(options);
+  }
+
   function resetCreateForm() {
     const today = new Date();
-    setNewOpponentName("");
-    setNewOpponentShortName("");
-    setNewGameDate(format(today, "yyyy-MM-dd"));
-    setNewGameTime("15:00");
-    setNewGameLocation("");
-    setNewIsHome(true);
+    setGameForm({
+      opponent_name: "",
+      opponent_short_name: "",
+      date: format(today, "yyyy-MM-dd"),
+      start_time: "15:00",
+      location: "",
+      is_home: true,
+      competition_id: "",
+    });
     setCreateError(null);
+  }
+
+  function handleGameFormFieldChange(
+    field: keyof SharedGameFormValues,
+    value: string | boolean,
+  ) {
+    setGameForm((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
   }
 
   async function handleCreateGame(e: { preventDefault(): void }) {
     e.preventDefault();
-    if (!newOpponentName.trim() || !newGameDate || !newGameTime) {
+    if (!gameForm.opponent_name.trim() || !gameForm.date || !gameForm.start_time) {
       setCreateError("Preenche adversário, data e hora.");
       return;
     }
-    if (!isValidManualShortName(newOpponentShortName, 2, 5)) {
+    if (!isValidManualShortName(gameForm.opponent_short_name, 2, 5)) {
       setCreateError("A sigla do adversário deve ter entre 2 e 5 caracteres.");
       return;
     }
@@ -133,7 +186,7 @@ export default function GamesPage() {
     setCreatingGame(true);
     setCreateError(null);
     const normalizedOpponentShortName = normalizeManualShortName(
-      newOpponentShortName,
+      gameForm.opponent_short_name,
       5,
     );
     try {
@@ -143,12 +196,13 @@ export default function GamesPage() {
         body: JSON.stringify({
           type: "game",
           payload: {
-            opponent_name: newOpponentName.trim(),
+            opponent_name: gameForm.opponent_name.trim(),
             opponent_short_name: normalizedOpponentShortName || null,
-            date: newGameDate,
-            start_time: newGameTime,
-            location: newGameLocation.trim() || null,
-            is_home: newIsHome,
+            competition_id: gameForm.competition_id || null,
+            date: gameForm.date,
+            start_time: gameForm.start_time,
+            location: gameForm.location.trim() || null,
+            is_home: gameForm.is_home,
           },
         }),
       });
@@ -285,72 +339,12 @@ export default function GamesPage() {
               className="p-5 space-y-3 overflow-y-auto flex-1 pb-[max(1.25rem,env(safe-area-inset-bottom))]"
               style={{ WebkitOverflowScrolling: "touch" }}
             >
-              <div className="space-y-1">
-                <label className="text-sm font-medium text-slate-700">Adversário *</label>
-                <input
-                  type="text"
-                  value={newOpponentName}
-                  onChange={(event) => setNewOpponentName(event.target.value)}
-                  placeholder="Nome do adversário"
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
-                  required
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-sm font-medium text-slate-700">Sigla adversário</label>
-                <input
-                  type="text"
-                  value={newOpponentShortName}
-                  onChange={(event) =>
-                    setNewOpponentShortName(
-                      normalizeManualShortName(event.target.value, 5) || "",
-                    )
-                  }
-                  placeholder="ex: SCP"
-                  maxLength={5}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm uppercase"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <label className="text-sm font-medium text-slate-700">Data *</label>
-                  <input
-                    type="date"
-                    value={newGameDate}
-                    onChange={(event) => setNewGameDate(event.target.value)}
-                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
-                    required
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-sm font-medium text-slate-700">Hora *</label>
-                  <input
-                    type="time"
-                    value={newGameTime}
-                    onChange={(event) => setNewGameTime(event.target.value)}
-                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
-                    required
-                  />
-                </div>
-              </div>
-              <div className="space-y-1">
-                <label className="text-sm font-medium text-slate-700">Local</label>
-                <input
-                  type="text"
-                  value={newGameLocation}
-                  onChange={(event) => setNewGameLocation(event.target.value)}
-                  placeholder="Campo/local"
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
-                />
-              </div>
-              <label className="inline-flex items-center gap-2 text-sm text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={newIsHome}
-                  onChange={(event) => setNewIsHome(event.target.checked)}
-                />
-                Jogo em casa
-              </label>
+              <GameFormFields
+                values={gameForm}
+                onFieldChange={handleGameFormFieldChange}
+                competitionOptions={competitionOptions}
+                showCompetitionSelect
+              />
               {createError && <p className="text-sm text-red-600">{createError}</p>}
               <div className="flex gap-2 pt-1">
                 <Button

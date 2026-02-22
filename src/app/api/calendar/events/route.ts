@@ -17,6 +17,7 @@ type CalendarPayload = {
   end_time?: string | null;
   opponent_name?: string | null;
   opponent_short_name?: string | null;
+  competition_id?: string | null;
   location?: string | null;
   location_address?: string | null;
   is_home?: boolean;
@@ -48,6 +49,12 @@ function normalizeTime(value: unknown) {
   return /^\d{2}:\d{2}$/.test(trimmed) ? trimmed : null;
 }
 
+function normalizeOptionalId(value: unknown) {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 function normalizeEventType(value: unknown): CalendarEventType | null {
   if (value === "training" || value === "game") return value;
   return null;
@@ -64,6 +71,7 @@ function normalizePayload(value: unknown): CalendarPayload {
     end_time: normalizeTime(row.end_time),
     opponent_name: normalizeOptionalText(row.opponent_name),
     opponent_short_name: normalizeManualShortName(opponentShortNameRaw, 5),
+    competition_id: normalizeOptionalId(row.competition_id),
     location: normalizeOptionalText(row.location),
     location_address: normalizeOptionalText(row.location_address),
     is_home: typeof row.is_home === "boolean" ? row.is_home : undefined,
@@ -161,6 +169,30 @@ async function getAgeGroupFromTeam(
     .eq("id", teamId)
     .maybeSingle();
   return data?.age_group_id ?? null;
+}
+
+async function resolveCompetitionId(
+  admin: ReturnType<typeof createAdminClient>,
+  teamId: string,
+  requestedCompetitionId: string | null | undefined,
+) {
+  if (!requestedCompetitionId) return { id: null as string | null, error: null as string | null };
+
+  const { data, error } = await admin
+    .from("competitions")
+    .select("id")
+    .eq("id", requestedCompetitionId)
+    .eq("team_id", teamId)
+    .maybeSingle();
+
+  if (error || !data?.id) {
+    return {
+      id: null as string | null,
+      error: "Competição inválida para esta equipa.",
+    };
+  }
+
+  return { id: data.id as string, error: null as string | null };
 }
 
 export async function GET(request: Request) {
@@ -310,6 +342,14 @@ export async function POST(request: Request) {
       );
     }
 
+    const competitionResult =
+      eventType === "game"
+        ? await resolveCompetitionId(admin, targetTeamId, payload.competition_id)
+        : { id: null as string | null, error: null as string | null };
+    if (competitionResult.error) {
+      return NextResponse.json({ error: competitionResult.error }, { status: 400 });
+    }
+
     if (eventType === "training") {
       const { data, error } = await admin
         .from("training_sessions")
@@ -353,6 +393,7 @@ export async function POST(request: Request) {
         team_id: targetTeamId,
         title: payload.title || (payload.opponent_name ? `vs ${payload.opponent_name}` : "Jogo"),
         game_datetime: gameDatetime,
+        competition_id: competitionResult.id,
         opponent_name: payload.opponent_name,
         opponent_short_name: payload.opponent_short_name,
         location: payload.location,
@@ -424,6 +465,14 @@ export async function PATCH(request: Request) {
         { error: "Não foi possível determinar a equipa para o evento." },
         { status: 422 },
       );
+    }
+
+    const competitionResult =
+      eventType === "game"
+        ? await resolveCompetitionId(admin, targetTeamId, payload.competition_id)
+        : { id: null as string | null, error: null as string | null };
+    if (competitionResult.error) {
+      return NextResponse.json({ error: competitionResult.error }, { status: 400 });
     }
 
     if (eventType === "training") {
@@ -519,6 +568,7 @@ export async function PATCH(request: Request) {
         team_id: targetTeamId,
         title: payload.title || (payload.opponent_name ? `vs ${payload.opponent_name}` : "Jogo"),
         game_datetime: gameDatetime,
+        competition_id: competitionResult.id,
         opponent_name: payload.opponent_name,
         opponent_short_name: payload.opponent_short_name,
         location: payload.location,

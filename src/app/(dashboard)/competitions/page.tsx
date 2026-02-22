@@ -19,13 +19,22 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  GameFormFields,
+  type GameCompetitionOption,
+  type SharedGameFormValues,
+} from "@/components/games/game-form-fields";
+import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { Competition, Game } from "@/types/database";
+import {
+  isValidManualShortName,
+  normalizeManualShortName,
+} from "@/lib/football/short-name";
+import type { Competition, Game, TeamLabel } from "@/types/database";
 
 interface CompetitionWithGames extends Competition {
   games?: Game[];
@@ -36,15 +45,12 @@ interface CompetitionForm {
   name: string;
   season: string;
   phase: string;
+  team_label: TeamLabel;
   total_rounds: string;
   has_two_legs: boolean;
 }
 
-interface GameForm {
-  opponent_name: string;
-  game_datetime: string;
-  is_home: boolean;
-  location: string;
+interface GameForm extends SharedGameFormValues {
   round_number: string;
 }
 
@@ -63,15 +69,19 @@ const EMPTY_COMP_FORM: CompetitionForm = {
   name: "",
   season: "2025/2026",
   phase: "",
+  team_label: "A",
   total_rounds: "",
   has_two_legs: false,
 };
 
 const EMPTY_GAME_FORM: GameForm = {
   opponent_name: "",
-  game_datetime: "",
+  opponent_short_name: "",
+  date: "",
+  start_time: "15:00",
   is_home: true,
   location: "",
+  competition_id: "",
   round_number: "",
 };
 
@@ -149,6 +159,7 @@ export default function CompetitionsPage() {
       name: comp.name,
       season: comp.season,
       phase: comp.phase || "",
+      team_label: comp.team_label || "A",
       total_rounds: comp.total_rounds?.toString() || "",
       has_two_legs: comp.has_two_legs || false,
     });
@@ -174,6 +185,7 @@ export default function CompetitionsPage() {
       name: compForm.name,
       season: compForm.season,
       phase: compForm.phase || null,
+      team_label: compForm.team_label,
       total_rounds: compForm.total_rounds ? parseInt(compForm.total_rounds) : null,
       has_two_legs: compForm.has_two_legs,
     };
@@ -220,8 +232,13 @@ export default function CompetitionsPage() {
   }
 
   function openAddGame(compId: string) {
+    const now = new Date();
     setAddingGameToCompId(compId);
-    setGameForm(EMPTY_GAME_FORM);
+    setGameForm({
+      ...EMPTY_GAME_FORM,
+      competition_id: compId,
+      date: format(now, "yyyy-MM-dd"),
+    });
     setError(null);
   }
 
@@ -231,19 +248,45 @@ export default function CompetitionsPage() {
     setError(null);
   }
 
+  function handleGameFieldChange(
+    field: keyof SharedGameFormValues,
+    value: string | boolean,
+  ) {
+    setGameForm((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  }
+
   async function handleSaveGame(e: { preventDefault(): void }) {
     e.preventDefault();
-    if (!teamId || !ageGroupId || !addingGameToCompId) return;
+    if (!teamId || !ageGroupId) return;
+    if (!gameForm.opponent_name.trim() || !gameForm.date || !gameForm.start_time) {
+      setError("Preenche adversário, data e hora.");
+      return;
+    }
+    if (!isValidManualShortName(gameForm.opponent_short_name, 2, 5)) {
+      setError("A sigla do adversário deve ter entre 2 e 5 caracteres.");
+      return;
+    }
+
+    const normalizedOpponentShortName = normalizeManualShortName(
+      gameForm.opponent_short_name,
+      5,
+    );
+    const gameDateTime = `${gameForm.date}T${gameForm.start_time}:00`;
+
     setSavingGame(true);
     setError(null);
 
     const { error } = await supabase.from("games").insert({
       team_id: teamId,
       age_group_id: ageGroupId,
-      competition_id: addingGameToCompId,
+      competition_id: gameForm.competition_id || null,
       title: gameForm.round_number ? `Jornada ${gameForm.round_number}` : null,
-      opponent_name: gameForm.opponent_name,
-      game_datetime: gameForm.game_datetime,
+      opponent_name: gameForm.opponent_name.trim(),
+      opponent_short_name: normalizedOpponentShortName || null,
+      game_datetime: gameDateTime,
       is_home: gameForm.is_home,
       location: gameForm.location || null,
       status: "scheduled",
@@ -265,6 +308,15 @@ export default function CompetitionsPage() {
     if (game.score_home == null || game.score_away == null) return null;
     return `${game.score_home}–${game.score_away}`;
   }
+
+  const competitionSelectOptions: GameCompetitionOption[] = competitions
+    .filter((competition) => competition.is_active !== false)
+    .map((competition) => ({
+      id: competition.id,
+      name: competition.name,
+      season: competition.season,
+      team_label: competition.team_label || null,
+    }));
 
   if (loading) {
     return (
@@ -350,7 +402,14 @@ export default function CompetitionsPage() {
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
-                      <CardTitle className="text-base">{comp.name}</CardTitle>
+                      <div className="flex items-center gap-2">
+                        <CardTitle className="text-base">{comp.name}</CardTitle>
+                        {comp.team_label && (
+                          <span className="text-[10px] font-bold bg-indigo-100 text-indigo-700 rounded px-1.5 py-0.5">
+                            Equipa {comp.team_label}
+                          </span>
+                        )}
+                      </div>
                       <p className="text-xs text-slate-400 mt-0.5">
                         {comp.season}
                         {comp.phase ? ` · ${comp.phase}` : ""}
@@ -434,6 +493,7 @@ export default function CompetitionsPage() {
                           <p className="text-sm font-medium text-slate-800 truncate">
                             {game.is_home ? "vs" : "@"}{" "}
                             {game.opponent_name || "Adversário"}
+                            {game.opponent_short_name ? ` (${game.opponent_short_name})` : ""}
                           </p>
                         </div>
                         <p className="text-xs text-slate-400">
@@ -478,6 +538,7 @@ export default function CompetitionsPage() {
                             <p className="text-sm font-medium text-slate-600 truncate">
                               {game.is_home ? "vs" : "@"}{" "}
                               {game.opponent_name || "Adversário"}
+                              {game.opponent_short_name ? ` (${game.opponent_short_name})` : ""}
                             </p>
                           </div>
                           <p className="text-xs text-slate-400">
@@ -507,22 +568,14 @@ export default function CompetitionsPage() {
                         </button>
                       </div>
                       <form onSubmit={handleSaveGame} className="space-y-2">
+                        <GameFormFields
+                          values={gameForm}
+                          onFieldChange={handleGameFieldChange}
+                          competitionOptions={competitionSelectOptions}
+                          showCompetitionSelect
+                          compact
+                        />
                         <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <Label className="text-xs">Adversário *</Label>
-                            <Input
-                              value={gameForm.opponent_name}
-                              onChange={(e) =>
-                                setGameForm((f) => ({
-                                  ...f,
-                                  opponent_name: e.target.value,
-                                }))
-                              }
-                              placeholder="Nome do adversário"
-                              required
-                              className="text-sm h-8"
-                            />
-                          </div>
                           <div>
                             <Label className="text-xs">Jornada</Label>
                             <Input
@@ -539,55 +592,6 @@ export default function CompetitionsPage() {
                               className="text-sm h-8"
                             />
                           </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <Label className="text-xs">Data e hora *</Label>
-                            <Input
-                              type="datetime-local"
-                              value={gameForm.game_datetime}
-                              onChange={(e) =>
-                                setGameForm((f) => ({
-                                  ...f,
-                                  game_datetime: e.target.value,
-                                }))
-                              }
-                              required
-                              className="text-sm h-8"
-                            />
-                          </div>
-                          <div className="flex items-end pb-0.5">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setGameForm((f) => ({
-                                  ...f,
-                                  is_home: !f.is_home,
-                                }))
-                              }
-                              className={`w-full h-8 rounded-lg text-xs font-semibold transition-colors border-2 ${
-                                gameForm.is_home
-                                  ? "bg-blue-50 border-blue-300 text-blue-700"
-                                  : "bg-slate-50 border-slate-200 text-slate-600"
-                              }`}
-                            >
-                              {gameForm.is_home ? "🏠 Casa" : "✈️ Fora"}
-                            </button>
-                          </div>
-                        </div>
-                        <div>
-                          <Label className="text-xs">Local (opcional)</Label>
-                          <Input
-                            value={gameForm.location}
-                            onChange={(e) =>
-                              setGameForm((f) => ({
-                                ...f,
-                                location: e.target.value,
-                              }))
-                            }
-                            placeholder="Estádio / Campo"
-                            className="text-sm h-8"
-                          />
                         </div>
                         <div className="flex gap-2 pt-1">
                           <Button
@@ -682,7 +686,24 @@ export default function CompetitionsPage() {
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Equipa</Label>
+                  <select
+                    value={compForm.team_label}
+                    onChange={(e) =>
+                      setCompForm((f) => ({
+                        ...f,
+                        team_label: (e.target.value as TeamLabel) || "A",
+                      }))
+                    }
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 bg-white text-sm text-slate-700"
+                  >
+                    <option value="A">Equipa A</option>
+                    <option value="B">Equipa B</option>
+                    <option value="C">Equipa C</option>
+                  </select>
+                </div>
                 <div className="space-y-1.5">
                   <Label>Fase / Série</Label>
                   <Input

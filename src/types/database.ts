@@ -15,6 +15,7 @@ export type GameEventType =
   | "substitution_out";
 export type LineupType = "starter" | "substitute";
 export type CompetitionType = "league" | "cup" | "friendly";
+export type TeamLabel = "A" | "B" | "C";
 export type KitNumber = 1 | 2 | 3;
 export type PlayerType = "field" | "goalkeeper";
 export type PieceType = "shirt" | "shorts" | "socks";
@@ -134,6 +135,7 @@ export interface Competition {
   name: string;
   season: string;
   phase?: string;
+  team_label?: TeamLabel;
   num_opponents?: number;
   total_rounds?: number;
   has_two_legs?: boolean;

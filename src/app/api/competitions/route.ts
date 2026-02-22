@@ -38,7 +38,7 @@ export async function GET() {
     const competitionsRes = await admin
       .from("competitions")
       .select(
-        "id, team_id, name, season, phase, num_opponents, total_rounds, has_two_legs, created_at",
+        "id, team_id, name, season, phase, team_label, num_opponents, total_rounds, has_two_legs, created_at",
       )
       .eq("team_id", context.teamId)
       .order("created_at", { ascending: false });
@@ -57,7 +57,7 @@ export async function GET() {
       const gamesRes = await admin
         .from("games")
         .select(
-          "id, competition_id, game_datetime, opponent_name, is_home, status, score_home, score_away, location, title, created_at",
+          "id, competition_id, game_datetime, opponent_name, opponent_short_name, is_home, status, score_home, score_away, location, title, created_at",
         )
         .in("competition_id", competitionIds)
         .order("game_datetime", { ascending: true })
