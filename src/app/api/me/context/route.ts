@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { resolveUserTeamContext } from "@/lib/auth/team-context";
+import { getTeamMembersDetailed } from "@/lib/team/members";
 import { NextResponse } from "next/server";
 
 function normalizeKitRowForUi(row: Record<string, unknown>) {
@@ -48,16 +49,32 @@ export async function GET() {
         source: context.source,
         teamId: context.teamId,
         teamRole: context.teamRole,
+        canManageStaff: false,
         ageGroup: null,
         accessibleTeamIds: context.accessibleTeamIds,
         kits: [],
+        staffMembers: [],
         activeStaffProfileIds: [],
         staffInvites: [],
         profile: profile || null,
       });
     }
 
-    const [kitsRes, staffRes, invitesRes] = await Promise.all([
+    const { data: ageGroupMeta } = await admin
+      .from("age_groups")
+      .select("coordinator_id")
+      .eq("id", context.ageGroup.id)
+      .maybeSingle();
+    const canManageStaff = ageGroupMeta?.coordinator_id === user.id;
+
+    const staffContext = context.teamId
+      ? await getTeamMembersDetailed(admin, {
+          teamId: context.teamId,
+          ageGroupId: context.ageGroup.id,
+        })
+      : { coordinatorId: null, members: [] };
+
+    const [kitsRes, invitesRes] = await Promise.all([
       context.teamId
         ? admin
             .from("kit_pieces")
@@ -67,51 +84,26 @@ export async function GET() {
             .order("player_type")
             .order("piece_type")
         : Promise.resolve({ data: [], error: null }),
-      context.teamId
+      canManageStaff
         ? admin
-            .from("team_staff")
-            .select("id, profile_id, role")
-            .eq("team_id", context.teamId)
+            .from("staff_invites")
+            .select("*")
+            .eq("age_group_id", context.ageGroup.id)
+            .order("created_at", { ascending: false })
         : Promise.resolve({ data: [], error: null }),
-      admin
-        .from("staff_invites")
-        .select("*")
-        .eq("age_group_id", context.ageGroup.id)
-        .order("created_at", { ascending: false }),
     ]);
 
-    const rawStaffRows = (staffRes.data || []) as Array<{
-      id: string;
-      profile_id: string;
-      role: string | null;
-    }>;
-    const staffProfileIds = rawStaffRows.map((row) => row.profile_id);
-
-    let staffProfilesData: Array<{
-      id: string;
-      full_name: string | null;
-      email: string | null;
-      phone: string | null;
-      avatar_url: string | null;
-    }> = [];
-    if (staffProfileIds.length > 0) {
-      const { data: pData } = await admin
-        .from("profiles")
-        .select("id, full_name, email, phone, avatar_url")
-        .in("id", staffProfileIds);
-      staffProfilesData = (pData || []) as typeof staffProfilesData;
-    }
-
-    const staffProfileMap = new Map(staffProfilesData.map((p) => [p.id, p]));
-    const staffMembers = rawStaffRows.map((row) => ({
-      id: row.id,
-      profile_id: row.profile_id,
-      role: row.role || "staff",
-      full_name: staffProfileMap.get(row.profile_id)?.full_name || null,
-      email: staffProfileMap.get(row.profile_id)?.email || null,
-      phone: staffProfileMap.get(row.profile_id)?.phone || null,
-      avatar_url: staffProfileMap.get(row.profile_id)?.avatar_url || null,
+    const staffMembers = staffContext.members.map((member) => ({
+      id: member.teamStaffId || `coordinator-${member.profileId}`,
+      profile_id: member.profileId,
+      role: member.role,
+      is_coordinator: member.isCoordinator,
+      full_name: member.fullName,
+      email: member.email,
+      phone: member.phone,
+      avatar_url: member.avatarUrl,
     }));
+    const staffProfileIds = staffContext.members.map((member) => member.profileId);
 
     return NextResponse.json({
       success: true,
@@ -119,6 +111,7 @@ export async function GET() {
       source: context.source,
       teamId: context.teamId,
       teamRole: context.teamRole,
+      canManageStaff,
       ageGroup: context.ageGroup,
       accessibleTeamIds: context.accessibleTeamIds,
       kits: ((kitsRes.data || []) as Record<string, unknown>[]).map((row) =>

@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -51,6 +50,7 @@ interface StaffMember {
   profile_id: string;
   role: string;
   full_name: string;
+  is_coordinator?: boolean;
   email?: string;
   phone?: string;
   avatar_url?: string;
@@ -82,10 +82,8 @@ const EMPTY_EDIT_FORM = {
 };
 
 export default function StaffPage() {
-  const supabase = useMemo(() => createClient(), []);
-
   const [loading, setLoading] = useState(true);
-  const [accountRole, setAccountRole] = useState("coordinator");
+  const [canManageStaff, setCanManageStaff] = useState(false);
 
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [invites, setInvites] = useState<StaffInvite[]>([]);
@@ -112,10 +110,7 @@ export default function StaffPage() {
   async function loadData() {
     setLoading(true);
 
-    const [contextRes, { data: { user } }] = await Promise.all([
-      fetch("/api/me/context", { cache: "no-store" }),
-      supabase.auth.getUser(),
-    ]);
+    const contextRes = await fetch("/api/me/context", { cache: "no-store" });
 
     const ctx = await contextRes.json().catch(() => ({}));
     if (!contextRes.ok) {
@@ -124,44 +119,46 @@ export default function StaffPage() {
       return;
     }
 
-    const incomingRole = ctx?.profile?.role ?? "coordinator";
-    setAccountRole(incomingRole);
+    setCanManageStaff(ctx?.canManageStaff === true);
 
     // Invites from context
     setInvites((ctx?.staffInvites as StaffInvite[]) || []);
 
-    // Staff members from context (fetched via admin client — bypasses RLS)
-    if (user) {
-      type CtxStaffMember = {
-        id: string;
-        profile_id: string;
-        role: string;
-        full_name: string | null;
-        email: string | null;
-        phone: string | null;
-        avatar_url: string | null;
-      };
-      const rawMembers = (ctx?.staffMembers as CtxStaffMember[]) || [];
-      const members: StaffMember[] = rawMembers
-        .filter((s) => s.profile_id !== user.id) // exclude self
-        .map((s) => ({
-          id: s.id,
-          profile_id: s.profile_id,
-          role: s.role || "staff",
-          full_name: s.full_name || "Sem nome",
-          email: s.email || undefined,
-          phone: s.phone || undefined,
-          avatar_url: s.avatar_url || undefined,
-        }));
-      setStaff(members);
-    }
+    type CtxStaffMember = {
+      id: string;
+      profile_id: string;
+      role: string;
+      is_coordinator?: boolean;
+      full_name: string | null;
+      email: string | null;
+      phone: string | null;
+      avatar_url: string | null;
+    };
+    const rawMembers = (ctx?.staffMembers as CtxStaffMember[]) || [];
+    const members: StaffMember[] = rawMembers.map((s) => ({
+      id: s.id,
+      profile_id: s.profile_id,
+      role: s.role || "staff",
+      full_name: s.full_name || "Sem nome",
+      is_coordinator: s.is_coordinator === true,
+      email: s.email || undefined,
+      phone: s.phone || undefined,
+      avatar_url: s.avatar_url || undefined,
+    }));
+    members.sort((a, b) => {
+      const aPriority = a.is_coordinator ? 0 : 1;
+      const bPriority = b.is_coordinator ? 0 : 1;
+      if (aPriority !== bPriority) return aPriority - bPriority;
+      return a.full_name.localeCompare(b.full_name, "pt");
+    });
+    setStaff(members);
 
     setLoading(false);
   }
 
   async function handleSendInvite(e: { preventDefault(): void }) {
     e.preventDefault();
-    if (accountRole !== "coordinator") {
+    if (!canManageStaff) {
       toast.error("Apenas o coordenador pode enviar convites.");
       return;
     }
@@ -186,7 +183,7 @@ export default function StaffPage() {
   }
 
   async function handleRemoveStaff(staffId: string) {
-    if (accountRole !== "coordinator") {
+    if (!canManageStaff) {
       toast.error("Apenas o coordenador pode gerir a equipa técnica.");
       return;
     }
@@ -205,7 +202,7 @@ export default function StaffPage() {
   }
 
   function openEditMember(member: StaffMember) {
-    if (accountRole !== "coordinator") return;
+    if (!canManageStaff || member.is_coordinator) return;
     const normalizedRole =
       member.role === "coach"
         ? "head_coach"
@@ -227,7 +224,7 @@ export default function StaffPage() {
 
   async function handleSaveMember(e: { preventDefault(): void }) {
     e.preventDefault();
-    if (!editingMember || accountRole !== "coordinator") return;
+    if (!editingMember || !canManageStaff) return;
 
     setSavingEdit(true);
     try {
@@ -316,7 +313,7 @@ export default function StaffPage() {
     <div className="p-4 md:p-8 max-w-2xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-slate-900">Equipa Técnica</h1>
-        {accountRole === "coordinator" && (
+        {canManageStaff && (
           <Button
             onClick={() => { setShowForm(true); setInviteResult(null); }}
             className="bg-emerald-600 hover:bg-emerald-700"
@@ -350,7 +347,10 @@ export default function StaffPage() {
                 )}
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-slate-800 truncate">{member.full_name}</p>
-                  <p className="text-xs text-slate-500">{ROLE_LABELS[member.role] || member.role}</p>
+                  <p className="text-xs text-slate-500">
+                    {ROLE_LABELS[member.role] || member.role}
+                    {member.is_coordinator ? " · Coordenador do escalão" : ""}
+                  </p>
                   {(member.email || member.phone) && (
                     <p className="text-xs text-slate-400 truncate">
                       {member.email || "Sem email"}
@@ -358,7 +358,7 @@ export default function StaffPage() {
                     </p>
                   )}
                 </div>
-                {accountRole === "coordinator" && (
+                {canManageStaff && !member.is_coordinator && (
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => openEditMember(member)}
@@ -401,7 +401,7 @@ export default function StaffPage() {
       </Card>
 
       {/* Convites pendentes */}
-      {invites.length > 0 && (
+      {canManageStaff && invites.length > 0 && (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
@@ -429,7 +429,7 @@ export default function StaffPage() {
                   >
                     {copiedCode === invite.invite_code ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
                   </button>
-                  {accountRole === "coordinator" && (
+                  {canManageStaff && (
                     confirmDeleteInviteId === invite.id ? (
                       <>
                         <button

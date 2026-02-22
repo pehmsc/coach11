@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { resolveUserTeamContext } from "@/lib/auth/team-context";
+import { createNotificationsForTeam } from "@/lib/notifications/service";
 import { deleteGameCascade, deleteTrainingSessionCascade } from "@/lib/events/delete-cascade";
 import {
   isValidManualShortName,
@@ -311,7 +312,7 @@ export async function POST(request: Request) {
     const routeContext = await buildRouteContext();
     if (routeContext instanceof NextResponse) return routeContext;
 
-    const { admin, context } = routeContext;
+    const { userId, admin, context } = routeContext;
     const body = await request.json().catch(() => null);
     const eventType = normalizeEventType(body?.type);
     const payload = normalizePayload(body?.payload);
@@ -376,6 +377,22 @@ export async function POST(request: Request) {
         );
       }
 
+      try {
+        await createNotificationsForTeam(admin, {
+          teamId: targetTeamId,
+          ageGroupId: targetAgeGroupId,
+          actorId: userId,
+          type: "new_training",
+          entityId: data.id,
+          title: "Novo treino agendado",
+          body: `${payload.title || "Treino"} · ${payload.date}${payload.start_time ? ` às ${payload.start_time}` : ""}`,
+          linkPath: "/calendar",
+          excludeActor: true,
+        });
+      } catch (notificationError) {
+        console.error("Erro ao gerar notificações de treino:", notificationError);
+      }
+
       return NextResponse.json({
         success: true,
         type: "training",
@@ -412,6 +429,22 @@ export async function POST(request: Request) {
         { error: error.message || "Erro ao criar jogo." },
         { status: 500 },
       );
+    }
+
+    try {
+      await createNotificationsForTeam(admin, {
+        teamId: targetTeamId,
+        ageGroupId: targetAgeGroupId,
+        actorId: userId,
+        type: "new_game",
+        entityId: data.id,
+        title: "Novo jogo adicionado",
+        body: `${payload.opponent_name || "Adversário"} · ${payload.date}${payload.start_time ? ` às ${payload.start_time}` : ""}`,
+        linkPath: `/games/${data.id}`,
+        excludeActor: true,
+      });
+    } catch (notificationError) {
+      console.error("Erro ao gerar notificações de jogo:", notificationError);
     }
 
     return NextResponse.json({

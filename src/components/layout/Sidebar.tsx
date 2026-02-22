@@ -8,16 +8,21 @@ import {
   Calendar,
   Trophy,
   BarChart2,
+  MessageSquare,
+  Bell,
   Settings,
   LogOut,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { Profile } from "@/types/database";
+import { useUnreadNotifications } from "@/components/layout/use-unread-notifications";
 
 const navItems = [
   { href: "/dashboard", icon: Home, label: "Dashboard" },
   { href: "/players", icon: Users, label: "Plantel" },
   { href: "/calendar", icon: Calendar, label: "Calendário" },
+  { href: "/messages", icon: MessageSquare, label: "Mensagens" },
+  { href: "/notifications", icon: Bell, label: "Notificações", showBadge: true },
   { href: "/competitions", icon: Trophy, label: "Competições" },
   { href: "/statistics", icon: BarChart2, label: "Estatísticas" },
   { href: "/settings", icon: Settings, label: "Configurações" },
@@ -38,6 +43,7 @@ const ROLE_LABELS: Record<string, string> = {
 export function Sidebar({ profile, avatarUrl }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const unreadCount = useUnreadNotifications(profile?.id ?? null);
 
   async function handleLogout() {
     const supabase = createClient();
@@ -79,7 +85,7 @@ export function Sidebar({ profile, avatarUrl }: SidebarProps) {
 
       {/* Navegação */}
       <nav className="flex-1 p-4 space-y-1">
-        {navItems.map(({ href, icon: Icon, label }) => {
+        {navItems.map(({ href, icon: Icon, label, showBadge }) => {
           const isActive =
             pathname === href || pathname.startsWith(`${href}/`);
           return (
@@ -93,7 +99,12 @@ export function Sidebar({ profile, avatarUrl }: SidebarProps) {
               }`}
             >
               <Icon size={18} />
-              {label}
+              <span className="flex-1">{label}</span>
+              {showBadge && unreadCount > 0 ? (
+                <span className="min-w-5 h-5 px-1 rounded-full bg-red-500 text-white text-[11px] font-bold inline-flex items-center justify-center">
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </span>
+              ) : null}
             </Link>
           );
         })}

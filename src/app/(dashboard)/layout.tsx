@@ -43,7 +43,7 @@ export default async function DashboardLayout({
       <main className="pb-20 md:pb-0 md:ml-64">{children}</main>
 
       {/* Navegação inferior — visível apenas em mobile */}
-      <BottomNav />
+      <BottomNav profileId={profile?.id} />
     </div>
   );
 }

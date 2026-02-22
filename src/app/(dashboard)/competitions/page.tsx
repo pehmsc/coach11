@@ -274,26 +274,35 @@ export default function CompetitionsPage() {
       gameForm.opponent_short_name,
       5,
     );
-    const gameDateTime = `${gameForm.date}T${gameForm.start_time}:00`;
 
     setSavingGame(true);
     setError(null);
 
-    const { error } = await supabase.from("games").insert({
-      team_id: teamId,
-      age_group_id: ageGroupId,
-      competition_id: gameForm.competition_id || null,
-      title: gameForm.round_number ? `Jornada ${gameForm.round_number}` : null,
-      opponent_name: gameForm.opponent_name.trim(),
-      opponent_short_name: normalizedOpponentShortName || null,
-      game_datetime: gameDateTime,
-      is_home: gameForm.is_home,
-      location: gameForm.location || null,
-      status: "scheduled",
+    const res = await fetch("/api/calendar/events", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "game",
+        ageGroupId,
+        teamId,
+        payload: {
+          title: gameForm.round_number ? `Jornada ${gameForm.round_number}` : null,
+          competition_id: gameForm.competition_id || null,
+          opponent_name: gameForm.opponent_name.trim(),
+          opponent_short_name: normalizedOpponentShortName || null,
+          date: gameForm.date,
+          start_time: gameForm.start_time,
+          is_home: gameForm.is_home,
+          location: gameForm.location || null,
+        },
+      }),
     });
+    const payload = await res.json().catch(() => null);
 
-    if (error) {
-      setError("Erro ao criar jogo: " + error.message);
+    if (!res.ok || !payload?.success) {
+      const message =
+        (payload as { error?: string } | null)?.error || "Erro ao criar jogo.";
+      setError(message);
       setSavingGame(false);
       return;
     }
