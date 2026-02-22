@@ -9,12 +9,9 @@ import {
   Users,
   Calendar,
   Trophy,
-  BarChart2,
-  Settings,
   AlertCircle,
   Sword,
   Dumbbell,
-  Shield,
   Briefcase,
   Play,
 } from "lucide-react";
@@ -286,15 +283,11 @@ export default async function DashboardPage() {
   const firstName = profile?.full_name?.split(" ")[0] || "Treinador";
 
   const navCards = [
-    { href: "/players", icon: Users, label: "Plantel", color: "text-blue-600" },
     { href: "/games", icon: Sword, label: "Jogos", color: "text-indigo-600" },
     { href: "/trainings", icon: Dumbbell, label: "Treinos", color: "text-emerald-600" },
-    { href: "/calendar", icon: Calendar, label: "Calendário", color: "text-purple-600" },
     { href: "/competitions", icon: Trophy, label: "Competições", color: "text-amber-600" },
-    { href: "/team", icon: Shield, label: "Equipa", color: "text-teal-600" },
+    { href: "/players", icon: Users, label: "Plantel", color: "text-blue-600" },
     { href: "/staff", icon: Briefcase, label: "Equipa Técnica", color: "text-rose-600" },
-    { href: "/statistics", icon: BarChart2, label: "Estatísticas", color: "text-orange-600" },
-    { href: "/settings", icon: Settings, label: "Configurações", color: "text-slate-600" },
   ];
 
   const hasPending =
@@ -498,11 +491,11 @@ export default async function DashboardPage() {
           </div>
         )}
 
-        {/* Atalhos rápidos */}
+        {/* Atalhos de gestão */}
         <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">
-          Atalhos
+          Gestão da equipa
         </h2>
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4 items-stretch">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-5 items-stretch">
           {navCards.map(({ href, icon: Icon, label, color }) => (
             <Link key={href} href={href}>
               <Card className="hover:shadow-md transition-all cursor-pointer border-2 hover:border-emerald-200 h-full">
@@ -516,6 +509,12 @@ export default async function DashboardPage() {
             </Link>
           ))}
         </div>
+        <p className="text-xs text-slate-500 mt-3">
+          Outras opções de gestão:{" "}
+          <Link href="/team" className="text-emerald-700 font-medium hover:underline">
+            Equipa / Escalão
+          </Link>
+        </p>
       </div>
     </>
   );

@@ -4,23 +4,21 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Home,
-  Users,
   Calendar,
-  Trophy,
   BarChart2,
   MessageSquare,
   Bell,
+  Settings,
 } from "lucide-react";
 import { useUnreadNotifications } from "@/components/layout/use-unread-notifications";
 
 const navItems = [
-  { href: "/dashboard", icon: Home, label: "Hoje" },
-  { href: "/players", icon: Users, label: "Plantel" },
+  { href: "/dashboard", icon: Home, label: "Dashboard" },
   { href: "/calendar", icon: Calendar, label: "Calendário" },
   { href: "/messages", icon: MessageSquare, label: "Mensagens" },
   { href: "/notifications", icon: Bell, label: "Alertas", showBadge: true },
-  { href: "/competitions", icon: Trophy, label: "Competições" },
   { href: "/statistics", icon: BarChart2, label: "Stats" },
+  { href: "/settings", icon: Settings, label: "Config" },
 ];
 
 export function BottomNav({ profileId }: { profileId?: string | null }) {

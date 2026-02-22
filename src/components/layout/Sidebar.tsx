@@ -4,9 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Home,
-  Users,
   Calendar,
-  Trophy,
   BarChart2,
   MessageSquare,
   Bell,
@@ -19,11 +17,9 @@ import { useUnreadNotifications } from "@/components/layout/use-unread-notificat
 
 const navItems = [
   { href: "/dashboard", icon: Home, label: "Dashboard" },
-  { href: "/players", icon: Users, label: "Plantel" },
   { href: "/calendar", icon: Calendar, label: "Calendário" },
   { href: "/messages", icon: MessageSquare, label: "Mensagens" },
-  { href: "/notifications", icon: Bell, label: "Notificações", showBadge: true },
-  { href: "/competitions", icon: Trophy, label: "Competições" },
+  { href: "/notifications", icon: Bell, label: "Alertas", showBadge: true },
   { href: "/statistics", icon: BarChart2, label: "Estatísticas" },
   { href: "/settings", icon: Settings, label: "Configurações" },
 ];
