@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, User, Palette, Bell, Camera } from "lucide-react";
+import { Loader2, User, Palette, Bell, Camera, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
 import { pt } from "date-fns/locale";
@@ -30,6 +30,9 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [authEmail, setAuthEmail] = useState("");
+  const [nextEmail, setNextEmail] = useState("");
+  const [updatingEmail, setUpdatingEmail] = useState(false);
 
   // Edit form
   const [fullName, setFullName] = useState("");
@@ -37,6 +40,9 @@ export default function SettingsPage() {
 
   // Password
   const [sendingReset, setSendingReset] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deletingAccount, setDeletingAccount] = useState(false);
 
   useEffect(() => {
     void loadProfile();
@@ -49,9 +55,15 @@ export default function SettingsPage() {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) {
+      setAuthEmail("");
+      setNextEmail("");
       setLoading(false);
       return;
     }
+
+    const resolvedAuthEmail = typeof user.email === "string" ? user.email : "";
+    setAuthEmail(resolvedAuthEmail);
+    setNextEmail(resolvedAuthEmail);
 
     const { data } = await supabase
       .from("profiles")
@@ -145,6 +157,76 @@ export default function SettingsPage() {
       toast.success("Email de redefinição enviado para " + email);
     }
     setSendingReset(false);
+  }
+
+  function isValidEmail(value: string) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+  }
+
+  async function handleEmailUpdate(e: { preventDefault(): void }) {
+    e.preventDefault();
+
+    const normalizedEmail = nextEmail.trim().toLowerCase();
+    if (!normalizedEmail) {
+      toast.error("Indica um email válido.");
+      return;
+    }
+
+    if (!isValidEmail(normalizedEmail)) {
+      toast.error("Formato de email inválido.");
+      return;
+    }
+
+    if (normalizedEmail === authEmail.trim().toLowerCase()) {
+      toast.message("O novo email é igual ao atual.");
+      return;
+    }
+
+    setUpdatingEmail(true);
+    const emailRedirectTo = `${window.location.origin}/auth/callback/client?next=${encodeURIComponent("/settings")}`;
+    const { error } = await supabase.auth.updateUser(
+      { email: normalizedEmail },
+      { emailRedirectTo },
+    );
+
+    if (error) {
+      toast.error("Erro ao alterar email: " + error.message);
+    } else {
+      toast.success("Pedido de alteração enviado. Confirma o novo email para concluir.");
+    }
+    setUpdatingEmail(false);
+  }
+
+  async function handleDeleteAccount() {
+    if (deleteConfirmText.trim().toUpperCase() !== "APAGAR") {
+      toast.error("Escreve APAGAR para confirmar.");
+      return;
+    }
+
+    setDeletingAccount(true);
+    try {
+      const res = await fetch("/api/me/account", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmation: "DELETE_ACCOUNT" }),
+      });
+      const payload = (await res.json().catch(() => null)) as
+        | { success?: boolean; error?: string }
+        | null;
+
+      if (!res.ok || !payload?.success) {
+        toast.error(payload?.error || "Não foi possível apagar a conta.");
+        setDeletingAccount(false);
+        return;
+      }
+
+      toast.success("Conta apagada com sucesso.");
+      await supabase.auth.signOut().catch(() => null);
+      window.location.href = "/";
+    } catch {
+      toast.error("Erro de ligação ao apagar conta.");
+      setDeletingAccount(false);
+    }
   }
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
@@ -288,6 +370,40 @@ export default function SettingsPage() {
 
               <Card>
                 <CardHeader>
+                  <CardTitle className="text-base">Email de acesso</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-slate-500 mb-3">
+                    O email atual da conta é <strong>{authEmail || "—"}</strong>.
+                  </p>
+                  <form onSubmit={handleEmailUpdate} className="space-y-3">
+                    <div className="space-y-1.5">
+                      <Label>Novo email</Label>
+                      <Input
+                        type="email"
+                        value={nextEmail}
+                        onChange={(e) => setNextEmail(e.target.value)}
+                        placeholder="novo@email.com"
+                        required
+                      />
+                    </div>
+                    <Button
+                      type="submit"
+                      variant="outline"
+                      className="w-full"
+                      disabled={updatingEmail}
+                    >
+                      {updatingEmail ? (
+                        <Loader2 size={16} className="animate-spin mr-2" />
+                      ) : null}
+                      Alterar email
+                    </Button>
+                  </form>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
                   <CardTitle className="text-base">Segurança</CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -305,6 +421,21 @@ export default function SettingsPage() {
                     ) : null}
                     Alterar palavra-passe
                   </Button>
+                  <div className="mt-4 pt-4 border-t border-slate-100">
+                    <p className="text-sm text-slate-500 mb-3">
+                      Apagar a tua conta remove o acesso, perfil e ligações associadas.
+                    </p>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setDeleteConfirmText("");
+                        setDeleteModalOpen(true);
+                      }}
+                      className="w-full border-red-200 text-red-600 hover:bg-red-50"
+                    >
+                      Apagar conta
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             </>
@@ -336,6 +467,65 @@ export default function SettingsPage() {
             </p>
           </CardContent>
         </Card>
+      )}
+
+      {deleteModalOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-50 flex items-end md:items-center justify-center p-4"
+          onClick={() => {
+            if (!deletingAccount) setDeleteModalOpen(false);
+          }}
+        >
+          <div
+            className="bg-white rounded-2xl w-full max-w-md shadow-xl max-h-[calc(100dvh-1rem)] md:max-h-[90vh] overflow-hidden flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-5 border-b">
+              <h3 className="font-bold text-slate-900 flex items-center gap-2">
+                <AlertTriangle size={18} className="text-red-500" />
+                Confirmar apagamento de conta
+              </h3>
+              <p className="text-sm text-slate-500 mt-2">
+                Esta ação é irreversível. Para confirmar, escreve <strong>APAGAR</strong>.
+              </p>
+            </div>
+
+            <div className="p-5 space-y-3 overflow-y-auto flex-1">
+              <div className="space-y-1.5">
+                <Label>Confirmação</Label>
+                <Input
+                  value={deleteConfirmText}
+                  onChange={(e) => setDeleteConfirmText(e.target.value)}
+                  placeholder="APAGAR"
+                  disabled={deletingAccount}
+                />
+              </div>
+            </div>
+
+            <div className="border-t bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setDeleteModalOpen(false)}
+                  disabled={deletingAccount}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  className="flex-1 bg-red-600 hover:bg-red-700"
+                  onClick={handleDeleteAccount}
+                  disabled={deletingAccount}
+                >
+                  {deletingAccount ? (
+                    <Loader2 size={16} className="animate-spin mr-2" />
+                  ) : null}
+                  Apagar conta
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

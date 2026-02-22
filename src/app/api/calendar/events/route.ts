@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { resolveUserTeamContext } from "@/lib/auth/team-context";
+import { deleteGameCascade, deleteTrainingSessionCascade } from "@/lib/events/delete-cascade";
 import { NextResponse } from "next/server";
 
 type CalendarEventType = "training" | "game";
@@ -162,7 +163,7 @@ export async function GET(request: Request) {
     const routeContext = await buildRouteContext();
     if (routeContext instanceof NextResponse) return routeContext;
 
-    const { admin, context } = routeContext;
+    const { userId, admin, context } = routeContext;
     const { searchParams } = new URL(request.url);
     const from = searchParams.get("from");
     const to = searchParams.get("to");
@@ -239,6 +240,11 @@ export async function GET(request: Request) {
       context.accessibleTeams.find((row) => row.age_group_id === targetAgeGroupId)?.id ?? null;
     const targetTeamId =
       currentTeamAgeGroupId === targetAgeGroupId ? context.teamId : fallbackTeamId;
+    const canDeleteEvents = await isCoordinatorForAgeGroup(
+      admin,
+      targetAgeGroupId,
+      userId,
+    );
 
     return NextResponse.json(
       {
@@ -247,6 +253,7 @@ export async function GET(request: Request) {
         ageGroupId: targetAgeGroupId,
         ageGroupName,
         teamId: targetTeamId,
+        canDeleteEvents,
         sessions: sessions || [],
         games: games || [],
       },
@@ -565,13 +572,29 @@ export async function DELETE(request: Request) {
         return NextResponse.json({ error: "Sem permissões para este treino." }, { status: 403 });
       }
 
-      const { error } = await admin.from("training_sessions").delete().eq("id", id);
-      if (error) {
+      const coordinator = await isCoordinatorForAgeGroup(
+        admin,
+        existingAgeGroupId,
+        userId,
+      );
+      if (!coordinator) {
         return NextResponse.json(
-          { error: error.message || "Erro ao apagar treino." },
+          { error: "Só o coordenador pode apagar treinos." },
+          { status: 403 },
+        );
+      }
+
+      try {
+        await deleteTrainingSessionCascade(admin, id);
+      } catch (deleteError) {
+        const message =
+          deleteError instanceof Error ? deleteError.message : "Erro ao apagar treino.";
+        return NextResponse.json(
+          { error: message || "Erro ao apagar treino." },
           { status: 500 },
         );
       }
+
       return NextResponse.json({ success: true, type: "training", id });
     }
 
@@ -595,20 +618,21 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: "Sem permissões para este jogo." }, { status: 403 });
     }
 
-    if (existingGame.status === "completed") {
-      const coordinator = await isCoordinatorForAgeGroup(admin, existingAgeGroupId, userId);
-      if (!coordinator) {
-        return NextResponse.json(
-          { error: "Só o coordenador pode editar jogos terminados." },
-          { status: 403 },
-        );
-      }
+    const coordinator = await isCoordinatorForAgeGroup(admin, existingAgeGroupId, userId);
+    if (!coordinator) {
+      return NextResponse.json(
+        { error: "Só o coordenador pode apagar jogos." },
+        { status: 403 },
+      );
     }
 
-    const { error } = await admin.from("games").delete().eq("id", id);
-    if (error) {
+    try {
+      await deleteGameCascade(admin, id);
+    } catch (deleteError) {
+      const message =
+        deleteError instanceof Error ? deleteError.message : "Erro ao apagar jogo.";
       return NextResponse.json(
-        { error: error.message || "Erro ao apagar jogo." },
+        { error: message || "Erro ao apagar jogo." },
         { status: 500 },
       );
     }

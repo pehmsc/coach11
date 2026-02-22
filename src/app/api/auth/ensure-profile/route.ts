@@ -77,7 +77,7 @@ export async function POST() {
       const updates: Record<string, unknown> = {};
       if (!existingProfile.full_name && fullName) updates.full_name = fullName;
       if (!existingProfile.role && resolvedRole) updates.role = resolvedRole;
-      if (!existingProfile.email && user.email) updates.email = user.email;
+      if (user.email && existingProfile.email !== user.email) updates.email = user.email;
       if (!existingProfile.avatar_url && avatarUrl) updates.avatar_url = avatarUrl;
 
       if (Object.keys(updates).length > 0) {

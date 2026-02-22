@@ -122,9 +122,9 @@ export default function GameDetailPage() {
     Record<string, "on_field" | "substitute">
   >({});
   const [canEditCompleted, setCanEditCompleted] = useState(false);
-  const [livePhase, setLivePhase] = useState<"first_half" | "second_half" | null>(
-    null,
-  );
+  const [livePhase, setLivePhase] = useState<
+    "first_half" | "second_half" | null
+  >(null);
   const [savingTactical, setSavingTactical] = useState(false);
   const [savingLineupPlayer, setSavingLineupPlayer] = useState<string | null>(
     null,
@@ -238,7 +238,10 @@ export default function GameDetailPage() {
         typeof payload?.liveCheckpoint?.phase === "string"
           ? payload.liveCheckpoint.phase
           : null;
-      if (checkpointPhase === "first_half" || checkpointPhase === "second_half") {
+      if (
+        checkpointPhase === "first_half" ||
+        checkpointPhase === "second_half"
+      ) {
         setLivePhase(checkpointPhase);
       } else {
         setLivePhase(null);
@@ -609,7 +612,8 @@ export default function GameDetailPage() {
   const gameDateTime = game.game_datetime ? parseISO(game.game_datetime) : null;
   const liveUnlockAt = gameDateTime ? subMinutes(gameDateTime, 10) : null;
   const canStartLive = !liveUnlockAt || now >= liveUnlockAt;
-  const isLiveInProgress = livePhase === "first_half" || livePhase === "second_half";
+  const isLiveInProgress =
+    livePhase === "first_half" || livePhase === "second_half";
   const minutesUntilLive = liveUnlockAt
     ? Math.max(0, differenceInMinutes(liveUnlockAt, now))
     : 0;
@@ -727,7 +731,10 @@ export default function GameDetailPage() {
                   value={editOpponentShortName}
                   onChange={(e) =>
                     setEditOpponentShortName(
-                      e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 5),
+                      e.target.value
+                        .toUpperCase()
+                        .replace(/[^A-Z0-9]/g, "")
+                        .slice(0, 5),
                     )
                   }
                   placeholder="ex: SCP"
@@ -868,7 +875,9 @@ export default function GameDetailPage() {
                   {UI_PIECE_TYPES.map((pieceType) => {
                     const field =
                       `${section.prefix}_${pieceType === "shirt" ? "jersey" : pieceType}_kit_id` as keyof KitSelection;
-                    const selectedPiece = kitById.get(kitSelection[field] || "");
+                    const selectedPiece = kitById.get(
+                      kitSelection[field] || "",
+                    );
 
                     return (
                       <span
@@ -877,10 +886,14 @@ export default function GameDetailPage() {
                       >
                         <span
                           className="inline-block h-3 w-3 rounded-full border border-slate-300"
-                          style={{ backgroundColor: getKitColor(selectedPiece) }}
+                          style={{
+                            backgroundColor: getKitColor(selectedPiece),
+                          }}
                         />
                         {PIECE_LABEL[pieceType]}
-                        {selectedPiece ? ` · Kit ${selectedPiece.kit_number}` : ""}
+                        {selectedPiece
+                          ? ` · Kit ${selectedPiece.kit_number}`
+                          : ""}
                       </span>
                     );
                   })}
@@ -924,7 +937,9 @@ export default function GameDetailPage() {
                       </label>
                       <Select
                         value={selectedValue ?? "__none__"}
-                        onValueChange={(value) => handleKitDraftChange(field, value)}
+                        onValueChange={(value) =>
+                          handleKitDraftChange(field, value)
+                        }
                         disabled={savingKitSelection}
                       >
                         <SelectTrigger className="h-9">
@@ -942,9 +957,10 @@ export default function GameDetailPage() {
                               <span className="inline-flex items-center gap-2">
                                 <span
                                   className="inline-block h-3 w-3 rounded-full border border-slate-300"
-                                  style={{ backgroundColor: getKitColor(piece) }}
+                                  style={{
+                                    backgroundColor: getKitColor(piece),
+                                  }}
                                 />
-                                Kit {piece.kit_number}
                               </span>
                             </SelectItem>
                           ))}

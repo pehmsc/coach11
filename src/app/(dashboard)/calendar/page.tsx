@@ -97,6 +97,7 @@ export default function CalendarPage() {
   const [ageGroupId, setAgeGroupId] = useState<string | null>(null);
   const [teamId, setTeamId] = useState<string | null>(null);
   const [ageGroupName, setAgeGroupName] = useState("");
+  const [canDeleteEvents, setCanDeleteEvents] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const [modalMode, setModalMode] = useState<ModalMode | null>(null);
@@ -122,6 +123,7 @@ export default function CalendarPage() {
             success?: boolean;
             ageGroupName?: string;
             teamId?: string | null;
+            canDeleteEvents?: boolean;
             sessions?: Array<Record<string, unknown>>;
             games?: Array<Record<string, unknown>>;
             error?: string;
@@ -139,6 +141,9 @@ export default function CalendarPage() {
       }
       if (typeof payload.teamId === "string") {
         setTeamId(payload.teamId);
+      }
+      if (typeof payload.canDeleteEvents === "boolean") {
+        setCanDeleteEvents(payload.canDeleteEvents);
       }
 
       const sessions = payload.sessions || [];
@@ -354,6 +359,10 @@ export default function CalendarPage() {
 
   async function deleteEvent() {
     if (!selectedEvent) return;
+    if (!canDeleteEvents) {
+      setOpError("Só o coordenador pode apagar jogos e treinos.");
+      return;
+    }
     setSaving(true);
     setOpError(null);
 
@@ -836,7 +845,7 @@ export default function CalendarPage() {
                       ? "Guardar alterações"
                       : "Adicionar"}
                 </Button>
-                {isEditing && (
+                {isEditing && canDeleteEvents && (
                   <Button
                     variant="outline"
                     onClick={deleteEvent}
