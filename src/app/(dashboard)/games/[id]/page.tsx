@@ -135,6 +135,7 @@ export default function GameDetailPage() {
   const [editingGame, setEditingGame] = useState(false);
   const [editTitle, setEditTitle] = useState("");
   const [editOpponent, setEditOpponent] = useState("");
+  const [editOpponentShortName, setEditOpponentShortName] = useState("");
   const [editLocation, setEditLocation] = useState("");
   const [savingGameEdit, setSavingGameEdit] = useState(false);
 
@@ -476,6 +477,7 @@ export default function GameDetailPage() {
       body: JSON.stringify({
         title: editTitle.trim() || null,
         opponent_name: editOpponent.trim(),
+        opponent_short_name: editOpponentShortName.trim() || null,
         location: editLocation.trim() || null,
       }),
     });
@@ -498,6 +500,7 @@ export default function GameDetailPage() {
     if (!game) return;
     setEditTitle(game.title ?? "");
     setEditOpponent(game.opponent_name ?? "");
+    setEditOpponentShortName(game.opponent_short_name ?? "");
     setEditLocation(game.location ?? "");
     setEditingGame(true);
   }
@@ -653,7 +656,9 @@ export default function GameDetailPage() {
           )}
         </div>
         <h1 className="text-xl font-bold mt-1">
-          {game.opponent_name ? `vs ${game.opponent_name}` : "Jogo"}
+          {game.opponent_name
+            ? `vs ${game.opponent_name}${game.opponent_short_name ? ` (${game.opponent_short_name})` : ""}`
+            : "Jogo"}
         </h1>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-blue-100 text-sm">
           <span className="flex items-center gap-1">
@@ -711,6 +716,23 @@ export default function GameDetailPage() {
                   placeholder="Nome do adversário"
                   required
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-slate-700">
+                  Sigla adversário
+                </label>
+                <input
+                  type="text"
+                  value={editOpponentShortName}
+                  onChange={(e) =>
+                    setEditOpponentShortName(
+                      e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 5),
+                    )
+                  }
+                  placeholder="ex: SCP"
+                  maxLength={5}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm uppercase focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div className="space-y-1.5">
@@ -837,32 +859,32 @@ export default function GameDetailPage() {
             ].map((section) => (
               <div
                 key={section.prefix}
-                className="rounded-lg border border-slate-100 bg-slate-50 p-3 space-y-2"
+                className="rounded-lg border border-slate-100 bg-slate-50 p-3"
               >
                 <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
                   {section.title}
                 </p>
-                {UI_PIECE_TYPES.map((pieceType) => {
-                  const field =
-                    `${section.prefix}_${pieceType === "shirt" ? "jersey" : pieceType}_kit_id` as keyof KitSelection;
-                  const selectedPiece = kitById.get(kitSelection[field] || "");
+                <div className="mt-2 flex flex-wrap items-center gap-3">
+                  {UI_PIECE_TYPES.map((pieceType) => {
+                    const field =
+                      `${section.prefix}_${pieceType === "shirt" ? "jersey" : pieceType}_kit_id` as keyof KitSelection;
+                    const selectedPiece = kitById.get(kitSelection[field] || "");
 
-                  return (
-                    <div
-                      key={`${section.prefix}-${pieceType}`}
-                      className="flex items-center justify-between gap-2 text-xs"
-                    >
-                      <span className="text-slate-500">{PIECE_LABEL[pieceType]}</span>
-                      <span className="inline-flex items-center gap-2 text-slate-700">
+                    return (
+                      <span
+                        key={`${section.prefix}-${pieceType}`}
+                        className="inline-flex items-center gap-1.5 text-xs text-slate-600"
+                      >
                         <span
                           className="inline-block h-3 w-3 rounded-full border border-slate-300"
                           style={{ backgroundColor: getKitColor(selectedPiece) }}
                         />
-                        {selectedPiece ? `Kit ${selectedPiece.kit_number}` : "Sem seleção"}
+                        {PIECE_LABEL[pieceType]}
+                        {selectedPiece ? ` · Kit ${selectedPiece.kit_number}` : ""}
                       </span>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
             ))}
           </div>

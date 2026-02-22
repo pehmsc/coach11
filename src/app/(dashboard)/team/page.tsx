@@ -123,6 +123,7 @@ export default function TeamPage() {
 
   // Escalão fields
   const [clubName, setClubName] = useState("");
+  const [clubShortName, setClubShortName] = useState("");
   const [ageGroupName, setAgeGroupName] = useState("");
   const [footballFormat, setFootballFormat] = useState("");
   const [season, setSeason] = useState("2025/2026");
@@ -181,6 +182,7 @@ export default function TeamPage() {
 
     setExistingAgeGroup(ag);
     setClubName(ag.club_name);
+    setClubShortName(ag.club_short_name || "");
     setAgeGroupName(ag.name);
     setFootballFormat(ag.football_format);
     setSeason(ag.season);
@@ -220,6 +222,7 @@ export default function TeamPage() {
       .from("age_groups")
       .update({
         club_name: clubName,
+        club_short_name: clubShortName || null,
         name: ageGroupName,
         football_format: footballFormat,
         season,
@@ -231,7 +234,14 @@ export default function TeamPage() {
     } else {
       toast.success("Escalão atualizado");
       setExistingAgeGroup((prev) =>
-        prev ? { ...prev, club_name: clubName, name: ageGroupName } : prev,
+        prev
+          ? {
+              ...prev,
+              club_name: clubName,
+              club_short_name: clubShortName || undefined,
+              name: ageGroupName,
+            }
+          : prev,
       );
       setIsEditing(false);
     }
@@ -382,8 +392,12 @@ export default function TeamPage() {
               <CardTitle className="text-base">Escalão</CardTitle>
               {existingAgeGroup && !isEditing && (
                 <p className="text-sm text-slate-500 mt-1">
-                  {existingAgeGroup.club_name} · {existingAgeGroup.name} ·
-                  Futebol {existingAgeGroup.football_format} ·{" "}
+                  {existingAgeGroup.club_name}
+                  {existingAgeGroup.club_short_name
+                    ? ` (${existingAgeGroup.club_short_name})`
+                    : ""}
+                  {" · "}
+                  {existingAgeGroup.name} · Futebol {existingAgeGroup.football_format} ·{" "}
                   {existingAgeGroup.season}
                 </p>
               )}
@@ -412,6 +426,22 @@ export default function TeamPage() {
                   onChange={(e) => setClubName(e.target.value)}
                   placeholder="ex: Sporting CP"
                   required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Sigla do Clube</Label>
+                <Input
+                  value={clubShortName}
+                  onChange={(e) =>
+                    setClubShortName(
+                      e.target.value
+                        .toUpperCase()
+                        .replace(/[^A-Z0-9]/g, "")
+                        .slice(0, 5),
+                    )
+                  }
+                  placeholder="ex: SCP"
+                  maxLength={5}
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">

@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { exportMatchReportPDF } from "@/lib/pdf/matchReport";
+import { resolveShortName } from "@/lib/football/short-name";
 import type { Game, Player, GameEvent, GameEventType } from "@/types/database";
 
 interface LivePlayer extends Player {
@@ -184,6 +185,14 @@ type FinalStatPayloadRow = {
   is_finalized: boolean;
 };
 
+function sortPlayersByName(players: LivePlayer[]) {
+  return [...players].sort(
+    (a, b) =>
+      a.first_name.localeCompare(b.first_name, "pt", { sensitivity: "base" }) ||
+      a.last_name.localeCompare(b.last_name, "pt", { sensitivity: "base" }),
+  );
+}
+
 function mergeEvents(prev: GameEvent[], incoming: GameEvent[]) {
   const byId = new Map<string, GameEvent>();
   prev.forEach((event) => byId.set(event.id, event));
@@ -314,6 +323,8 @@ export default function LiveGamePage() {
 
   const [loading, setLoading] = useState(true);
   const [game, setGame] = useState<Game | null>(null);
+  const [homeClubName, setHomeClubName] = useState<string | null>(null);
+  const [homeClubShortName, setHomeClubShortName] = useState<string | null>(null);
   const [convocatedPlayers, setConvocatedPlayers] = useState<LivePlayer[]>([]);
   const [initialStarterIds, setInitialStarterIds] = useState<string[]>([]);
   const [events, setEvents] = useState<GameEvent[]>([]);
@@ -333,7 +344,8 @@ export default function LiveGamePage() {
   // Event modal state
   type ModalType = GameEventType | "substitution";
   const [modalType, setModalType] = useState<ModalType | null>(null);
-  const [modalIsOpponent, setModalIsOpponent] = useState(false);
+  const [goalTeamSide, setGoalTeamSide] = useState<"ours" | "opponent" | null>(null);
+  const [goalKind, setGoalKind] = useState<"goal" | "own_goal" | null>(null);
   // Goal flow: step 1 = scorer, step 2 = assist
   const [goalStep, setGoalStep] = useState<"scorer" | "assist">("scorer");
   const [selectedScorerID, setSelectedScorerID] = useState<string | null>(null);
@@ -480,6 +492,8 @@ export default function LiveGamePage() {
 
     if (!gameData) {
       setGame(null);
+      setHomeClubName(null);
+      setHomeClubShortName(null);
       setError(
         (convPayload as { error?: string } | null)?.error || "Jogo não encontrado.",
       );
@@ -487,6 +501,14 @@ export default function LiveGamePage() {
       return;
     }
     setGame(gameData);
+    setHomeClubName(
+      typeof convPayload?.homeClubName === "string" ? convPayload.homeClubName : null,
+    );
+    setHomeClubShortName(
+      typeof convPayload?.homeClubShortName === "string"
+        ? convPayload.homeClubShortName
+        : null,
+    );
     const gameStatus = (gameData as { status?: string }).status ?? null;
     if (gameStatus === "completed") {
       setPhase("completed");
@@ -952,9 +974,44 @@ export default function LiveGamePage() {
     });
   }, [events]);
 
-  const playersOnField = convocatedPlayers.filter((p) => p.isOnField);
-  // ALL not-on-field players are available to enter (revolving subs)
-  const playersAvailableToEnter = convocatedPlayers.filter((p) => !p.isOnField);
+  const yellowCardsByPlayer = useMemo(() => {
+    const map = new Map<string, number>();
+    events.forEach((event) => {
+      if (event.is_opponent_event || event.event_type !== "yellow_card" || !event.player_id) {
+        return;
+      }
+      map.set(event.player_id, (map.get(event.player_id) ?? 0) + 1);
+    });
+    return map;
+  }, [events]);
+
+  const sentOffPlayerIds = useMemo(() => {
+    const set = new Set<string>();
+    events.forEach((event) => {
+      if (event.is_opponent_event || !event.player_id) return;
+      if (event.event_type === "red_card") {
+        set.add(event.player_id);
+      }
+    });
+    yellowCardsByPlayer.forEach((count, playerId) => {
+      if (count >= 2) set.add(playerId);
+    });
+    return set;
+  }, [events, yellowCardsByPlayer]);
+
+  const playersOnField = sortPlayersByName(
+    convocatedPlayers.filter((player) => player.isOnField),
+  );
+  const playersAvailableToEnter = sortPlayersByName(
+    convocatedPlayers.filter(
+      (player) => !player.isOnField && !sentOffPlayerIds.has(player.id),
+    ),
+  );
+  const suspendedBenchPlayers = sortPlayersByName(
+    convocatedPlayers.filter(
+      (player) => !player.isOnField && sentOffPlayerIds.has(player.id),
+    ),
+  );
 
   const isLivePhase = phase === "first_half" || phase === "second_half";
   const canRegisterEvents = isLivePhase || !!clockState.runningSinceMs;
@@ -1063,31 +1120,25 @@ export default function LiveGamePage() {
 
   // ── Event handlers ──
 
-  function openModal(type: ModalType, isOpponent: boolean) {
+  function openModal(type: ModalType) {
     if (!canRegisterEvents) {
       toast.error("Inicia a 1ª ou 2ª parte para registar eventos.");
       return;
     }
     setModalType(type);
-    setModalIsOpponent(isOpponent);
+    setGoalTeamSide(null);
+    setGoalKind(null);
     setGoalStep("scorer");
     setSelectedScorerID(null);
     setSelectedAssistID(null);
     setSelectedSubOutId(null);
     setSelectedSubInId(null);
-
-    if (type === "goal" && isOpponent) {
-      const firstOnField = playersOnField[0] ?? null;
-      const preferredGoalkeeper =
-        playersOnField.find((player) =>
-          /gr|gk|guarda/i.test(player.preferred_position ?? ""),
-        ) ?? firstOnField;
-      setSelectedScorerID(preferredGoalkeeper?.id ?? null);
-    }
   }
 
   function closeModal() {
     setModalType(null);
+    setGoalTeamSide(null);
+    setGoalKind(null);
     setGoalStep("scorer");
     setSelectedScorerID(null);
     setSelectedAssistID(null);
@@ -1096,17 +1147,46 @@ export default function LiveGamePage() {
   }
 
   async function confirmGoal() {
-    const goalEventType: GameEventType = modalType === "own_goal" ? "own_goal" : "goal";
-    if (goalEventType === "goal" && !selectedScorerID) {
-      toast.error(
-        modalIsOpponent
-          ? "Seleciona o jogador associado ao golo adversário."
-          : "Seleciona o marcador do golo.",
-      );
+    if (modalType !== "goal") return;
+    if (!goalTeamSide || !goalKind) {
+      toast.error("Seleciona o lado e o tipo de golo.");
       return;
     }
-    if (goalEventType === "own_goal" && !selectedScorerID) {
-      toast.error("Seleciona o jogador do autogolo.");
+
+    const eventType: GameEventType = goalKind;
+    const isOpponentEvent =
+      goalKind === "own_goal"
+        ? goalTeamSide === "ours"
+        : goalTeamSide === "opponent";
+    let playerId: string | null = null;
+    let relatedPlayerId: string | null = null;
+
+    if (goalTeamSide === "ours" && goalKind === "goal") {
+      if (!selectedScorerID) {
+        toast.error("Seleciona o marcador.");
+        return;
+      }
+      playerId = selectedScorerID;
+      relatedPlayerId = selectedAssistID || null;
+    } else if (goalTeamSide === "ours" && goalKind === "own_goal") {
+      // Autogolo a nosso favor (do adversário): sem player adversário obrigatório.
+      playerId = null;
+      relatedPlayerId = null;
+    } else if (goalTeamSide === "opponent" && goalKind === "goal") {
+      // Opcional: jogador nosso associado (tipicamente GR).
+      playerId = selectedScorerID || null;
+      relatedPlayerId = null;
+    } else if (goalTeamSide === "opponent" && goalKind === "own_goal") {
+      if (!selectedScorerID) {
+        toast.error("Seleciona o jogador que marcou autogolo.");
+        return;
+      }
+      playerId = selectedScorerID;
+      relatedPlayerId = null;
+    }
+
+    if (!eventType) {
+      toast.error("Tipo de golo inválido.");
       return;
     }
 
@@ -1114,16 +1194,15 @@ export default function LiveGamePage() {
     try {
       const inserted = await insertEventsToBackend([
         {
-          event_type: goalEventType,
-          player_id: selectedScorerID || null,
-          related_player_id:
-            goalEventType === "goal" && !modalIsOpponent ? selectedAssistID || null : null,
+          event_type: eventType,
+          player_id: playerId,
+          related_player_id: relatedPlayerId,
           minute: currentMinute,
-          is_opponent_event: modalIsOpponent,
+          is_opponent_event: isOpponentEvent,
         },
       ]);
       setEvents((prev) => mergeEvents(prev, inserted));
-      toast.success(`${EVENT_LABELS[goalEventType] ?? goalEventType} — min. ${currentMinute}`);
+      toast.success(`${EVENT_LABELS[eventType] ?? eventType} — min. ${currentMinute}`);
     } catch {
       toast.error("Erro ao registar golo.");
     }
@@ -1131,20 +1210,75 @@ export default function LiveGamePage() {
     closeModal();
   }
 
+  async function applySendOff(playerId: string) {
+    const player = convocatedPlayers.find((item) => item.id === playerId);
+    if (!player) return;
+
+    setConvocatedPlayers((prev) =>
+      prev.map((item) =>
+        item.id === playerId ? { ...item, isOnField: false } : item,
+      ),
+    );
+
+    try {
+      await saveLivePlayerStatus(playerId, "substitute", {
+        endMinute: player.isOnField ? currentMinute : null,
+      });
+    } catch {
+      // non-blocking: event is already stored
+    }
+  }
+
   async function confirmCard(eventType: "yellow_card" | "red_card") {
-    if (!selectedScorerID && !modalIsOpponent) return;
+    if (!selectedScorerID) {
+      toast.error("Seleciona um jogador.");
+      return;
+    }
     setSavingEvent(true);
     try {
-      const inserted = await insertEventsToBackend([
+      const payload: LiveEventInput[] = [
         {
           event_type: eventType,
-          player_id: selectedScorerID || null,
+          player_id: selectedScorerID,
           minute: currentMinute,
-          is_opponent_event: modalIsOpponent,
+          is_opponent_event: false,
         },
-      ]);
+      ];
+
+      if (eventType === "yellow_card") {
+        const yellowCountBefore = events.filter(
+          (event) =>
+            !event.is_opponent_event &&
+            event.event_type === "yellow_card" &&
+            event.player_id === selectedScorerID,
+        ).length;
+        const alreadyRed = events.some(
+          (event) =>
+            !event.is_opponent_event &&
+            event.event_type === "red_card" &&
+            event.player_id === selectedScorerID,
+        );
+        if (!alreadyRed && yellowCountBefore + 1 >= 2) {
+          payload.push({
+            event_type: "red_card",
+            player_id: selectedScorerID,
+            minute: currentMinute,
+            is_opponent_event: false,
+          });
+        }
+      }
+
+      const inserted = await insertEventsToBackend(payload);
       setEvents((prev) => mergeEvents(prev, inserted));
       toast.success(`${EVENT_LABELS[eventType]} — min. ${currentMinute}`);
+
+      const hasRed = inserted.some((event) => event.event_type === "red_card");
+      if (eventType === "red_card" || hasRed) {
+        await applySendOff(selectedScorerID);
+        if (eventType === "yellow_card" && hasRed) {
+          toast.info("2º amarelo: vermelho automático aplicado.");
+        }
+      }
     } catch {
       toast.error("Erro ao registar cartão.");
     }
@@ -1517,6 +1651,19 @@ export default function LiveGamePage() {
     );
   }
 
+  const matchDateTimeLabel = game.game_datetime
+    ? format(parseISO(game.game_datetime), "d MMM · HH:mm", { locale: pt })
+    : "Sem data";
+  const matchMetaLabel = game.location
+    ? `${matchDateTimeLabel} · ${game.location}`
+    : matchDateTimeLabel;
+  const homeShortName = resolveShortName(homeClubShortName, homeClubName || "Casa", "CASA");
+  const awayShortName = resolveShortName(
+    game.opponent_short_name,
+    game.opponent_name || "Adversário",
+    "FORA",
+  );
+
   return (
     <div className="p-4 md:p-8 max-w-2xl mx-auto pb-24">
       {/* Back */}
@@ -1529,16 +1676,12 @@ export default function LiveGamePage() {
 
       {/* Scoreboard */}
       <div className="rounded-2xl bg-slate-900 text-white p-5 mb-5 text-center">
-        <p className="text-slate-400 text-sm mb-1">
-          {game.opponent_name ? `vs ${game.opponent_name}` : "Jogo"}
-          {game.game_datetime &&
-            ` · ${format(parseISO(game.game_datetime), "d MMM", { locale: pt })}`}
-        </p>
-        <div className="text-5xl font-black tracking-tight">
-          {score.home} – {score.away}
+        <p className="text-slate-300 text-sm mb-1">{matchMetaLabel}</p>
+        <div className="text-3xl md:text-4xl font-black tracking-tight">
+          {homeShortName} {score.home} – {score.away} {awayShortName}
         </div>
         <p className="text-slate-300 text-sm mt-2">
-          Relógio: {formatClock(clockSeconds)} · Minuto {currentMinute}&apos;
+          {formatClock(clockSeconds)} · {currentMinute}&apos;
         </p>
         {isFinalized && (
           <span className="mt-2 inline-block text-xs bg-emerald-500 text-white px-3 py-0.5 rounded-full">
@@ -1715,85 +1858,33 @@ export default function LiveGamePage() {
       {!isFinalized && (
         <div className="grid grid-cols-2 gap-2 mb-5">
           <button
-            onClick={() => openModal("goal", false)}
+            onClick={() => openModal("goal")}
             disabled={!canRegisterEvents}
-            className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm font-medium hover:bg-emerald-100 transition-colors disabled:opacity-40"
+            className="col-span-2 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm font-medium hover:bg-emerald-100 transition-colors disabled:opacity-40"
           >
-            ⚽ Golo nosso
+            ⚽ Golo
           </button>
           <button
-            onClick={() => openModal("goal", true)}
-            disabled={!canRegisterEvents}
-            className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm font-medium hover:bg-red-100 transition-colors disabled:opacity-40"
-          >
-            ⚽ Golo adversário
-          </button>
-          <button
-            onClick={() => openModal("yellow_card", false)}
+            onClick={() => openModal("yellow_card")}
             disabled={!canRegisterEvents}
             className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 text-sm font-medium hover:bg-amber-100 transition-colors disabled:opacity-40"
           >
             🟨 Amarelo
           </button>
           <button
-            onClick={() => openModal("red_card", false)}
+            onClick={() => openModal("red_card")}
             disabled={!canRegisterEvents}
             className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm font-medium hover:bg-red-100 transition-colors disabled:opacity-40"
           >
             🟥 Vermelho
           </button>
           <button
-            onClick={() => openModal("substitution", false)}
+            onClick={() => openModal("substitution")}
             disabled={!canRegisterEvents}
             className="col-span-2 p-3 rounded-xl bg-blue-50 border border-blue-200 text-blue-700 text-sm font-medium hover:bg-blue-100 transition-colors disabled:opacity-40"
           >
             🔄 Substituição
           </button>
-        </div>
-      )}
-
-      {/* ── Players list (mid-game / completed) ── */}
-      {phase !== "pre_match" && convocatedPlayers.length > 0 && (
-        <div className="mb-5">
-          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">
-            Convocados ({convocatedPlayers.length})
-          </h3>
-          <div className="space-y-1">
-            {convocatedPlayers.map((p) => {
-              const mins = computedMinutes.get(p.id) ?? 0;
-              const conceded = concededGoalsByPlayer.get(p.id) ?? 0;
-              return (
-                <div
-                  key={p.id}
-                  className={`flex items-center gap-3 p-2.5 rounded-xl text-sm ${
-                    p.isOnField
-                      ? "bg-emerald-50 border border-emerald-200"
-                      : "bg-white border border-slate-100"
-                  }`}
-                >
-                  <span
-                    className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
-                      p.isOnField ? "bg-emerald-500 text-white" : "bg-slate-200 text-slate-500"
-                    }`}
-                  >
-                    {p.jersey_number || "—"}
-                  </span>
-                  <span className="flex-1 font-medium text-slate-800 truncate">
-                    {p.first_name} {p.last_name}
-                  </span>
-                  <span className="text-xs text-slate-400">
-                    {p.isOnField ? "Em campo" : "Banco"}
-                  </span>
-                  {mins > 0 && (
-                    <span className="text-xs text-slate-500 font-mono">{mins}&apos;</span>
-                  )}
-                  {conceded > 0 && (
-                    <span className="text-xs text-rose-600 font-mono">-{conceded} GS</span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
         </div>
       )}
 
@@ -1988,10 +2079,13 @@ export default function LiveGamePage() {
               <h3 className="font-bold text-slate-900">
                 {modalType === "substitution"
                   ? "🔄 Substituição"
-                  : modalIsOpponent
-                    ? `${EVENT_LABELS[modalType]} — Adversário`
+                  : modalType === "goal"
+                    ? "⚽ Golo"
                     : EVENT_LABELS[modalType] ?? modalType}
-                {modalType === "goal" && !modalIsOpponent && goalStep === "assist"
+                {modalType === "goal" &&
+                goalTeamSide === "ours" &&
+                goalKind === "goal" &&
+                goalStep === "assist"
                   ? " — Assistência?"
                   : ""}
               </h3>
@@ -2042,7 +2136,9 @@ export default function LiveGamePage() {
                       Entra (banco)
                     </p>
                     {playersAvailableToEnter.length === 0 ? (
-                      <p className="text-xs text-slate-400">Todos os jogadores estão em campo.</p>
+                      <p className="text-xs text-slate-400">
+                        Sem suplentes elegíveis para entrar.
+                      </p>
                     ) : (
                       playersAvailableToEnter.map((p) => (
                         <button
@@ -2066,6 +2162,12 @@ export default function LiveGamePage() {
                         </button>
                       ))
                     )}
+                    {suspendedBenchPlayers.length > 0 && (
+                      <p className="text-xs text-red-600 mt-1">
+                        {suspendedBenchPlayers.length} jogador(es) expulso(s) no banco não podem
+                        entrar.
+                      </p>
+                    )}
                   </div>
                   <Button
                     onClick={() => void confirmSubstitution()}
@@ -2077,80 +2179,202 @@ export default function LiveGamePage() {
                 </>
               )}
 
-              {/* GOAL (own team) — 2-step: scorer → assist */}
-              {modalType === "goal" && !modalIsOpponent && (
+              {/* GOAL (unified flow) */}
+              {modalType === "goal" && (
                 <>
-                  {goalStep === "scorer" && (
+                  {!goalTeamSide && (
                     <>
                       <p className="text-xs font-semibold text-slate-500 uppercase mb-2">
-                        Marcador
+                        Quem marcou?
                       </p>
-                      {convocatedPlayers.map((p) => (
-                        <button
-                          key={p.id}
-                          onClick={() => setSelectedScorerID(p.id)}
-                          className={`w-full flex items-center gap-3 p-2.5 rounded-xl mb-1 text-left transition-colors ${
-                            selectedScorerID === p.id
-                              ? "bg-emerald-50 border-2 border-emerald-300"
-                              : "bg-slate-50 border border-slate-100"
-                          }`}
-                        >
-                          <span className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold flex-shrink-0">
-                            {p.jersey_number || "—"}
-                          </span>
-                          <span className="text-sm font-medium truncate">
-                            {p.first_name} {p.last_name}
-                          </span>
-                          {selectedScorerID === p.id && (
-                            <Check size={14} className="text-emerald-500 ml-auto" />
-                          )}
-                        </button>
-                      ))}
-                      <div className="flex gap-2 pt-1">
+                      <div className="grid grid-cols-2 gap-2">
                         <Button
-                          onClick={() => setGoalStep("assist")}
-                          disabled={!selectedScorerID}
-                          className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                          onClick={() => {
+                            setGoalTeamSide("ours");
+                            setGoalKind(null);
+                            setGoalStep("scorer");
+                            setSelectedScorerID(null);
+                            setSelectedAssistID(null);
+                          }}
+                          className="bg-emerald-600 hover:bg-emerald-700"
                         >
-                          Seguinte →
+                          Nosso
                         </Button>
-                        <Button variant="outline" onClick={closeModal}>
-                          Cancelar
+                        <Button
+                          onClick={() => {
+                            setGoalTeamSide("opponent");
+                            setGoalKind(null);
+                            setGoalStep("scorer");
+                            setSelectedScorerID(null);
+                            setSelectedAssistID(null);
+                          }}
+                          className="bg-red-600 hover:bg-red-700"
+                        >
+                          Adversário
                         </Button>
                       </div>
                     </>
                   )}
 
-                  {goalStep === "assist" && (
+                  {goalTeamSide && !goalKind && (
                     <>
                       <p className="text-xs font-semibold text-slate-500 uppercase mb-2">
-                        Assistência (opcional)
+                        Tipo de golo
                       </p>
-                      {convocatedPlayers
-                        .filter((p) => p.id !== selectedScorerID)
-                        .map((p) => (
-                          <button
-                            key={p.id}
-                            onClick={() =>
-                              setSelectedAssistID((prev) => (prev === p.id ? null : p.id))
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button
+                          onClick={() => {
+                            setGoalKind("goal");
+                            if (goalTeamSide === "opponent") {
+                              const firstOnField = playersOnField[0] ?? null;
+                              const preferredGoalkeeper =
+                                playersOnField.find((player) =>
+                                  /gr|gk|guarda/i.test(player.preferred_position ?? ""),
+                                ) ?? firstOnField;
+                              setSelectedScorerID(preferredGoalkeeper?.id ?? null);
+                            } else {
+                              setSelectedScorerID(null);
                             }
-                            className={`w-full flex items-center gap-3 p-2.5 rounded-xl mb-1 text-left transition-colors ${
-                              selectedAssistID === p.id
-                                ? "bg-blue-50 border-2 border-blue-300"
-                                : "bg-slate-50 border border-slate-100"
-                            }`}
-                          >
-                            <span className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold flex-shrink-0">
-                              {p.jersey_number || "—"}
-                            </span>
-                            <span className="text-sm font-medium truncate">
-                              {p.first_name} {p.last_name}
-                            </span>
-                            {selectedAssistID === p.id && (
-                              <Check size={14} className="text-blue-500 ml-auto" />
-                            )}
-                          </button>
-                        ))}
+                          }}
+                          className="bg-blue-600 hover:bg-blue-700"
+                        >
+                          Golo
+                        </Button>
+                        <Button
+                          onClick={() => {
+                            setGoalKind("own_goal");
+                            setSelectedScorerID(null);
+                            setSelectedAssistID(null);
+                          }}
+                          className="bg-slate-700 hover:bg-slate-800"
+                        >
+                          Autogolo
+                        </Button>
+                      </div>
+                      <Button
+                        variant="outline"
+                        className="w-full"
+                        onClick={() => {
+                          setGoalTeamSide(null);
+                          setGoalKind(null);
+                        }}
+                      >
+                        ← Voltar
+                      </Button>
+                    </>
+                  )}
+
+                  {goalTeamSide === "ours" && goalKind === "goal" && (
+                    <>
+                      {goalStep === "scorer" && (
+                        <>
+                          <p className="text-xs font-semibold text-slate-500 uppercase mb-2">
+                            Marcador
+                          </p>
+                          {sortPlayersByName(convocatedPlayers).map((player) => (
+                            <button
+                              key={player.id}
+                              onClick={() => setSelectedScorerID(player.id)}
+                              className={`w-full flex items-center gap-3 p-2.5 rounded-xl mb-1 text-left transition-colors ${
+                                selectedScorerID === player.id
+                                  ? "bg-emerald-50 border-2 border-emerald-300"
+                                  : "bg-slate-50 border border-slate-100"
+                              }`}
+                            >
+                              <span className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                                {player.jersey_number || "—"}
+                              </span>
+                              <span className="text-sm font-medium truncate">
+                                {player.first_name} {player.last_name}
+                              </span>
+                              {selectedScorerID === player.id && (
+                                <Check size={14} className="text-emerald-500 ml-auto" />
+                              )}
+                            </button>
+                          ))}
+                          <div className="flex gap-2 pt-1">
+                            <Button
+                              onClick={() => setGoalStep("assist")}
+                              disabled={!selectedScorerID}
+                              className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                            >
+                              Seguinte →
+                            </Button>
+                            <Button
+                              variant="outline"
+                              onClick={() => {
+                                setGoalKind(null);
+                                setGoalStep("scorer");
+                                setSelectedScorerID(null);
+                              }}
+                            >
+                              ← Voltar
+                            </Button>
+                          </div>
+                        </>
+                      )}
+
+                      {goalStep === "assist" && (
+                        <>
+                          <p className="text-xs font-semibold text-slate-500 uppercase mb-2">
+                            Assistência (opcional)
+                          </p>
+                          {sortPlayersByName(
+                            convocatedPlayers.filter((player) => player.id !== selectedScorerID),
+                          ).map((player) => (
+                            <button
+                              key={player.id}
+                              onClick={() =>
+                                setSelectedAssistID((prev) =>
+                                  prev === player.id ? null : player.id,
+                                )
+                              }
+                              className={`w-full flex items-center gap-3 p-2.5 rounded-xl mb-1 text-left transition-colors ${
+                                selectedAssistID === player.id
+                                  ? "bg-blue-50 border-2 border-blue-300"
+                                  : "bg-slate-50 border border-slate-100"
+                              }`}
+                            >
+                              <span className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                                {player.jersey_number || "—"}
+                              </span>
+                              <span className="text-sm font-medium truncate">
+                                {player.first_name} {player.last_name}
+                              </span>
+                              {selectedAssistID === player.id && (
+                                <Check size={14} className="text-blue-500 ml-auto" />
+                              )}
+                            </button>
+                          ))}
+                          <div className="flex gap-2 pt-1">
+                            <Button
+                              onClick={() => void confirmGoal()}
+                              disabled={savingEvent}
+                              className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                            >
+                              {savingEvent ? (
+                                <Loader2 size={16} className="animate-spin" />
+                              ) : (
+                                "Confirmar golo"
+                              )}
+                            </Button>
+                            <Button
+                              variant="outline"
+                              onClick={() => setGoalStep("scorer")}
+                            >
+                              ← Voltar
+                            </Button>
+                          </div>
+                        </>
+                      )}
+                    </>
+                  )}
+
+                  {goalTeamSide === "ours" && goalKind === "own_goal" && (
+                    <>
+                      <p className="text-sm text-slate-600">
+                        Vai ser registado autogolo do adversário a nosso favor.
+                      </p>
                       <div className="flex gap-2 pt-1">
                         <Button
                           onClick={() => void confirmGoal()}
@@ -2160,69 +2384,129 @@ export default function LiveGamePage() {
                           {savingEvent ? (
                             <Loader2 size={16} className="animate-spin" />
                           ) : (
-                            "Confirmar golo"
+                            "Confirmar autogolo"
                           )}
                         </Button>
-                        <Button variant="outline" onClick={() => setGoalStep("scorer")}>
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setGoalKind(null);
+                          }}
+                        >
                           ← Voltar
                         </Button>
                       </div>
                     </>
                   )}
-                </>
-              )}
 
-              {/* GOAL (opponent) / own_goal */}
-              {((modalType === "goal" && modalIsOpponent) || modalType === "own_goal") && (
-                <>
-                  <p className="text-xs font-semibold text-slate-500 uppercase mb-2">
-                    {modalType === "goal" && modalIsOpponent
-                      ? "Jogador associado ao golo sofrido"
-                      : "Jogador (autogolo)"}
-                  </p>
-                  {(modalType === "goal" && modalIsOpponent
-                    ? playersOnField.length > 0
-                      ? playersOnField
-                      : convocatedPlayers
-                    : convocatedPlayers
-                  ).map((p) => (
-                    <button
-                      key={p.id}
-                      onClick={() => setSelectedScorerID(p.id)}
-                      className={`w-full flex items-center gap-3 p-2.5 rounded-xl mb-1 text-left transition-colors ${
-                        selectedScorerID === p.id
-                          ? "bg-emerald-50 border-2 border-emerald-300"
-                          : "bg-slate-50 border border-slate-100"
-                      }`}
-                    >
-                      <span className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold flex-shrink-0">
-                        {p.jersey_number || "—"}
-                      </span>
-                      <span className="text-sm font-medium truncate">
-                        {p.first_name} {p.last_name}
-                      </span>
-                      {selectedScorerID === p.id && (
-                        <Check size={14} className="text-emerald-500 ml-auto" />
-                      )}
-                    </button>
-                  ))}
-                  {modalType === "goal" && modalIsOpponent && playersOnField.length === 0 && (
-                    <p className="text-xs text-amber-600">
-                      Sem jogadores marcados em campo. Mostramos todos os convocados.
-                    </p>
+                  {goalTeamSide === "opponent" && goalKind === "goal" && (
+                    <>
+                      <p className="text-xs font-semibold text-slate-500 uppercase mb-2">
+                        Jogador associado ao golo sofrido (opcional)
+                      </p>
+                      {(playersOnField.length > 0
+                        ? playersOnField
+                        : sortPlayersByName(convocatedPlayers)
+                      ).map((player) => (
+                        <button
+                          key={player.id}
+                          onClick={() =>
+                            setSelectedScorerID((prev) =>
+                              prev === player.id ? null : player.id,
+                            )
+                          }
+                          className={`w-full flex items-center gap-3 p-2.5 rounded-xl mb-1 text-left transition-colors ${
+                            selectedScorerID === player.id
+                              ? "bg-rose-50 border-2 border-rose-300"
+                              : "bg-slate-50 border border-slate-100"
+                          }`}
+                        >
+                          <span className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                            {player.jersey_number || "—"}
+                          </span>
+                          <span className="text-sm font-medium truncate">
+                            {player.first_name} {player.last_name}
+                          </span>
+                          {selectedScorerID === player.id && (
+                            <Check size={14} className="text-rose-500 ml-auto" />
+                          )}
+                        </button>
+                      ))}
+                      <div className="flex gap-2 pt-1">
+                        <Button
+                          onClick={() => void confirmGoal()}
+                          disabled={savingEvent}
+                          className="flex-1 bg-red-600 hover:bg-red-700"
+                        >
+                          {savingEvent ? (
+                            <Loader2 size={16} className="animate-spin" />
+                          ) : (
+                            "Confirmar golo adversário"
+                          )}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setGoalKind(null);
+                            setSelectedScorerID(null);
+                          }}
+                        >
+                          ← Voltar
+                        </Button>
+                      </div>
+                    </>
                   )}
-                  <div className="flex gap-2 pt-2">
-                    <Button
-                      onClick={() => void confirmGoal()}
-                      disabled={savingEvent || !selectedScorerID}
-                      className="flex-1 bg-emerald-600 hover:bg-emerald-700"
-                    >
-                      {savingEvent ? <Loader2 size={16} className="animate-spin" /> : "Confirmar"}
-                    </Button>
-                    <Button variant="outline" onClick={closeModal}>
-                      Cancelar
-                    </Button>
-                  </div>
+
+                  {goalTeamSide === "opponent" && goalKind === "own_goal" && (
+                    <>
+                      <p className="text-xs font-semibold text-slate-500 uppercase mb-2">
+                        Jogador que marcou autogolo
+                      </p>
+                      {sortPlayersByName(convocatedPlayers).map((player) => (
+                        <button
+                          key={player.id}
+                          onClick={() => setSelectedScorerID(player.id)}
+                          className={`w-full flex items-center gap-3 p-2.5 rounded-xl mb-1 text-left transition-colors ${
+                            selectedScorerID === player.id
+                              ? "bg-red-50 border-2 border-red-300"
+                              : "bg-slate-50 border border-slate-100"
+                          }`}
+                        >
+                          <span className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                            {player.jersey_number || "—"}
+                          </span>
+                          <span className="text-sm font-medium truncate">
+                            {player.first_name} {player.last_name}
+                          </span>
+                          {selectedScorerID === player.id && (
+                            <Check size={14} className="text-red-500 ml-auto" />
+                          )}
+                        </button>
+                      ))}
+                      <div className="flex gap-2 pt-1">
+                        <Button
+                          onClick={() => void confirmGoal()}
+                          disabled={savingEvent || !selectedScorerID}
+                          className="flex-1 bg-red-600 hover:bg-red-700"
+                        >
+                          {savingEvent ? (
+                            <Loader2 size={16} className="animate-spin" />
+                          ) : (
+                            "Confirmar autogolo"
+                          )}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setGoalKind(null);
+                            setSelectedScorerID(null);
+                          }}
+                        >
+                          ← Voltar
+                        </Button>
+                      </div>
+                    </>
+                  )}
                 </>
               )}
 
@@ -2232,7 +2516,7 @@ export default function LiveGamePage() {
                   <p className="text-xs font-semibold text-slate-500 uppercase mb-2">
                     Jogador
                   </p>
-                  {convocatedPlayers.map((p) => (
+                  {sortPlayersByName(convocatedPlayers).map((p) => (
                     <button
                       key={p.id}
                       onClick={() => setSelectedScorerID(p.id)}
@@ -2247,6 +2531,13 @@ export default function LiveGamePage() {
                       </span>
                       <span className="text-sm font-medium truncate">
                         {p.first_name} {p.last_name}
+                      </span>
+                      <span className="text-[10px] text-slate-400">
+                        {sentOffPlayerIds.has(p.id)
+                          ? "Expulso"
+                          : p.isOnField
+                            ? "Em campo"
+                            : "Banco"}
                       </span>
                       {selectedScorerID === p.id && (
                         <Check size={14} className="text-emerald-500 ml-auto" />

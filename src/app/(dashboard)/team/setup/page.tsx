@@ -118,6 +118,7 @@ export default function TeamSetupPage() {
   const [existingAgeGroup, setExistingAgeGroup] = useState<AgeGroup | null>(null);
   const [teamId, setTeamId] = useState<string | null>(null);
   const [clubName, setClubName] = useState("");
+  const [clubShortName, setClubShortName] = useState("");
   const [ageGroupName, setAgeGroupName] = useState("");
   const [footballFormat, setFootballFormat] = useState("");
   const [season, setSeason] = useState("2025/2026");
@@ -201,6 +202,7 @@ export default function TeamSetupPage() {
 
       setExistingAgeGroup(ag);
       setClubName(ag.club_name);
+      setClubShortName(ag.club_short_name || "");
       setAgeGroupName(ag.name);
       setFootballFormat(ag.football_format);
       setSeason(ag.season);
@@ -257,6 +259,7 @@ export default function TeamSetupPage() {
         .from("age_groups")
         .update({
           club_name: clubName,
+          club_short_name: clubShortName || null,
           name: ageGroupName,
           football_format: footballFormat,
           season,
@@ -268,7 +271,14 @@ export default function TeamSetupPage() {
         return;
       }
       setExistingAgeGroup((prev) =>
-        prev ? { ...prev, club_name: clubName, name: ageGroupName } : prev,
+        prev
+          ? {
+              ...prev,
+              club_name: clubName,
+              club_short_name: clubShortName || undefined,
+              name: ageGroupName,
+            }
+          : prev,
       );
     } else {
       const { data, error } = await supabase
@@ -276,6 +286,7 @@ export default function TeamSetupPage() {
         .insert({
           coordinator_id: user.id,
           club_name: clubName,
+          club_short_name: clubShortName || null,
           name: ageGroupName,
           football_format: footballFormat,
           season,
@@ -523,8 +534,12 @@ export default function TeamSetupPage() {
               <CardTitle className="text-base">Escalão</CardTitle>
               {existingAgeGroup && !isEditing && (
                 <CardDescription className="mt-1">
-                  {existingAgeGroup.club_name} · {existingAgeGroup.name} ·
-                  Futebol {existingAgeGroup.football_format} ·{" "}
+                  {existingAgeGroup.club_name}
+                  {existingAgeGroup.club_short_name
+                    ? ` (${existingAgeGroup.club_short_name})`
+                    : ""}
+                  {" · "}
+                  {existingAgeGroup.name} · Futebol {existingAgeGroup.football_format} ·{" "}
                   {existingAgeGroup.season}
                 </CardDescription>
               )}
@@ -564,6 +579,22 @@ export default function TeamSetupPage() {
                   onChange={(e) => setClubName(e.target.value)}
                   placeholder="ex: Os Belenenses"
                   required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Sigla do Clube</Label>
+                <Input
+                  value={clubShortName}
+                  onChange={(e) =>
+                    setClubShortName(
+                      e.target.value
+                        .toUpperCase()
+                        .replace(/[^A-Z0-9]/g, "")
+                        .slice(0, 5),
+                    )
+                  }
+                  placeholder="ex: EFB"
+                  maxLength={5}
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">

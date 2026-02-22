@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 export type TeamContextAgeGroup = {
   id: string;
   club_name: string;
+  club_short_name?: string | null;
   name: string;
   football_format: string | null;
 };
@@ -70,7 +71,7 @@ export async function resolveUserTeamContext(
   const [managedAgeGroupsRes, staffLinksRes] = await Promise.all([
     admin
       .from("age_groups")
-      .select("id, club_name, name, football_format")
+      .select("id, club_name, club_short_name, name, football_format")
       .eq("coordinator_id", userId)
       .order("created_at", { ascending: true })
       .limit(20),
@@ -147,7 +148,7 @@ export async function resolveUserTeamContext(
   if (missingAgeGroupIds.length > 0) {
     const missingAgeGroupsRes = await admin
       .from("age_groups")
-      .select("id, club_name, name, football_format")
+      .select("id, club_name, club_short_name, name, football_format")
       .in("id", missingAgeGroupIds);
     if (missingAgeGroupsRes.error) {
       throw new Error(`Erro ao carregar escalões do staff: ${missingAgeGroupsRes.error.message}`);

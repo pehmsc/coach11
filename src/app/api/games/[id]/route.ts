@@ -91,6 +91,9 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     const updates: Record<string, unknown> = {};
     if (typeof body.title === "string" || body.title === null) updates.title = body.title || null;
     if (typeof body.opponent_name === "string") updates.opponent_name = body.opponent_name;
+    if (typeof body.opponent_short_name === "string" || body.opponent_short_name === null) {
+      updates.opponent_short_name = body.opponent_short_name || null;
+    }
     if (typeof body.location === "string" || body.location === null) updates.location = body.location || null;
     if (typeof body.game_datetime === "string") updates.game_datetime = body.game_datetime;
     if (typeof body.is_home === "boolean") updates.is_home = body.is_home;

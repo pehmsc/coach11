@@ -11,6 +11,7 @@ type CalendarPayload = {
   start_time?: string | null;
   end_time?: string | null;
   opponent_name?: string | null;
+  opponent_short_name?: string | null;
   location?: string | null;
   location_address?: string | null;
   is_home?: boolean;
@@ -56,6 +57,7 @@ function normalizePayload(value: unknown): CalendarPayload {
     start_time: normalizeTime(row.start_time),
     end_time: normalizeTime(row.end_time),
     opponent_name: normalizeOptionalText(row.opponent_name),
+    opponent_short_name: normalizeOptionalText(row.opponent_short_name),
     location: normalizeOptionalText(row.location),
     location_address: normalizeOptionalText(row.location_address),
     is_home: typeof row.is_home === "boolean" ? row.is_home : undefined,
@@ -334,6 +336,7 @@ export async function POST(request: Request) {
         title: payload.title || (payload.opponent_name ? `vs ${payload.opponent_name}` : "Jogo"),
         game_datetime: gameDatetime,
         opponent_name: payload.opponent_name,
+        opponent_short_name: payload.opponent_short_name,
         location: payload.location,
         location_address: payload.location_address,
         is_home: payload.is_home ?? true,
@@ -493,6 +496,7 @@ export async function PATCH(request: Request) {
         title: payload.title || (payload.opponent_name ? `vs ${payload.opponent_name}` : "Jogo"),
         game_datetime: gameDatetime,
         opponent_name: payload.opponent_name,
+        opponent_short_name: payload.opponent_short_name,
         location: payload.location,
         location_address: payload.location_address,
         is_home: payload.is_home ?? true,

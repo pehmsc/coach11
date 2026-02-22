@@ -263,13 +263,19 @@ export async function GET(_request: Request, { params }: RouteContext) {
 
     // Football format from age_group
     let footballFormat: string | null = null;
+    let homeClubName: string | null = null;
+    let homeClubShortName: string | null = null;
     if (game.age_group_id) {
       const { data: ag } = await admin
         .from("age_groups")
-        .select("football_format")
+        .select("football_format, club_name, club_short_name")
         .eq("id", game.age_group_id)
         .maybeSingle();
-      footballFormat = (ag as unknown as { football_format?: string } | null)?.football_format ?? null;
+      footballFormat =
+        (ag as unknown as { football_format?: string } | null)?.football_format ?? null;
+      homeClubName = (ag as { club_name?: string } | null)?.club_name ?? null;
+      homeClubShortName =
+        (ag as { club_short_name?: string | null } | null)?.club_short_name ?? null;
     }
 
     // Lineup statuses from game_stats_live
@@ -357,6 +363,8 @@ export async function GET(_request: Request, { params }: RouteContext) {
       lineupStatuses,
       starterIds: Array.from(starterIdsSet),
       tacticalSystem: (game as unknown as { additional_info?: string }).additional_info ?? null,
+      homeClubName,
+      homeClubShortName,
       convocationStatus,
       convocationId: convocations?.[0]?.id ?? null,
       convocationCount: convocationIds.length,

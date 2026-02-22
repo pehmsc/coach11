@@ -32,6 +32,7 @@ export interface AgeGroup {
   id: string;
   coordinator_id: string;
   club_name: string;
+  club_short_name?: string;
   club_logo_url?: string;
   name: string;
   football_format: FootballFormat;
@@ -94,6 +95,7 @@ export interface Game {
   title?: string;
   game_datetime: string;
   opponent_name?: string;
+  opponent_short_name?: string;
   opponent_id?: string;
   location?: string;
   location_address?: string;

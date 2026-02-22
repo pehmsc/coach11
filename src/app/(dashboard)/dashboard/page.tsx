@@ -137,7 +137,7 @@ export default async function DashboardPage() {
         .order("session_date", { ascending: true })
         .order("start_time", { ascending: true, nullsFirst: false })
         .order("created_at", { ascending: true })
-        .limit(3),
+        .limit(10),
       (admin ?? supabase)
         .from("games")
         .select("*")
@@ -146,7 +146,7 @@ export default async function DashboardPage() {
         .lte("game_datetime", `${in7days}T23:59:59`)
         .neq("status", "completed")
         .order("game_datetime", { ascending: true })
-        .limit(3),
+        .limit(10),
     ]);
     upcomingTrainings = trainingsData || [];
     upcomingGames = gamesData || [];
@@ -262,6 +262,26 @@ export default async function DashboardPage() {
     todayTrainings[0];
   const todayTrainingDone = todayTraining?.status === "completed";
 
+  const upcomingTimeline = [
+    ...upcomingTrainings
+      .filter((training) => training.id !== todayTraining?.id)
+      .map((training) => ({
+        type: "training" as const,
+        sortDateTime: `${training.session_date}T${training.start_time || "00:00"}:00`,
+        training,
+      })),
+    ...upcomingGames.map((game) => ({
+      type: "game" as const,
+      sortDateTime: game.game_datetime,
+      game,
+    })),
+  ]
+    .sort(
+      (a, b) =>
+        new Date(a.sortDateTime).getTime() - new Date(b.sortDateTime).getTime(),
+    )
+    .slice(0, 8);
+
   const today = format(new Date(), "EEEE, d 'de' MMMM", { locale: pt });
   const firstName = profile?.full_name?.split(" ")[0] || "Treinador";
 
@@ -277,7 +297,11 @@ export default async function DashboardPage() {
     { href: "/settings", icon: Settings, label: "Configurações", color: "text-slate-600" },
   ];
 
-  const hasPending = !!activeLiveGame || upcomingTrainings.length > 0 || upcomingGames.length > 0;
+  const hasPending =
+    !!activeLiveGame ||
+    !!todayTraining ||
+    upcomingTimeline.length > 0 ||
+    upcomingGames.length > 0;
 
   return (
     <>
@@ -395,38 +419,33 @@ export default async function DashboardPage() {
               </div>
             )}
 
-            {/* Próximos treinos (sem hoje) */}
-            {upcomingTrainings
-              .filter((t) => t.session_date !== todayDate)
-              .map((training) => (
-                <Link key={training.id} href="/calendar">
-                  <div className="flex items-center gap-3 p-4 bg-emerald-50 border border-emerald-200 rounded-xl hover:border-emerald-300 transition-colors">
-                    <div className="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center flex-shrink-0">
-                      <span className="text-white text-xs font-bold">T</span>
+            {upcomingTimeline.map((eventItem) => {
+              if (eventItem.type === "training") {
+                const training = eventItem.training;
+                return (
+                  <Link key={training.id} href="/calendar">
+                    <div className="flex items-center gap-3 p-4 bg-emerald-50 border border-emerald-200 rounded-xl hover:border-emerald-300 transition-colors">
+                      <div className="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center flex-shrink-0">
+                        <span className="text-white text-xs font-bold">T</span>
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-semibold text-emerald-900 text-sm">Treino</p>
+                        <p className="text-emerald-700 text-xs capitalize">
+                          {relativeDay(training.session_date)}
+                          {training.start_time ? ` · ${training.start_time.substring(0, 5)}` : ""}
+                        </p>
+                      </div>
+                      <span className="text-emerald-600 text-xs font-medium">→</span>
                     </div>
-                    <div className="flex-1">
-                      <p className="font-semibold text-emerald-900 text-sm">
-                        Treino
-                      </p>
-                      <p className="text-emerald-700 text-xs capitalize">
-                        {relativeDay(training.session_date)}
-                        {training.start_time
-                          ? ` · ${training.start_time.substring(0, 5)}`
-                          : ""}
-                      </p>
-                    </div>
-                    <span className="text-emerald-600 text-xs font-medium">
-                      →
-                    </span>
-                  </div>
-                </Link>
-              ))}
+                  </Link>
+                );
+              }
 
-            {/* Próximos jogos */}
-            {upcomingGames.map((game) => {
+              const game = eventItem.game;
               const gameDate = game.game_datetime ? parseISO(game.game_datetime) : null;
               const needsConvocation =
                 gameDate && gameDate <= in48h && gameDate >= now && !confirmedGameIds.has(game.id);
+
               return (
                 <div key={game.id} className="space-y-1">
                   <Link href={`/games/${game.id}`}>

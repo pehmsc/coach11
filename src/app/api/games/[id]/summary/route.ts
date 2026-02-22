@@ -100,7 +100,9 @@ export async function GET(_request: Request, { params }: RouteContext) {
 
     const { data: game, error: gameError } = await admin
       .from("games")
-      .select("id, status, title, opponent_name, game_datetime, location, is_home, score_home, score_away, notes")
+      .select(
+        "id, team_id, age_group_id, status, title, opponent_name, opponent_short_name, game_datetime, location, is_home, score_home, score_away, notes",
+      )
       .eq("id", gameId)
       .maybeSingle();
 
@@ -129,6 +131,27 @@ export async function GET(_request: Request, { params }: RouteContext) {
           .order("minutes_played", { ascending: false })
           .order("created_at", { ascending: true }),
       ]);
+
+    let homeClubName: string | null = null;
+    let homeClubShortName: string | null = null;
+    let ageGroupId: string | null = game.age_group_id ?? null;
+    if (!ageGroupId && game.team_id) {
+      const { data: team } = await admin
+        .from("teams")
+        .select("age_group_id")
+        .eq("id", game.team_id)
+        .maybeSingle();
+      ageGroupId = team?.age_group_id ?? null;
+    }
+    if (ageGroupId) {
+      const { data: ageGroup } = await admin
+        .from("age_groups")
+        .select("club_name, club_short_name")
+        .eq("id", ageGroupId)
+        .maybeSingle();
+      homeClubName = ageGroup?.club_name ?? null;
+      homeClubShortName = ageGroup?.club_short_name ?? null;
+    }
 
     if (eventsError) {
       return NextResponse.json({ error: "Erro ao carregar timeline do jogo." }, { status: 500 });
@@ -198,6 +221,8 @@ export async function GET(_request: Request, { params }: RouteContext) {
         finalStats: finalStats || [],
         playersById,
         totalMinutes,
+        homeClubName,
+        homeClubShortName,
       },
       {
         headers: {

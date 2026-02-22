@@ -4,9 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import { pt } from "date-fns/locale";
-import { ArrowLeft, Clock, Star, AlertCircle, Loader2, RotateCcw } from "lucide-react";
+import { ArrowLeft, Star, AlertCircle, Loader2, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { resolveShortName } from "@/lib/football/short-name";
 import type { Game, GameEvent, GameFinalStats } from "@/types/database";
 
 type SummaryPlayer = {
@@ -24,6 +25,8 @@ type SummaryPayload = {
   finalStats: GameFinalStats[];
   playersById: Record<string, SummaryPlayer>;
   totalMinutes: number;
+  homeClubName: string | null;
+  homeClubShortName: string | null;
 };
 
 const EVENT_LABELS: Record<string, string> = {
@@ -238,6 +241,22 @@ export default function GameSummaryPage() {
 
   const game = summary.game;
   const mvp = summary.finalStats.find((row) => row.is_mvp);
+  const matchDateTimeLabel = game.game_datetime
+    ? format(parseISO(game.game_datetime), "d MMM · HH:mm", { locale: pt })
+    : "Sem data";
+  const matchMetaLabel = game.location
+    ? `${matchDateTimeLabel} · ${game.location}`
+    : matchDateTimeLabel;
+  const homeShortName = resolveShortName(
+    summary.homeClubShortName,
+    summary.homeClubName,
+    "CASA",
+  );
+  const awayShortName = resolveShortName(
+    game.opponent_short_name,
+    game.opponent_name || "Adversário",
+    "FORA",
+  );
 
   return (
     <div className="p-4 md:p-8 max-w-3xl mx-auto pb-16">
@@ -316,18 +335,13 @@ export default function GameSummaryPage() {
       )}
 
       <div className="rounded-2xl bg-slate-900 text-white p-5 mb-5 text-center">
-        <p className="text-slate-300 text-sm">
-          {game.opponent_name ? `vs ${game.opponent_name}` : "Jogo"}
-          {game.game_datetime
-            ? ` · ${format(parseISO(game.game_datetime), "d MMM yyyy · HH:mm", { locale: pt })}`
-            : ""}
-        </p>
-        <div className="text-5xl font-black tracking-tight mt-1">
-          {game.score_home ?? 0} – {game.score_away ?? 0}
+        <p className="text-slate-300 text-sm">{matchMetaLabel}</p>
+        <div className="text-3xl md:text-4xl font-black tracking-tight mt-1">
+          {homeShortName} {game.score_home ?? 0} – {game.score_away ?? 0} {awayShortName}
         </div>
         <div className="mt-2 flex items-center justify-center gap-4 text-xs text-slate-300">
-          <span className="inline-flex items-center gap-1">
-            <Clock size={12} /> {summary.totalMinutes}&apos;
+          <span>
+            {String(summary.totalMinutes).padStart(2, "0")}:00 · {summary.totalMinutes}&apos;
           </span>
           {mvp && (
             <span className="inline-flex items-center gap-1 text-amber-300">

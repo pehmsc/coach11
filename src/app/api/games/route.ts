@@ -35,7 +35,7 @@ export async function GET() {
     const { data: games, error: gamesError } = await admin
       .from("games")
       .select(
-        "id, game_datetime, opponent_name, is_home, status, score_home, score_away, location, title, competition_id, team_id, age_group_id",
+        "id, game_datetime, opponent_name, opponent_short_name, is_home, status, score_home, score_away, location, title, competition_id, team_id, age_group_id",
       )
       .in("team_id", context.accessibleTeamIds)
       .order("game_datetime", { ascending: false });
