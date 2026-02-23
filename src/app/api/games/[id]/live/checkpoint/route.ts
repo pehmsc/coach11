@@ -1,4 +1,3 @@
-import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { NextResponse } from "next/server";
@@ -211,13 +210,12 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       );
     }
 
-    const admin = createAdminClient();
-    const access = await assertGameAccess(admin, gameId, user.id);
+    const access = await assertGameAccess(supabase, gameId, user.id);
     if (!access.ok) return access.response;
 
     const runningSinceMs = isRunningPhase(phase) ? runningSinceMsRaw : null;
 
-    const { error } = await admin
+    const { error } = await supabase
       .from("game_live_checkpoints")
       .upsert(
         {
@@ -238,7 +236,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       return NextResponse.json({ error: "Erro ao guardar checkpoint live." }, { status: 500 });
     }
 
-    const { data: gameRow } = await admin
+    const { data: gameRow } = await supabase
       .from("games")
       .select("status")
       .eq("id", gameId)
@@ -247,7 +245,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     const currentStatus = (gameRow as { status?: string } | null)?.status ?? null;
     if (currentStatus !== "completed" && currentStatus !== "cancelled") {
       const nextStatus = isRunningPhase(phase) ? "live" : "scheduled";
-      await admin.from("games").update({ status: nextStatus }).eq("id", gameId);
+      await supabase.from("games").update({ status: nextStatus }).eq("id", gameId);
     }
 
     return NextResponse.json({ success: true });

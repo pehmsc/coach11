@@ -1,4 +1,3 @@
-import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { NextResponse } from "next/server";
@@ -154,60 +153,62 @@ function computeMinutesPlayed(
   return result;
 }
 
-async function assertCoordinatorAccess(
-  admin: ReturnType<typeof createAdminClient>,
-  gameId: string,
-  userId: string,
-) {
-  const { data: game, error: gameError } = await admin
-    .from("games")
-    .select("id, status, team_id, age_group_id")
-    .eq("id", gameId)
-    .maybeSingle();
+type GameAccessContext = {
+  exists: boolean;
+  canWrite: boolean;
+  isCoordinator: boolean;
+  status: string | null;
+  teamId: string | null;
+  ageGroupId: string | null;
+};
 
-  if (gameError) {
+function parseGameAccessContext(value: unknown): GameAccessContext | null {
+  if (!value || typeof value !== "object") return null;
+  const row = value as Record<string, unknown>;
+  return {
+    exists: row.exists === true,
+    canWrite: row.canWrite === true,
+    isCoordinator: row.isCoordinator === true,
+    status: typeof row.status === "string" ? row.status : null,
+    teamId: typeof row.teamId === "string" ? row.teamId : null,
+    ageGroupId: typeof row.ageGroupId === "string" ? row.ageGroupId : null,
+  };
+}
+
+async function assertCoordinatorAccess(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  gameId: string,
+) {
+  const { data: accessData, error: accessError } = await supabase.rpc(
+    "rpc_game_access_context",
+    {
+      p_game_id: gameId,
+    },
+  );
+
+  if (accessError) {
     return {
       ok: false as const,
       response: NextResponse.json({ error: "Erro ao validar jogo." }, { status: 500 }),
     };
   }
-  if (!game) {
+
+  const access = parseGameAccessContext(accessData);
+  if (!access?.exists) {
     return {
       ok: false as const,
       response: NextResponse.json({ error: "Jogo não encontrado." }, { status: 404 }),
     };
   }
 
-  let teamId: string | null = game.team_id ?? null;
-  const ageGroupId = game.age_group_id ?? null;
-
-  if (!ageGroupId) {
+  if (!access.ageGroupId) {
     return {
       ok: false as const,
       response: NextResponse.json({ error: "Jogo sem escalão associado." }, { status: 400 }),
     };
   }
 
-  const { data: coordinatorAgeGroup } = await admin
-    .from("age_groups")
-    .select("id")
-    .eq("id", ageGroupId)
-    .eq("coordinator_id", userId)
-    .maybeSingle();
-  const isCoordinator = !!coordinatorAgeGroup;
-
-  if (!teamId) {
-    const { data: fallbackTeam } = await admin
-      .from("teams")
-      .select("id")
-      .eq("age_group_id", ageGroupId)
-      .order("created_at", { ascending: true })
-      .limit(1)
-      .maybeSingle();
-    teamId = fallbackTeam?.id ?? null;
-  }
-
-  if (!isCoordinator) {
+  if (!access.canWrite || !access.isCoordinator) {
     return {
       ok: false as const,
       response: NextResponse.json(
@@ -220,10 +221,10 @@ async function assertCoordinatorAccess(
   return {
     ok: true as const,
     game: {
-      id: game.id,
-      status: game.status ?? null,
-      teamId,
-      ageGroupId,
+      id: gameId,
+      status: access.status,
+      teamId: access.teamId,
+      ageGroupId: access.ageGroupId,
     },
   };
 }
@@ -241,8 +242,7 @@ export async function POST(request: Request, { params }: RouteContext) {
     }
 
     const body = (await request.json().catch(() => null)) as RecalculatePayload | null;
-    const admin = createAdminClient();
-    const access = await assertCoordinatorAccess(admin, gameId, user.id);
+    const access = await assertCoordinatorAccess(supabase, gameId);
     if (!access.ok) return access.response;
 
     if (access.game.status !== "completed") {
@@ -252,7 +252,7 @@ export async function POST(request: Request, { params }: RouteContext) {
       );
     }
 
-    const { data: convocationRows } = await admin
+    const { data: convocationRows } = await supabase
       .from("convocations")
       .select("id, created_at")
       .eq("game_id", gameId)
@@ -263,7 +263,7 @@ export async function POST(request: Request, { params }: RouteContext) {
 
     let playerIds: string[] = [];
     if (latestConvocationId) {
-      const { data: convocationPlayers } = await admin
+      const { data: convocationPlayers } = await supabase
         .from("convocation_players")
         .select("player_id")
         .eq("convocation_id", latestConvocationId);
@@ -277,7 +277,7 @@ export async function POST(request: Request, { params }: RouteContext) {
     }
 
     if (playerIds.length === 0) {
-      const { data: liveRows } = await admin
+      const { data: liveRows } = await supabase
         .from("game_stats_live")
         .select("player_id")
         .eq("game_id", gameId);
@@ -298,24 +298,24 @@ export async function POST(request: Request, { params }: RouteContext) {
     }
 
     const [eventsRes, liveStatsRes, finalStatsRes, checkpointRes] = await Promise.all([
-      admin
+      supabase
         .from("game_events")
         .select("id, event_type, player_id, related_player_id, minute, is_opponent_event, created_at")
         .eq("game_id", gameId)
         .order("minute", { ascending: true })
         .order("created_at", { ascending: true }),
-      admin
+      supabase
         .from("game_stats_live")
         .select("player_id, status, start_minute")
         .eq("game_id", gameId)
         .in("player_id", playerIds),
-      admin
+      supabase
         .from("game_final_stats")
         .select(
           "player_id, lineup_type, coach_rating, is_mvp, minutes_played, goals, own_goals, assists, yellow_cards, red_cards, notes, is_finalized, finalized_at",
         )
         .eq("game_id", gameId),
-      admin
+      supabase
         .from("game_live_checkpoints")
         .select("base_seconds")
         .eq("game_id", gameId)
@@ -475,7 +475,7 @@ export async function POST(request: Request, { params }: RouteContext) {
     });
 
     const score = computeScoreFromEvents(events);
-    const rpcResult = await admin.rpc("rpc_recalculate_game_summary", {
+    const rpcResult = await supabase.rpc("rpc_recalculate_game_summary_auth", {
       p_game_id: gameId,
       p_rows: rowsToInsert,
       p_score_home: score.home,
@@ -486,7 +486,7 @@ export async function POST(request: Request, { params }: RouteContext) {
 
     if (rpcResult.error) {
       return respondInternalError(
-        "api.games.id.summary.recalculate.post.rpc-recalculate",
+        "api.games.id.summary.recalculate.post.rpc-recalculate-auth",
         rpcResult.error,
       );
     }

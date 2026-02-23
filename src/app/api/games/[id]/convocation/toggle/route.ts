@@ -1,4 +1,3 @@
-import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { NextResponse } from "next/server";
@@ -6,6 +5,22 @@ import { NextResponse } from "next/server";
 type RouteContext = {
   params: Promise<{ id: string }>;
 };
+
+type GameAccessContext = {
+  exists: boolean;
+  canWrite: boolean;
+  ageGroupId: string | null;
+};
+
+function parseGameAccessContext(value: unknown): GameAccessContext | null {
+  if (!value || typeof value !== "object") return null;
+  const row = value as Record<string, unknown>;
+  return {
+    exists: row.exists === true,
+    canWrite: row.canWrite === true,
+    ageGroupId: typeof row.ageGroupId === "string" ? row.ageGroupId : null,
+  };
+}
 
 export async function POST(request: Request, { params }: RouteContext) {
   try {
@@ -30,71 +45,38 @@ export async function POST(request: Request, { params }: RouteContext) {
       );
     }
 
-    const admin = createAdminClient();
+    const { data: accessData, error: accessError } = await supabase.rpc(
+      "rpc_game_access_context",
+      {
+        p_game_id: gameId,
+      },
+    );
 
-    const { data: game, error: gameError } = await admin
-      .from("games")
-      .select("id, team_id, age_group_id")
-      .eq("id", gameId)
-      .maybeSingle();
-
-    if (gameError) {
+    if (accessError) {
       return NextResponse.json(
         { error: "Erro ao validar o jogo." },
         { status: 500 },
       );
     }
 
-    if (!game) {
+    const access = parseGameAccessContext(accessData);
+    if (!access?.exists) {
       return NextResponse.json({ error: "Jogo não encontrado." }, { status: 404 });
     }
 
-    let hasAccess = false;
-    let teamId: string | null = game.team_id;
-
-    if (game.age_group_id) {
-      const { data: ageGroup } = await admin
-        .from("age_groups")
-        .select("id")
-        .eq("id", game.age_group_id)
-        .eq("coordinator_id", user.id)
-        .maybeSingle();
-      hasAccess = !!ageGroup;
-    }
-
-    if (!teamId && game.age_group_id) {
-      const { data: fallbackTeam } = await admin
-        .from("teams")
-        .select("id")
-        .eq("age_group_id", game.age_group_id)
-        .limit(1)
-        .maybeSingle();
-      teamId = fallbackTeam?.id ?? null;
-    }
-
-    if (!hasAccess && teamId) {
-      const { data: staffLink } = await admin
-        .from("team_staff")
-        .select("id")
-        .eq("team_id", teamId)
-        .eq("profile_id", user.id)
-        .maybeSingle();
-      hasAccess = !!staffLink;
-    }
-
-    if (!hasAccess) {
+    if (!access.canWrite) {
       return NextResponse.json(
         { error: "Sem permissões para editar esta convocatória." },
         { status: 403 },
       );
     }
 
-    if (game.age_group_id) {
-      const { data: player } = await admin
+    if (access.ageGroupId) {
+      const { data: player } = await supabase
         .from("players")
         .select("id")
         .eq("id", playerId)
-        .eq("age_group_id", game.age_group_id)
+        .eq("age_group_id", access.ageGroupId)
         .maybeSingle();
 
       if (!player) {
@@ -105,7 +87,7 @@ export async function POST(request: Request, { params }: RouteContext) {
       }
     }
 
-    const { data: convocationRows, error: convocationRowsError } = await admin
+    const { data: convocationRows, error: convocationRowsError } = await supabase
       .from("convocations")
       .select("id, status, created_at")
       .eq("game_id", gameId)
@@ -122,7 +104,7 @@ export async function POST(request: Request, { params }: RouteContext) {
     let convocation = convocationRows?.[0] ?? null;
 
     if (!convocation) {
-      const { data: newConvocation, error: createConvError } = await admin
+      const { data: newConvocation, error: createConvError } = await supabase
         .from("convocations")
         .insert({ game_id: gameId, status: "draft" })
         .select("id, status, created_at")
@@ -149,7 +131,7 @@ export async function POST(request: Request, { params }: RouteContext) {
       ? convocationRows.map((row) => row.id)
       : [convocation.id];
 
-    const { data: existing } = await admin
+    const { data: existing } = await supabase
       .from("convocation_players")
       .select("id")
       .in("convocation_id", allConvocationIds)
@@ -157,7 +139,7 @@ export async function POST(request: Request, { params }: RouteContext) {
       .limit(1);
 
     if ((existing?.length ?? 0) > 0) {
-      const { error: deleteError } = await admin
+      const { error: deleteError } = await supabase
         .from("convocation_players")
         .delete()
         .in("convocation_id", allConvocationIds)
@@ -170,7 +152,7 @@ export async function POST(request: Request, { params }: RouteContext) {
         );
       }
 
-      await admin
+      await supabase
         .from("convocations")
         .update({ status: "draft" })
         .eq("id", convocation.id)
@@ -179,7 +161,7 @@ export async function POST(request: Request, { params }: RouteContext) {
       return NextResponse.json({ success: true, isConvocated: false });
     }
 
-    const { error: insertError } = await admin.from("convocation_players").insert({
+    const { error: insertError } = await supabase.from("convocation_players").insert({
       convocation_id: convocation.id,
       player_id: playerId,
     });
@@ -196,7 +178,7 @@ export async function POST(request: Request, { params }: RouteContext) {
       );
     }
 
-    await admin
+    await supabase
       .from("convocations")
       .update({ status: "draft" })
       .eq("id", convocation.id)

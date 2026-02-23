@@ -1,4 +1,3 @@
-import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { NextResponse } from "next/server";
@@ -29,80 +28,21 @@ type FinalizePayload = {
   final_minute?: number;
 };
 
-async function assertGameAccess(
-  admin: ReturnType<typeof createAdminClient>,
-  gameId: string,
-  userId: string,
-) {
-  const { data: game, error: gameError } = await admin
-    .from("games")
-    .select("id, team_id, age_group_id, status")
-    .eq("id", gameId)
-    .maybeSingle();
+type GameAccessContext = {
+  exists: boolean;
+  canWrite: boolean;
+  isCoordinator: boolean;
+  status: string | null;
+};
 
-  if (gameError) {
-    return {
-      ok: false as const,
-      response: NextResponse.json({ error: "Erro ao validar jogo." }, { status: 500 }),
-    };
-  }
-
-  if (!game) {
-    return {
-      ok: false as const,
-      response: NextResponse.json({ error: "Jogo não encontrado." }, { status: 404 }),
-    };
-  }
-
-  let hasAccess = false;
-  let isCoordinator = false;
-  let teamId: string | null = (game as unknown as { team_id?: string }).team_id ?? null;
-  const ageGroupId = (game as unknown as { age_group_id?: string }).age_group_id ?? null;
-  const gameStatus = (game as unknown as { status?: string }).status ?? null;
-
-  if (ageGroupId) {
-    const { data: ageGroupOwner } = await admin
-      .from("age_groups")
-      .select("id")
-      .eq("id", ageGroupId)
-      .eq("coordinator_id", userId)
-      .maybeSingle();
-    hasAccess = !!ageGroupOwner;
-    isCoordinator = !!ageGroupOwner;
-  }
-
-  if (!teamId && ageGroupId) {
-    const { data: fallbackTeam } = await admin
-      .from("teams")
-      .select("id")
-      .eq("age_group_id", ageGroupId)
-      .order("created_at", { ascending: true })
-      .limit(1)
-      .maybeSingle();
-    teamId = (fallbackTeam as unknown as { id?: string } | null)?.id ?? null;
-  }
-
-  if (!hasAccess && teamId) {
-    const { data: staffLink } = await admin
-      .from("team_staff")
-      .select("id")
-      .eq("team_id", teamId)
-      .eq("profile_id", userId)
-      .maybeSingle();
-    hasAccess = !!staffLink;
-  }
-
-  if (!hasAccess) {
-    return {
-      ok: false as const,
-      response: NextResponse.json({ error: "Sem permissões." }, { status: 403 }),
-    };
-  }
-
+function parseGameAccessContext(value: unknown): GameAccessContext | null {
+  if (!value || typeof value !== "object") return null;
+  const row = value as Record<string, unknown>;
   return {
-    ok: true as const,
-    isCoordinator,
-    gameStatus,
+    exists: row.exists === true,
+    canWrite: row.canWrite === true,
+    isCoordinator: row.isCoordinator === true,
+    status: typeof row.status === "string" ? row.status : null,
   };
 }
 
@@ -169,15 +109,31 @@ export async function POST(request: Request, { params }: RouteContext) {
     if (scoreHome === null || scoreAway === null) {
       return NextResponse.json({ error: "Score final inválido." }, { status: 400 });
     }
+
     const finalMinute =
       typeof body.final_minute === "number" && Number.isFinite(body.final_minute)
         ? Math.max(1, Math.floor(body.final_minute))
         : null;
 
-    const admin = createAdminClient();
-    const access = await assertGameAccess(admin, gameId, user.id);
-    if (!access.ok) return access.response;
-    if (access.gameStatus === "completed" && !access.isCoordinator) {
+    const { data: accessData, error: accessError } = await supabase.rpc(
+      "rpc_game_access_context",
+      {
+        p_game_id: gameId,
+      },
+    );
+
+    if (accessError) {
+      return NextResponse.json({ error: "Erro ao validar jogo." }, { status: 500 });
+    }
+
+    const access = parseGameAccessContext(accessData);
+    if (!access?.exists) {
+      return NextResponse.json({ error: "Jogo não encontrado." }, { status: 404 });
+    }
+    if (!access.canWrite) {
+      return NextResponse.json({ error: "Sem permissões." }, { status: 403 });
+    }
+    if (access.status === "completed" && !access.isCoordinator) {
       return NextResponse.json(
         { error: "Só o coordenador pode editar jogos terminados." },
         { status: 403 },
@@ -201,7 +157,7 @@ export async function POST(request: Request, { params }: RouteContext) {
       finalized_at: new Date().toISOString(),
     }));
 
-    const rpcResult = await admin.rpc("rpc_finalize_game", {
+    const rpcResult = await supabase.rpc("rpc_finalize_game_auth", {
       p_game_id: gameId,
       p_final_stats: rowsToInsert,
       p_score_home: scoreHome,
@@ -211,8 +167,21 @@ export async function POST(request: Request, { params }: RouteContext) {
     });
 
     if (rpcResult.error) {
+      if (rpcResult.error.message?.includes("game_not_found")) {
+        return NextResponse.json({ error: "Jogo não encontrado." }, { status: 404 });
+      }
+      if (rpcResult.error.message?.includes("completed_requires_coordinator")) {
+        return NextResponse.json(
+          { error: "Só o coordenador pode editar jogos terminados." },
+          { status: 403 },
+        );
+      }
+      if (rpcResult.error.code === "42501") {
+        return NextResponse.json({ error: "Sem permissões." }, { status: 403 });
+      }
+
       return respondInternalError(
-        "api.games.id.live.finalize.post.rpc-finalize-game",
+        "api.games.id.live.finalize.post.rpc-finalize-game-auth",
         rpcResult.error,
       );
     }
