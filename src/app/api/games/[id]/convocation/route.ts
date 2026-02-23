@@ -1,4 +1,3 @@
-import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { NextResponse } from "next/server";
@@ -72,9 +71,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
       return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
     }
 
-    const admin = createAdminClient();
-
-    const { data: game, error: gameError } = await admin
+    const { data: game, error: gameError } = await supabase
       .from("games")
       .select("*")
       .eq("id", gameId)
@@ -95,7 +92,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
     // Parallelizar: coordinator check e fallback team lookup são independentes
     const [coordinatorRes, fallbackTeamRes] = await Promise.all([
       game.age_group_id
-        ? admin
+        ? supabase
             .from("age_groups")
             .select("id")
             .eq("id", game.age_group_id)
@@ -103,7 +100,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
             .maybeSingle()
         : Promise.resolve({ data: null, error: null }),
       !teamId && game.age_group_id
-        ? admin
+        ? supabase
             .from("teams")
             .select("id")
             .eq("age_group_id", game.age_group_id)
@@ -118,7 +115,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
     if (!teamId) teamId = (fallbackTeamRes.data as { id: string } | null)?.id ?? null;
 
     if (!hasAccess && teamId) {
-      const { data: staffLink } = await admin
+      const { data: staffLink } = await supabase
         .from("team_staff")
         .select("id")
         .eq("team_id", teamId)
@@ -134,7 +131,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
       );
     }
 
-    const { data: convocations, error: convocationError } = await admin
+    const { data: convocations, error: convocationError } = await supabase
       .from("convocations")
       .select(
         "id, status, created_at, fp_jersey_kit_id, fp_shorts_kit_id, fp_socks_kit_id, gk_jersey_kit_id, gk_shorts_kit_id, gk_socks_kit_id",
@@ -156,7 +153,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
 
     const selectedIds = new Set<string>();
     if (convocationIds.length > 0) {
-      const { data: selectedRows, error: selectedError } = await admin
+      const { data: selectedRows, error: selectedError } = await supabase
         .from("convocation_players")
         .select("player_id")
         .in("convocation_id", convocationIds);
@@ -176,7 +173,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
     // Ensure all convocated players have a game_stats_live row (bench by default).
     // This keeps lineup/states consistent after refresh and across devices.
     if (selectedIds.size > 0) {
-      const { data: existingLiveRows, error: existingLiveRowsError } = await admin
+      const { data: existingLiveRows, error: existingLiveRowsError } = await supabase
         .from("game_stats_live")
         .select("player_id")
         .eq("game_id", gameId);
@@ -194,12 +191,12 @@ export async function GET(_request: Request, { params }: RouteContext) {
           }));
 
         if (missingLiveRows.length > 0) {
-          await admin.from("game_stats_live").insert(missingLiveRows);
+          await supabase.from("game_stats_live").insert(missingLiveRows);
         }
       }
     }
 
-    const playersQuery = admin
+    const playersQuery = supabase
       .from("players")
       .select("*")
       .eq("status", "active")
@@ -226,7 +223,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
       const gameDate = String(game.game_datetime).split("T")[0];
 
       if (gameDate) {
-        const { data: sameDayGames } = await admin
+        const { data: sameDayGames } = await supabase
           .from("games")
           .select("id")
           .neq("id", gameId)
@@ -237,7 +234,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
         const sameDayIds = (sameDayGames || []).map((g) => g.id);
 
         if (sameDayIds.length > 0) {
-          const { data: otherConvocations } = await admin
+          const { data: otherConvocations } = await supabase
             .from("convocations")
             .select("id")
             .in("game_id", sameDayIds);
@@ -245,7 +242,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
           const otherConvocationIds = (otherConvocations || []).map((c) => c.id);
 
           if (otherConvocationIds.length > 0) {
-            const { data: blockedRows } = await admin
+            const { data: blockedRows } = await supabase
               .from("convocation_players")
               .select("player_id")
               .in("convocation_id", otherConvocationIds);
@@ -270,7 +267,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
     let homeClubName: string | null = null;
     let homeClubShortName: string | null = null;
     if (game.age_group_id) {
-      const { data: ag } = await admin
+      const { data: ag } = await supabase
         .from("age_groups")
         .select("football_format, club_name, club_short_name")
         .eq("id", game.age_group_id)
@@ -283,7 +280,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
     }
 
     // Lineup statuses from game_stats_live
-    const { data: liveStats } = await admin
+    const { data: liveStats } = await supabase
       .from("game_stats_live")
       .select("player_id, status, start_minute")
       .eq("game_id", gameId);
@@ -306,7 +303,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
 
     let kits: Record<string, unknown>[] = [];
     if (teamId) {
-      const { data: kitRows, error: kitsError } = await admin
+      const { data: kitRows, error: kitsError } = await supabase
         .from("kit_pieces")
         .select("*")
         .eq("team_id", teamId)
@@ -334,7 +331,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
     } | null = null;
 
     const activityCutoffIso = new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString();
-    const { data: checkpointRow, error: checkpointError } = await admin
+    const { data: checkpointRow, error: checkpointError } = await supabase
       .from("game_live_checkpoints")
       .select("phase, base_seconds, running_since_ms, updated_at")
       .eq("game_id", gameId)

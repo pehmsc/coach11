@@ -1,18 +1,18 @@
-import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { NextResponse } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
 };
 
 async function assertGameAccess(
-  admin: ReturnType<typeof createAdminClient>,
+  db: SupabaseClient,
   gameId: string,
   userId: string,
 ) {
-  const { data: game, error: gameError } = await admin
+  const { data: game, error: gameError } = await db
     .from("games")
     .select("id, team_id, age_group_id")
     .eq("id", gameId)
@@ -38,7 +38,7 @@ async function assertGameAccess(
   const ageGroupId = (game as { age_group_id?: string }).age_group_id ?? null;
 
   if (ageGroupId) {
-    const { data: ageGroupOwner } = await admin
+    const { data: ageGroupOwner } = await db
       .from("age_groups")
       .select("id")
       .eq("id", ageGroupId)
@@ -49,7 +49,7 @@ async function assertGameAccess(
   }
 
   if (!teamId && ageGroupId) {
-    const { data: fallbackTeam } = await admin
+    const { data: fallbackTeam } = await db
       .from("teams")
       .select("id")
       .eq("age_group_id", ageGroupId)
@@ -60,7 +60,7 @@ async function assertGameAccess(
   }
 
   if (!hasAccess && teamId) {
-    const { data: staffLink } = await admin
+    const { data: staffLink } = await db
       .from("team_staff")
       .select("id")
       .eq("team_id", teamId)
@@ -95,11 +95,10 @@ export async function GET(_request: Request, { params }: RouteContext) {
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
 
-    const admin = createAdminClient();
-    const access = await assertGameAccess(admin, gameId, user.id);
+    const access = await assertGameAccess(supabase, gameId, user.id);
     if (!access.ok) return access.response;
 
-    const { data: game, error: gameError } = await admin
+    const { data: game, error: gameError } = await supabase
       .from("games")
       .select(
         "id, team_id, age_group_id, status, title, opponent_name, opponent_short_name, game_datetime, location, is_home, score_home, score_away, notes",
@@ -116,13 +115,13 @@ export async function GET(_request: Request, { params }: RouteContext) {
 
     const [{ data: events, error: eventsError }, { data: finalStats, error: finalStatsError }] =
       await Promise.all([
-        admin
+        supabase
           .from("game_events")
           .select("id, game_id, event_type, player_id, related_player_id, minute, is_opponent_event, created_at")
           .eq("game_id", gameId)
           .order("minute", { ascending: true })
           .order("created_at", { ascending: true }),
-        admin
+        supabase
           .from("game_final_stats")
           .select(
             "id, game_id, player_id, lineup_type, minutes_played, goals, own_goals, assists, yellow_cards, red_cards, coach_rating, notes, is_mvp, is_finalized, finalized_at, created_at",
@@ -137,7 +136,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
     let homeClubShortName: string | null = null;
     let ageGroupId: string | null = game.age_group_id ?? null;
     if (!ageGroupId && game.team_id) {
-      const { data: team } = await admin
+      const { data: team } = await supabase
         .from("teams")
         .select("age_group_id")
         .eq("id", game.team_id)
@@ -145,7 +144,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
       ageGroupId = team?.age_group_id ?? null;
     }
     if (ageGroupId) {
-      const { data: ageGroup } = await admin
+      const { data: ageGroup } = await supabase
         .from("age_groups")
         .select("club_name, club_short_name")
         .eq("id", ageGroupId)
@@ -176,7 +175,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
     > = {};
 
     if (playerIds.size > 0) {
-      const { data: playerRows, error: playersError } = await admin
+      const { data: playerRows, error: playersError } = await supabase
         .from("players")
         .select("id, first_name, last_name, jersey_number, preferred_position")
         .in("id", Array.from(playerIds));
@@ -196,7 +195,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
       });
     }
 
-    const { data: checkpoint } = await admin
+    const { data: checkpoint } = await supabase
       .from("game_live_checkpoints")
       .select("phase, base_seconds")
       .eq("game_id", gameId)

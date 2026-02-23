@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { NextResponse } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -42,11 +43,11 @@ function isMissingCheckpointTableError(errorMessage: string | null | undefined) 
 }
 
 async function assertGameAccess(
-  admin: ReturnType<typeof createAdminClient>,
+  db: SupabaseClient,
   gameId: string,
   userId: string,
 ) {
-  const { data: game, error: gameError } = await admin
+  const { data: game, error: gameError } = await db
     .from("games")
     .select("id, team_id, age_group_id, status")
     .eq("id", gameId)
@@ -73,7 +74,7 @@ async function assertGameAccess(
   const gameStatus = (game as unknown as { status?: string }).status ?? null;
 
   if (ageGroupId) {
-    const { data: ageGroupOwner } = await admin
+    const { data: ageGroupOwner } = await db
       .from("age_groups")
       .select("id")
       .eq("id", ageGroupId)
@@ -84,7 +85,7 @@ async function assertGameAccess(
   }
 
   if (!teamId && ageGroupId) {
-    const { data: fallbackTeam } = await admin
+    const { data: fallbackTeam } = await db
       .from("teams")
       .select("id")
       .eq("age_group_id", ageGroupId)
@@ -95,7 +96,7 @@ async function assertGameAccess(
   }
 
   if (!hasAccess && teamId) {
-    const { data: staffLink } = await admin
+    const { data: staffLink } = await db
       .from("team_staff")
       .select("id")
       .eq("team_id", teamId)
@@ -131,8 +132,7 @@ export async function GET(_: Request, { params }: RouteContext) {
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
 
-    const admin = createAdminClient();
-    const access = await assertGameAccess(admin, gameId, user.id);
+    const access = await assertGameAccess(supabase, gameId, user.id);
     if (!access.ok) return access.response;
     if (access.gameStatus === "completed" && !access.isCoordinator) {
       return NextResponse.json(
@@ -141,7 +141,7 @@ export async function GET(_: Request, { params }: RouteContext) {
       );
     }
 
-    const { data, error } = await admin
+    const { data, error } = await supabase
       .from("game_live_checkpoints")
       .select("phase, base_seconds, running_since_ms, updated_at")
       .eq("game_id", gameId)
