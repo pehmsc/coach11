@@ -15,6 +15,7 @@ import {
   Dumbbell,
   Briefcase,
   Play,
+  Settings,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,30 @@ function relativeDay(dateStr: string) {
   if (isToday(d)) return "Hoje";
   if (isTomorrow(d)) return "Amanhã";
   return format(d, "EEEE, d 'de' MMM", { locale: pt });
+}
+
+function normalizeTimePart(value: string | null | undefined) {
+  if (!value) return "00:00";
+  const [rawHours = "00", rawMinutes = "00"] = value.split(":");
+  const hours = rawHours.padStart(2, "0").slice(0, 2);
+  const minutes = rawMinutes.padStart(2, "0").slice(0, 2);
+  return `${hours}:${minutes}`;
+}
+
+function toTimestampFromDateAndTime(
+  dateValue: string | null | undefined,
+  timeValue: string | null | undefined,
+) {
+  if (!dateValue) return Number.MAX_SAFE_INTEGER;
+  const hhmm = normalizeTimePart(timeValue);
+  const parsed = Date.parse(`${dateValue}T${hhmm}:00`);
+  return Number.isNaN(parsed) ? Number.MAX_SAFE_INTEGER : parsed;
+}
+
+function toTimestampFromDateTime(dateTimeValue: string | null | undefined) {
+  if (!dateTimeValue) return Number.MAX_SAFE_INTEGER;
+  const parsed = Date.parse(dateTimeValue);
+  return Number.isNaN(parsed) ? Number.MAX_SAFE_INTEGER : parsed;
 }
 
 export default async function DashboardPage() {
@@ -265,31 +290,32 @@ export default async function DashboardPage() {
       .filter((training) => training.id !== todayTraining?.id)
       .map((training) => ({
         type: "training" as const,
-        sortDateTime: `${training.session_date}T${training.start_time || "00:00"}:00`,
+        sortTs: toTimestampFromDateAndTime(
+          training.session_date,
+          training.start_time,
+        ),
         training,
       })),
     ...upcomingGames.map((game) => ({
       type: "game" as const,
-      sortDateTime: game.game_datetime,
+      sortTs: toTimestampFromDateTime(game.game_datetime),
       game,
     })),
   ]
-    .sort(
-      (a, b) =>
-        new Date(a.sortDateTime).getTime() - new Date(b.sortDateTime).getTime(),
-    )
+    .sort((a, b) => a.sortTs - b.sortTs)
     .slice(0, 8);
 
   const today = format(new Date(), "EEEE, d 'de' MMMM", { locale: pt });
   const firstName = profile?.full_name?.split(" ")[0] || "Treinador";
 
-  const navCards = [
+  const mobileShortcutCards = [
     { href: "/games", icon: Sword, label: "Jogos", color: "text-indigo-600" },
     { href: "/trainings", icon: Dumbbell, label: "Treinos", color: "text-emerald-600" },
     { href: "/competitions", icon: Trophy, label: "Competições", color: "text-amber-600" },
     { href: "/players", icon: Users, label: "Plantel", color: "text-blue-600" },
     { href: "/team", icon: Shield, label: "Equipa", color: "text-teal-600" },
     { href: "/staff", icon: Briefcase, label: "Equipa Técnica", color: "text-rose-600" },
+    { href: "/settings", icon: Settings, label: "Configurações", color: "text-slate-600" },
   ];
 
   const hasPending =
@@ -493,23 +519,25 @@ export default async function DashboardPage() {
           </div>
         )}
 
-        {/* Atalhos de gestão */}
-        <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">
-          Gestão da equipa
-        </h2>
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-6 items-stretch">
-          {navCards.map(({ href, icon: Icon, label, color }) => (
-            <Link key={href} href={href}>
-              <Card className="hover:shadow-md transition-all cursor-pointer border-2 hover:border-emerald-200 h-full">
-                <CardContent className="pt-5 pb-4 flex flex-col items-center justify-center text-center min-h-[90px]">
-                  <Icon className={`mb-2 ${color}`} size={26} />
-                  <p className="font-semibold text-sm text-slate-700 leading-tight">
-                    {label}
-                  </p>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
+        {/* Atalhos mobile (apenas itens fora da bottom nav principal) */}
+        <div className="md:hidden mt-6">
+          <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">
+            Atalhos rápidos
+          </h2>
+          <div className="grid grid-cols-2 gap-3 items-stretch">
+            {mobileShortcutCards.map(({ href, icon: Icon, label, color }) => (
+              <Link key={href} href={href}>
+                <Card className="hover:shadow-md transition-all cursor-pointer border-2 hover:border-emerald-200 h-full">
+                  <CardContent className="pt-5 pb-4 flex flex-col items-center justify-center text-center min-h-[90px]">
+                    <Icon className={`mb-2 ${color}`} size={26} />
+                    <p className="font-semibold text-sm text-slate-700 leading-tight">
+                      {label}
+                    </p>
+                  </CardContent>
+                </Card>
+              </Link>
+            ))}
+          </div>
         </div>
       </div>
     </>

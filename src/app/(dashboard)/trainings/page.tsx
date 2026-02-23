@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { format, parseISO, isToday, isFuture } from "date-fns";
 import { pt } from "date-fns/locale";
-import { Loader2, Dumbbell, X, Users, Clock, MapPin, Plus } from "lucide-react";
+import { Loader2, Dumbbell, X, Users, Clock, MapPin, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { Player } from "@/types/database";
 
@@ -64,6 +64,10 @@ export default function TrainingsPage() {
   const [newTrainingStartTime, setNewTrainingStartTime] = useState("18:30");
   const [newTrainingEndTime, setNewTrainingEndTime] = useState("20:00");
   const [newTrainingLocation, setNewTrainingLocation] = useState("");
+  const [canDeleteTrainings, setCanDeleteTrainings] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deletingTraining, setDeletingTraining] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
 
   useEffect(() => {
     void loadData();
@@ -75,6 +79,7 @@ export default function TrainingsPage() {
 
     const res = await fetch("/api/me/context", { cache: "no-store" });
     const ctx = await res.json().catch(() => ({}));
+    setCanDeleteTrainings(ctx?.canManageStaff === true);
     if (!res.ok || !ctx?.ageGroup?.id) {
       setLoading(false);
       return;
@@ -135,6 +140,8 @@ export default function TrainingsPage() {
 
   async function handleSessionClick(session: TrainingRow) {
     setLoadingDetail(true);
+    setDetailError(null);
+    setShowDeleteConfirm(false);
 
     // Load attendance for this specific session
     const { data: attRows } = await supabase
@@ -165,6 +172,48 @@ export default function TrainingsPage() {
 
     setSelectedSession({ session, attendance: playerMap, summary });
     setLoadingDetail(false);
+  }
+
+  async function handleDeleteSelectedSession() {
+    if (!selectedSession) return;
+    if (!canDeleteTrainings) {
+      setDetailError("Só o coordenador pode apagar treinos.");
+      return;
+    }
+
+    setDeletingTraining(true);
+    setDetailError(null);
+    const sessionId = selectedSession.session.id;
+
+    try {
+      const res = await fetch("/api/calendar/events", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: sessionId,
+          type: "training",
+          ageGroupId,
+        }),
+      });
+      const payload = (await res.json().catch(() => null)) as
+        | { success?: boolean; error?: string }
+        | null;
+
+      if (!res.ok || !payload?.success) {
+        setDetailError(payload?.error || "Erro ao apagar treino.");
+        return;
+      }
+
+      setSessions((prev) => prev.filter((item) => item.id !== sessionId));
+      setAttendance((prev) => prev.filter((item) => item.session_id !== sessionId));
+      setSelectedSession(null);
+      setShowDeleteConfirm(false);
+      await loadData();
+    } catch {
+      setDetailError("Erro de ligação ao apagar treino.");
+    } finally {
+      setDeletingTraining(false);
+    }
   }
 
   function resetCreateForm() {
@@ -448,7 +497,12 @@ export default function TrainingsPage() {
       {selectedSession && (
         <div
           className="fixed inset-0 bg-black/50 z-50 flex items-end md:items-center justify-center p-4"
-          onClick={() => setSelectedSession(null)}
+          onClick={() => {
+            if (deletingTraining) return;
+            setSelectedSession(null);
+            setShowDeleteConfirm(false);
+            setDetailError(null);
+          }}
         >
           <div
             className="bg-white rounded-2xl w-full max-w-md shadow-xl max-h-[calc(100dvh-1rem)] md:max-h-[85vh] overflow-hidden flex flex-col"
@@ -469,10 +523,35 @@ export default function TrainingsPage() {
                   </p>
                 )}
               </div>
-              <button onClick={() => setSelectedSession(null)}>
-                <X size={20} className="text-slate-400" />
-              </button>
+              <div className="flex items-center gap-1.5">
+                {canDeleteTrainings && (
+                  <button
+                    onClick={() => setShowDeleteConfirm(true)}
+                    className="p-1.5 rounded-full bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
+                    title="Apagar treino"
+                    disabled={deletingTraining}
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    setSelectedSession(null);
+                    setShowDeleteConfirm(false);
+                    setDetailError(null);
+                  }}
+                  disabled={deletingTraining}
+                >
+                  <X size={20} className="text-slate-400" />
+                </button>
+              </div>
             </div>
+
+            {detailError && (
+              <div className="mx-5 mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {detailError}
+              </div>
+            )}
 
             {/* Summary row */}
             <div className="flex divide-x border-b">
@@ -516,6 +595,52 @@ export default function TrainingsPage() {
                   ))}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {selectedSession && showDeleteConfirm && (
+        <div
+          className="fixed inset-0 bg-black/55 z-[60] flex items-end md:items-center justify-center p-4"
+          onClick={() => {
+            if (deletingTraining) return;
+            setShowDeleteConfirm(false);
+          }}
+        >
+          <div
+            className="bg-white rounded-2xl w-full max-w-sm shadow-xl p-5 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div>
+              <h3 className="text-base font-bold text-slate-900">Apagar treino?</h3>
+              <p className="text-sm text-slate-600 mt-1">
+                Esta ação remove presenças e registos estatísticos associados.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="flex-1"
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={deletingTraining}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                className="flex-1 bg-red-600 hover:bg-red-700"
+                onClick={() => void handleDeleteSelectedSession()}
+                disabled={deletingTraining}
+              >
+                {deletingTraining ? (
+                  <Loader2 size={15} className="mr-2 animate-spin" />
+                ) : (
+                  <Trash2 size={15} className="mr-2" />
+                )}
+                Apagar treino
+              </Button>
+            </div>
           </div>
         </div>
       )}

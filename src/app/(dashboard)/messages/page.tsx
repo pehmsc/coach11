@@ -341,7 +341,7 @@ export default function MessagesPage() {
         )}
       </div>
 
-      <div className="border-t bg-white px-3 md:px-6 pt-2 pb-[calc(env(safe-area-inset-bottom)+4.5rem)] md:pb-3">
+      <div className="border-t bg-white px-3 md:px-6 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:pb-3 sticky bottom-0 z-10">
         <div className="relative">
           {mentionToken && mentionSuggestions.length > 0 ? (
             <div className="absolute bottom-full mb-2 w-full bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden z-20">
@@ -363,7 +363,10 @@ export default function MessagesPage() {
             </div>
           ) : null}
 
-          <form onSubmit={handleSendMessage} className="flex items-end gap-2">
+          <form
+            onSubmit={handleSendMessage}
+            className="flex flex-col gap-2 md:flex-row md:items-end"
+          >
             <div className="relative flex-1">
               <AtSign
                 size={14}
@@ -394,7 +397,7 @@ export default function MessagesPage() {
             </div>
             <Button
               type="submit"
-              className="bg-emerald-600 hover:bg-emerald-700 h-11"
+              className="bg-emerald-600 hover:bg-emerald-700 h-10 w-full md:w-auto md:h-11"
               disabled={sending || !draft.trim()}
             >
               {sending ? (

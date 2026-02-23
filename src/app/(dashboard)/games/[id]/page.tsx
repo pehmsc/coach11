@@ -15,6 +15,7 @@ import {
   Play,
   Loader2,
   Pencil,
+  Trash2,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -142,6 +143,8 @@ export default function GameDetailPage() {
     null,
   );
   const [error, setError] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deletingGame, setDeletingGame] = useState(false);
 
   // Game edit state
   const [editingGame, setEditingGame] = useState(false);
@@ -564,6 +567,39 @@ export default function GameDetailPage() {
     setEditingGame(true);
   }
 
+  async function handleDeleteGame() {
+    if (!game || !canEditCompleted) return;
+    setDeletingGame(true);
+    setError(null);
+
+    try {
+      const res = await fetch("/api/calendar/events", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: game.id,
+          type: "game",
+          ageGroupId: game.age_group_id ?? null,
+        }),
+      });
+      const payload = await res.json().catch(() => ({}));
+
+      if (!res.ok || !payload?.success) {
+        setError(payload?.error || "Erro ao apagar jogo.");
+        return;
+      }
+
+      toast.success("Jogo apagado com sucesso.");
+      router.replace("/games");
+      router.refresh();
+    } catch {
+      setError("Erro de ligação ao apagar jogo.");
+    } finally {
+      setDeletingGame(false);
+      setShowDeleteConfirm(false);
+    }
+  }
+
   // Auto-assign lineup when player is convocated: fills starters up to format number
   async function autoAssignLineup(playerId: string, isConvocated: boolean) {
     if (!isConvocated) {
@@ -686,15 +722,26 @@ export default function GameDetailPage() {
 
       {/* Game header */}
       <div className="rounded-2xl bg-blue-600 text-white p-5 mb-5 relative">
-        {(game.status !== "completed" || canEditCompleted) && (
-          <button
-            onClick={openEditGame}
-            className="absolute top-3 right-3 p-1.5 rounded-full bg-white/20 hover:bg-white/30 transition-colors"
-            title="Editar jogo"
-          >
-            <Pencil size={14} />
-          </button>
-        )}
+        <div className="absolute top-3 right-3 flex items-center gap-1.5">
+          {(game.status !== "completed" || canEditCompleted) && (
+            <button
+              onClick={openEditGame}
+              className="p-1.5 rounded-full bg-white/20 hover:bg-white/30 transition-colors"
+              title="Editar jogo"
+            >
+              <Pencil size={14} />
+            </button>
+          )}
+          {canEditCompleted && (
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              className="p-1.5 rounded-full bg-red-500/80 hover:bg-red-500 transition-colors"
+              title="Apagar jogo"
+            >
+              <Trash2 size={14} />
+            </button>
+          )}
+        </div>
         <div className="flex items-center gap-2 mb-1">
           <span className="text-xs font-medium bg-white/20 px-2 py-0.5 rounded-full">
             {game.is_home ? "Casa" : "Fora"}
@@ -829,6 +876,53 @@ export default function GameDetailPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showDeleteConfirm && (
+        <div
+          className="fixed inset-0 bg-black/50 z-50 flex items-end md:items-center justify-center p-4"
+          onClick={() => {
+            if (deletingGame) return;
+            setShowDeleteConfirm(false);
+          }}
+        >
+          <div
+            className="bg-white rounded-2xl w-full max-w-md shadow-xl p-5 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div>
+              <h3 className="text-base font-bold text-slate-900">Apagar jogo?</h3>
+              <p className="text-sm text-slate-600 mt-1">
+                Esta ação é irreversível e remove convocatória, eventos, estatísticas
+                live/finais e restantes dados associados.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="flex-1"
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={deletingGame}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                className="flex-1 bg-red-600 hover:bg-red-700"
+                onClick={() => void handleDeleteGame()}
+                disabled={deletingGame}
+              >
+                {deletingGame ? (
+                  <Loader2 size={15} className="mr-2 animate-spin" />
+                ) : (
+                  <Trash2 size={15} className="mr-2" />
+                )}
+                Apagar jogo
+              </Button>
+            </div>
           </div>
         </div>
       )}
