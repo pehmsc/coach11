@@ -148,7 +148,7 @@ async function resolveStaffContext(admin: ReturnType<typeof createAdminClient>, 
   if (managedAgeGroup) {
     context.ageGroup = managedAgeGroup;
 
-    const { data: team } = await admin
+    const teamResult = await admin
       .from("teams")
       .select("id")
       .eq("age_group_id", managedAgeGroup.id)
@@ -156,7 +156,8 @@ async function resolveStaffContext(admin: ReturnType<typeof createAdminClient>, 
       .limit(1)
       .maybeSingle();
 
-    context.teamId = team?.id ?? null;
+    const team = (teamResult.data ?? null) as { id: string } | null;
+    context.teamId = typeof team?.id === "string" ? team.id : null;
     return context;
   }
 
