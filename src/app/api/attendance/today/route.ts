@@ -161,7 +161,7 @@ async function resolveStaffContext(admin: ReturnType<typeof createAdminClient>, 
     return context;
   }
 
-  const { data: staffLink } = await admin
+  const staffLinkResult = await admin
     .from("team_staff")
     .select("team_id")
     .eq("profile_id", userId)
@@ -169,16 +169,18 @@ async function resolveStaffContext(admin: ReturnType<typeof createAdminClient>, 
     .limit(1)
     .maybeSingle();
 
+  const staffLink = (staffLinkResult.data ?? null) as { team_id: string | null } | null;
   if (!staffLink?.team_id) return context;
 
   context.teamId = staffLink.team_id;
 
-  const { data: team } = await admin
+  const teamResult = await admin
     .from("teams")
     .select("age_group_id")
     .eq("id", staffLink.team_id)
     .maybeSingle();
 
+  const team = (teamResult.data ?? null) as { age_group_id: string | null } | null;
   if (!team?.age_group_id) return context;
 
   const ageGroup = await getAgeGroupById(admin, team.age_group_id);
