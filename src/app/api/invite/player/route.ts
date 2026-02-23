@@ -3,93 +3,127 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveUserTeamContext } from "@/lib/auth/team-context";
 import { Resend } from "resend";
 import { NextResponse } from "next/server";
+import { z } from "zod";
+import { checkPlayerInviteLimit } from "@/lib/rate-limit";
+// Note: checkPlayerInviteLimit is in-memory. For distributed rate limiting upgrade to Vercel KV.
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const PlayerInviteSchema = z.object({
+  playerId: z.string().uuid(),
+});
+
+function generateCode(length = 8): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const arr = new Uint8Array(length);
+  crypto.getRandomValues(arr);
+  return Array.from(arr).map((b) => chars[b % chars.length]).join("");
+}
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
+  try {
+    const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
-  }
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+    }
 
-  const { playerId } = await request.json();
+    // 🚦 Rate limiting: máx 5 convites por utilizador em 15 minutos
+    const rateLimitExceeded = checkPlayerInviteLimit(user.id);
+    if (rateLimitExceeded) {
+      return NextResponse.json(
+        { error: "Demasiados pedidos. Tenta mais tarde." },
+        { status: 429 },
+      );
+    }
 
-  if (!playerId) {
-    return NextResponse.json(
-      { error: "playerId obrigatório" },
-      { status: 400 },
-    );
-  }
+    // 📩 Validar body
+    const body = await request.json().catch(() => null);
+    const parsed = PlayerInviteSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Dados inválidos.", details: parsed.error.flatten().fieldErrors },
+        { status: 400 },
+      );
+    }
+    const { playerId } = parsed.data;
 
-  const admin = createAdminClient();
-  const context = await resolveUserTeamContext(admin, user.id);
+    const admin = createAdminClient();
+    const context = await resolveUserTeamContext(admin, user.id);
 
-  // Buscar dados do jogador
-  const { data: player } = await admin
-    .from("players")
-    .select("*")
-    .eq("id", playerId)
-    .single();
+    // Buscar dados do jogador
+    const { data: player } = await admin
+      .from("players")
+      .select("id, first_name, last_name, email, age_group_id")
+      .eq("id", playerId)
+      .maybeSingle();
 
-  if (!player) {
-    return NextResponse.json(
-      { error: "Atleta não encontrado" },
-      { status: 404 },
-    );
-  }
+    if (!player) {
+      return NextResponse.json(
+        { error: "Atleta não encontrado" },
+        { status: 404 },
+      );
+    }
 
-  if (!context.accessibleAgeGroupIds.includes(player.age_group_id)) {
-    return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
-  }
+    if (!context.accessibleAgeGroupIds.includes(player.age_group_id)) {
+      return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
+    }
 
-  const { data: ageGroup } = await admin
-    .from("age_groups")
-    .select("id, name, club_name")
-    .eq("id", player.age_group_id)
-    .maybeSingle();
+    const { data: ageGroup } = await admin
+      .from("age_groups")
+      .select("id, name, club_name")
+      .eq("id", player.age_group_id)
+      .maybeSingle();
 
-  if (!player.email) {
-    return NextResponse.json({ error: "Atleta sem email" }, { status: 400 });
-  }
+    if (!player.email) {
+      return NextResponse.json({ error: "Atleta sem email" }, { status: 400 });
+    }
 
-  // Gerar código de convite
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  const inviteCode = Array.from(
-    { length: 8 },
-    () => chars[Math.floor(Math.random() * chars.length)],
-  ).join("");
+    // Gerar código de convite com Web Crypto API
+    const inviteCode = generateCode();
 
-  // Guardar código na DB
-  await admin
-    .from("players")
-    .update({
-      invite_code: inviteCode,
-      invite_method: "email",
-      invite_sent_at: new Date().toISOString(),
-    })
-    .eq("id", playerId);
+    // Guardar código na DB
+    await admin
+      .from("players")
+      .update({
+        invite_code: inviteCode,
+        invite_method: "email",
+        invite_sent_at: new Date().toISOString(),
+      })
+      .eq("id", playerId);
 
-  // Buscar nome do coordinator
-  const { data: profile } = await admin
-    .from("profiles")
-    .select("full_name")
-    .eq("id", user.id)
-    .single();
+    // Buscar nome do coordinator
+    const { data: profile } = await admin
+      .from("profiles")
+      .select("full_name")
+      .eq("id", user.id)
+      .maybeSingle();
 
-  const coordinatorName = profile?.full_name || "O teu treinador";
-  const appUrl =
-    process.env.NEXT_PUBLIC_APP_URL || "https://coach11.vercel.app";
-  const registerUrl = `${appUrl}/register?code=${inviteCode}&email=${encodeURIComponent(player.email)}&type=player`;
+    const coordinatorName = profile?.full_name || "O teu treinador";
+    const appUrl =
+      process.env.NEXT_PUBLIC_APP_URL || "https://coach11.vercel.app";
+    const registerUrl = `${appUrl}/register?code=${inviteCode}&email=${encodeURIComponent(player.email)}&type=player`;
 
-  const { error: emailError } = await resend.emails.send({
-    from: "Coach11 <noreply@coach11.app>",
-    to: [player.email],
-    subject: `${coordinatorName} convidou-te para o Coach11`,
-    html: `
+    if (!process.env.RESEND_API_KEY) {
+      console.error("RESEND_API_KEY não definida.");
+      return NextResponse.json({
+        success: true,
+        inviteCode,
+        emailSent: false,
+        warning: "Código gerado mas email não enviado (API key em falta).",
+      });
+    }
+
+    const resend = new Resend(process.env.RESEND_API_KEY);
+    const fromEmail =
+      process.env.RESEND_FROM_EMAIL || "Coach11 <noreply@coach11.app>";
+
+    const { error: emailError } = await resend.emails.send({
+      from: fromEmail,
+      to: [player.email],
+      subject: `${coordinatorName} convidou-te para o Coach11`,
+      html: `
       <!DOCTYPE html>
       <html>
       <head>
@@ -150,17 +184,24 @@ export async function POST(request: Request) {
       </body>
       </html>
     `,
-  });
-
-  if (emailError) {
-    console.error("Erro ao enviar email atleta:", emailError);
-    return NextResponse.json({
-      success: true,
-      inviteCode,
-      emailSent: false,
-      warning: "Código gerado mas email não enviado.",
     });
-  }
 
-  return NextResponse.json({ success: true, inviteCode, emailSent: true });
+    if (emailError) {
+      console.error("Erro ao enviar email atleta:", emailError);
+      return NextResponse.json({
+        success: true,
+        inviteCode,
+        emailSent: false,
+        warning: "Código gerado mas email não enviado.",
+      });
+    }
+
+    return NextResponse.json({ success: true, inviteCode, emailSent: true });
+  } catch (err) {
+    console.error("Erro em invite/player POST:", err);
+    return NextResponse.json(
+      { error: "Erro interno do servidor" },
+      { status: 500 },
+    );
+  }
 }

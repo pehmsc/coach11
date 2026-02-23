@@ -121,7 +121,8 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       .single();
 
     if (updateError) {
-      return NextResponse.json({ error: updateError.message }, { status: 500 });
+      console.error("Erro ao atualizar jogo:", updateError.message);
+      return NextResponse.json({ error: "Erro ao atualizar jogo." }, { status: 500 });
     }
 
     return NextResponse.json({ success: true, game: updated });

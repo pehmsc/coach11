@@ -80,36 +80,36 @@ export async function deleteTrainingSessionCascade(
   admin: SupabaseClient,
   trainingSessionId: string,
 ) {
-  await deleteRows(admin, "attendance_records", {
-    type: "eq",
-    column: "training_session_id",
-    value: trainingSessionId,
-  }, { optional: true });
+  // Todas as tabelas de presença são opcionais (schema pode variar) — paralelizar
+  await Promise.all([
+    deleteRows(admin, "attendance_records", {
+      type: "eq",
+      column: "training_session_id",
+      value: trainingSessionId,
+    }, { optional: true }),
+    deleteRows(admin, "attendance_records", {
+      type: "eq",
+      column: "session_id",
+      value: trainingSessionId,
+    }, { optional: true }),
+    deleteRows(admin, "training_attendance", {
+      type: "eq",
+      column: "training_session_id",
+      value: trainingSessionId,
+    }, { optional: true }),
+    deleteRows(admin, "training_attendance", {
+      type: "eq",
+      column: "session_id",
+      value: trainingSessionId,
+    }, { optional: true }),
+    deleteRows(admin, "pse_records", {
+      type: "eq",
+      column: "training_session_id",
+      value: trainingSessionId,
+    }, { optional: true }),
+  ]);
 
-  await deleteRows(admin, "attendance_records", {
-    type: "eq",
-    column: "session_id",
-    value: trainingSessionId,
-  }, { optional: true });
-
-  await deleteRows(admin, "training_attendance", {
-    type: "eq",
-    column: "training_session_id",
-    value: trainingSessionId,
-  }, { optional: true });
-
-  await deleteRows(admin, "training_attendance", {
-    type: "eq",
-    column: "session_id",
-    value: trainingSessionId,
-  }, { optional: true });
-
-  await deleteRows(admin, "pse_records", {
-    type: "eq",
-    column: "training_session_id",
-    value: trainingSessionId,
-  }, { optional: true });
-
+  // Apagar sessão por último (garantir que os filhos já foram apagados)
   await deleteRows(admin, "training_sessions", {
     type: "eq",
     column: "id",
@@ -118,60 +118,61 @@ export async function deleteTrainingSessionCascade(
 }
 
 export async function deleteGameCascade(admin: SupabaseClient, gameId: string) {
+  // 1. Listar convocatórias antes de apagar (precisamos dos IDs)
   const convocationIds = await listConvocationsByGame(admin, gameId);
 
-  await deleteRows(admin, "convocation_players", {
-    type: "in",
-    column: "convocation_id",
-    values: convocationIds,
-  }, { optional: true });
+  // 2. Apagar convocation_players (dependentes das convocatórias)
+  await Promise.all([
+    deleteRows(admin, "convocation_players", {
+      type: "in",
+      column: "convocation_id",
+      values: convocationIds,
+    }, { optional: true }),
+    deleteRows(admin, "convocation_players", {
+      type: "eq",
+      column: "game_id",
+      value: gameId,
+    }, { optional: true }),
+  ]);
 
-  await deleteRows(admin, "convocation_players", {
-    type: "eq",
-    column: "game_id",
-    value: gameId,
-  }, { optional: true });
+  // 3. Apagar convocações e todos os dados independentes do jogo em paralelo
+  await Promise.all([
+    deleteRows(admin, "convocations", {
+      type: "eq",
+      column: "game_id",
+      value: gameId,
+    }, { optional: true }),
+    deleteRows(admin, "game_events", {
+      type: "eq",
+      column: "game_id",
+      value: gameId,
+    }, { optional: true }),
+    deleteRows(admin, "game_stats_live", {
+      type: "eq",
+      column: "game_id",
+      value: gameId,
+    }, { optional: true }),
+    deleteRows(admin, "game_final_stats", {
+      type: "eq",
+      column: "game_id",
+      value: gameId,
+    }, { optional: true }),
+    deleteRows(admin, "game_live_checkpoints", {
+      type: "eq",
+      column: "game_id",
+      value: gameId,
+    }, { optional: true }),
+    deleteRows(admin, "pse_records", {
+      type: "eq",
+      column: "game_id",
+      value: gameId,
+    }, { optional: true }),
+  ]);
 
-  await deleteRows(admin, "convocations", {
-    type: "eq",
-    column: "game_id",
-    value: gameId,
-  }, { optional: true });
-
-  await deleteRows(admin, "game_events", {
-    type: "eq",
-    column: "game_id",
-    value: gameId,
-  }, { optional: true });
-
-  await deleteRows(admin, "game_stats_live", {
-    type: "eq",
-    column: "game_id",
-    value: gameId,
-  }, { optional: true });
-
-  await deleteRows(admin, "game_final_stats", {
-    type: "eq",
-    column: "game_id",
-    value: gameId,
-  }, { optional: true });
-
-  await deleteRows(admin, "game_live_checkpoints", {
-    type: "eq",
-    column: "game_id",
-    value: gameId,
-  }, { optional: true });
-
-  await deleteRows(admin, "pse_records", {
-    type: "eq",
-    column: "game_id",
-    value: gameId,
-  }, { optional: true });
-
+  // 4. Apagar o jogo por último (garantir integridade referencial)
   await deleteRows(admin, "games", {
     type: "eq",
     column: "id",
     value: gameId,
   });
 }
-

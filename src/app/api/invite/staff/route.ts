@@ -1,16 +1,25 @@
 import { createClient } from "@/lib/supabase/server";
 import { Resend } from "resend";
 import { NextResponse } from "next/server";
+import { z } from "zod";
+import { checkInviteSendLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
 function generateCode(length = 8): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  return Array.from(
-    { length },
-    () => chars[Math.floor(Math.random() * chars.length)],
-  ).join("");
+  const arr = new Uint8Array(length);
+  crypto.getRandomValues(arr);
+  return Array.from(arr).map((b) => chars[b % chars.length]).join("");
 }
+
+const StaffInviteSchema = z.object({
+  firstName: z.string().min(1).max(100),
+  lastName: z.string().min(1).max(100),
+  email: z.string().email().max(254),
+  phone: z.string().max(20).nullable().optional(),
+  role: z.enum(["coach", "assistant_coach", "coordinator"]),
+});
 
 const roleLabel: Record<string, string> = {
   coach: "Treinador Principal",
@@ -31,6 +40,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
     }
 
+    // 🚦 Rate limiting: máx 5 convites por utilizador em 15 minutos
+    const rateLimitExceeded = await checkInviteSendLimit(supabase, user.id);
+    if (rateLimitExceeded) {
+      return NextResponse.json(
+        { error: "Demasiados pedidos. Tenta mais tarde." },
+        { status: 429 },
+      );
+    }
+
     // 🏟 Buscar escalão do coordinator
     const { data: ageGroup, error: ageGroupError } = await supabase
       .from("age_groups")
@@ -45,12 +63,16 @@ export async function POST(request: Request) {
       );
     }
 
-    // 📩 Dados do convite
-    const { firstName, lastName, email, phone, role } = await request.json();
-
-    if (!firstName || !lastName || !email || !role) {
-      return NextResponse.json({ error: "Dados incompletos" }, { status: 400 });
+    // 📩 Validar dados do convite
+    const body = await request.json().catch(() => null);
+    const parsed = StaffInviteSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Dados inválidos.", details: parsed.error.flatten().fieldErrors },
+        { status: 400 },
+      );
     }
+    const { firstName, lastName, email, phone, role } = parsed.data;
 
     // 🔑 Gerar código único
     let inviteCode = generateCode();
@@ -182,7 +204,7 @@ export async function POST(request: Request) {
       emailSent: true,
     });
   } catch (err) {
-    console.error("Erro geral:", err);
+    console.error("Erro em invite/staff POST:", err);
     return NextResponse.json(
       { error: "Erro interno do servidor" },
       { status: 500 },

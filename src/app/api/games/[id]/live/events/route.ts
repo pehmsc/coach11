@@ -365,7 +365,8 @@ export async function POST(request: Request, { params }: RouteContext) {
       .order("created_at", { ascending: true });
 
     if (error) {
-      return NextResponse.json({ error: error.message || "Erro ao guardar eventos." }, { status: 500 });
+      console.error("Erro ao guardar eventos:", error.message);
+      return NextResponse.json({ error: "Erro ao guardar eventos." }, { status: 500 });
     }
 
     return NextResponse.json({ success: true, events: data || [] });

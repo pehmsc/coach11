@@ -2,20 +2,26 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { resolveUserTeamContext } from "@/lib/auth/team-context";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 
-function normalizeOptionalText(value: unknown) {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
+const PLAYER_FIELDS =
+  "id, age_group_id, first_name, last_name, preferred_position, birth_date, phone, email, jersey_number, status, avatar_url, invite_code, invite_method, invite_sent_at, profile_id, short_name";
 
-function normalizeOptionalInt(value: unknown) {
-  if (value === null || value === undefined || value === "") return null;
-  const parsed = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(parsed)) return null;
-  const intValue = Math.floor(parsed);
-  return intValue >= 0 ? intValue : null;
-}
+const PlayerCreateSchema = z.object({
+  first_name: z.string().min(1).max(100),
+  last_name: z.string().min(1).max(100),
+  preferred_position: z.string().max(10).nullable().optional(),
+  birth_date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .nullable()
+    .optional(),
+  phone: z.string().max(20).nullable().optional(),
+  email: z.string().email().max(254).nullable().optional(),
+  jersey_number: z.number().int().min(0).max(99).nullable().optional(),
+  status: z.enum(["active", "injured", "suspended", "inactive"]).optional(),
+  age_group_id: z.string().uuid().optional(),
+});
 
 async function getRouteContext() {
   const supabase = await createClient();
@@ -74,7 +80,7 @@ export async function GET(request: Request) {
     const [{ data: players, error: playersError }, ageGroupRes] = await Promise.all([
       admin
         .from("players")
-        .select("*")
+        .select(PLAYER_FIELDS)
         .eq("age_group_id", targetAgeGroupId)
         .order("first_name", { ascending: true })
         .order("last_name", { ascending: true }),
@@ -109,8 +115,8 @@ export async function GET(request: Request) {
       players: players || [],
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Erro interno.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("Erro em GET /api/players:", error);
+    return NextResponse.json({ error: "Erro interno do servidor." }, { status: 500 });
   }
 }
 
@@ -121,20 +127,31 @@ export async function POST(request: Request) {
     const { admin, context } = routeContext;
 
     const body = await request.json().catch(() => null);
-    if (!body || typeof body !== "object") {
-      return NextResponse.json({ error: "Dados inválidos." }, { status: 400 });
+    const parsed = PlayerCreateSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Dados inválidos.", details: parsed.error.flatten().fieldErrors },
+        { status: 400 },
+      );
     }
 
-    const firstName = normalizeOptionalText((body as Record<string, unknown>).first_name);
-    const lastName = normalizeOptionalText((body as Record<string, unknown>).last_name);
-    const targetAgeGroupId = resolveTargetAgeGroupId(
-      context,
-      (body as Record<string, unknown>).age_group_id,
-    );
+    const {
+      first_name,
+      last_name,
+      preferred_position,
+      birth_date,
+      phone,
+      email,
+      jersey_number,
+      status,
+      age_group_id: requestedAgeGroupId,
+    } = parsed.data;
 
-    if (!firstName || !lastName || !targetAgeGroupId) {
+    const targetAgeGroupId = resolveTargetAgeGroupId(context, requestedAgeGroupId);
+
+    if (!targetAgeGroupId) {
       return NextResponse.json(
-        { error: "Primeiro nome, apelido e escalão são obrigatórios." },
+        { error: "Escalão é obrigatório." },
         { status: 400 },
       );
     }
@@ -145,33 +162,33 @@ export async function POST(request: Request) {
 
     const insertPayload = {
       age_group_id: targetAgeGroupId,
-      first_name: firstName,
-      last_name: lastName,
-      preferred_position: normalizeOptionalText((body as Record<string, unknown>).preferred_position),
-      birth_date: normalizeOptionalText((body as Record<string, unknown>).birth_date),
-      phone: normalizeOptionalText((body as Record<string, unknown>).phone),
-      email: normalizeOptionalText((body as Record<string, unknown>).email),
-      jersey_number: normalizeOptionalInt((body as Record<string, unknown>).jersey_number),
-      status:
-        normalizeOptionalText((body as Record<string, unknown>).status) || "active",
+      first_name,
+      last_name,
+      preferred_position: preferred_position ?? null,
+      birth_date: birth_date ?? null,
+      phone: phone ?? null,
+      email: email ?? null,
+      jersey_number: jersey_number ?? null,
+      status: status ?? "active",
     };
 
     const { data, error } = await admin
       .from("players")
       .insert(insertPayload)
-      .select("*")
+      .select(PLAYER_FIELDS)
       .single();
 
     if (error || !data) {
+      console.error("Erro ao criar atleta:", error);
       return NextResponse.json(
-        { error: error?.message || "Erro ao criar atleta." },
+        { error: "Erro ao criar atleta." },
         { status: 500 },
       );
     }
 
     return NextResponse.json({ success: true, player: data });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Erro interno.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("Erro em POST /api/players:", error);
+    return NextResponse.json({ error: "Erro interno do servidor." }, { status: 500 });
   }
 }

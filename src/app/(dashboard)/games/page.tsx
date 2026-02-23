@@ -50,17 +50,6 @@ type CompetitionsResponse = {
   }>;
 };
 
-function groupByMonth(games: GameRow[]): { label: string; games: GameRow[] }[] {
-  const map = new Map<string, GameRow[]>();
-  for (const game of games) {
-    const key = format(parseISO(game.game_datetime), "MMMM yyyy", { locale: pt });
-    const bucket = map.get(key) ?? [];
-    bucket.push(game);
-    map.set(key, bucket);
-  }
-  return Array.from(map.entries()).map(([label, games]) => ({ label, games }));
-}
-
 function statusBadge(game: GameRow) {
   if (game.status === "completed" || game.status === "cancelled") {
     return (
@@ -223,8 +212,6 @@ export default function GamesPage() {
     }
   }
 
-  const grouped = groupByMonth(games);
-
   // Split future vs past
   const upcoming = games.filter((g) => isFuture(parseISO(g.game_datetime)) || isToday(parseISO(g.game_datetime)));
   const past = games.filter((g) => isPast(parseISO(g.game_datetime)) && !isToday(parseISO(g.game_datetime)));
@@ -277,8 +264,6 @@ export default function GamesPage() {
       </div>
     );
   }
-
-  void grouped; // suppress unused var (we use upcoming/past sections instead)
 
   return (
     <div className="p-4 md:p-8 max-w-2xl mx-auto">

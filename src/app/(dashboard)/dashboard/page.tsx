@@ -96,33 +96,29 @@ export default async function DashboardPage() {
       }
     : null;
 
-  // Conta de staff convidado (não coordenador)
+  // Conta de staff convidado (não coordenador) — single query com join (era N+1)
   if (!firstTeamId) {
-    const { data: staffTeam } = await (admin ?? supabase)
+    const { data: staffEntry } = await (admin ?? supabase)
       .from("team_staff")
-      .select("team_id")
+      .select("team_id, teams(id, age_group_id, age_groups(id, club_name, name, club_logo_url))")
       .eq("profile_id", user.id)
       .order("created_at", { ascending: true })
       .limit(1)
       .maybeSingle();
-    firstTeamId = staffTeam?.team_id ?? null;
 
-    if (staffTeam?.team_id) {
-      const { data: staffTeamRow } = await (admin ?? supabase)
-        .from("teams")
-        .select("age_group_id")
-        .eq("id", staffTeam.team_id)
-        .maybeSingle();
+    firstTeamId = staffEntry?.team_id ?? null;
 
-      if (staffTeamRow?.age_group_id) {
-        const { data: staffAgeGroup } = await (admin ?? supabase)
-          .from("age_groups")
-          .select("id, club_name, name, club_logo_url")
-          .eq("id", staffTeamRow.age_group_id)
-          .maybeSingle();
-
-        activeAgeGroup = staffAgeGroup ?? activeAgeGroup;
-      }
+    type StaffAgeGroupJoin = {
+      id: string;
+      club_name: string;
+      name: string;
+      club_logo_url: string | null;
+    };
+    const joinedTeam = (staffEntry?.teams as unknown) as
+      | { id: string; age_group_id: string; age_groups: StaffAgeGroupJoin | null }
+      | null;
+    if (joinedTeam?.age_groups) {
+      activeAgeGroup = joinedTeam.age_groups;
     }
   }
 

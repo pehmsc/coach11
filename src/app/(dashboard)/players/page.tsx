@@ -81,24 +81,11 @@ export default function PlayersPage() {
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [form, setForm] = useState(EMPTY_FORM);
-  const [openStatusId, setOpenStatusId] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Fechar dropdown ao clicar fora
-  useEffect(() => {
-    function handleClick() {
-      setOpenStatusId(null);
-    }
-    document.addEventListener("click", handleClick);
-    return () => document.removeEventListener("click", handleClick);
-  }, []);
-
-  // openStatusId kept for future dropdown; suppress lint warning
-  void openStatusId;
 
   async function loadData() {
     setLoading(true);
@@ -221,7 +208,6 @@ export default function PlayersPage() {
     setPlayers((prev) =>
       prev.map((p) => (p.id === playerId ? { ...p, status } : p)),
     );
-    setOpenStatusId(null);
   }
 
   async function sendInvite(

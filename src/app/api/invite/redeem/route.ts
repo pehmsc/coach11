@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
+import { checkRedeemLimit } from "@/lib/rate-limit";
 
 export async function POST(request: Request) {
   try {
@@ -11,6 +12,14 @@ export async function POST(request: Request) {
     } = await supabase.auth.getUser();
     if (!user) {
       return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+    }
+
+    // 🚦 Rate limiting: máx 10 tentativas por hora por utilizador
+    if (checkRedeemLimit(user.id)) {
+      return NextResponse.json(
+        { error: "Demasiados pedidos. Tenta mais tarde." },
+        { status: 429 },
+      );
     }
 
     let inviteCode: string | undefined;
@@ -44,7 +53,7 @@ export async function POST(request: Request) {
       .maybeSingle();
 
     if (inviteError) {
-      console.error("Erro ao buscar convite:", code, inviteError.message);
+      console.error("Erro ao buscar convite:", inviteError.message);
       return NextResponse.json(
         { error: "Erro ao validar o código de convite." },
         { status: 500 },
@@ -182,36 +191,19 @@ export async function POST(request: Request) {
     }
 
     // 5. Criar associação em team_staff
-    // team_staff.role CHECK: head_coach | assistant_coach | coordinator
-    const roleCandidates =
-      invite.role === "coach" ? ["head_coach", "coach"] : [invite.role];
+    // invite.role "coach" mapeia para "head_coach" no schema de team_staff
+    const insertRole = invite.role === "coach" ? "head_coach" : invite.role;
+    const { error: staffError } = await admin.from("team_staff").insert({
+      profile_id: user.id,
+      team_id: team.id,
+      role: insertRole,
+    });
 
-    let staffError: { message?: string; code?: string } | null = null;
-
-    for (let i = 0; i < roleCandidates.length; i += 1) {
-      const roleCandidate = roleCandidates[i];
-      const { error } = await admin.from("team_staff").insert({
-        profile_id: user.id,
-        team_id: team.id,
-        role: roleCandidate,
-      });
-
-      if (!error || error.code === "23505") {
-        staffError = null;
-        break;
-      }
-
-      staffError = error;
-      const isLast = i === roleCandidates.length - 1;
-      if (error.code !== "23514" || isLast) {
-        break;
-      }
-    }
-
-    if (staffError) {
+    // 23505 = duplicate key — utilizador já está na equipa, pode continuar
+    if (staffError && staffError.code !== "23505") {
       console.error("Erro ao criar team_staff:", staffError.message);
       return NextResponse.json(
-        { error: `Erro ao aceitar convite: ${staffError.message}` },
+        { error: "Erro ao aceitar convite. Contacta o coordenador." },
         { status: 500 },
       );
     }
@@ -255,23 +247,9 @@ export async function POST(request: Request) {
       role: invite.role,
     });
   } catch (error) {
-    console.error("Erro inesperado ao aceitar convite:", error);
-
-    const message =
-      error instanceof Error ? error.message : "Erro interno ao aceitar o convite.";
-
-    if (message.includes("SUPABASE_SERVICE_ROLE_KEY")) {
-      return NextResponse.json(
-        {
-          error:
-            "Configuração do servidor incompleta: falta SUPABASE_SERVICE_ROLE_KEY no ambiente de produção.",
-        },
-        { status: 500 },
-      );
-    }
-
+    console.error("Erro inesperado em invite/redeem:", error);
     return NextResponse.json(
-      { error: message || "Erro interno ao aceitar o convite." },
+      { error: "Erro interno ao aceitar o convite." },
       { status: 500 },
     );
   }

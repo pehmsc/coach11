@@ -3,5 +3,5 @@ export const SUPABASE_AUTH_COOKIE_OPTIONS = {
   path: "/",
   sameSite: "lax" as const,
   httpOnly: false,
-  secure: process.env.NODE_ENV === "production",
+  secure: true,
 };

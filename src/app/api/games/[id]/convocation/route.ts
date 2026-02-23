@@ -91,27 +91,30 @@ export async function GET(_request: Request, { params }: RouteContext) {
     let isCoordinator = false;
     let teamId: string | null = game.team_id;
 
-    if (game.age_group_id) {
-      const { data: ageGroup } = await admin
-        .from("age_groups")
-        .select("id")
-        .eq("id", game.age_group_id)
-        .eq("coordinator_id", user.id)
-        .maybeSingle();
-      hasAccess = !!ageGroup;
-      isCoordinator = !!ageGroup;
-    }
+    // Parallelizar: coordinator check e fallback team lookup são independentes
+    const [coordinatorRes, fallbackTeamRes] = await Promise.all([
+      game.age_group_id
+        ? admin
+            .from("age_groups")
+            .select("id")
+            .eq("id", game.age_group_id)
+            .eq("coordinator_id", user.id)
+            .maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
+      !teamId && game.age_group_id
+        ? admin
+            .from("teams")
+            .select("id")
+            .eq("age_group_id", game.age_group_id)
+            .order("created_at", { ascending: true })
+            .limit(1)
+            .maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
+    ]);
 
-    if (!teamId && game.age_group_id) {
-      const { data: fallbackTeam } = await admin
-        .from("teams")
-        .select("id")
-        .eq("age_group_id", game.age_group_id)
-        .order("created_at", { ascending: true })
-        .limit(1)
-        .maybeSingle();
-      teamId = fallbackTeam?.id ?? null;
-    }
+    hasAccess = !!coordinatorRes.data;
+    isCoordinator = !!coordinatorRes.data;
+    if (!teamId) teamId = (fallbackTeamRes.data as { id: string } | null)?.id ?? null;
 
     if (!hasAccess && teamId) {
       const { data: staffLink } = await admin
