@@ -1,7 +1,7 @@
-import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { NextResponse } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -15,6 +15,13 @@ type EventInput = {
   is_opponent_event: boolean;
 };
 
+type GameAccessContext = {
+  exists: boolean;
+  canWrite: boolean;
+  isCoordinator: boolean;
+  status: string | null;
+};
+
 const ALLOWED_EVENT_TYPES = new Set([
   "goal",
   "assist",
@@ -26,70 +33,44 @@ const ALLOWED_EVENT_TYPES = new Set([
   "penalty_goal",
 ]);
 
-async function assertGameAccess(
-  admin: ReturnType<typeof createAdminClient>,
-  gameId: string,
-  userId: string,
-) {
-  const { data: game, error: gameError } = await admin
-    .from("games")
-    .select("id, team_id, age_group_id, status")
-    .eq("id", gameId)
-    .maybeSingle();
+function parseGameAccessContext(value: unknown): GameAccessContext | null {
+  if (!value || typeof value !== "object") return null;
+  const row = value as Record<string, unknown>;
+  return {
+    exists: row.exists === true,
+    canWrite: row.canWrite === true,
+    isCoordinator: row.isCoordinator === true,
+    status: typeof row.status === "string" ? row.status : null,
+  };
+}
 
-  if (gameError) {
+async function assertGameAccess(
+  db: SupabaseClient,
+  gameId: string,
+) {
+  const { data: accessData, error: accessError } = await db.rpc(
+    "rpc_game_access_context",
+    {
+      p_game_id: gameId,
+    },
+  );
+
+  if (accessError) {
     return {
       ok: false as const,
       response: NextResponse.json({ error: "Erro ao validar jogo." }, { status: 500 }),
     };
   }
 
-  if (!game) {
+  const access = parseGameAccessContext(accessData);
+  if (!access?.exists) {
     return {
       ok: false as const,
       response: NextResponse.json({ error: "Jogo não encontrado." }, { status: 404 }),
     };
   }
 
-  let hasAccess = false;
-  let isCoordinator = false;
-  let teamId: string | null = (game as unknown as { team_id?: string }).team_id ?? null;
-  const ageGroupId = (game as unknown as { age_group_id?: string }).age_group_id ?? null;
-  const gameStatus = (game as unknown as { status?: string }).status ?? null;
-
-  if (ageGroupId) {
-    const { data: agOwner } = await admin
-      .from("age_groups")
-      .select("id")
-      .eq("id", ageGroupId)
-      .eq("coordinator_id", userId)
-      .maybeSingle();
-    hasAccess = !!agOwner;
-    isCoordinator = !!agOwner;
-  }
-
-  if (!teamId && ageGroupId) {
-    const { data: fallbackTeam } = await admin
-      .from("teams")
-      .select("id")
-      .eq("age_group_id", ageGroupId)
-      .order("created_at", { ascending: true })
-      .limit(1)
-      .maybeSingle();
-    teamId = (fallbackTeam as unknown as { id?: string } | null)?.id ?? null;
-  }
-
-  if (!hasAccess && teamId) {
-    const { data: staffLink } = await admin
-      .from("team_staff")
-      .select("id")
-      .eq("team_id", teamId)
-      .eq("profile_id", userId)
-      .maybeSingle();
-    hasAccess = !!staffLink;
-  }
-
-  if (!hasAccess) {
+  if (!access.canWrite) {
     return {
       ok: false as const,
       response: NextResponse.json({ error: "Sem permissões." }, { status: 403 }),
@@ -98,8 +79,8 @@ async function assertGameAccess(
 
   return {
     ok: true as const,
-    isCoordinator,
-    gameStatus,
+    isCoordinator: access.isCoordinator,
+    gameStatus: access.status,
   };
 }
 
@@ -170,11 +151,10 @@ export async function GET(_: Request, { params }: RouteContext) {
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
 
-    const admin = createAdminClient();
-    const access = await assertGameAccess(admin, gameId, user.id);
+    const access = await assertGameAccess(supabase, gameId);
     if (!access.ok) return access.response;
 
-    const { data, error } = await admin
+    const { data, error } = await supabase
       .from("game_events")
       .select("*")
       .eq("game_id", gameId)
@@ -221,8 +201,7 @@ export async function POST(request: Request, { params }: RouteContext) {
 
     const rows = rowsRaw as EventInput[];
 
-    const admin = createAdminClient();
-    const access = await assertGameAccess(admin, gameId, user.id);
+    const access = await assertGameAccess(supabase, gameId);
     if (!access.ok) return access.response;
     if (access.gameStatus === "completed" && !access.isCoordinator) {
       return NextResponse.json(
@@ -233,8 +212,8 @@ export async function POST(request: Request, { params }: RouteContext) {
 
     const [{ data: liveRows, error: liveRowsError }, { data: existingEvents, error: existingEventsError }] =
       await Promise.all([
-        admin.from("game_stats_live").select("player_id, status").eq("game_id", gameId),
-        admin
+        supabase.from("game_stats_live").select("player_id, status").eq("game_id", gameId),
+        supabase
           .from("game_events")
           .select("event_type, player_id, is_opponent_event, minute, created_at")
           .eq("game_id", gameId)
@@ -358,7 +337,7 @@ export async function POST(request: Request, { params }: RouteContext) {
       is_opponent_event: row.is_opponent_event,
     }));
 
-    const { data, error } = await admin
+    const { data, error } = await supabase
       .from("game_events")
       .insert(payload)
       .select("*")
@@ -397,8 +376,7 @@ export async function DELETE(request: Request, { params }: RouteContext) {
       return NextResponse.json({ error: "Sem IDs para apagar." }, { status: 400 });
     }
 
-    const admin = createAdminClient();
-    const access = await assertGameAccess(admin, gameId, user.id);
+    const access = await assertGameAccess(supabase, gameId);
     if (!access.ok) return access.response;
     if (access.gameStatus === "completed" && !access.isCoordinator) {
       return NextResponse.json(
@@ -407,7 +385,7 @@ export async function DELETE(request: Request, { params }: RouteContext) {
       );
     }
 
-    const { error } = await admin
+    const { error } = await supabase
       .from("game_events")
       .delete()
       .eq("game_id", gameId)

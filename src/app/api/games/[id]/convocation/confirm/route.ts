@@ -1,4 +1,3 @@
-import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { NextResponse } from "next/server";
@@ -6,6 +5,20 @@ import { NextResponse } from "next/server";
 type RouteContext = {
   params: Promise<{ id: string }>;
 };
+
+type GameAccessContext = {
+  exists: boolean;
+  canWrite: boolean;
+};
+
+function parseGameAccessContext(value: unknown): GameAccessContext | null {
+  if (!value || typeof value !== "object") return null;
+  const row = value as Record<string, unknown>;
+  return {
+    exists: row.exists === true,
+    canWrite: row.canWrite === true,
+  };
+}
 
 export async function POST(_request: Request, { params }: RouteContext) {
   try {
@@ -20,59 +33,33 @@ export async function POST(_request: Request, { params }: RouteContext) {
       return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
     }
 
-    const admin = createAdminClient();
+    const { data: accessData, error: accessError } = await supabase.rpc(
+      "rpc_game_access_context",
+      {
+        p_game_id: gameId,
+      },
+    );
 
-    const { data: game } = await admin
-      .from("games")
-      .select("id, team_id, age_group_id")
-      .eq("id", gameId)
-      .maybeSingle();
+    if (accessError) {
+      return NextResponse.json(
+        { error: "Erro ao validar o jogo." },
+        { status: 500 },
+      );
+    }
 
-    if (!game) {
+    const access = parseGameAccessContext(accessData);
+    if (!access?.exists) {
       return NextResponse.json({ error: "Jogo não encontrado." }, { status: 404 });
     }
 
-    let hasAccess = false;
-    let teamId: string | null = game.team_id;
-
-    if (game.age_group_id) {
-      const { data: ageGroup } = await admin
-        .from("age_groups")
-        .select("id")
-        .eq("id", game.age_group_id)
-        .eq("coordinator_id", user.id)
-        .maybeSingle();
-      hasAccess = !!ageGroup;
-    }
-
-    if (!teamId && game.age_group_id) {
-      const { data: fallbackTeam } = await admin
-        .from("teams")
-        .select("id")
-        .eq("age_group_id", game.age_group_id)
-        .limit(1)
-        .maybeSingle();
-      teamId = fallbackTeam?.id ?? null;
-    }
-
-    if (!hasAccess && teamId) {
-      const { data: staffLink } = await admin
-        .from("team_staff")
-        .select("id")
-        .eq("team_id", teamId)
-        .eq("profile_id", user.id)
-        .maybeSingle();
-      hasAccess = !!staffLink;
-    }
-
-    if (!hasAccess) {
+    if (!access.canWrite) {
       return NextResponse.json(
         { error: "Sem permissões para guardar esta convocatória." },
         { status: 403 },
       );
     }
 
-    const { data: convocationRows, error: convocationRowsError } = await admin
+    const { data: convocationRows, error: convocationRowsError } = await supabase
       .from("convocations")
       .select("id, status, created_at")
       .eq("game_id", gameId)
@@ -89,7 +76,7 @@ export async function POST(_request: Request, { params }: RouteContext) {
     let convocation = convocationRows?.[0] ?? null;
 
     if (!convocation) {
-      const { data: createdConvocation, error: createError } = await admin
+      const { data: createdConvocation, error: createError } = await supabase
         .from("convocations")
         .insert({ game_id: gameId, status: "draft" })
         .select("id, status, created_at")
@@ -116,7 +103,7 @@ export async function POST(_request: Request, { params }: RouteContext) {
       ? convocationRows.map((row) => row.id)
       : [convocation.id];
 
-    const { data: selectedRows, error: selectedError } = await admin
+    const { data: selectedRows, error: selectedError } = await supabase
       .from("convocation_players")
       .select("player_id")
       .in("convocation_id", allConvocationIds);
@@ -140,7 +127,7 @@ export async function POST(_request: Request, { params }: RouteContext) {
 
     // Guarantee game_stats_live has a row for each convocated player.
     // Missing rows are initialized as bench so live page always has full state.
-    const { data: existingLiveRows, error: existingLiveRowsError } = await admin
+    const { data: existingLiveRows, error: existingLiveRowsError } = await supabase
       .from("game_stats_live")
       .select("player_id")
       .eq("game_id", gameId);
@@ -164,7 +151,7 @@ export async function POST(_request: Request, { params }: RouteContext) {
       }));
 
     if (missingLiveRows.length > 0) {
-      const { error: insertLiveRowsError } = await admin
+      const { error: insertLiveRowsError } = await supabase
         .from("game_stats_live")
         .insert(missingLiveRows);
 
@@ -176,7 +163,7 @@ export async function POST(_request: Request, { params }: RouteContext) {
       }
     }
 
-    const { error: updateError } = await admin
+    const { error: updateError } = await supabase
       .from("convocations")
       .update({ status: "confirmed" })
       .in("id", allConvocationIds);

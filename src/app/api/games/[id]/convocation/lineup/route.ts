@@ -1,4 +1,3 @@
-import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { NextResponse } from "next/server";
@@ -6,6 +5,20 @@ import { NextResponse } from "next/server";
 type RouteContext = {
   params: Promise<{ id: string }>;
 };
+
+type GameAccessContext = {
+  exists: boolean;
+  canWrite: boolean;
+};
+
+function parseGameAccessContext(value: unknown): GameAccessContext | null {
+  if (!value || typeof value !== "object") return null;
+  const row = value as Record<string, unknown>;
+  return {
+    exists: row.exists === true,
+    canWrite: row.canWrite === true,
+  };
+}
 
 export async function POST(request: Request, { params }: RouteContext) {
   try {
@@ -35,61 +48,33 @@ export async function POST(request: Request, { params }: RouteContext) {
       );
     }
 
-    const admin = createAdminClient();
+    const { data: accessData, error: accessError } = await supabase.rpc(
+      "rpc_game_access_context",
+      {
+        p_game_id: gameId,
+      },
+    );
 
-    const { data: game } = await admin
-      .from("games")
-      .select("id, team_id, age_group_id")
-      .eq("id", gameId)
-      .maybeSingle();
+    if (accessError) {
+      return NextResponse.json(
+        { error: "Erro ao validar o jogo." },
+        { status: 500 },
+      );
+    }
 
-    if (!game) {
+    const access = parseGameAccessContext(accessData);
+    if (!access?.exists) {
       return NextResponse.json({ error: "Jogo não encontrado." }, { status: 404 });
     }
 
-    let hasAccess = false;
-    let teamId: string | null = (game as unknown as { team_id?: string }).team_id ?? null;
-    const ageGroupId = (game as unknown as { age_group_id?: string }).age_group_id ?? null;
-
-    if (ageGroupId) {
-      const { data: ag } = await admin
-        .from("age_groups")
-        .select("id")
-        .eq("id", ageGroupId)
-        .eq("coordinator_id", user.id)
-        .maybeSingle();
-      hasAccess = !!ag;
-    }
-
-    if (!teamId && ageGroupId) {
-      const { data: ft } = await admin
-        .from("teams")
-        .select("id")
-        .eq("age_group_id", ageGroupId)
-        .order("created_at", { ascending: true })
-        .limit(1)
-        .maybeSingle();
-      teamId = (ft as unknown as { id?: string } | null)?.id ?? null;
-    }
-
-    if (!hasAccess && teamId) {
-      const { data: sl } = await admin
-        .from("team_staff")
-        .select("id")
-        .eq("team_id", teamId)
-        .eq("profile_id", user.id)
-        .maybeSingle();
-      hasAccess = !!sl;
-    }
-
-    if (!hasAccess) {
+    if (!access.canWrite) {
       return NextResponse.json(
         { error: "Sem permissões para editar o lineup deste jogo." },
         { status: 403 },
       );
     }
 
-    const { data: convocationRows } = await admin
+    const { data: convocationRows } = await supabase
       .from("convocations")
       .select("id, created_at")
       .eq("game_id", gameId)
@@ -104,7 +89,7 @@ export async function POST(request: Request, { params }: RouteContext) {
       );
     }
 
-    const { data: playerInConvocation } = await admin
+    const { data: playerInConvocation } = await supabase
       .from("convocation_players")
       .select("id")
       .eq("convocation_id", latestConvocationId)
@@ -125,7 +110,7 @@ export async function POST(request: Request, { params }: RouteContext) {
       end_minute: null,
     };
 
-    const { data: existingRows, error: existingRowsError } = await admin
+    const { data: existingRows, error: existingRowsError } = await supabase
       .from("game_stats_live")
       .select("id")
       .eq("game_id", gameId)
@@ -140,7 +125,7 @@ export async function POST(request: Request, { params }: RouteContext) {
     }
 
     if ((existingRows || []).length > 0) {
-      const { error: updateError } = await admin
+      const { error: updateError } = await supabase
         .from("game_stats_live")
         .update(payload)
         .eq("game_id", gameId)
@@ -157,7 +142,7 @@ export async function POST(request: Request, { params }: RouteContext) {
       );
     }
 
-    const { error: insertError } = await admin.from("game_stats_live").insert({
+    const { error: insertError } = await supabase.from("game_stats_live").insert({
       game_id: gameId,
       player_id: playerId,
       ...payload,
