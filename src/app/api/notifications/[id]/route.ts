@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 
@@ -33,9 +32,8 @@ export async function PATCH(
       return NextResponse.json({ error: "Ação inválida." }, { status: 400 });
     }
 
-    const admin = createAdminClient();
     const readAtValue = action === "mark_read" ? new Date().toISOString() : null;
-    const { data, error } = await admin
+    const { data, error } = await supabase
       .from("notifications")
       .update({ read_at: readAtValue })
       .eq("id", id)
@@ -86,8 +84,7 @@ export async function DELETE(
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
 
-    const admin = createAdminClient();
-    const { data, error } = await admin
+    const { data, error } = await supabase
       .from("notifications")
       .delete()
       .eq("id", id)

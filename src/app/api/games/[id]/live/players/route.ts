@@ -205,6 +205,45 @@ export async function POST(request: Request, { params }: RouteContext) {
       }>,
     );
 
+    const playerIds = Array.from(new Set(updates.map((row) => row.playerId)));
+    const { data: existingRows, error: existingRowsError } = await admin
+      .from("game_stats_live")
+      .select("player_id, start_minute, end_minute")
+      .eq("game_id", gameId)
+      .in("player_id", playerIds);
+
+    if (existingRowsError) {
+      return NextResponse.json({ error: "Erro ao validar estado live." }, { status: 500 });
+    }
+
+    const existingByPlayer = new Map<
+      string,
+      { start_minute: number | null; end_minute: number | null }
+    >();
+    (existingRows || []).forEach((row) => {
+      if (typeof row.player_id !== "string") return;
+      existingByPlayer.set(row.player_id, {
+        start_minute: typeof row.start_minute === "number" ? row.start_minute : null,
+        end_minute: typeof row.end_minute === "number" ? row.end_minute : null,
+      });
+    });
+
+    const rowsToUpsert: Array<{
+      game_id: string;
+      player_id: string;
+      status: string;
+      start_minute: number | null;
+      end_minute: number | null;
+    }> = [];
+
+    const rowsToInsert: Array<{
+      game_id: string;
+      player_id: string;
+      status: string;
+      start_minute: number | null;
+      end_minute: number | null;
+    }> = [];
+
     for (const update of updates) {
       if (update.status === "on_field" && sentOffPlayerIds.has(update.playerId)) {
         return NextResponse.json(
@@ -213,55 +252,52 @@ export async function POST(request: Request, { params }: RouteContext) {
         );
       }
 
-      const payload: {
-        status: string;
-        start_minute?: number | null;
-        end_minute?: number | null;
-      } = {
+      const hasStartMinute = Object.prototype.hasOwnProperty.call(update, "startMinute");
+      const hasEndMinute = Object.prototype.hasOwnProperty.call(update, "endMinute");
+      const existing = existingByPlayer.get(update.playerId);
+
+      let startMinute =
+        hasStartMinute && typeof update.startMinute === "number"
+          ? Math.floor(update.startMinute)
+          : null;
+      let endMinute =
+        hasEndMinute && typeof update.endMinute === "number"
+          ? Math.floor(update.endMinute)
+          : null;
+
+      if (existing) {
+        if (!hasStartMinute) startMinute = existing.start_minute;
+        if (!hasEndMinute) endMinute = existing.end_minute;
+        if (existing.start_minute === 0) startMinute = 0;
+      }
+
+      const row = {
+        game_id: gameId,
+        player_id: update.playerId,
         status: toDbLiveStatus(update.status, update.startMinute),
+        start_minute: startMinute,
+        end_minute: endMinute,
       };
 
-      if ("startMinute" in update) {
-        payload.start_minute =
-          typeof update.startMinute === "number" ? Math.floor(update.startMinute) : null;
-      }
-      if ("endMinute" in update) {
-        payload.end_minute = typeof update.endMinute === "number" ? Math.floor(update.endMinute) : null;
-      }
+      if (existing) rowsToUpsert.push(row);
+      else rowsToInsert.push(row);
+    }
 
-      const { data: existingRows, error: existingRowsError } = await admin
+    if (rowsToUpsert.length > 0) {
+      const { error: updateError } = await admin
         .from("game_stats_live")
-        .select("id, start_minute")
-        .eq("game_id", gameId)
-        .eq("player_id", update.playerId);
+        .upsert(rowsToUpsert, { onConflict: "game_id,player_id" });
 
-      if (existingRowsError) {
-        return NextResponse.json({ error: "Erro ao validar estado live." }, { status: 500 });
+      if (updateError) {
+        return NextResponse.json({ error: "Erro ao atualizar estado live." }, { status: 500 });
       }
+    }
 
-      if ((existingRows || []).length > 0) {
-        const existingStarterStart =
-          (existingRows?.[0] as { start_minute?: number | null } | undefined)?.start_minute ?? null;
-        if (existingStarterStart === 0) {
-          payload.start_minute = 0;
-        }
-        const { error: updateError } = await admin
-          .from("game_stats_live")
-          .update(payload)
-          .eq("game_id", gameId)
-          .eq("player_id", update.playerId);
-        if (updateError) {
-          return NextResponse.json({ error: "Erro ao atualizar estado live." }, { status: 500 });
-        }
-      } else {
-        const { error: insertError } = await admin.from("game_stats_live").insert({
-          game_id: gameId,
-          player_id: update.playerId,
-          ...payload,
-        });
-        if (insertError) {
-          return NextResponse.json({ error: "Erro ao inserir estado live." }, { status: 500 });
-        }
+    if (rowsToInsert.length > 0) {
+      const { error: insertError } = await admin.from("game_stats_live").insert(rowsToInsert);
+
+      if (insertError) {
+        return NextResponse.json({ error: "Erro ao inserir estado live." }, { status: 500 });
       }
     }
 

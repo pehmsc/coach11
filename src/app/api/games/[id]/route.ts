@@ -1,4 +1,3 @@
-import { createAdminClient } from "@/lib/supabase/admin";
 import {
   isValidManualShortName,
   normalizeManualShortName,
@@ -29,10 +28,8 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       return NextResponse.json({ error: "Dados inválidos." }, { status: 400 });
     }
 
-    const admin = createAdminClient();
-
     // Verify game exists and get team/age_group
-    const { data: game } = await admin
+    const { data: game } = await supabase
       .from("games")
       .select("id, team_id, age_group_id, status")
       .eq("id", gameId)
@@ -49,7 +46,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     let teamId: string | null = (game as unknown as { team_id?: string }).team_id ?? null;
 
     if (ageGroupId) {
-      const { data: ag } = await admin
+      const { data: ag } = await supabase
         .from("age_groups")
         .select("id")
         .eq("id", ageGroupId)
@@ -60,7 +57,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     }
 
     if (!teamId && ageGroupId) {
-      const { data: ft } = await admin
+      const { data: ft } = await supabase
         .from("teams")
         .select("id")
         .eq("age_group_id", ageGroupId)
@@ -71,7 +68,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     }
 
     if (!hasAccess && teamId) {
-      const { data: sl } = await admin
+      const { data: sl } = await supabase
         .from("team_staff")
         .select("id")
         .eq("team_id", teamId)
@@ -114,7 +111,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       return NextResponse.json({ error: "Sem campos para atualizar." }, { status: 400 });
     }
 
-    const { data: updated, error: updateError } = await admin
+    const { data: updated, error: updateError } = await supabase
       .from("games")
       .update(updates)
       .eq("id", gameId)

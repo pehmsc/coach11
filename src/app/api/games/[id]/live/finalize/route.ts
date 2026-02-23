@@ -184,14 +184,6 @@ export async function POST(request: Request, { params }: RouteContext) {
       );
     }
 
-    const deleteResult = await admin.from("game_final_stats").delete().eq("game_id", gameId);
-    if (deleteResult.error) {
-      return respondInternalError(
-        "api.games.id.live.finalize.post.delete-old",
-        deleteResult.error,
-      );
-    }
-
     const rowsToInsert = finalStats.map((row) => ({
       game_id: gameId,
       player_id: row.player_id,
@@ -209,60 +201,33 @@ export async function POST(request: Request, { params }: RouteContext) {
       finalized_at: new Date().toISOString(),
     }));
 
-    const insertResult = await admin
-      .from("game_final_stats")
-      .insert(rowsToInsert)
-      .select("id");
+    const rpcResult = await admin.rpc("rpc_finalize_game", {
+      p_game_id: gameId,
+      p_final_stats: rowsToInsert,
+      p_score_home: scoreHome,
+      p_score_away: scoreAway,
+      p_final_minute: finalMinute,
+      p_updated_by: user.id,
+    });
 
-    if (insertResult.error) {
+    if (rpcResult.error) {
       return respondInternalError(
-        "api.games.id.live.finalize.post.insert-final-stats",
-        insertResult.error,
+        "api.games.id.live.finalize.post.rpc-finalize-game",
+        rpcResult.error,
       );
     }
 
-    const updateGameResult = await admin
-      .from("games")
-      .update({ status: "completed", score_home: scoreHome, score_away: scoreAway })
-      .eq("id", gameId)
-      .select("id")
-      .single();
-
-    if (updateGameResult.error) {
-      return respondInternalError(
-        "api.games.id.live.finalize.post.update-game",
-        updateGameResult.error,
-      );
-    }
-
-    const checkpointResult = await admin
-      .from("game_live_checkpoints")
-      .upsert(
-        {
-          game_id: gameId,
-          phase: "completed",
-          base_seconds:
-            finalMinute !== null
-              ? Math.max(0, (finalMinute - 1) * 60)
-              : rowsToInsert.reduce(
-                  (max, row) => Math.max(max, Math.floor(row.minutes_played * 60)),
-                  0,
-                ),
-          running_since_ms: null,
-          updated_at: new Date().toISOString(),
-          updated_by: user.id,
-        },
-        { onConflict: "game_id" },
-      );
-
-    if (checkpointResult.error) {
-      // non-blocking for finalization: game is already completed and stats inserted
-      console.error("Finalize warning (checkpoint):", checkpointResult.error);
-    }
+    const insertedRowsFromRpc =
+      rpcResult.data &&
+      typeof rpcResult.data === "object" &&
+      "insertedRows" in rpcResult.data &&
+      typeof (rpcResult.data as { insertedRows?: unknown }).insertedRows === "number"
+        ? (rpcResult.data as { insertedRows: number }).insertedRows
+        : null;
 
     return NextResponse.json({
       success: true,
-      insertedRows: insertResult.data?.length ?? 0,
+      insertedRows: insertedRowsFromRpc ?? rowsToInsert.length,
     });
   } catch (error) {
     console.error("Live finalize error:", error);

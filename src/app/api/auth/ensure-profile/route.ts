@@ -1,4 +1,3 @@
-import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
@@ -14,24 +13,15 @@ export async function POST() {
       return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
     }
 
-    let admin: ReturnType<typeof createAdminClient> | null = null;
-    try {
-      admin = createAdminClient();
-    } catch {
-      admin = null;
-    }
-
-    const db = admin ?? supabase;
-
-    const { data: existingProfile } = await db
+    const { data: existingProfile } = await supabase
       .from("profiles")
       .select("id, full_name, role, email, avatar_url")
       .eq("id", user.id)
       .maybeSingle();
 
     let resolvedRole: "coordinator" | "coach" = "coordinator";
-    if (admin && user.email) {
-      const { data: inviteByEmail } = await admin
+    if (user.email) {
+      const { data: inviteByEmail } = await supabase
         .from("staff_invites")
         .select("role")
         .ilike("email", user.email)
@@ -60,7 +50,7 @@ export async function POST() {
       null;
 
     if (!existingProfile) {
-      const { error: insertError } = await db.from("profiles").insert({
+      const { error: insertError } = await supabase.from("profiles").insert({
         id: user.id,
         full_name: fullName,
         role: resolvedRole,
@@ -82,7 +72,7 @@ export async function POST() {
       if (!existingProfile.avatar_url && avatarUrl) updates.avatar_url = avatarUrl;
 
       if (Object.keys(updates).length > 0) {
-        await db.from("profiles").update(updates).eq("id", user.id);
+        await supabase.from("profiles").update(updates).eq("id", user.id);
       }
     }
 

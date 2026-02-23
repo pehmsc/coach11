@@ -1,4 +1,3 @@
-import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { resolveUserTeamContext } from "@/lib/auth/team-context";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
@@ -34,8 +33,7 @@ async function getRouteContext() {
     };
   }
 
-  const admin = createAdminClient();
-  const context = await resolveUserTeamContext(admin, user.id);
+  const context = await resolveUserTeamContext(supabase, user.id);
 
   if (context.accessibleAgeGroupIds.length === 0) {
     return {
@@ -46,7 +44,7 @@ async function getRouteContext() {
     };
   }
 
-  return { admin, context };
+  return { supabase, context };
 }
 
 export async function PATCH(request: Request, { params }: RouteContext) {
@@ -58,9 +56,9 @@ export async function PATCH(request: Request, { params }: RouteContext) {
 
     const routeContext = await getRouteContext();
     if ("error" in routeContext) return routeContext.error;
-    const { admin, context } = routeContext;
+    const { supabase, context } = routeContext;
 
-    const { data: existingPlayer, error: existingError } = await admin
+    const { data: existingPlayer, error: existingError } = await supabase
       .from("players")
       .select("id, age_group_id")
       .eq("id", id)
@@ -149,7 +147,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       );
     }
 
-    const { data, error } = await admin
+    const { data, error } = await supabase
       .from("players")
       .update(updates)
       .eq("id", id)

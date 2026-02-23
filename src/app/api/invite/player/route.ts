@@ -1,5 +1,4 @@
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveUserTeamContext } from "@/lib/auth/team-context";
 import { Resend } from "resend";
 import { NextResponse } from "next/server";
@@ -51,11 +50,10 @@ export async function POST(request: Request) {
     }
     const { playerId } = parsed.data;
 
-    const admin = createAdminClient();
-    const context = await resolveUserTeamContext(admin, user.id);
+    const context = await resolveUserTeamContext(supabase, user.id);
 
     // Buscar dados do jogador
-    const { data: player } = await admin
+    const { data: player } = await supabase
       .from("players")
       .select("id, first_name, last_name, email, age_group_id")
       .eq("id", playerId)
@@ -72,7 +70,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
     }
 
-    const { data: ageGroup } = await admin
+    const { data: ageGroup } = await supabase
       .from("age_groups")
       .select("id, name, club_name")
       .eq("id", player.age_group_id)
@@ -86,7 +84,7 @@ export async function POST(request: Request) {
     const inviteCode = generateCode();
 
     // Guardar código na DB
-    await admin
+    await supabase
       .from("players")
       .update({
         invite_code: inviteCode,
@@ -96,7 +94,7 @@ export async function POST(request: Request) {
       .eq("id", playerId);
 
     // Buscar nome do coordinator
-    const { data: profile } = await admin
+    const { data: profile } = await supabase
       .from("profiles")
       .select("full_name")
       .eq("id", user.id)

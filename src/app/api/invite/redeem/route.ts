@@ -3,9 +3,67 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
 import { checkRedeemLimit } from "@/lib/rate-limit";
 
+type RedeemRpcResult = {
+  ok?: boolean;
+  error_code?: string;
+  already_linked?: boolean;
+  role?: string | null;
+  age_group_name?: string | null;
+  age_group_club_name?: string | null;
+};
+
+function mapRedeemError(errorCode: string | undefined) {
+  switch (errorCode) {
+    case "invite_not_found":
+      return {
+        body: { error: "Código inválido ou já utilizado" },
+        status: 404,
+      };
+    case "email_mismatch":
+      return {
+        body: { error: "Este convite foi enviado para outro email." },
+        status: 403,
+      };
+    case "invite_used_by_other":
+      return {
+        body: { error: "Este código já foi utilizado por outro utilizador." },
+        status: 409,
+      };
+    case "cross_club_forbidden":
+      return {
+        body: { error: "Este convite pertence a outro clube." },
+        status: 403,
+      };
+    case "age_group_not_found":
+      return {
+        body: { error: "Escalão não encontrado. Contacta o coordenador." },
+        status: 422,
+      };
+    case "team_create_failed":
+      return {
+        body: { error: "Erro ao processar convite. Tenta novamente." },
+        status: 500,
+      };
+    case "team_staff_insert_failed":
+      return {
+        body: { error: "Erro ao aceitar convite. Contacta o coordenador." },
+        status: 500,
+      };
+    case "invite_lookup_failed":
+      return {
+        body: { error: "Erro ao validar o código de convite." },
+        status: 500,
+      };
+    default:
+      return {
+        body: { error: "Erro interno ao aceitar o convite." },
+        status: 500,
+      };
+  }
+}
+
 export async function POST(request: Request) {
   try {
-    // Cliente regular apenas para autenticar o utilizador
     const supabase = await createClient();
     const {
       data: { user },
@@ -14,7 +72,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
     }
 
-    // 🚦 Rate limiting: máx 10 tentativas por hora por utilizador
     if (checkRedeemLimit(user.id)) {
       return NextResponse.json(
         { error: "Demasiados pedidos. Tenta mais tarde." },
@@ -41,210 +98,52 @@ export async function POST(request: Request) {
     }
 
     const code = inviteCode.trim().toUpperCase();
-
-    // Admin client: bypassa RLS para todas as operações de escrita
     const admin = createAdminClient();
 
-    // 1. Buscar convite (aceite ou pendente)
-    const { data: invite, error: inviteError } = await admin
-      .from("staff_invites")
-      .select("*")
-      .eq("invite_code", code)
-      .maybeSingle();
+    const rpcResult = await admin.rpc("rpc_redeem_staff_invite", {
+      p_invite_code: code,
+      p_user_id: user.id,
+      p_user_email: user.email ?? null,
+    });
 
-    if (inviteError) {
-      console.error("Erro ao buscar convite:", inviteError.message);
+    if (rpcResult.error) {
+      console.error("Erro ao executar rpc_redeem_staff_invite:", rpcResult.error.message);
       return NextResponse.json(
-        { error: "Erro ao validar o código de convite." },
+        { error: "Erro interno ao aceitar o convite." },
         { status: 500 },
       );
     }
 
-    if (!invite) {
-      return NextResponse.json(
-        { error: "Código inválido ou já utilizado" },
-        { status: 404 },
-      );
+    const result =
+      rpcResult.data && typeof rpcResult.data === "object"
+        ? (rpcResult.data as RedeemRpcResult)
+        : null;
+
+    if (!result?.ok) {
+      const mapped = mapRedeemError(result?.error_code);
+      return NextResponse.json(mapped.body, { status: mapped.status });
     }
 
-    const userEmail = user.email?.trim().toLowerCase() ?? null;
-    const inviteEmail =
-      typeof invite.email === "string" ? invite.email.trim().toLowerCase() : null;
-    const emailMatches = !!userEmail && !!inviteEmail && userEmail === inviteEmail;
+    const ageGroup =
+      result.age_group_name && result.age_group_club_name
+        ? { name: result.age_group_name, clubName: result.age_group_club_name }
+        : null;
 
-    if (inviteEmail && userEmail && !emailMatches) {
-      return NextResponse.json(
-        { error: "Este convite foi enviado para outro email." },
-        { status: 403 },
-      );
-    }
+    const role = result.role ?? null;
 
-    // Convite já utilizado por outro utilizador.
-    // Se o email coincide, permitimos corrigir a associação para este utilizador.
-    if (
-      invite.accepted_at &&
-      invite.accepted_by &&
-      invite.accepted_by !== user.id &&
-      !emailMatches
-    ) {
-      return NextResponse.json(
-        { error: "Este código já foi utilizado por outro utilizador." },
-        { status: 409 },
-      );
-    }
-
-    // 2. Buscar o team_id real para o age_group
-    let { data: team } = await admin
-      .from("teams")
-      .select("id")
-      .eq("age_group_id", invite.age_group_id)
-      .limit(1)
-      .maybeSingle();
-
-    // Se não existir equipa, criar automaticamente
-    if (!team) {
-      const { data: ageGroupInfo } = await admin
-        .from("age_groups")
-        .select("club_name, name")
-        .eq("id", invite.age_group_id)
-        .single();
-
-      if (!ageGroupInfo) {
-        return NextResponse.json(
-          { error: "Escalão não encontrado. Contacta o coordenador." },
-          { status: 422 },
-        );
-      }
-
-      const { data: newTeam, error: newTeamError } = await admin
-        .from("teams")
-        .insert({
-          age_group_id: invite.age_group_id,
-          name: `${ageGroupInfo.club_name} ${ageGroupInfo.name}`,
-          is_competitive: true,
-        })
-        .select("id")
-        .single();
-
-      if (newTeamError || !newTeam) {
-        console.error("Erro ao criar equipa:", newTeamError?.message);
-        return NextResponse.json(
-          { error: "Erro ao processar convite. Tenta novamente." },
-          { status: 500 },
-        );
-      }
-      team = newTeam;
-    }
-
-    // 3. Garantir que o perfil existe (email/password signup não passa pelo auth callback)
-    const { data: existingProfile } = await admin
-      .from("profiles")
-      .select("id, full_name")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    if (!existingProfile) {
-      const fullName =
-        `${invite.first_name || ""} ${invite.last_name || ""}`.trim() ||
-        user.email?.split("@")[0] ||
-        "Utilizador";
-      await admin.from("profiles").insert({
-        id: user.id,
-        full_name: fullName,
-        role: invite.role === "coordinator" ? "coordinator" : "coach",
-      });
-    }
-
-    // 4. Verificar se já está associado
-    const { data: existingStaff } = await admin
-      .from("team_staff")
-      .select("id")
-      .eq("profile_id", user.id)
-      .eq("team_id", team.id)
-      .maybeSingle();
-
-    if (existingStaff) {
-      // Marcar como aceite na mesma
-      await admin
-        .from("staff_invites")
-        .update({
-          accepted_at: new Date().toISOString(),
-          accepted_by: user.id,
-          status: "accepted",
-        })
-        .eq("id", invite.id);
-
-      const { data: ageGroup } = await admin
-        .from("age_groups")
-        .select("id, name, club_name")
-        .eq("id", invite.age_group_id)
-        .single();
-
+    if (result.already_linked) {
       return NextResponse.json({
         success: true,
         alreadyLinked: true,
-        ageGroup: ageGroup
-          ? { name: ageGroup.name, clubName: ageGroup.club_name }
-          : null,
-        role: invite.role,
+        ageGroup,
+        role,
       });
     }
 
-    // 5. Criar associação em team_staff
-    // invite.role "coach" mapeia para "head_coach" no schema de team_staff
-    const insertRole = invite.role === "coach" ? "head_coach" : invite.role;
-    const { error: staffError } = await admin.from("team_staff").insert({
-      profile_id: user.id,
-      team_id: team.id,
-      role: insertRole,
-    });
-
-    // 23505 = duplicate key — utilizador já está na equipa, pode continuar
-    if (staffError && staffError.code !== "23505") {
-      console.error("Erro ao criar team_staff:", staffError.message);
-      return NextResponse.json(
-        { error: "Erro ao aceitar convite. Contacta o coordenador." },
-        { status: 500 },
-      );
-    }
-
-    // 6. Atualizar role do perfil
-    const profileRole = invite.role === "coordinator" ? "coordinator" : "coach";
-    await admin.from("profiles").update({ role: profileRole }).eq("id", user.id);
-
-    // 7. Marcar convite como aceite
-    await admin
-      .from("staff_invites")
-      .update({
-        accepted_at: new Date().toISOString(),
-        accepted_by: user.id,
-        status: "accepted",
-      })
-      .eq("id", invite.id);
-
-    // 8. Atualizar nome do perfil se ainda não tiver
-    if (existingProfile && !existingProfile.full_name && invite.first_name) {
-      await admin
-        .from("profiles")
-        .update({
-          full_name: `${invite.first_name} ${invite.last_name || ""}`.trim(),
-        })
-        .eq("id", user.id);
-    }
-
-    // 9. Buscar info do escalão para resposta
-    const { data: ageGroup } = await admin
-      .from("age_groups")
-      .select("id, name, club_name")
-      .eq("id", invite.age_group_id)
-      .single();
-
     return NextResponse.json({
       success: true,
-      ageGroup: ageGroup
-        ? { name: ageGroup.name, clubName: ageGroup.club_name }
-        : null,
-      role: invite.role,
+      ageGroup,
+      role,
     });
   } catch (error) {
     console.error("Erro inesperado em invite/redeem:", error);

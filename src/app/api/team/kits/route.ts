@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 
 type PlayerTypeInput = "field" | "field_player" | "goalkeeper";
@@ -111,9 +110,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const admin = createAdminClient();
-
-    const { data: team, error: teamError } = await admin
+    const { data: team, error: teamError } = await supabase
       .from("teams")
       .select("id, age_group_id")
       .eq("id", teamId)
@@ -130,7 +127,7 @@ export async function POST(request: Request) {
     let hasAccess = false;
 
     if (team.age_group_id) {
-      const { data: ageGroup } = await admin
+      const { data: ageGroup } = await supabase
         .from("age_groups")
         .select("id")
         .eq("id", team.age_group_id)
@@ -140,7 +137,7 @@ export async function POST(request: Request) {
     }
 
     if (!hasAccess) {
-      const { data: staffLink } = await admin
+      const { data: staffLink } = await supabase
         .from("team_staff")
         .select("id")
         .eq("team_id", team.id)
@@ -160,7 +157,7 @@ export async function POST(request: Request) {
     const candidatePlayerTypes = playerTypeVariants(playerType);
     const candidatePieceTypes = pieceTypeVariants(pieceType);
 
-    const { data: existingPieces } = await admin
+    const { data: existingPieces } = await supabase
       .from("kit_pieces")
       .select("*")
       .eq("team_id", team.id)
@@ -176,7 +173,7 @@ export async function POST(request: Request) {
       const playerTypesInDb = Array.from(
         new Set((existingPieces || []).map((piece) => piece.player_type)),
       );
-      const { data: updatedPieces, error: updateError } = await admin
+      const { data: updatedPieces, error: updateError } = await supabase
         .from("kit_pieces")
         .update({ color_hex: colorHex, color_name: colorName })
         .eq("team_id", team.id)
@@ -218,7 +215,7 @@ export async function POST(request: Request) {
     }
 
     for (const candidate of insertCandidates) {
-      const insertResult = await admin
+      const insertResult = await supabase
         .from("kit_pieces")
         .insert({ ...insertPayload, ...candidate })
         .select("*")

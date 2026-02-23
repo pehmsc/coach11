@@ -1,4 +1,3 @@
-import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { resolveUserTeamContext } from "@/lib/auth/team-context";
 import { NextResponse } from "next/server";
@@ -16,8 +15,7 @@ export async function GET() {
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
 
-    const admin = createAdminClient();
-    const context = await resolveUserTeamContext(admin, user.id);
+    const context = await resolveUserTeamContext(supabase, user.id);
 
     if (context.accessibleTeamIds.length === 0) {
       return NextResponse.json(
@@ -34,7 +32,7 @@ export async function GET() {
       );
     }
 
-    const { data: games, error: gamesError } = await admin
+    const { data: games, error: gamesError } = await supabase
       .from("games")
       .select(
         "id, game_datetime, opponent_name, opponent_short_name, is_home, status, score_home, score_away, location, title, competition_id, team_id, age_group_id",

@@ -474,93 +474,34 @@ export async function POST(request: Request, { params }: RouteContext) {
       };
     });
 
-    const deleteResult = await admin.from("game_final_stats").delete().eq("game_id", gameId);
-    if (deleteResult.error) {
-      return respondInternalError(
-        "api.games.id.summary.recalculate.post.delete-old",
-        deleteResult.error,
-      );
-    }
-
-    const insertResult = await admin.from("game_final_stats").insert(rowsToInsert).select("id");
-    if (insertResult.error) {
-      const rollbackRows = currentFinalStats
-        .filter(
-          (row): row is {
-            player_id: string;
-            lineup_type: "starter" | "substitute";
-            minutes_played: number | null;
-            goals: number | null;
-            own_goals: number | null;
-            assists: number | null;
-            yellow_cards: number | null;
-            red_cards: number | null;
-            coach_rating: number | null;
-            notes: string | null;
-            is_mvp: boolean;
-            is_finalized: boolean | null;
-            finalized_at: string | null;
-          } =>
-            typeof row.player_id === "string" &&
-            (row.lineup_type === "starter" || row.lineup_type === "substitute"),
-        )
-        .map((row) => ({
-          game_id: gameId,
-          player_id: row.player_id,
-          lineup_type: row.lineup_type,
-          minutes_played: Math.max(0, Math.floor(row.minutes_played ?? 0)),
-          goals: Math.max(0, Math.floor(row.goals ?? 0)),
-          own_goals: Math.max(0, Math.floor(row.own_goals ?? 0)),
-          assists: Math.max(0, Math.floor(row.assists ?? 0)),
-          yellow_cards: Math.max(0, Math.floor(row.yellow_cards ?? 0)),
-          red_cards: Math.max(0, Math.floor(row.red_cards ?? 0)),
-          coach_rating: typeof row.coach_rating === "number" ? row.coach_rating : null,
-          notes: typeof row.notes === "string" ? row.notes : null,
-          is_mvp: row.is_mvp === true,
-          is_finalized: row.is_finalized ?? true,
-          finalized_at: row.finalized_at ?? null,
-        }));
-
-      if (rollbackRows.length > 0) {
-        const rollbackResult = await admin.from("game_final_stats").insert(rollbackRows);
-        if (rollbackResult.error) {
-          console.error("Summary recalculate rollback failed:", rollbackResult.error);
-        }
-      }
-
-      return respondInternalError(
-        "api.games.id.summary.recalculate.post.insert",
-        insertResult.error,
-      );
-    }
-
     const score = computeScoreFromEvents(events);
-    await admin
-      .from("games")
-      .update({
-        status: "completed",
-        score_home: score.home,
-        score_away: score.away,
-      })
-      .eq("id", gameId);
+    const rpcResult = await admin.rpc("rpc_recalculate_game_summary", {
+      p_game_id: gameId,
+      p_rows: rowsToInsert,
+      p_score_home: score.home,
+      p_score_away: score.away,
+      p_final_minute: finalMinute,
+      p_updated_by: user.id,
+    });
 
-    await admin
-      .from("game_live_checkpoints")
-      .upsert(
-        {
-          game_id: gameId,
-          phase: "completed",
-          base_seconds: Math.max(0, (finalMinute - 1) * 60),
-          running_since_ms: null,
-          updated_at: new Date().toISOString(),
-          updated_by: user.id,
-        },
-        { onConflict: "game_id" },
+    if (rpcResult.error) {
+      return respondInternalError(
+        "api.games.id.summary.recalculate.post.rpc-recalculate",
+        rpcResult.error,
       );
+    }
+
+    const insertedRowsFromRpc =
+      rpcResult.data &&
+      typeof rpcResult.data === "object" &&
+      "insertedRows" in rpcResult.data &&
+      typeof (rpcResult.data as { insertedRows?: unknown }).insertedRows === "number"
+        ? (rpcResult.data as { insertedRows: number }).insertedRows
+        : null;
 
     return NextResponse.json({
       success: true,
-      insertedRows: insertResult.data?.length ?? 0,
+      insertedRows: insertedRowsFromRpc ?? rowsToInsert.length,
       finalMinute,
       score,
     });

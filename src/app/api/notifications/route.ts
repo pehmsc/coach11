@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { resolveUserTeamContext } from "@/lib/auth/team-context";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
@@ -45,8 +44,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
 
-    const admin = createAdminClient();
-    const context = await resolveUserTeamContext(admin, user.id);
+    const context = await resolveUserTeamContext(supabase, user.id);
     if (context.accessibleTeamIds.length === 0 || !context.ageGroup) {
       return NextResponse.json(
         {
@@ -68,7 +66,7 @@ export async function GET(request: Request) {
     const limit = normalizeLimit(searchParams.get("limit"));
     const unreadOnly = searchParams.get("unreadOnly") === "true";
 
-    let listQuery = admin
+    let listQuery = supabase
       .from("notifications")
       .select(
         "id, user_id, team_id, age_group_id, actor_id, type, entity_id, title, body, link_path, created_at, read_at",
@@ -84,7 +82,7 @@ export async function GET(request: Request) {
 
     const [{ data: rows, error: listError }, unreadRes] = await Promise.all([
       listQuery,
-      admin
+      supabase
         .from("notifications")
         .select("id", { count: "exact", head: true })
         .eq("user_id", user.id)
@@ -132,8 +130,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
 
-    const admin = createAdminClient();
-    const context = await resolveUserTeamContext(admin, user.id);
+    const context = await resolveUserTeamContext(supabase, user.id);
     if (context.accessibleTeamIds.length === 0) {
       return NextResponse.json({ success: true, updated: 0, deleted: 0 });
     }
@@ -150,7 +147,7 @@ export async function POST(request: Request) {
     }
 
     if (action === "delete_all") {
-      let deleteQuery = admin
+      let deleteQuery = supabase
         .from("notifications")
         .delete()
         .eq("user_id", user.id)
@@ -179,7 +176,7 @@ export async function POST(request: Request) {
 
     const readAtValue =
       action === "mark_all_read" ? new Date().toISOString() : null;
-    let updateQuery = admin
+    let updateQuery = supabase
       .from("notifications")
       .update({ read_at: readAtValue })
       .eq("user_id", user.id)

@@ -1,4 +1,3 @@
-import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { resolveUserTeamContext } from "@/lib/auth/team-context";
 import { NextResponse } from "next/server";
@@ -35,8 +34,7 @@ async function getRouteContext() {
     };
   }
 
-  const admin = createAdminClient();
-  const context = await resolveUserTeamContext(admin, user.id);
+  const context = await resolveUserTeamContext(supabase, user.id);
 
   if (context.accessibleAgeGroupIds.length === 0) {
     return {
@@ -47,7 +45,7 @@ async function getRouteContext() {
     };
   }
 
-  return { userId: user.id, admin, context };
+  return { userId: user.id, supabase, context };
 }
 
 function resolveTargetAgeGroupId(
@@ -67,7 +65,7 @@ export async function GET(request: Request) {
   try {
     const routeContext = await getRouteContext();
     if ("error" in routeContext) return routeContext.error;
-    const { admin, context } = routeContext;
+    const { supabase, context } = routeContext;
 
     const { searchParams } = new URL(request.url);
     const requestedAgeGroupId = searchParams.get("ageGroupId");
@@ -78,7 +76,7 @@ export async function GET(request: Request) {
     }
 
     const [{ data: players, error: playersError }, ageGroupRes] = await Promise.all([
-      admin
+      supabase
         .from("players")
         .select(PLAYER_FIELDS)
         .eq("age_group_id", targetAgeGroupId)
@@ -89,7 +87,7 @@ export async function GET(request: Request) {
             data: context.ageGroup,
             error: null,
           })
-        : admin
+        : supabase
             .from("age_groups")
             .select("*")
             .eq("id", targetAgeGroupId)
@@ -124,7 +122,7 @@ export async function POST(request: Request) {
   try {
     const routeContext = await getRouteContext();
     if ("error" in routeContext) return routeContext.error;
-    const { admin, context } = routeContext;
+    const { supabase, context } = routeContext;
 
     const body = await request.json().catch(() => null);
     const parsed = PlayerCreateSchema.safeParse(body);
@@ -172,7 +170,7 @@ export async function POST(request: Request) {
       status: status ?? "active",
     };
 
-    const { data, error } = await admin
+    const { data, error } = await supabase
       .from("players")
       .insert(insertPayload)
       .select(PLAYER_FIELDS)
