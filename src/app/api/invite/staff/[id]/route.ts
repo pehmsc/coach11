@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 
 type RouteContext = {
@@ -24,9 +23,7 @@ export async function DELETE(_request: Request, { params }: RouteContext) {
       return NextResponse.json({ error: "Convite inválido." }, { status: 400 });
     }
 
-    const admin = createAdminClient();
-
-    const { data: invite, error: inviteError } = await admin
+    const { data: invite, error: inviteError } = await supabase
       .from("staff_invites")
       .select("id, age_group_id, accepted_by")
       .eq("id", inviteId)
@@ -43,7 +40,7 @@ export async function DELETE(_request: Request, { params }: RouteContext) {
       return NextResponse.json({ error: "Convite não encontrado." }, { status: 404 });
     }
 
-    const { data: managedAgeGroup } = await admin
+    const { data: managedAgeGroup } = await supabase
       .from("age_groups")
       .select("id")
       .eq("id", invite.age_group_id)
@@ -58,14 +55,14 @@ export async function DELETE(_request: Request, { params }: RouteContext) {
     }
 
     if (invite.accepted_by) {
-      const { data: teams } = await admin
+      const { data: teams } = await supabase
         .from("teams")
         .select("id")
         .eq("age_group_id", invite.age_group_id);
 
       const teamIds = (teams || []).map((team) => team.id);
       if (teamIds.length > 0) {
-        await admin
+        await supabase
           .from("team_staff")
           .delete()
           .in("team_id", teamIds)
@@ -73,7 +70,7 @@ export async function DELETE(_request: Request, { params }: RouteContext) {
       }
     }
 
-    const { error: deleteInviteError } = await admin
+    const { error: deleteInviteError } = await supabase
       .from("staff_invites")
       .delete()
       .eq("id", invite.id);

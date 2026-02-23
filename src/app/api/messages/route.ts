@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { resolveUserTeamContext } from "@/lib/auth/team-context";
 import {
@@ -80,8 +79,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
 
-    const admin = createAdminClient();
-    const context = await resolveUserTeamContext(admin, user.id);
+    const context = await resolveUserTeamContext(supabase, user.id);
     if (!context.teamId || !context.ageGroup) {
       return NextResponse.json(
         { success: true, linked: false, teamId: null, messages: [], members: [] },
@@ -92,7 +90,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const limit = normalizeLimit(searchParams.get("limit"));
 
-    const { data: rows, error } = await admin
+    const { data: rows, error } = await supabase
       .from("team_messages")
       .select("id, team_id, age_group_id, sender_id, content, created_at")
       .eq("team_id", context.teamId)
@@ -109,7 +107,7 @@ export async function GET(request: Request) {
       senderIds.length > 0
         ? (
             (
-              await admin
+              await supabase
                 .from("profiles")
                 .select("id, full_name, avatar_url")
                 .in("id", senderIds)
@@ -120,7 +118,7 @@ export async function GET(request: Request) {
       (profileRows as ProfileRow[]).map((row) => [row.id, row]),
     );
 
-    const memberContext = await getTeamMembersDetailed(admin, {
+    const memberContext = await getTeamMembersDetailed(supabase, {
       teamId: context.teamId,
       ageGroupId: context.ageGroup.id,
     });
@@ -131,7 +129,7 @@ export async function GET(request: Request) {
     }));
 
     const nowIso = new Date().toISOString();
-    await admin
+    await supabase
       .from("notifications")
       .update({ read_at: nowIso })
       .eq("user_id", user.id)
@@ -187,8 +185,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const admin = createAdminClient();
-    const context = await resolveUserTeamContext(admin, user.id);
+    const context = await resolveUserTeamContext(supabase, user.id);
     if (!context.teamId || !context.ageGroup) {
       return NextResponse.json(
         { error: "Sem equipa associada para enviar mensagens." },
@@ -196,7 +193,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const memberContext = await getTeamMembersDetailed(admin, {
+    const memberContext = await getTeamMembersDetailed(supabase, {
       teamId: context.teamId,
       ageGroupId: context.ageGroup.id,
     });
@@ -207,7 +204,7 @@ export async function POST(request: Request) {
       (memberId) => validMemberIds.has(memberId) && memberId !== user.id,
     );
 
-    const { data: inserted, error: insertError } = await admin
+    const { data: inserted, error: insertError } = await supabase
       .from("team_messages")
       .insert({
         team_id: context.teamId,
@@ -225,14 +222,14 @@ export async function POST(request: Request) {
       );
     }
 
-    const { data: senderProfile } = await admin
+    const { data: senderProfile } = await supabase
       .from("profiles")
       .select("id, full_name, avatar_url")
       .eq("id", user.id)
       .maybeSingle();
 
     try {
-      await createNotificationsForTeam(admin, {
+      await createNotificationsForTeam(supabase, {
         teamId: context.teamId,
         ageGroupId: context.ageGroup.id,
         actorId: user.id,
@@ -252,7 +249,7 @@ export async function POST(request: Request) {
 
     if (mentionRecipientIds.length > 0) {
       try {
-        await createNotificationsForUsers(admin, {
+        await createNotificationsForUsers(supabase, {
           recipientIds: mentionRecipientIds,
           actorId: user.id,
           ageGroupId: context.ageGroup.id,
