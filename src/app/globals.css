@@ -124,3 +124,14 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* iOS Safari zooms focused form fields below 16px. Keep mobile inputs at >=16px. */
+@supports (-webkit-touch-callout: none) {
+  @media (max-width: 1024px) {
+    input,
+    textarea,
+    select {
+      font-size: 16px !important;
+    }
+  }
+}

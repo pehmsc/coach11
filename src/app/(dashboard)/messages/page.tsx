@@ -280,7 +280,7 @@ export default function MessagesPage() {
   }
 
   return (
-    <div className="h-[calc(100dvh-5rem)] md:h-[calc(100dvh-1rem)] flex flex-col bg-white md:max-w-4xl md:mx-auto md:rounded-2xl md:border md:border-slate-200 md:mt-4">
+    <div className="h-[calc(100dvh-5rem)] md:h-[calc(100dvh-1rem)] min-h-0 flex flex-col bg-white md:max-w-4xl md:mx-auto md:rounded-2xl md:border md:border-slate-200 md:mt-4">
       <div className="px-4 md:px-6 py-3 border-b bg-slate-50/70">
         <h1 className="text-base font-semibold text-slate-900 flex items-center gap-2">
           <MessageSquare size={16} className="text-slate-500" />
@@ -293,7 +293,7 @@ export default function MessagesPage() {
 
       <div
         ref={listRef}
-        className="flex-1 overflow-y-auto px-3 md:px-6 py-4 space-y-2 bg-slate-50/40"
+        className="flex-1 min-h-0 overflow-y-auto px-3 md:px-6 py-4 space-y-2 bg-slate-50/40"
         style={{ WebkitOverflowScrolling: "touch" }}
       >
         {messages.length === 0 ? (
@@ -392,7 +392,7 @@ export default function MessagesPage() {
                 maxLength={1200}
                 disabled={sending}
                 rows={2}
-                className="w-full min-h-[48px] max-h-40 resize-none rounded-xl border border-slate-200 bg-white pl-8 pr-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                className="w-full min-h-[48px] max-h-40 resize-none rounded-xl border border-slate-200 bg-white pl-8 pr-3 py-2 text-base md:text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-400"
               />
             </div>
             <Button
