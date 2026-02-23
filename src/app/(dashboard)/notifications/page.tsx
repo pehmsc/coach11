@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatDistanceToNow, parseISO } from "date-fns";
 import { pt } from "date-fns/locale";
-import { Bell, CheckCheck, Loader2 } from "lucide-react";
+import { Bell, CheckCheck, Loader2, Trash2, Eye, EyeOff } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -40,6 +40,9 @@ export default function NotificationsPage() {
 
   const [loading, setLoading] = useState(true);
   const [markingAll, setMarkingAll] = useState(false);
+  const [clearingAll, setClearingAll] = useState(false);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [linked, setLinked] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -105,17 +108,47 @@ export default function NotificationsPage() {
     };
   }, [currentUserId, loadNotifications, supabase]);
 
-  async function markNotificationRead(id: string) {
-    await fetch(`/api/notifications/${id}`, {
+  async function updateNotificationReadState(id: string, markAsRead: boolean) {
+    setUpdatingId(id);
+    const res = await fetch(`/api/notifications/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: markAsRead ? "mark_read" : "mark_unread" }),
     }).catch(() => null);
-    setNotifications((prev) =>
-      prev.map((item) =>
-        item.id === id ? { ...item, read_at: item.read_at || new Date().toISOString() } : item,
-      ),
-    );
-    setUnreadCount((prev) => Math.max(0, prev - 1));
+
+    if (res?.ok) {
+      setNotifications((prev) =>
+        prev.map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                read_at: markAsRead ? item.read_at || new Date().toISOString() : null,
+              }
+            : item,
+        ),
+      );
+      setUnreadCount((prev) =>
+        markAsRead ? Math.max(0, prev - 1) : prev + 1,
+      );
+    }
+
+    setUpdatingId(null);
+  }
+
+  async function deleteNotification(id: string) {
+    setDeletingId(id);
+    const wasUnread = notifications.find((item) => item.id === id)?.read_at == null;
+    const res = await fetch(`/api/notifications/${id}`, {
+      method: "DELETE",
+    }).catch(() => null);
+
+    if (res?.ok) {
+      setNotifications((prev) => prev.filter((item) => item.id !== id));
+      if (wasUnread) {
+        setUnreadCount((prev) => Math.max(0, prev - 1));
+      }
+    }
+    setDeletingId(null);
   }
 
   async function handleMarkAllRead() {
@@ -137,9 +170,42 @@ export default function NotificationsPage() {
     setMarkingAll(false);
   }
 
+  async function handleMarkAllUnread() {
+    setMarkingAll(true);
+    const res = await fetch("/api/notifications", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "mark_all_unread" }),
+    });
+    if (res.ok) {
+      setNotifications((prev) =>
+        prev.map((item) => ({
+          ...item,
+          read_at: null,
+        })),
+      );
+      setUnreadCount(notifications.length);
+    }
+    setMarkingAll(false);
+  }
+
+  async function handleClearAll() {
+    setClearingAll(true);
+    const res = await fetch("/api/notifications", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "delete_all" }),
+    });
+    if (res.ok) {
+      setNotifications([]);
+      setUnreadCount(0);
+    }
+    setClearingAll(false);
+  }
+
   async function handleOpenNotification(notification: NotificationItem) {
     if (!notification.read_at) {
-      await markNotificationRead(notification.id);
+      await updateNotificationReadState(notification.id, true);
     }
     if (notification.link_path) {
       router.push(notification.link_path);
@@ -175,7 +241,7 @@ export default function NotificationsPage() {
   return (
     <div className="p-4 md:p-8 max-w-3xl mx-auto space-y-4">
       <Card>
-        <CardHeader className="pb-3 flex flex-row items-center justify-between">
+        <CardHeader className="pb-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <CardTitle className="text-base flex items-center gap-2">
             <Bell size={16} className="text-slate-500" />
             Notificações
@@ -185,19 +251,44 @@ export default function NotificationsPage() {
               </span>
             ) : null}
           </CardTitle>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void handleMarkAllRead()}
-            disabled={markingAll || unreadCount === 0}
-          >
-            {markingAll ? (
-              <Loader2 size={14} className="animate-spin mr-1" />
-            ) : (
-              <CheckCheck size={14} className="mr-1" />
-            )}
-            Marcar todas como lidas
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void handleMarkAllRead()}
+              disabled={markingAll || unreadCount === 0}
+            >
+              {markingAll ? (
+                <Loader2 size={14} className="animate-spin mr-1" />
+              ) : (
+                <CheckCheck size={14} className="mr-1" />
+              )}
+              Marcar todas como lidas
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void handleMarkAllUnread()}
+              disabled={markingAll || notifications.length === 0}
+            >
+              <EyeOff size={14} className="mr-1" />
+              Marcar todas não lidas
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void handleClearAll()}
+              disabled={clearingAll || notifications.length === 0}
+              className="border-red-200 text-red-600 hover:bg-red-50"
+            >
+              {clearingAll ? (
+                <Loader2 size={14} className="animate-spin mr-1" />
+              ) : (
+                <Trash2 size={14} className="mr-1" />
+              )}
+              Limpar tudo
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-2">
           {notifications.length === 0 ? (
@@ -206,38 +297,79 @@ export default function NotificationsPage() {
             </p>
           ) : (
             notifications.map((notification) => (
-              <button
+              <div
                 key={notification.id}
-                onClick={() => void handleOpenNotification(notification)}
                 className={`w-full text-left rounded-xl border p-3 transition-colors ${
                   notification.read_at
                     ? "border-slate-100 bg-white"
                     : "border-blue-200 bg-blue-50/60 hover:bg-blue-50"
                 }`}
               >
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-xs uppercase tracking-wide text-slate-500 font-semibold">
-                    {TYPE_LABELS[notification.type]}
+                <button
+                  onClick={() => void handleOpenNotification(notification)}
+                  className="w-full text-left"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs uppercase tracking-wide text-slate-500 font-semibold">
+                      {TYPE_LABELS[notification.type]}
+                    </p>
+                    {!notification.read_at ? (
+                      <span className="text-[10px] text-blue-700 font-semibold">
+                        Nova
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="text-sm font-semibold text-slate-800 mt-0.5">
+                    {notification.title}
                   </p>
-                  {!notification.read_at ? (
-                    <span className="text-[10px] text-blue-700 font-semibold">
-                      Nova
-                    </span>
+                  {notification.body ? (
+                    <p className="text-xs text-slate-600 mt-0.5">{notification.body}</p>
                   ) : null}
+                  <p className="text-[11px] text-slate-400 mt-1.5">
+                    {formatDistanceToNow(parseISO(notification.created_at), {
+                      locale: pt,
+                      addSuffix: true,
+                    })}
+                  </p>
+                </button>
+                <div className="flex items-center gap-2 mt-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs"
+                    disabled={updatingId === notification.id}
+                    onClick={() =>
+                      void updateNotificationReadState(
+                        notification.id,
+                        !notification.read_at,
+                      )
+                    }
+                  >
+                    {updatingId === notification.id ? (
+                      <Loader2 size={12} className="animate-spin mr-1" />
+                    ) : notification.read_at ? (
+                      <EyeOff size={12} className="mr-1" />
+                    ) : (
+                      <Eye size={12} className="mr-1" />
+                    )}
+                    {notification.read_at ? "Não lida" : "Marcar lida"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs border-red-200 text-red-600 hover:bg-red-50"
+                    disabled={deletingId === notification.id}
+                    onClick={() => void deleteNotification(notification.id)}
+                  >
+                    {deletingId === notification.id ? (
+                      <Loader2 size={12} className="animate-spin mr-1" />
+                    ) : (
+                      <Trash2 size={12} className="mr-1" />
+                    )}
+                    Limpar
+                  </Button>
                 </div>
-                <p className="text-sm font-semibold text-slate-800 mt-0.5">
-                  {notification.title}
-                </p>
-                {notification.body ? (
-                  <p className="text-xs text-slate-600 mt-0.5">{notification.body}</p>
-                ) : null}
-                <p className="text-[11px] text-slate-400 mt-1.5">
-                  {formatDistanceToNow(parseISO(notification.created_at), {
-                    locale: pt,
-                    addSuffix: true,
-                  })}
-                </p>
-              </button>
+              </div>
             ))
           )}
         </CardContent>

@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 export async function PATCH(
-  _: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
@@ -24,10 +24,19 @@ export async function PATCH(
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
 
+    const body = await request.json().catch(() => null);
+    const action =
+      typeof body?.action === "string" ? body.action : "mark_read";
+
+    if (!["mark_read", "mark_unread"].includes(action)) {
+      return NextResponse.json({ error: "Ação inválida." }, { status: 400 });
+    }
+
     const admin = createAdminClient();
+    const readAtValue = action === "mark_read" ? new Date().toISOString() : null;
     const { data, error } = await admin
       .from("notifications")
-      .update({ read_at: new Date().toISOString() })
+      .update({ read_at: readAtValue })
       .eq("id", id)
       .eq("user_id", user.id)
       .select(
@@ -52,6 +61,57 @@ export async function PATCH(
       success: true,
       notification: data,
     });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Erro interno.";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+export async function DELETE(
+  _: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const { id } = await params;
+    if (!id) {
+      return NextResponse.json(
+        { error: "Identificador da notificação em falta." },
+        { status: 400 },
+      );
+    }
+
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
+    }
+
+    const admin = createAdminClient();
+    const { data, error } = await admin
+      .from("notifications")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", user.id)
+      .select("id")
+      .maybeSingle();
+
+    if (error) {
+      return NextResponse.json(
+        { error: error.message || "Erro ao apagar notificação." },
+        { status: 500 },
+      );
+    }
+    if (!data?.id) {
+      return NextResponse.json(
+        { error: "Notificação não encontrada." },
+        { status: 404 },
+      );
+    }
+
+    return NextResponse.json({ success: true, id: data.id });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Erro interno.";
     return NextResponse.json({ error: message }, { status: 500 });

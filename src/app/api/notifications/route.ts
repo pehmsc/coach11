@@ -138,29 +138,69 @@ export async function POST(request: Request) {
     const admin = createAdminClient();
     const context = await resolveUserTeamContext(admin, user.id);
     if (context.accessibleTeamIds.length === 0) {
-      return NextResponse.json({ success: true, updated: 0 });
+      return NextResponse.json({ success: true, updated: 0, deleted: 0 });
     }
 
     const body = await request.json().catch(() => null);
-    const action = typeof body?.action === "string" ? body.action : "mark_all_read";
+    const action =
+      typeof body?.action === "string" ? body.action : "mark_all_read";
     const type = typeof body?.type === "string" ? body.type : null;
+    const onlyRead = body?.onlyRead === true;
+    const onlyUnread = body?.onlyUnread === true;
 
-    if (action !== "mark_all_read") {
+    if (!["mark_all_read", "mark_all_unread", "delete_all"].includes(action)) {
       return NextResponse.json({ error: "Ação inválida." }, { status: 400 });
     }
 
-    let query = admin
-      .from("notifications")
-      .update({ read_at: new Date().toISOString() })
-      .eq("user_id", user.id)
-      .in("team_id", context.accessibleTeamIds)
-      .is("read_at", null);
+    if (action === "delete_all") {
+      let deleteQuery = admin
+        .from("notifications")
+        .delete()
+        .eq("user_id", user.id)
+        .in("team_id", context.accessibleTeamIds);
 
-    if (type) {
-      query = query.eq("type", type);
+      if (type) {
+        deleteQuery = deleteQuery.eq("type", type);
+      }
+      if (onlyRead) {
+        deleteQuery = deleteQuery.not("read_at", "is", null);
+      }
+      if (onlyUnread) {
+        deleteQuery = deleteQuery.is("read_at", null);
+      }
+
+      const { data, error } = await deleteQuery.select("id");
+      if (error) {
+        return NextResponse.json(
+          { error: error.message || "Erro ao limpar notificações." },
+          { status: 500 },
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        deleted: (data || []).length,
+      });
     }
 
-    const { data, error } = await query.select("id");
+    const readAtValue =
+      action === "mark_all_read" ? new Date().toISOString() : null;
+    let updateQuery = admin
+      .from("notifications")
+      .update({ read_at: readAtValue })
+      .eq("user_id", user.id)
+      .in("team_id", context.accessibleTeamIds);
+
+    if (action === "mark_all_read") {
+      updateQuery = updateQuery.is("read_at", null);
+    } else {
+      updateQuery = updateQuery.not("read_at", "is", null);
+    }
+    if (type) {
+      updateQuery = updateQuery.eq("type", type);
+    }
+
+    const { data, error } = await updateQuery.select("id");
     if (error) {
       return NextResponse.json(
         { error: error.message || "Erro ao atualizar notificações." },

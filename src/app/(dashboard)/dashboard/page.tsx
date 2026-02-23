@@ -9,6 +9,7 @@ import {
   Users,
   Calendar,
   Trophy,
+  Shield,
   AlertCircle,
   Sword,
   Dumbbell,
@@ -287,6 +288,7 @@ export default async function DashboardPage() {
     { href: "/trainings", icon: Dumbbell, label: "Treinos", color: "text-emerald-600" },
     { href: "/competitions", icon: Trophy, label: "Competições", color: "text-amber-600" },
     { href: "/players", icon: Users, label: "Plantel", color: "text-blue-600" },
+    { href: "/team", icon: Shield, label: "Equipa", color: "text-teal-600" },
     { href: "/staff", icon: Briefcase, label: "Equipa Técnica", color: "text-rose-600" },
   ];
 
@@ -495,7 +497,7 @@ export default async function DashboardPage() {
         <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">
           Gestão da equipa
         </h2>
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-5 items-stretch">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-6 items-stretch">
           {navCards.map(({ href, icon: Icon, label, color }) => (
             <Link key={href} href={href}>
               <Card className="hover:shadow-md transition-all cursor-pointer border-2 hover:border-emerald-200 h-full">
@@ -509,12 +511,6 @@ export default async function DashboardPage() {
             </Link>
           ))}
         </div>
-        <p className="text-xs text-slate-500 mt-3">
-          Outras opções de gestão:{" "}
-          <Link href="/team" className="text-emerald-700 font-medium hover:underline">
-            Equipa / Escalão
-          </Link>
-        </p>
       </div>
     </>
   );

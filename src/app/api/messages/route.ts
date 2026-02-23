@@ -2,7 +2,11 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { resolveUserTeamContext } from "@/lib/auth/team-context";
-import { createNotificationsForTeam } from "@/lib/notifications/service";
+import {
+  createNotificationsForTeam,
+  createNotificationsForUsers,
+} from "@/lib/notifications/service";
+import { getTeamMembersDetailed } from "@/lib/team/members";
 
 type TeamMessageRow = {
   id: string;
@@ -19,6 +23,12 @@ type ProfileRow = {
   avatar_url: string | null;
 };
 
+type MessageMemberRow = {
+  id: string;
+  full_name: string;
+  role: string;
+};
+
 function normalizeLimit(value: string | null) {
   const parsed = Number.parseInt(value || "", 10);
   if (!Number.isFinite(parsed)) return 80;
@@ -28,6 +38,17 @@ function normalizeLimit(value: string | null) {
 function normalizeContent(value: unknown) {
   if (typeof value !== "string") return "";
   return value.trim();
+}
+
+function normalizeMentionUserIds(value: unknown) {
+  if (!Array.isArray(value)) return [] as string[];
+  return Array.from(
+    new Set(
+      value
+        .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
+        .filter((entry) => entry.length > 0),
+    ),
+  );
 }
 
 function mapMessageWithProfile(
@@ -62,7 +83,7 @@ export async function GET(request: Request) {
     const context = await resolveUserTeamContext(admin, user.id);
     if (!context.teamId || !context.ageGroup) {
       return NextResponse.json(
-        { success: true, linked: false, teamId: null, messages: [] },
+        { success: true, linked: false, teamId: null, messages: [], members: [] },
         { headers: { "Cache-Control": "no-store" } },
       );
     }
@@ -101,6 +122,16 @@ export async function GET(request: Request) {
       (profileRows as ProfileRow[]).map((row) => [row.id, row]),
     );
 
+    const memberContext = await getTeamMembersDetailed(admin, {
+      teamId: context.teamId,
+      ageGroupId: context.ageGroup.id,
+    });
+    const members: MessageMemberRow[] = memberContext.members.map((member) => ({
+      id: member.profileId,
+      full_name: member.fullName || "Membro da equipa",
+      role: member.role,
+    }));
+
     const nowIso = new Date().toISOString();
     await admin
       .from("notifications")
@@ -117,6 +148,7 @@ export async function GET(request: Request) {
         teamId: context.teamId,
         ageGroupId: context.ageGroup.id,
         currentUserId: user.id,
+        members,
         messages: messages.map((row) => mapMessageWithProfile(row, profileMap)),
       },
       {
@@ -144,6 +176,7 @@ export async function POST(request: Request) {
 
     const body = await request.json().catch(() => null);
     const content = normalizeContent(body?.content);
+    const mentionUserIds = normalizeMentionUserIds(body?.mentionUserIds);
     if (!content) {
       return NextResponse.json(
         { error: "A mensagem não pode estar vazia." },
@@ -165,6 +198,17 @@ export async function POST(request: Request) {
         { status: 403 },
       );
     }
+
+    const memberContext = await getTeamMembersDetailed(admin, {
+      teamId: context.teamId,
+      ageGroupId: context.ageGroup.id,
+    });
+    const validMemberIds = new Set(
+      memberContext.members.map((member) => member.profileId),
+    );
+    const mentionRecipientIds = mentionUserIds.filter(
+      (memberId) => validMemberIds.has(memberId) && memberId !== user.id,
+    );
 
     const { data: inserted, error: insertError } = await admin
       .from("team_messages")
@@ -207,6 +251,30 @@ export async function POST(request: Request) {
       });
     } catch (notificationError) {
       console.error("Erro ao gerar notificações de mensagem:", notificationError);
+    }
+
+    if (mentionRecipientIds.length > 0) {
+      try {
+        await createNotificationsForUsers(admin, {
+          recipientIds: mentionRecipientIds,
+          actorId: user.id,
+          ageGroupId: context.ageGroup.id,
+          teamId: context.teamId,
+          type: "message",
+          entityId: inserted.id,
+          title: "Foste mencionado numa mensagem",
+          body: `${
+            senderProfile?.full_name || "Um membro da equipa"
+          } mencionou-te no chat`,
+          linkPath: "/messages",
+          excludeActor: true,
+        });
+      } catch (mentionNotificationError) {
+        console.error(
+          "Erro ao gerar notificações de menção:",
+          mentionNotificationError,
+        );
+      }
     }
 
     const profileMap = new Map<string, ProfileRow>();
