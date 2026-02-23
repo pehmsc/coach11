@@ -7,7 +7,13 @@
       "Bash(git commit:*)",
       "Bash(git push:*)",
       "Bash(find:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(git -C /Users/pedrocampos/Project_2026/coach11 stash:*)",
+      "Bash(git -C /Users/pedrocampos/Project_2026/coach11 show 0405b90:src/lib/supabase/admin.ts)",
+      "Bash(git -C /Users/pedrocampos/Project_2026/coach11 checkout HEAD -- src/lib/supabase/admin.ts)",
+      "Bash(npm install:*)",
+      "Bash(git -C /Users/pedrocampos/Project_2026/coach11 add package.json package-lock.json)",
+      "Bash(git -C:*)"
     ]
   }
 }
