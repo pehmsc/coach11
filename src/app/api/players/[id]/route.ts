@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { resolveUserTeamContext } from "@/lib/auth/team-context";
+import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { NextResponse } from "next/server";
 
 type RouteContext = {
@@ -156,15 +157,11 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       .single();
 
     if (error || !data) {
-      return NextResponse.json(
-        { error: error?.message || "Erro ao atualizar atleta." },
-        { status: 500 },
-      );
+      return respondInternalError("api.players.id.patch.update", error ?? new Error("PLAYER_UPDATE_EMPTY"));
     }
 
     return NextResponse.json({ success: true, player: data });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Erro interno.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return respondInternalError("api.players.id.patch", error);
   }
 }

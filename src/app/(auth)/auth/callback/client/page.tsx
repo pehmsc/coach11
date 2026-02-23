@@ -5,19 +5,7 @@ import { Suspense, useEffect, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import type { EmailOtpType } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
-
-function sanitizeNext(rawNext: string | null) {
-  if (!rawNext) return "/dashboard";
-
-  try {
-    const decoded = decodeURIComponent(rawNext);
-    if (decoded.startsWith("/")) return decoded;
-  } catch {
-    if (rawNext.startsWith("/")) return rawNext;
-  }
-
-  return "/dashboard";
-}
+import { sanitizeNextPath } from "@/lib/auth/sanitize-next";
 
 function parseOtpType(rawType: string | null): EmailOtpType | null {
   if (!rawType) return null;
@@ -54,7 +42,7 @@ function OAuthCallbackClientContent() {
   const oauthCode = searchParams.get("code");
   const otpTokenHash = searchParams.get("token_hash");
   const otpType = useMemo(() => parseOtpType(searchParams.get("type")), [searchParams]);
-  const next = useMemo(() => sanitizeNext(searchParams.get("next")), [searchParams]);
+  const next = useMemo(() => sanitizeNextPath(searchParams.get("next")), [searchParams]);
 
   useEffect(() => {
     const hasOauthCode = typeof oauthCode === "string" && oauthCode.length > 0;

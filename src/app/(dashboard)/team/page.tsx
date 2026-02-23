@@ -163,7 +163,7 @@ export default function TeamPage() {
 
   async function loadData() {
     setLoading(true);
-    const res = await fetch("/api/me/context", { cache: "no-store" });
+    const res = await fetch("/api/me/context");
     const payload = await res.json().catch(() => ({}));
 
     if (!res.ok) {

@@ -2,6 +2,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { resolveUserTeamContext } from "@/lib/auth/team-context";
 import { NextResponse } from "next/server";
+import { SHORT_PRIVATE_CACHE_CONTROL } from "@/lib/http/cache";
+import { respondInternalError } from "@/lib/http/respond-internal-error";
 
 export async function GET() {
   try {
@@ -26,7 +28,7 @@ export async function GET() {
         },
         {
           headers: {
-            "Cache-Control": "no-store",
+            "Cache-Control": SHORT_PRIVATE_CACHE_CONTROL,
           },
         },
       );
@@ -52,12 +54,11 @@ export async function GET() {
       },
       {
         headers: {
-          "Cache-Control": "no-store",
+          "Cache-Control": SHORT_PRIVATE_CACHE_CONTROL,
         },
       },
     );
   } catch (error) {
-    console.error("Erro em GET /api/games:", error);
-    return NextResponse.json({ error: "Erro interno do servidor." }, { status: 500 });
+    return respondInternalError("api.games.get", error);
   }
 }

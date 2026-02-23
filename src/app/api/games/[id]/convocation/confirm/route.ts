@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { NextResponse } from "next/server";
 
 type RouteContext = {
@@ -194,23 +195,6 @@ export async function POST(_request: Request, { params }: RouteContext) {
     });
   } catch (error) {
     console.error("Erro ao confirmar convocatória:", error);
-
-    const message =
-      error instanceof Error ? error.message : "Erro interno ao guardar convocatória.";
-
-    if (message.includes("SUPABASE_SERVICE_ROLE_KEY")) {
-      return NextResponse.json(
-        {
-          error:
-            "Configuração do servidor incompleta: falta SUPABASE_SERVICE_ROLE_KEY no ambiente de produção.",
-        },
-        { status: 500 },
-      );
-    }
-
-    return NextResponse.json(
-      { error: message || "Erro interno ao guardar convocatória." },
-      { status: 500 },
-    );
+    return respondInternalError("api.games.id.convocation.confirm.post", error);
   }
 }

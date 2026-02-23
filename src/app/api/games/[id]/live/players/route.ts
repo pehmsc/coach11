@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { NextResponse } from "next/server";
 
 type RouteContext = {
@@ -266,7 +267,6 @@ export async function POST(request: Request, { params }: RouteContext) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Erro interno.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return respondInternalError("api.games.id.live.players.patch", error);
   }
 }

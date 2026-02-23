@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { NextResponse } from "next/server";
 
 type RouteContext = {
@@ -204,7 +205,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
 
         if (authUserError) {
           authEmailSync = "failed";
-          authEmailSyncMessage = authUserError.message;
+          authEmailSyncMessage = "Não foi possível validar o email no Auth.";
         } else {
           const providers =
             authUserData.user?.identities
@@ -229,16 +230,15 @@ export async function PATCH(request: Request, { params }: RouteContext) {
 
             if (authUpdateError) {
               authEmailSync = "failed";
-              authEmailSyncMessage = authUpdateError.message;
+              authEmailSyncMessage = "Não foi possível sincronizar o email no Auth.";
             } else {
               authEmailSync = "updated";
             }
           }
         }
-      } catch (error) {
+      } catch {
         authEmailSync = "failed";
-        authEmailSyncMessage =
-          error instanceof Error ? error.message : "Erro ao sincronizar email no Auth.";
+        authEmailSyncMessage = "Erro ao sincronizar email no Auth.";
       }
     }
 
@@ -271,11 +271,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     });
   } catch (error) {
     console.error("Erro ao atualizar membro da equipa técnica:", error);
-    const message =
-      error instanceof Error
-        ? error.message
-        : "Erro interno ao atualizar membro da equipa técnica.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return respondInternalError("api.staff.id.patch", error);
   }
 }
 
@@ -311,10 +307,6 @@ export async function DELETE(_request: Request, { params }: RouteContext) {
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Erro ao remover membro da equipa técnica:", error);
-    const message =
-      error instanceof Error
-        ? error.message
-        : "Erro interno ao remover membro da equipa técnica.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return respondInternalError("api.staff.id.delete", error);
   }
 }

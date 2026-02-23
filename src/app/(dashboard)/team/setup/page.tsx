@@ -176,7 +176,7 @@ export default function TeamSetupPage() {
     setError(null);
 
     try {
-      const res = await fetch("/api/me/context", { cache: "no-store" });
+      const res = await fetch("/api/me/context");
       const payload = await res.json().catch(() => ({}));
 
       if (!res.ok) {

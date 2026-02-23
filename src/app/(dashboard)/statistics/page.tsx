@@ -105,7 +105,7 @@ export default function StatisticsPage() {
     setLoading(true);
     try {
       // Get age group context (works for both coordinators and coaches)
-      const ctxRes = await fetch("/api/me/context", { cache: "no-store", credentials: "include" });
+      const ctxRes = await fetch("/api/me/context", { credentials: "include" });
       const ctx = (await ctxRes.json().catch(() => ({}))) as ContextResponse;
       const agId = ctx.ageGroupId ?? ctx.ageGroup?.id ?? null;
       if (!agId) { setLoading(false); return; }

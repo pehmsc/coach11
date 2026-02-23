@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { NextResponse } from "next/server";
 
 export async function GET(request: Request) {
@@ -180,7 +181,6 @@ export async function GET(request: Request) {
     });
   } catch (error) {
     console.error("Erro ao carregar estatísticas:", error);
-    const message = error instanceof Error ? error.message : "Erro interno";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return respondInternalError("api.statistics.players.get", error);
   }
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { respondInternalError } from "@/lib/http/respond-internal-error";
 
 export const runtime = "nodejs";
 
@@ -185,22 +186,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, url: logoUrl });
   } catch (error) {
     console.error("Erro ao fazer upload do logotipo:", error);
-    const message =
-      error instanceof Error ? error.message : "Erro interno ao carregar logotipo.";
-
-    if (message.includes("SUPABASE_SERVICE_ROLE_KEY")) {
-      return NextResponse.json(
-        {
-          error:
-            "Configuração do servidor incompleta: falta SUPABASE_SERVICE_ROLE_KEY no ambiente de produção.",
-        },
-        { status: 500 },
-      );
-    }
-
-    return NextResponse.json(
-      { error: message || "Erro interno ao carregar logotipo." },
-      { status: 500 },
-    );
+    return respondInternalError("api.team.logo.post", error);
   }
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { respondInternalError } from "@/lib/http/respond-internal-error";
 
 type AttendanceStatus = "present" | "absent" | "injured";
 
@@ -452,24 +453,7 @@ export async function GET(request: Request) {
       attendanceTable: attendanceResult.table,
     });
   } catch (error) {
-    console.error("Erro ao carregar presenças do dia:", error);
-    const message =
-      error instanceof Error ? error.message : "Erro interno ao carregar presenças do dia.";
-
-    if (message.includes("SUPABASE_SERVICE_ROLE_KEY")) {
-      return NextResponse.json(
-        {
-          error:
-            "Configuração do servidor incompleta: falta SUPABASE_SERVICE_ROLE_KEY no ambiente de produção.",
-        },
-        { status: 500 },
-      );
-    }
-
-    return NextResponse.json(
-      { error: message || "Erro interno ao carregar presenças do dia." },
-      { status: 500 },
-    );
+    return respondInternalError("api.attendance.today.get", error);
   }
 }
 
@@ -615,23 +599,6 @@ export async function POST(request: Request) {
       savedCount: rows.length,
     });
   } catch (error) {
-    console.error("Erro ao guardar presenças:", error);
-    const message =
-      error instanceof Error ? error.message : "Erro interno ao guardar presenças.";
-
-    if (message.includes("SUPABASE_SERVICE_ROLE_KEY")) {
-      return NextResponse.json(
-        {
-          error:
-            "Configuração do servidor incompleta: falta SUPABASE_SERVICE_ROLE_KEY no ambiente de produção.",
-        },
-        { status: 500 },
-      );
-    }
-
-    return NextResponse.json(
-      { error: message || "Erro interno ao guardar presenças." },
-      { status: 500 },
-    );
+    return respondInternalError("api.attendance.today.post", error);
   }
 }

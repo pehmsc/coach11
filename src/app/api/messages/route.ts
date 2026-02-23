@@ -7,6 +7,7 @@ import {
   createNotificationsForUsers,
 } from "@/lib/notifications/service";
 import { getTeamMembersDetailed } from "@/lib/team/members";
+import { respondInternalError } from "@/lib/http/respond-internal-error";
 
 type TeamMessageRow = {
   id: string;
@@ -99,10 +100,7 @@ export async function GET(request: Request) {
       .limit(limit);
 
     if (error) {
-      return NextResponse.json(
-        { error: error.message || "Erro ao carregar mensagens." },
-        { status: 500 },
-      );
+      return respondInternalError("api.messages.get.list", error);
     }
 
     const messages = (rows || []) as TeamMessageRow[];
@@ -158,8 +156,7 @@ export async function GET(request: Request) {
       },
     );
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Erro interno.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return respondInternalError("api.messages.get", error);
   }
 }
 
@@ -222,9 +219,9 @@ export async function POST(request: Request) {
       .single();
 
     if (insertError || !inserted) {
-      return NextResponse.json(
-        { error: insertError?.message || "Erro ao enviar mensagem." },
-        { status: 500 },
+      return respondInternalError(
+        "api.messages.post.insert",
+        insertError ?? new Error("MESSAGE_INSERT_EMPTY_RESULT"),
       );
     }
 
@@ -289,7 +286,6 @@ export async function POST(request: Request) {
       message: mapMessageWithProfile(inserted as TeamMessageRow, profileMap),
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Erro interno.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return respondInternalError("api.messages.post", error);
   }
 }

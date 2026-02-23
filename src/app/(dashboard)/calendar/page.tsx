@@ -125,7 +125,6 @@ export default function CalendarPage() {
     try {
       const res = await fetch(
         `/api/calendar/events?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&ageGroupId=${encodeURIComponent(ageGroupId)}`,
-        { cache: "no-store" },
       );
       const payload = (await res.json().catch(() => null)) as
         | {
@@ -215,8 +214,8 @@ export default function CalendarPage() {
     async function loadTeam() {
       setLoadError(null);
       const [contextRes, competitionsRes] = await Promise.all([
-        fetch("/api/me/context", { cache: "no-store" }),
-        fetch("/api/competitions", { cache: "no-store" }),
+        fetch("/api/me/context"),
+        fetch("/api/competitions"),
       ]);
       const payload = (await contextRes.json().catch(() => null)) as
         | {

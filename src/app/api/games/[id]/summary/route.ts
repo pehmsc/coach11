@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { NextResponse } from "next/server";
 
 type RouteContext = {
@@ -231,7 +232,6 @@ export async function GET(_request: Request, { params }: RouteContext) {
       },
     );
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Erro interno.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return respondInternalError("api.games.id.summary.get", error);
   }
 }

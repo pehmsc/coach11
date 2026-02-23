@@ -4,6 +4,7 @@ import {
   normalizeManualShortName,
 } from "@/lib/football/short-name";
 import { createClient } from "@/lib/supabase/server";
+import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { NextResponse } from "next/server";
 
 type RouteContext = {
@@ -127,7 +128,6 @@ export async function PATCH(request: Request, { params }: RouteContext) {
 
     return NextResponse.json({ success: true, game: updated });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Erro interno.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return respondInternalError("api.games.id.patch", error);
   }
 }

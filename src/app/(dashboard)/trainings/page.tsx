@@ -77,7 +77,7 @@ export default function TrainingsPage() {
   async function loadData() {
     setLoading(true);
 
-    const res = await fetch("/api/me/context", { cache: "no-store" });
+    const res = await fetch("/api/me/context");
     const ctx = await res.json().catch(() => ({}));
     setCanDeleteTrainings(ctx?.canManageStaff === true);
     if (!res.ok || !ctx?.ageGroup?.id) {

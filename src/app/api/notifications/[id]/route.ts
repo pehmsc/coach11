@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { respondInternalError } from "@/lib/http/respond-internal-error";
 
 export async function PATCH(
   request: Request,
@@ -45,10 +46,7 @@ export async function PATCH(
       .maybeSingle();
 
     if (error) {
-      return NextResponse.json(
-        { error: error.message || "Erro ao atualizar notificação." },
-        { status: 500 },
-      );
+      return respondInternalError("api.notifications.id.patch.update", error);
     }
     if (!data) {
       return NextResponse.json(
@@ -62,8 +60,7 @@ export async function PATCH(
       notification: data,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Erro interno.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return respondInternalError("api.notifications.id.patch", error);
   }
 }
 
@@ -99,10 +96,7 @@ export async function DELETE(
       .maybeSingle();
 
     if (error) {
-      return NextResponse.json(
-        { error: error.message || "Erro ao apagar notificação." },
-        { status: 500 },
-      );
+      return respondInternalError("api.notifications.id.delete.remove", error);
     }
     if (!data?.id) {
       return NextResponse.json(
@@ -113,7 +107,6 @@ export async function DELETE(
 
     return NextResponse.json({ success: true, id: data.id });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Erro interno.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return respondInternalError("api.notifications.id.delete", error);
   }
 }

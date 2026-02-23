@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { respondInternalError } from "@/lib/http/respond-internal-error";
 
 export async function POST() {
   try {
@@ -87,12 +88,6 @@ export async function POST() {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Erro ao garantir perfil:", error);
-    const message =
-      error instanceof Error ? error.message : "Erro interno ao garantir perfil.";
-    return NextResponse.json(
-      { error: message || "Erro interno ao garantir perfil." },
-      { status: 500 },
-    );
+    return respondInternalError("api.auth.ensure-profile.post", error);
   }
 }

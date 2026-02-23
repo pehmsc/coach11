@@ -8,6 +8,8 @@ import {
   normalizeManualShortName,
 } from "@/lib/football/short-name";
 import { NextResponse } from "next/server";
+import { SHORT_PRIVATE_CACHE_CONTROL } from "@/lib/http/cache";
+import { respondInternalError } from "@/lib/http/respond-internal-error";
 
 type CalendarEventType = "training" | "game";
 
@@ -297,13 +299,12 @@ export async function GET(request: Request) {
       },
       {
         headers: {
-          "Cache-Control": "no-store",
+          "Cache-Control": SHORT_PRIVATE_CACHE_CONTROL,
         },
       },
     );
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Erro interno.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return respondInternalError("api.calendar.events.get", error);
   }
 }
 
@@ -371,10 +372,7 @@ export async function POST(request: Request) {
         .single();
 
       if (error) {
-        return NextResponse.json(
-          { error: error.message || "Erro ao criar treino." },
-          { status: 500 },
-        );
+        return respondInternalError("api.calendar.events.post.create_training", error);
       }
 
       try {
@@ -425,10 +423,7 @@ export async function POST(request: Request) {
       .single();
 
     if (error) {
-      return NextResponse.json(
-        { error: error.message || "Erro ao criar jogo." },
-        { status: 500 },
-      );
+      return respondInternalError("api.calendar.events.post.create_game", error);
     }
 
     try {
@@ -455,8 +450,7 @@ export async function POST(request: Request) {
       teamId: targetTeamId,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Erro interno.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return respondInternalError("api.calendar.events.post", error);
   }
 }
 
@@ -548,10 +542,7 @@ export async function PATCH(request: Request) {
         .single();
 
       if (error) {
-        return NextResponse.json(
-          { error: error.message || "Erro ao editar treino." },
-          { status: 500 },
-        );
+        return respondInternalError("api.calendar.events.patch.update_training", error);
       }
 
       return NextResponse.json({
@@ -615,10 +606,7 @@ export async function PATCH(request: Request) {
       .single();
 
     if (error) {
-      return NextResponse.json(
-        { error: error.message || "Erro ao editar jogo." },
-        { status: 500 },
-      );
+      return respondInternalError("api.calendar.events.patch.update_game", error);
     }
 
     return NextResponse.json({
@@ -629,8 +617,7 @@ export async function PATCH(request: Request) {
       teamId: targetTeamId,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Erro interno.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return respondInternalError("api.calendar.events.patch", error);
   }
 }
 
@@ -687,12 +674,7 @@ export async function DELETE(request: Request) {
       try {
         await deleteTrainingSessionCascade(admin, id);
       } catch (deleteError) {
-        const message =
-          deleteError instanceof Error ? deleteError.message : "Erro ao apagar treino.";
-        return NextResponse.json(
-          { error: message || "Erro ao apagar treino." },
-          { status: 500 },
-        );
+        return respondInternalError("api.calendar.events.delete.training_cascade", deleteError);
       }
 
       return NextResponse.json({ success: true, type: "training", id });
@@ -729,17 +711,11 @@ export async function DELETE(request: Request) {
     try {
       await deleteGameCascade(admin, id);
     } catch (deleteError) {
-      const message =
-        deleteError instanceof Error ? deleteError.message : "Erro ao apagar jogo.";
-      return NextResponse.json(
-        { error: message || "Erro ao apagar jogo." },
-        { status: 500 },
-      );
+      return respondInternalError("api.calendar.events.delete.game_cascade", deleteError);
     }
 
     return NextResponse.json({ success: true, type: "game", id });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Erro interno.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return respondInternalError("api.calendar.events.delete", error);
   }
 }

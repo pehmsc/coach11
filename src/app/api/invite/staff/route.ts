@@ -3,6 +3,8 @@ import { Resend } from "resend";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { checkInviteSendLimit } from "@/lib/rate-limit";
+import { getCanonicalAppUrl } from "@/lib/config/canonical-app-url";
+import { respondInternalError } from "@/lib/http/respond-internal-error";
 
 export const runtime = "nodejs";
 
@@ -126,15 +128,8 @@ export async function POST(request: Request) {
       coordinatorName = user.user_metadata.full_name;
     }
 
-    // 🔗 URL registo
-    const proto = request.headers.get("x-forwarded-proto") ?? "https";
-    const host =
-      request.headers.get("x-forwarded-host") ?? request.headers.get("host");
-
-    const appUrl = host
-      ? `${proto}://${host}`
-      : process.env.NEXT_PUBLIC_APP_URL || "https://coach11.vercel.app";
-
+    // 🔗 URL registo (base canónica, sem host headers)
+    const appUrl = getCanonicalAppUrl();
     const inviteUrl = `${appUrl}/invite?code=${inviteCode}&email=${encodeURIComponent(email)}`;
 
     // 📧 Configuração Resend
@@ -151,7 +146,7 @@ export async function POST(request: Request) {
     const resend = new Resend(process.env.RESEND_API_KEY);
 
     const fromEmail =
-      process.env.RESEND_FROM_EMAIL || "Coach11 <noreply@befirstrs.com>";
+      process.env.RESEND_FROM_EMAIL || "Coach11 <noreply@coach11.app>";
 
     // ✉️ Enviar email
     const { data: emailData, error: emailError } = await resend.emails.send({
@@ -203,11 +198,7 @@ export async function POST(request: Request) {
       inviteCode,
       emailSent: true,
     });
-  } catch (err) {
-    console.error("Erro em invite/staff POST:", err);
-    return NextResponse.json(
-      { error: "Erro interno do servidor" },
-      { status: 500 },
-    );
+  } catch (error) {
+    return respondInternalError("api.invite.staff.post", error);
   }
 }

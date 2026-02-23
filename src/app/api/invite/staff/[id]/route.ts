@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { respondInternalError } from "@/lib/http/respond-internal-error";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -87,13 +88,6 @@ export async function DELETE(_request: Request, { params }: RouteContext) {
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Erro ao remover convite de staff:", error);
-    const message =
-      error instanceof Error ? error.message : "Erro interno ao remover convite.";
-
-    return NextResponse.json(
-      { error: message || "Erro interno ao remover convite." },
-      { status: 500 },
-    );
+    return respondInternalError("api.invite.staff.id.delete", error);
   }
 }
-

@@ -95,7 +95,7 @@ export default function GamesPage() {
     setLoadError(null);
     setHasContext(true);
 
-    const res = await fetch("/api/games", { cache: "no-store" });
+    const res = await fetch("/api/games");
     const payload = (await res.json().catch(() => null)) as
       | { success?: boolean; linked?: boolean; games?: GameRow[]; error?: string }
       | null;
@@ -118,7 +118,7 @@ export default function GamesPage() {
   }
 
   async function loadCompetitions() {
-    const res = await fetch("/api/competitions", { cache: "no-store" });
+    const res = await fetch("/api/competitions");
     const payload = (await res.json().catch(() => null)) as CompetitionsResponse | null;
     if (!res.ok || !payload?.success) {
       setCompetitionOptions([]);

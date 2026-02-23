@@ -119,7 +119,7 @@ export default function CompetitionsPage() {
     setError(null);
     setLoading(true);
     try {
-      const res = await fetch("/api/competitions", { cache: "no-store" });
+      const res = await fetch("/api/competitions");
       const payload = (await res.json().catch(() => null)) as CompetitionsPayload | null;
 
       if (!res.ok || !payload?.success) {

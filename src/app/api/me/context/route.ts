@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { resolveUserTeamContext } from "@/lib/auth/team-context";
 import { getTeamMembersDetailed } from "@/lib/team/members";
 import { NextResponse } from "next/server";
+import { SHORT_PRIVATE_CACHE_CONTROL } from "@/lib/http/cache";
+import { respondInternalError } from "@/lib/http/respond-internal-error";
 
 function normalizeKitRowForUi(row: Record<string, unknown>) {
   const playerType =
@@ -43,21 +45,28 @@ export async function GET() {
     const context = await resolveUserTeamContext(admin, user.id);
 
     if (!context.ageGroup) {
-      return NextResponse.json({
-        success: true,
-        linked: false,
-        source: context.source,
-        teamId: context.teamId,
-        teamRole: context.teamRole,
-        canManageStaff: false,
-        ageGroup: null,
-        accessibleTeamIds: context.accessibleTeamIds,
-        kits: [],
-        staffMembers: [],
-        activeStaffProfileIds: [],
-        staffInvites: [],
-        profile: profile || null,
-      });
+      return NextResponse.json(
+        {
+          success: true,
+          linked: false,
+          source: context.source,
+          teamId: context.teamId,
+          teamRole: context.teamRole,
+          canManageStaff: false,
+          ageGroup: null,
+          accessibleTeamIds: context.accessibleTeamIds,
+          kits: [],
+          staffMembers: [],
+          activeStaffProfileIds: [],
+          staffInvites: [],
+          profile: profile || null,
+        },
+        {
+          headers: {
+            "Cache-Control": SHORT_PRIVATE_CACHE_CONTROL,
+          },
+        },
+      );
     }
 
     const { data: ageGroupMeta } = await admin
@@ -105,41 +114,31 @@ export async function GET() {
     }));
     const staffProfileIds = staffContext.members.map((member) => member.profileId);
 
-    return NextResponse.json({
-      success: true,
-      linked: true,
-      source: context.source,
-      teamId: context.teamId,
-      teamRole: context.teamRole,
-      canManageStaff,
-      ageGroup: context.ageGroup,
-      accessibleTeamIds: context.accessibleTeamIds,
-      kits: ((kitsRes.data || []) as Record<string, unknown>[]).map((row) =>
-        normalizeKitRowForUi(row),
-      ),
-      activeStaffProfileIds: staffProfileIds,
-      staffMembers,
-      staffInvites: invitesRes.data || [],
-      profile: profile || null,
-    });
-  } catch (error) {
-    console.error("Erro ao carregar contexto do utilizador:", error);
-    const message =
-      error instanceof Error ? error.message : "Erro interno ao carregar contexto.";
-
-    if (message.includes("SUPABASE_SERVICE_ROLE_KEY")) {
-      return NextResponse.json(
-        {
-          error:
-            "Configuração do servidor incompleta: falta SUPABASE_SERVICE_ROLE_KEY no ambiente de produção.",
-        },
-        { status: 500 },
-      );
-    }
-
     return NextResponse.json(
-      { error: message || "Erro interno ao carregar contexto." },
-      { status: 500 },
+      {
+        success: true,
+        linked: true,
+        source: context.source,
+        teamId: context.teamId,
+        teamRole: context.teamRole,
+        canManageStaff,
+        ageGroup: context.ageGroup,
+        accessibleTeamIds: context.accessibleTeamIds,
+        kits: ((kitsRes.data || []) as Record<string, unknown>[]).map((row) =>
+          normalizeKitRowForUi(row),
+        ),
+        activeStaffProfileIds: staffProfileIds,
+        staffMembers,
+        staffInvites: invitesRes.data || [],
+        profile: profile || null,
+      },
+      {
+        headers: {
+          "Cache-Control": SHORT_PRIVATE_CACHE_CONTROL,
+        },
+      },
     );
+  } catch (error) {
+    return respondInternalError("api.me.context.get", error);
   }
 }

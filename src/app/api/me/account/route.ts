@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { deleteGameCascade, deleteTrainingSessionCascade } from "@/lib/events/delete-cascade";
+import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { NextResponse } from "next/server";
 
 type DeleteAccountPayload = {
@@ -320,32 +321,16 @@ export async function DELETE(request: Request) {
       .eq("id", user.id);
 
     if (deleteProfileError) {
-      return NextResponse.json(
-        {
-          error:
-            "Não foi possível apagar o perfil associado. " +
-            (deleteProfileError.message || "Tenta novamente."),
-        },
-        { status: 500 },
-      );
+      return respondInternalError("api.me.account.delete.profile", deleteProfileError);
     }
 
     const { error: deleteAuthUserError } = await admin.auth.admin.deleteUser(user.id);
     if (deleteAuthUserError) {
-      return NextResponse.json(
-        {
-          error:
-            "O perfil foi removido mas a conta de autenticação não foi apagada. " +
-            (deleteAuthUserError.message || "Contacta suporte."),
-        },
-        { status: 500 },
-      );
+      return respondInternalError("api.me.account.delete.auth-user", deleteAuthUserError);
     }
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Erro interno ao apagar a conta.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return respondInternalError("api.me.account.delete", error);
   }
 }

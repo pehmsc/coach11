@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { resolveUserTeamContext } from "@/lib/auth/team-context";
+import { respondInternalError } from "@/lib/http/respond-internal-error";
 
 type NotificationRow = {
   id: string;
@@ -92,10 +93,7 @@ export async function GET(request: Request) {
     ]);
 
     if (listError) {
-      return NextResponse.json(
-        { error: listError.message || "Erro ao carregar notificações." },
-        { status: 500 },
-      );
+      return respondInternalError("api.notifications.get.list", listError);
     }
 
     const unreadCount = unreadRes.count ?? 0;
@@ -119,8 +117,7 @@ export async function GET(request: Request) {
       },
     );
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Erro interno.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return respondInternalError("api.notifications.get", error);
   }
 }
 
@@ -171,10 +168,7 @@ export async function POST(request: Request) {
 
       const { data, error } = await deleteQuery.select("id");
       if (error) {
-        return NextResponse.json(
-          { error: error.message || "Erro ao limpar notificações." },
-          { status: 500 },
-        );
+        return respondInternalError("api.notifications.post.delete_all", error);
       }
 
       return NextResponse.json({
@@ -202,10 +196,7 @@ export async function POST(request: Request) {
 
     const { data, error } = await updateQuery.select("id");
     if (error) {
-      return NextResponse.json(
-        { error: error.message || "Erro ao atualizar notificações." },
-        { status: 500 },
-      );
+      return respondInternalError("api.notifications.post.update_all", error);
     }
 
     return NextResponse.json({
@@ -213,7 +204,6 @@ export async function POST(request: Request) {
       updated: (data || []).length,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Erro interno.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return respondInternalError("api.notifications.post", error);
   }
 }

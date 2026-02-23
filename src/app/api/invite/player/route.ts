@@ -5,6 +5,8 @@ import { Resend } from "resend";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { checkPlayerInviteLimit } from "@/lib/rate-limit";
+import { getCanonicalAppUrl } from "@/lib/config/canonical-app-url";
+import { respondInternalError } from "@/lib/http/respond-internal-error";
 // Note: checkPlayerInviteLimit is in-memory. For distributed rate limiting upgrade to Vercel KV.
 
 const PlayerInviteSchema = z.object({
@@ -101,8 +103,7 @@ export async function POST(request: Request) {
       .maybeSingle();
 
     const coordinatorName = profile?.full_name || "O teu treinador";
-    const appUrl =
-      process.env.NEXT_PUBLIC_APP_URL || "https://coach11.vercel.app";
+    const appUrl = getCanonicalAppUrl();
     const registerUrl = `${appUrl}/register?code=${inviteCode}&email=${encodeURIComponent(player.email)}&type=player`;
 
     if (!process.env.RESEND_API_KEY) {
@@ -197,11 +198,7 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({ success: true, inviteCode, emailSent: true });
-  } catch (err) {
-    console.error("Erro em invite/player POST:", err);
-    return NextResponse.json(
-      { error: "Erro interno do servidor" },
-      { status: 500 },
-    );
+  } catch (error) {
+    return respondInternalError("api.invite.player.post", error);
   }
 }

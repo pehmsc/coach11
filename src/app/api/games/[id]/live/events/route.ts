@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { NextResponse } from "next/server";
 
 type RouteContext = {
@@ -186,8 +187,7 @@ export async function GET(_: Request, { params }: RouteContext) {
 
     return NextResponse.json({ events: data || [] });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Erro interno.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return respondInternalError("api.games.id.live.events.get", error);
   }
 }
 
@@ -371,8 +371,7 @@ export async function POST(request: Request, { params }: RouteContext) {
 
     return NextResponse.json({ success: true, events: data || [] });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Erro interno.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return respondInternalError("api.games.id.live.events.post", error);
   }
 }
 
@@ -420,7 +419,6 @@ export async function DELETE(request: Request, { params }: RouteContext) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Erro interno.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return respondInternalError("api.games.id.live.events.delete", error);
   }
 }

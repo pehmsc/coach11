@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { NextResponse } from "next/server";
 
 type RouteContext = {
@@ -475,9 +476,9 @@ export async function POST(request: Request, { params }: RouteContext) {
 
     const deleteResult = await admin.from("game_final_stats").delete().eq("game_id", gameId);
     if (deleteResult.error) {
-      return NextResponse.json(
-        { error: `Erro ao limpar estatísticas antigas: ${deleteResult.error.message}` },
-        { status: 500 },
+      return respondInternalError(
+        "api.games.id.summary.recalculate.post.delete-old",
+        deleteResult.error,
       );
     }
 
@@ -527,9 +528,9 @@ export async function POST(request: Request, { params }: RouteContext) {
         }
       }
 
-      return NextResponse.json(
-        { error: `Erro ao gravar estatísticas recalculadas: ${insertResult.error.message}` },
-        { status: 500 },
+      return respondInternalError(
+        "api.games.id.summary.recalculate.post.insert",
+        insertResult.error,
       );
     }
 
@@ -564,8 +565,7 @@ export async function POST(request: Request, { params }: RouteContext) {
       score,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Erro interno.";
     console.error("Summary recalculate error:", error);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return respondInternalError("api.games.id.summary.recalculate.post", error);
   }
 }

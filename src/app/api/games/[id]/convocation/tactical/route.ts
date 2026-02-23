@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { NextResponse } from "next/server";
 
 type RouteContext = {
@@ -100,10 +101,6 @@ export async function POST(request: Request, { params }: RouteContext) {
     return NextResponse.json({ success: true, tacticalSystem });
   } catch (error) {
     console.error("Erro ao guardar sistema táctico:", error);
-    const message =
-      error instanceof Error
-        ? error.message
-        : "Erro interno ao guardar sistema táctico.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return respondInternalError("api.games.id.convocation.tactical.post", error);
   }
 }

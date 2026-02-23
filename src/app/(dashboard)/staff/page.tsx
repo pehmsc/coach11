@@ -110,7 +110,7 @@ export default function StaffPage() {
   async function loadData() {
     setLoading(true);
 
-    const contextRes = await fetch("/api/me/context", { cache: "no-store" });
+    const contextRes = await fetch("/api/me/context");
 
     const ctx = await contextRes.json().catch(() => ({}));
     if (!contextRes.ok) {

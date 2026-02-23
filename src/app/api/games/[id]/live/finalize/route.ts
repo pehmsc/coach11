@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { NextResponse } from "next/server";
 
 type RouteContext = {
@@ -185,9 +186,9 @@ export async function POST(request: Request, { params }: RouteContext) {
 
     const deleteResult = await admin.from("game_final_stats").delete().eq("game_id", gameId);
     if (deleteResult.error) {
-      return NextResponse.json(
-        { error: `Erro ao limpar estatísticas antigas: ${deleteResult.error.message}` },
-        { status: 500 },
+      return respondInternalError(
+        "api.games.id.live.finalize.post.delete-old",
+        deleteResult.error,
       );
     }
 
@@ -214,9 +215,9 @@ export async function POST(request: Request, { params }: RouteContext) {
       .select("id");
 
     if (insertResult.error) {
-      return NextResponse.json(
-        { error: `Erro ao inserir game_final_stats: ${insertResult.error.message}` },
-        { status: 500 },
+      return respondInternalError(
+        "api.games.id.live.finalize.post.insert-final-stats",
+        insertResult.error,
       );
     }
 
@@ -228,9 +229,9 @@ export async function POST(request: Request, { params }: RouteContext) {
       .single();
 
     if (updateGameResult.error) {
-      return NextResponse.json(
-        { error: `Erro ao marcar jogo como completed: ${updateGameResult.error.message}` },
-        { status: 500 },
+      return respondInternalError(
+        "api.games.id.live.finalize.post.update-game",
+        updateGameResult.error,
       );
     }
 
@@ -264,8 +265,7 @@ export async function POST(request: Request, { params }: RouteContext) {
       insertedRows: insertResult.data?.length ?? 0,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Erro interno.";
     console.error("Live finalize error:", error);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return respondInternalError("api.games.id.live.finalize.post", error);
   }
 }
