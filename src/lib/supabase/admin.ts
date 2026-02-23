@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
 /**
  * Cliente Supabase com service role key — bypassa todas as RLS policies.
@@ -10,9 +10,9 @@ import { createClient } from "@supabase/supabase-js";
  * repeated initialization overhead.
  */
 
-let _cached: ReturnType<typeof createClient> | null = null;
+let _cached: SupabaseClient<any> | null = null;
 
-export function createAdminClient() {
+export function createAdminClient(): SupabaseClient<any> {
   if (_cached) return _cached;
 
   const url = (
