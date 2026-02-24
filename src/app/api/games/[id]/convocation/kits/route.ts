@@ -1,10 +1,13 @@
-import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { NextResponse } from "next/server";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
+};
+
+type GameAccessContext = {
+  exists: boolean;
 };
 
 type KitSelectionPayload = {
@@ -15,6 +18,14 @@ type KitSelectionPayload = {
   gk_shorts_kit_id: string | null;
   gk_socks_kit_id: string | null;
 };
+
+function parseGameAccessContext(value: unknown): GameAccessContext | null {
+  if (!value || typeof value !== "object") return null;
+  const row = value as Record<string, unknown>;
+  return {
+    exists: row.exists === true,
+  };
+}
 
 const KIT_FIELD_RULES: Record<
   keyof KitSelectionPayload,
@@ -91,9 +102,23 @@ export async function POST(request: Request, { params }: RouteContext) {
     const body = await request.json().catch(() => null);
     const selection = normalizeKitSelection(body);
 
-    const admin = createAdminClient();
+    const { data: accessData, error: accessError } = await supabase.rpc(
+      "rpc_game_access_context",
+      {
+        p_game_id: gameId,
+      },
+    );
 
-    const { data: game, error: gameError } = await admin
+    if (accessError) {
+      return NextResponse.json({ error: "Erro ao validar o jogo." }, { status: 500 });
+    }
+
+    const access = parseGameAccessContext(accessData);
+    if (!access?.exists) {
+      return NextResponse.json({ error: "Jogo não encontrado." }, { status: 404 });
+    }
+
+    const { data: game, error: gameError } = await supabase
       .from("games")
       .select("id, team_id, age_group_id")
       .eq("id", gameId)
@@ -104,14 +129,17 @@ export async function POST(request: Request, { params }: RouteContext) {
     }
 
     if (!game) {
-      return NextResponse.json({ error: "Jogo não encontrado." }, { status: 404 });
+      return NextResponse.json(
+        { error: "Sem permissões para editar os equipamentos deste jogo." },
+        { status: 403 },
+      );
     }
 
     let hasAccess = false;
     let teamId: string | null = game.team_id;
 
     if (game.age_group_id) {
-      const { data: ageGroup } = await admin
+      const { data: ageGroup } = await supabase
         .from("age_groups")
         .select("id")
         .eq("id", game.age_group_id)
@@ -121,7 +149,7 @@ export async function POST(request: Request, { params }: RouteContext) {
     }
 
     if (!teamId && game.age_group_id) {
-      const { data: fallbackTeam } = await admin
+      const { data: fallbackTeam } = await supabase
         .from("teams")
         .select("id")
         .eq("age_group_id", game.age_group_id)
@@ -132,7 +160,7 @@ export async function POST(request: Request, { params }: RouteContext) {
     }
 
     if (!hasAccess && teamId) {
-      const { data: staffLink } = await admin
+      const { data: staffLink } = await supabase
         .from("team_staff")
         .select("id")
         .eq("team_id", teamId)
@@ -160,7 +188,7 @@ export async function POST(request: Request, { params }: RouteContext) {
     );
 
     if (selectedIds.length > 0) {
-      const { data: selectedPieces, error: selectedPiecesError } = await admin
+      const { data: selectedPieces, error: selectedPiecesError } = await supabase
         .from("kit_pieces")
         .select("id, team_id, player_type, piece_type")
         .in("id", selectedIds);
@@ -201,7 +229,7 @@ export async function POST(request: Request, { params }: RouteContext) {
       }
     }
 
-    const { data: convocationRows, error: convocationRowsError } = await admin
+    const { data: convocationRows, error: convocationRowsError } = await supabase
       .from("convocations")
       .select("id, status, created_at")
       .eq("game_id", gameId)
@@ -226,7 +254,7 @@ export async function POST(request: Request, { params }: RouteContext) {
     const allConvocationIds = convocationRows?.map((row) => row.id) ?? [];
 
     if (!latestConvocation) {
-      const { data: createdConvocation, error: createError } = await admin
+      const { data: createdConvocation, error: createError } = await supabase
         .from("convocations")
         .insert({
           game_id: gameId,
@@ -246,7 +274,7 @@ export async function POST(request: Request, { params }: RouteContext) {
       latestConvocation = { id: createdConvocation.id, status: "draft", created_at: null };
     } else {
       const updateIds = allConvocationIds.length > 0 ? allConvocationIds : [latestConvocation.id];
-      const { error: updateError } = await admin
+      const { error: updateError } = await supabase
         .from("convocations")
         .update({
           ...selection,

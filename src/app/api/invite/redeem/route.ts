@@ -1,5 +1,4 @@
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
 import { checkRedeemLimit } from "@/lib/rate-limit";
 
@@ -98,16 +97,13 @@ export async function POST(request: Request) {
     }
 
     const code = inviteCode.trim().toUpperCase();
-    const admin = createAdminClient();
-
-    const rpcResult = await admin.rpc("rpc_redeem_staff_invite", {
+    const rpcResult = await supabase.rpc("rpc_redeem_staff_invite_auth", {
       p_invite_code: code,
-      p_user_id: user.id,
       p_user_email: user.email ?? null,
     });
 
     if (rpcResult.error) {
-      console.error("Erro ao executar rpc_redeem_staff_invite:", rpcResult.error.message);
+      console.error("Erro ao executar rpc_redeem_staff_invite_auth:", rpcResult.error.message);
       return NextResponse.json(
         { error: "Erro interno ao aceitar o convite." },
         { status: 500 },

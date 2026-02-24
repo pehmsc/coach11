@@ -1,10 +1,10 @@
-import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { NextResponse } from "next/server";
 
 type StaffInviteRow = {
   id: string;
+  invite_code: string;
   age_group_id: string;
   role: string;
   email: string | null;
@@ -25,14 +25,16 @@ export async function POST() {
       return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
     }
 
-    const admin = createAdminClient();
-
-    const { data: existingStaff } = await admin
+    const { data: existingStaff, error: existingStaffError } = await supabase
       .from("team_staff")
       .select("id")
       .eq("profile_id", user.id)
       .limit(1)
       .maybeSingle();
+
+    if (existingStaffError) {
+      return respondInternalError("api.invite.sync.post.lookup_team_staff", existingStaffError);
+    }
 
     if (existingStaff) {
       return NextResponse.json({ success: true, linked: true, source: "team_staff" });
@@ -41,9 +43,11 @@ export async function POST() {
     let invite: StaffInviteRow | null = null;
 
     if (user.email) {
-      const latestByEmail = await admin
+      const latestByEmail = await supabase
         .from("staff_invites")
-        .select("id, age_group_id, role, email, first_name, last_name, accepted_at, accepted_by")
+        .select(
+          "id, invite_code, age_group_id, role, email, first_name, last_name, accepted_at, accepted_by",
+        )
         .ilike("email", user.email)
         .order("accepted_at", { ascending: false, nullsFirst: false })
         .order("created_at", { ascending: false })
@@ -56,9 +60,11 @@ export async function POST() {
     }
 
     if (!invite) {
-      const acceptedByUser = await admin
+      const acceptedByUser = await supabase
         .from("staff_invites")
-        .select("id, age_group_id, role, email, first_name, last_name, accepted_at, accepted_by")
+        .select(
+          "id, invite_code, age_group_id, role, email, first_name, last_name, accepted_at, accepted_by",
+        )
         .eq("accepted_by", user.id)
         .order("created_at", { ascending: false })
         .limit(1)
@@ -83,108 +89,70 @@ export async function POST() {
       );
     }
 
-    let { data: team } = await admin
-      .from("teams")
-      .select("id")
-      .eq("age_group_id", invite.age_group_id)
-      .limit(1)
-      .maybeSingle();
+    const rpcResult = await supabase.rpc("rpc_redeem_staff_invite_auth", {
+      p_invite_code: invite.invite_code,
+      p_user_email: user.email ?? null,
+    });
 
-    if (!team) {
-      const { data: ageGroupInfo } = await admin
-        .from("age_groups")
-        .select("club_name, name")
-        .eq("id", invite.age_group_id)
+    if (rpcResult.error) {
+      return respondInternalError("api.invite.sync.post.rpc_redeem", rpcResult.error);
+    }
+
+    const result =
+      rpcResult.data && typeof rpcResult.data === "object"
+        ? (rpcResult.data as {
+            ok?: boolean;
+            error_code?: string;
+            already_linked?: boolean;
+          })
+        : null;
+
+    if (!result?.ok) {
+      switch (result?.error_code) {
+        case "invite_not_found":
+        case "invalid_code":
+          return NextResponse.json({ success: true, linked: false });
+        case "email_mismatch":
+          return NextResponse.json(
+            { error: "O convite encontrado pertence a outro email." },
+            { status: 403 },
+          );
+        case "cross_club_forbidden":
+          return NextResponse.json(
+            { error: "Este convite pertence a outro clube." },
+            { status: 403 },
+          );
+        case "age_group_not_found":
+          return NextResponse.json(
+            { error: "Escalão do convite não encontrado." },
+            { status: 422 },
+          );
+        default:
+          return NextResponse.json(
+            { error: "Não foi possível associar à equipa técnica." },
+            { status: 500 },
+          );
+      }
+    }
+
+    if (result.already_linked) {
+      const { data: staffLink, error: staffLinkError } = await supabase
+        .from("team_staff")
+        .select("id")
+        .eq("profile_id", user.id)
+        .limit(1)
         .maybeSingle();
 
-      if (!ageGroupInfo) {
-        return NextResponse.json(
-          { error: "Escalão do convite não encontrado." },
-          { status: 422 },
-        );
+      if (staffLinkError) {
+        return respondInternalError("api.invite.sync.post.verify_staff_link", staffLinkError);
       }
 
-      const { data: newTeam, error: createTeamError } = await admin
-        .from("teams")
-        .insert({
-          age_group_id: invite.age_group_id,
-          name: `${ageGroupInfo.club_name} ${ageGroupInfo.name}`,
-          is_competitive: true,
-        })
-        .select("id")
-        .single();
-
-      if (createTeamError || !newTeam) {
+      if (!staffLink) {
         return NextResponse.json(
-          { error: "Não foi possível criar equipa para o convite." },
+          { error: "Não foi possível associar à equipa técnica." },
           { status: 500 },
         );
       }
-
-      team = newTeam;
-    }
-
-    const { data: profile } = await admin
-      .from("profiles")
-      .select("id, full_name")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    if (!profile) {
-      const fullName =
-        `${invite.first_name || ""} ${invite.last_name || ""}`.trim() ||
-        user.user_metadata?.full_name ||
-        user.user_metadata?.name ||
-        user.email?.split("@")[0] ||
-        "Utilizador";
-
-      await admin.from("profiles").insert({
-        id: user.id,
-        full_name: fullName,
-        role: invite.role === "coordinator" ? "coordinator" : "coach",
-      });
-    }
-
-    const roleCandidates =
-      invite.role === "coach" ? ["head_coach", "coach"] : [invite.role];
-    let insertStaffError: { code?: string } | null = null;
-
-    for (let i = 0; i < roleCandidates.length; i += 1) {
-      const roleCandidate = roleCandidates[i];
-      const { error } = await admin.from("team_staff").insert({
-        profile_id: user.id,
-        team_id: team.id,
-        role: roleCandidate,
-      });
-
-      if (!error || error.code === "23505") {
-        insertStaffError = null;
-        break;
-      }
-
-      insertStaffError = error;
-      const isLast = i === roleCandidates.length - 1;
-      if (error.code !== "23514" || isLast) {
-        break;
-      }
-    }
-
-    if (insertStaffError) {
-      return NextResponse.json(
-        { error: "Não foi possível associar à equipa técnica." },
-        { status: 500 },
-      );
-    }
-
-    if (!invite.accepted_at || invite.accepted_by !== user.id) {
-      await admin
-        .from("staff_invites")
-        .update({
-          accepted_at: invite.accepted_at || new Date().toISOString(),
-          accepted_by: user.id,
-          status: "accepted",
-        })
-        .eq("id", invite.id);
     }
 
     return NextResponse.json({ success: true, linked: true, source: "invite_sync" });

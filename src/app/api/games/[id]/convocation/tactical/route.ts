@@ -1,4 +1,3 @@
-import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { NextResponse } from "next/server";
@@ -6,6 +5,31 @@ import { NextResponse } from "next/server";
 type RouteContext = {
   params: Promise<{ id: string }>;
 };
+
+type TacticalRpcResult = {
+  ok?: boolean;
+  error_code?: string;
+};
+
+function mapTacticalError(errorCode: string | undefined) {
+  switch (errorCode) {
+    case "game_not_found":
+      return {
+        body: { error: "Jogo não encontrado." },
+        status: 404,
+      };
+    case "forbidden":
+      return {
+        body: { error: "Sem permissões para editar este jogo." },
+        status: 403,
+      };
+    default:
+      return {
+        body: { error: "Erro ao guardar sistema táctico." },
+        status: 500,
+      };
+  }
+}
 
 export async function POST(request: Request, { params }: RouteContext) {
   try {
@@ -26,81 +50,27 @@ export async function POST(request: Request, { params }: RouteContext) {
         ? body.tacticalSystem.trim()
         : null;
 
-    const admin = createAdminClient();
+    const rpcResult = await supabase.rpc("rpc_update_game_tactical_auth", {
+      p_game_id: gameId,
+      p_tactical_system: tacticalSystem,
+    });
 
-    const { data: game } = await admin
-      .from("games")
-      .select("id, team_id, age_group_id")
-      .eq("id", gameId)
-      .maybeSingle();
-
-    if (!game) {
-      return NextResponse.json(
-        { error: "Jogo não encontrado." },
-        { status: 404 },
-      );
+    if (rpcResult.error) {
+      return respondInternalError("api.games.id.convocation.tactical.post.rpc", rpcResult.error);
     }
 
-    let hasAccess = false;
-    let teamId: string | null =
-      (game as unknown as { team_id?: string }).team_id ?? null;
-    const ageGroupId =
-      (game as unknown as { age_group_id?: string }).age_group_id ?? null;
+    const result =
+      rpcResult.data && typeof rpcResult.data === "object"
+        ? (rpcResult.data as TacticalRpcResult)
+        : null;
 
-    if (ageGroupId) {
-      const { data: ag } = await admin
-        .from("age_groups")
-        .select("id")
-        .eq("id", ageGroupId)
-        .eq("coordinator_id", user.id)
-        .maybeSingle();
-      hasAccess = !!ag;
-    }
-
-    if (!teamId && ageGroupId) {
-      const { data: ft } = await admin
-        .from("teams")
-        .select("id")
-        .eq("age_group_id", ageGroupId)
-        .order("created_at", { ascending: true })
-        .limit(1)
-        .maybeSingle();
-      teamId = (ft as unknown as { id?: string } | null)?.id ?? null;
-    }
-
-    if (!hasAccess && teamId) {
-      const { data: sl } = await admin
-        .from("team_staff")
-        .select("id")
-        .eq("team_id", teamId)
-        .eq("profile_id", user.id)
-        .maybeSingle();
-      hasAccess = !!sl;
-    }
-
-    if (!hasAccess) {
-      return NextResponse.json(
-        { error: "Sem permissões para editar este jogo." },
-        { status: 403 },
-      );
-    }
-
-    const { error } = await admin
-      .from("games")
-      .update({ additional_info: tacticalSystem || null })
-      .eq("id", gameId);
-
-    if (error) {
-      console.error("Erro ao guardar sistema táctico:", error);
-      return NextResponse.json(
-        { error: "Erro ao guardar sistema táctico." },
-        { status: 500 },
-      );
+    if (!result?.ok) {
+      const mapped = mapTacticalError(result?.error_code);
+      return NextResponse.json(mapped.body, { status: mapped.status });
     }
 
     return NextResponse.json({ success: true, tacticalSystem });
   } catch (error) {
-    console.error("Erro ao guardar sistema táctico:", error);
     return respondInternalError("api.games.id.convocation.tactical.post", error);
   }
 }

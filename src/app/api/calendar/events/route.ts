@@ -1,4 +1,3 @@
-import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { resolveUserTeamContext } from "@/lib/auth/team-context";
 import { createNotificationsForTeam } from "@/lib/notifications/service";
@@ -10,6 +9,7 @@ import {
 import { NextResponse } from "next/server";
 import { SHORT_PRIVATE_CACHE_CONTROL } from "@/lib/http/cache";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 type CalendarEventType = "training" | "game";
 
@@ -30,7 +30,7 @@ type CalendarPayload = {
 
 type RouteContextData = {
   userId: string;
-  admin: ReturnType<typeof createAdminClient>;
+  db: SupabaseClient;
   context: Awaited<ReturnType<typeof resolveUserTeamContext>>;
 };
 
@@ -84,17 +84,16 @@ function normalizePayload(value: unknown): CalendarPayload {
 }
 
 async function buildRouteContext(): Promise<RouteContextData | NextResponse> {
-  const supabase = await createClient();
+  const db = await createClient();
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await db.auth.getUser();
 
   if (!user) {
     return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
   }
 
-  const admin = createAdminClient();
-  const context = await resolveUserTeamContext(admin, user.id);
+  const context = await resolveUserTeamContext(db, user.id);
 
   if (context.accessibleAgeGroupIds.length === 0 || context.accessibleTeamIds.length === 0) {
     return NextResponse.json(
@@ -105,7 +104,7 @@ async function buildRouteContext(): Promise<RouteContextData | NextResponse> {
 
   return {
     userId: user.id,
-    admin,
+    db,
     context,
   };
 }
@@ -147,12 +146,12 @@ function resolveTargetTeamId(
 }
 
 async function isCoordinatorForAgeGroup(
-  admin: ReturnType<typeof createAdminClient>,
+  db: SupabaseClient,
   ageGroupId: string | null | undefined,
   userId: string,
 ) {
   if (!ageGroupId) return false;
-  const { data } = await admin
+  const { data } = await db
     .from("age_groups")
     .select("id")
     .eq("id", ageGroupId)
@@ -162,11 +161,11 @@ async function isCoordinatorForAgeGroup(
 }
 
 async function getAgeGroupFromTeam(
-  admin: ReturnType<typeof createAdminClient>,
+  db: SupabaseClient,
   teamId: string | null | undefined,
 ) {
   if (!teamId) return null;
-  const { data } = await admin
+  const { data } = await db
     .from("teams")
     .select("age_group_id")
     .eq("id", teamId)
@@ -175,13 +174,13 @@ async function getAgeGroupFromTeam(
 }
 
 async function resolveCompetitionId(
-  admin: ReturnType<typeof createAdminClient>,
+  db: SupabaseClient,
   teamId: string,
   requestedCompetitionId: string | null | undefined,
 ) {
   if (!requestedCompetitionId) return { id: null as string | null, error: null as string | null };
 
-  const { data, error } = await admin
+  const { data, error } = await db
     .from("competitions")
     .select("id")
     .eq("id", requestedCompetitionId)
@@ -203,7 +202,7 @@ export async function GET(request: Request) {
     const routeContext = await buildRouteContext();
     if (routeContext instanceof NextResponse) return routeContext;
 
-    const { userId, admin, context } = routeContext;
+    const { userId, db, context } = routeContext;
     const { searchParams } = new URL(request.url);
     const from = searchParams.get("from");
     const to = searchParams.get("to");
@@ -228,7 +227,7 @@ export async function GET(request: Request) {
     if (targetAgeGroupId === context.ageGroup?.id && context.ageGroup) {
       ageGroupName = `${context.ageGroup.club_name} · ${context.ageGroup.name}`;
     } else {
-      const { data: ageGroup } = await admin
+      const { data: ageGroup } = await db
         .from("age_groups")
         .select("club_name, name")
         .eq("id", targetAgeGroupId)
@@ -240,7 +239,7 @@ export async function GET(request: Request) {
 
     const [{ data: sessions, error: sessionsError }, { data: games, error: gamesError }] =
       await Promise.all([
-        admin
+        db
           .from("training_sessions")
           .select("*")
           .eq("age_group_id", targetAgeGroupId)
@@ -249,7 +248,7 @@ export async function GET(request: Request) {
           .order("session_date", { ascending: true })
           .order("start_time", { ascending: true, nullsFirst: false })
           .order("created_at", { ascending: true }),
-        admin
+        db
           .from("games")
           .select("*")
           .eq("age_group_id", targetAgeGroupId)
@@ -281,7 +280,7 @@ export async function GET(request: Request) {
     const targetTeamId =
       currentTeamAgeGroupId === targetAgeGroupId ? context.teamId : fallbackTeamId;
     const canDeleteEvents = await isCoordinatorForAgeGroup(
-      admin,
+      db,
       targetAgeGroupId,
       userId,
     );
@@ -313,7 +312,7 @@ export async function POST(request: Request) {
     const routeContext = await buildRouteContext();
     if (routeContext instanceof NextResponse) return routeContext;
 
-    const { userId, admin, context } = routeContext;
+    const { userId, db, context } = routeContext;
     const body = await request.json().catch(() => null);
     const eventType = normalizeEventType(body?.type);
     const payload = normalizePayload(body?.payload);
@@ -346,14 +345,14 @@ export async function POST(request: Request) {
 
     const competitionResult =
       eventType === "game"
-        ? await resolveCompetitionId(admin, targetTeamId, payload.competition_id)
+        ? await resolveCompetitionId(db, targetTeamId, payload.competition_id)
         : { id: null as string | null, error: null as string | null };
     if (competitionResult.error) {
       return NextResponse.json({ error: competitionResult.error }, { status: 400 });
     }
 
     if (eventType === "training") {
-      const { data, error } = await admin
+      const { data, error } = await db
         .from("training_sessions")
         .insert({
           age_group_id: targetAgeGroupId,
@@ -376,7 +375,7 @@ export async function POST(request: Request) {
       }
 
       try {
-        await createNotificationsForTeam(admin, {
+        await createNotificationsForTeam(db, {
           teamId: targetTeamId,
           ageGroupId: targetAgeGroupId,
           actorId: userId,
@@ -401,7 +400,7 @@ export async function POST(request: Request) {
     }
 
     const gameDatetime = `${payload.date}T${payload.start_time || "00:00"}:00`;
-    const { data, error } = await admin
+    const { data, error } = await db
       .from("games")
       .insert({
         age_group_id: targetAgeGroupId,
@@ -427,7 +426,7 @@ export async function POST(request: Request) {
     }
 
     try {
-      await createNotificationsForTeam(admin, {
+      await createNotificationsForTeam(db, {
         teamId: targetTeamId,
         ageGroupId: targetAgeGroupId,
         actorId: userId,
@@ -459,7 +458,7 @@ export async function PATCH(request: Request) {
     const routeContext = await buildRouteContext();
     if (routeContext instanceof NextResponse) return routeContext;
 
-    const { userId, admin, context } = routeContext;
+    const { userId, db, context } = routeContext;
     const body = await request.json().catch(() => null);
     const id = typeof body?.id === "string" ? body.id : null;
     const eventType = normalizeEventType(body?.type);
@@ -496,14 +495,14 @@ export async function PATCH(request: Request) {
 
     const competitionResult =
       eventType === "game"
-        ? await resolveCompetitionId(admin, targetTeamId, payload.competition_id)
+        ? await resolveCompetitionId(db, targetTeamId, payload.competition_id)
         : { id: null as string | null, error: null as string | null };
     if (competitionResult.error) {
       return NextResponse.json({ error: competitionResult.error }, { status: 400 });
     }
 
     if (eventType === "training") {
-      const { data: existing } = await admin
+      const { data: existing } = await db
         .from("training_sessions")
         .select("id, age_group_id, team_id")
         .eq("id", id)
@@ -514,7 +513,7 @@ export async function PATCH(request: Request) {
       }
 
       const existingAgeGroupId =
-        existing.age_group_id || (await getAgeGroupFromTeam(admin, existing.team_id));
+        existing.age_group_id || (await getAgeGroupFromTeam(db, existing.team_id));
       const hasAccess =
         !!existing.team_id && context.accessibleTeamIds.includes(existing.team_id)
           ? true
@@ -523,7 +522,7 @@ export async function PATCH(request: Request) {
         return NextResponse.json({ error: "Sem permissões para este treino." }, { status: 403 });
       }
 
-      const { data, error } = await admin
+      const { data, error } = await db
         .from("training_sessions")
         .update({
           age_group_id: targetAgeGroupId,
@@ -554,7 +553,7 @@ export async function PATCH(request: Request) {
       });
     }
 
-    const { data: existingGame } = await admin
+    const { data: existingGame } = await db
       .from("games")
       .select("id, age_group_id, team_id, status")
       .eq("id", id)
@@ -565,7 +564,7 @@ export async function PATCH(request: Request) {
     }
 
     const existingAgeGroupId =
-      existingGame.age_group_id || (await getAgeGroupFromTeam(admin, existingGame.team_id));
+      existingGame.age_group_id || (await getAgeGroupFromTeam(db, existingGame.team_id));
     const hasAccess =
       !!existingGame.team_id && context.accessibleTeamIds.includes(existingGame.team_id)
         ? true
@@ -575,7 +574,7 @@ export async function PATCH(request: Request) {
     }
 
     if (existingGame.status === "completed") {
-      const coordinator = await isCoordinatorForAgeGroup(admin, existingAgeGroupId, userId);
+      const coordinator = await isCoordinatorForAgeGroup(db, existingAgeGroupId, userId);
       if (!coordinator) {
         return NextResponse.json(
           { error: "Só o coordenador pode editar jogos terminados." },
@@ -585,7 +584,7 @@ export async function PATCH(request: Request) {
     }
 
     const gameDatetime = `${payload.date}T${payload.start_time || "00:00"}:00`;
-    const { data, error } = await admin
+    const { data, error } = await db
       .from("games")
       .update({
         age_group_id: targetAgeGroupId,
@@ -626,7 +625,7 @@ export async function DELETE(request: Request) {
     const routeContext = await buildRouteContext();
     if (routeContext instanceof NextResponse) return routeContext;
 
-    const { userId, admin, context } = routeContext;
+    const { userId, db, context } = routeContext;
     const body = await request.json().catch(() => null);
     const id = typeof body?.id === "string" ? body.id : null;
     const eventType = normalizeEventType(body?.type);
@@ -639,7 +638,7 @@ export async function DELETE(request: Request) {
     }
 
     if (eventType === "training") {
-      const { data: existing } = await admin
+      const { data: existing } = await db
         .from("training_sessions")
         .select("id, age_group_id, team_id")
         .eq("id", id)
@@ -650,7 +649,7 @@ export async function DELETE(request: Request) {
       }
 
       const existingAgeGroupId =
-        existing.age_group_id || (await getAgeGroupFromTeam(admin, existing.team_id));
+        existing.age_group_id || (await getAgeGroupFromTeam(db, existing.team_id));
       const hasAccess =
         !!existing.team_id && context.accessibleTeamIds.includes(existing.team_id)
           ? true
@@ -660,7 +659,7 @@ export async function DELETE(request: Request) {
       }
 
       const coordinator = await isCoordinatorForAgeGroup(
-        admin,
+        db,
         existingAgeGroupId,
         userId,
       );
@@ -672,7 +671,7 @@ export async function DELETE(request: Request) {
       }
 
       try {
-        await deleteTrainingSessionCascade(admin, id);
+        await deleteTrainingSessionCascade(db, id);
       } catch (deleteError) {
         return respondInternalError("api.calendar.events.delete.training_cascade", deleteError);
       }
@@ -680,7 +679,7 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ success: true, type: "training", id });
     }
 
-    const { data: existingGame } = await admin
+    const { data: existingGame } = await db
       .from("games")
       .select("id, age_group_id, team_id, status")
       .eq("id", id)
@@ -691,7 +690,7 @@ export async function DELETE(request: Request) {
     }
 
     const existingAgeGroupId =
-      existingGame.age_group_id || (await getAgeGroupFromTeam(admin, existingGame.team_id));
+      existingGame.age_group_id || (await getAgeGroupFromTeam(db, existingGame.team_id));
     const hasAccess =
       !!existingGame.team_id && context.accessibleTeamIds.includes(existingGame.team_id)
         ? true
@@ -700,7 +699,7 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: "Sem permissões para este jogo." }, { status: 403 });
     }
 
-    const coordinator = await isCoordinatorForAgeGroup(admin, existingAgeGroupId, userId);
+    const coordinator = await isCoordinatorForAgeGroup(db, existingAgeGroupId, userId);
     if (!coordinator) {
       return NextResponse.json(
         { error: "Só o coordenador pode apagar jogos." },
@@ -709,7 +708,7 @@ export async function DELETE(request: Request) {
     }
 
     try {
-      await deleteGameCascade(admin, id);
+      await deleteGameCascade(db, id);
     } catch (deleteError) {
       return respondInternalError("api.calendar.events.delete.game_cascade", deleteError);
     }
