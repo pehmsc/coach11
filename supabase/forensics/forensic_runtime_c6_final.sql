@@ -1,11 +1,22 @@
 -- COACH11 - C6 FINAL FORENSIC RUNTIME SCRIPT
--- SQL Editor safe: no schema changes, no helper tables, no function/procedure creation.
--- This script is read-only. It does not insert/update/delete domain tables.
+-- SQL Editor safe:
+-- - no schema changes
+-- - no helper tables
+-- - no CREATE FUNCTION / CREATE PROCEDURE
+-- - no INSERT/UPDATE/DELETE em tabelas de dominio
 --
 -- Usage:
 -- 1) Optional: override defaults via set_config lines below.
 -- 2) Run as one script in Supabase SQL Editor.
--- 3) Copy A1/A2 result sets + A3/A5 NOTICE lines into the audit report.
+-- 3) Copy exactly:
+--    - ACTIVE CONTEXT
+--    - A1
+--    - A2
+--    - role_routine_grants snapshot
+--    - NOTICE A3/A4/A5
+-- 4) Script uses BEGIN/ROLLBACK; no data persistence.
+-- 5) Runtime write-tests (cross-club deny / within-club allow) were proven previously and are
+--    intentionally not repeated here to keep this script read-only and reproducible.
 
 begin;
 
@@ -115,6 +126,7 @@ order by routine_name, grantee, privilege_type;
 -- Notes:
 -- - No inserts/updates/deletes.
 -- - Uses SELECT counts + rpc_game_access_context(jsonb).
+-- - Guardrails abort with explicit setup messages if IDs are invalid/out of scope.
 -- ============================================================================
 do $$
 declare
