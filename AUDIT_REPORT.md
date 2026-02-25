@@ -253,3 +253,55 @@ Evidência: tabela `Local | Remote | Time (UTC)` com IDs idênticos em ambos.
   - `rpc_redeem_staff_invite` (base RPC continua service_role-only)
 
 Isto garante que os caminhos autenticados usam wrappers e que o core atómico mantém-se protegido.
+
+## C7 - Fecho (DB-first) e Redução Final de Admin Surface
+
+### Estado no remoto (migrations)
+
+O remoto confirma aplicadas as migrations:
+
+- 20260225003000_redeem_authenticated_wrapper_v1.sql
+- 20260225004000_calendar_events_rls_alignment_v1.sql
+- 20260225005000_tactical_authenticated_wrapper_v1.sql
+
+Evidência: `supabase migration list` mostra Local=Remote para 20260225003000/04000/05000.
+
+### Admin surface - prova local (createAdminClient)
+
+Contagem final após C7:
+
+- 3 ficheiros
+- 4 ocorrências
+
+Evidência (terminal):
+
+````bash
+grep -R --line-number "createAdminClient(" src/app/api
+
+src/app/api/team/logo/route.ts:105:    const admin = createAdminClient();
+src/app/api/me/account/route.ts:297:    const admin = createAdminClient();
+src/app/api/staff/[id]/route.ts:156:    const admin = createAdminClient();
+src/app/api/staff/[id]/route.ts:291:    const admin = createAdminClient();
+
+
+
+
+---
+
+## 3) Interpretação rápida do estado final
+- ✅ **C7 aplicado no remoto** (migrations em sync).
+- ✅ **Admin surface reduzido ao mínimo “real”**: só auth.admin + storage admin.
+- ✅ **Wrappers com EXECUTE para authenticated** = caminho normal da app **sem service-role**.
+- ✅ **Base RPC sensível (redeem) continua protegida** (service_role only), e o wrapper é o “portão”.
+
+---
+
+## 4) Último passo para fechar “DONE”
+Faz isto no repositório:
+
+1) confirma que `AUDIT_REPORT.md` está atualizado com a secção acima
+2) commit com mensagem tipo:
+```bash
+git add AUDIT_REPORT.md supabase/forensics/forensic_runtime_c6_final.sql
+git commit -m "audit: finalize report + c6/c7 reproducible evidence"
+````
