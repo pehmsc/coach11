@@ -1,4 +1,4 @@
-# COACH11 - AUDITORIA FORENSE POS-HARDENING (C1..C6)
+# COACH11 - AUDITORIA FORENSE POS-HARDENING (C1..C7)
 
 Data: 2026-02-23  
 Baseline hardening: `0405b90`  
@@ -88,36 +88,21 @@ Interpretacao:
 
 - `rpc_finalize_game_auth`, `rpc_recalculate_game_summary_auth` e `rpc_game_access_context` estao expostos para `authenticated` (ok para caminho app com JWT).
 - `rpc_redeem_staff_invite` continua **service-role-only** (sem grant para `authenticated`) por decisao faseada atual.
+- `rpc_redeem_staff_invite_auth` está exposto para authenticated (wrapper), enquanto `rpc_redeem_staff_invite` mantém-se service-role/postgres.
 
-## Admin remanescente (8 ficheiros / 9 ocorrencias)
+## Admin remanescente (3 ficheiros / 4 ocorrências)
 
-Antes C6 (HEAD): `12 ficheiros / 15 ocorrencias`  
-Depois C6: `8 ficheiros / 9 ocorrencias`
+Depois C6: `8 ficheiros / 9 ocorrências`  
+Depois C7: `3 ficheiros / 4 ocorrências`
+
+Ficheiros ainda com `createAdminClient` (inevitável neste desenho):
 
 1. `src/app/api/team/logo/route.ts`  
-   Motivo: `storage admin`  
-   Classe: inevitavel (neste desenho)
+   Motivo: `storage admin` (upload/bucket)
 2. `src/app/api/me/account/route.ts`  
-   Motivo: `auth.admin.deleteUser`  
-   Classe: inevitavel
+   Motivo: `auth.admin.deleteUser` + cleanup transversal
 3. `src/app/api/staff/[id]/route.ts`  
-   Motivo: `auth.admin.getUserById/updateUserById`  
-   Classe: inevitavel parcial
-4. `src/app/api/invite/redeem/route.ts`  
-   Motivo: depende de `rpc_redeem_staff_invite` **service-role-only**  
-   Classe: por fazer (wrapper auth para redeem em C7)
-5. `src/app/api/invite/sync/route.ts`  
-   Motivo: fluxo legado admin-first  
-   Classe: por fazer
-6. `src/app/api/calendar/events/route.ts`  
-   Motivo: contexto ainda resolvido via admin  
-   Classe: por fazer
-7. `src/app/api/games/[id]/convocation/kits/route.ts`  
-   Motivo: write policy funcional ainda pendente  
-   Classe: por fazer
-8. `src/app/api/games/[id]/convocation/tactical/route.ts`  
-   Motivo: update em `games` ainda via admin  
-   Classe: por fazer
+   Motivo: `auth.admin.getUserById/updateUserById` (operações auth admin)
 
 ## Estado de contratos (API)
 
@@ -270,8 +255,8 @@ Evidência: `supabase migration list` mostra Local=Remote para 20260225003000/04
 
 Contagem final após C7:
 
-- 3 ficheiros
-- 4 ocorrências
+- Depois C6: 8 ficheiros / 9 ocorrências
+- Depois C7: 3 ficheiros / 4 ocorrências
 
 Evidência (terminal):
 
