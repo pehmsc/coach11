@@ -34,6 +34,10 @@ import {
   isValidManualShortName,
   normalizeManualShortName,
 } from "@/lib/football/short-name";
+import {
+  formatFixtureOpponentLabel,
+  isClosedGameStatus,
+} from "@/lib/games/display";
 import type { Competition, Game, TeamLabel } from "@/types/database";
 
 interface CompetitionWithGames extends Competition {
@@ -112,7 +116,6 @@ export default function CompetitionsPage() {
 
   useEffect(() => {
     loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function loadData() {
@@ -403,8 +406,8 @@ export default function CompetitionsPage() {
                 new Date(a.game_datetime).getTime() -
                 new Date(b.game_datetime).getTime(),
             );
-            const upcoming = games.filter((g) => g.status !== "completed");
-            const played = games.filter((g) => g.status === "completed");
+            const upcoming = games.filter((g) => !isClosedGameStatus(g.status));
+            const played = games.filter((g) => isClosedGameStatus(g.status));
 
             return (
               <Card key={comp.id}>
@@ -500,9 +503,11 @@ export default function CompetitionsPage() {
                             </span>
                           )}
                           <p className="text-sm font-medium text-slate-800 truncate">
-                            {game.is_home ? "vs" : "@"}{" "}
-                            {game.opponent_name || "Adversário"}
-                            {game.opponent_short_name ? ` (${game.opponent_short_name})` : ""}
+                            {formatFixtureOpponentLabel({
+                              isHome: game.is_home,
+                              opponentName: game.opponent_name,
+                              opponentShortName: game.opponent_short_name,
+                            })}
                           </p>
                         </div>
                         <p className="text-xs text-slate-400">
@@ -545,9 +550,11 @@ export default function CompetitionsPage() {
                               </span>
                             )}
                             <p className="text-sm font-medium text-slate-600 truncate">
-                              {game.is_home ? "vs" : "@"}{" "}
-                              {game.opponent_name || "Adversário"}
-                              {game.opponent_short_name ? ` (${game.opponent_short_name})` : ""}
+                              {formatFixtureOpponentLabel({
+                                isHome: game.is_home,
+                                opponentName: game.opponent_name,
+                                opponentShortName: game.opponent_short_name,
+                              })}
                             </p>
                           </div>
                           <p className="text-xs text-slate-400">

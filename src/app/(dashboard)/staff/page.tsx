@@ -104,7 +104,6 @@ export default function StaffPage() {
 
   useEffect(() => {
     void loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function loadData() {
@@ -175,6 +174,12 @@ export default function StaffPage() {
     if (data.success) {
       setInviteResult({ code: data.inviteCode, emailSent: data.emailSent, name: form.firstName });
       setForm(EMPTY_FORM);
+      setShowForm(false);
+      if (data.emailSent) {
+        toast.success("Convite enviado.");
+      } else {
+        toast.warning(data.warning || "Convite criado, mas email não enviado.");
+      }
       void loadData();
     } else {
       toast.error(data.error || "Erro ao enviar convite");

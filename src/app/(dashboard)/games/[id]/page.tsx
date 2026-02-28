@@ -32,6 +32,7 @@ import {
   isValidManualShortName,
   normalizeManualShortName,
 } from "@/lib/football/short-name";
+import { formatFixtureOpponentLabel } from "@/lib/games/display";
 import type { Game, Player } from "@/types/database";
 
 interface PlayerWithStatus extends Player {
@@ -764,7 +765,11 @@ export default function GameDetailPage() {
         </div>
         <h1 className="text-xl font-bold mt-1">
           {game.opponent_name
-            ? `vs ${game.opponent_name}${game.opponent_short_name ? ` (${game.opponent_short_name})` : ""}`
+            ? formatFixtureOpponentLabel({
+                isHome: game.is_home,
+                opponentName: game.opponent_name,
+                opponentShortName: game.opponent_short_name,
+              })
             : "Jogo"}
         </h1>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-blue-100 text-sm">

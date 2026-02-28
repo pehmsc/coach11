@@ -28,18 +28,27 @@ function isGoalEventType(eventType: string | null | undefined) {
   return eventType === "goal" || eventType === "penalty_goal";
 }
 
-function computeScoreFromEvents(events: GameEventRow[]) {
+function computeScoreFromEvents(events: GameEventRow[], ourTeamIsHome: boolean) {
   let home = 0;
   let away = 0;
+
+  const incrementScore = (isOurTeamGoal: boolean) => {
+    if (ourTeamIsHome) {
+      if (isOurTeamGoal) home += 1;
+      else away += 1;
+    } else {
+      if (isOurTeamGoal) away += 1;
+      else home += 1;
+    }
+  };
+
   events.forEach((event) => {
     if (event.event_type === "own_goal") {
-      if (event.is_opponent_event) home += 1;
-      else away += 1;
+      incrementScore(event.is_opponent_event);
       return;
     }
     if (isGoalEventType(event.event_type)) {
-      if (event.is_opponent_event) away += 1;
-      else home += 1;
+      incrementScore(!event.is_opponent_event);
     }
   });
   return { home, away };
@@ -474,7 +483,17 @@ export async function POST(request: Request, { params }: RouteContext) {
       };
     });
 
-    const score = computeScoreFromEvents(events);
+    const { data: gameMeta, error: gameMetaError } = await supabase
+      .from("games")
+      .select("is_home")
+      .eq("id", gameId)
+      .maybeSingle();
+
+    if (gameMetaError || !gameMeta) {
+      return NextResponse.json({ error: "Erro ao validar jogo." }, { status: 500 });
+    }
+
+    const score = computeScoreFromEvents(events, gameMeta.is_home !== false);
     const rpcResult = await supabase.rpc("rpc_recalculate_game_summary_auth", {
       p_game_id: gameId,
       p_rows: rowsToInsert,

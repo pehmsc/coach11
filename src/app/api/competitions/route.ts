@@ -4,6 +4,7 @@ import { resolveUserTeamContext } from "@/lib/auth/team-context";
 import { NextResponse } from "next/server";
 import { SHORT_PRIVATE_CACHE_CONTROL } from "@/lib/http/cache";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
+import { isClosedGameStatus } from "@/lib/games/display";
 
 export async function GET() {
   try {
@@ -93,7 +94,9 @@ export async function GET() {
 
     const enrichedCompetitions = competitions.map((competition) => {
       const games = gamesByCompetition.get(competition.id) || [];
-      const hasPendingGames = games.some((row) => row.status !== "completed");
+      const hasPendingGames = games.some(
+        (row) => !isClosedGameStatus(typeof row.status === "string" ? row.status : null),
+      );
       return {
         ...competition,
         is_active: hasPendingGames || games.length === 0,

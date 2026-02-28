@@ -34,6 +34,7 @@ import {
   isValidManualShortName,
   normalizeManualShortName,
 } from "@/lib/football/short-name";
+import { formatFixtureOpponentLabel } from "@/lib/games/display";
 
 const DAY_NAMES = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 
@@ -177,10 +178,19 @@ export default function CalendarPage() {
         date:
           typeof g.game_datetime === "string" ? g.game_datetime.split("T")[0] : "",
         title:
-          typeof g.title === "string"
+          typeof g.title === "string" && g.title.trim().length > 0
             ? g.title
-            : typeof g.opponent_name === "string"
-              ? `vs ${g.opponent_name}`
+            : typeof g.opponent_name === "string" ||
+                typeof g.opponent_short_name === "string"
+              ? formatFixtureOpponentLabel({
+                  isHome: typeof g.is_home === "boolean" ? g.is_home : true,
+                  opponentName:
+                    typeof g.opponent_name === "string" ? g.opponent_name : undefined,
+                  opponentShortName:
+                    typeof g.opponent_short_name === "string"
+                      ? g.opponent_short_name
+                      : undefined,
+                })
               : "Jogo",
         start_time:
           typeof g.game_datetime === "string"
@@ -271,7 +281,6 @@ export default function CalendarPage() {
 
   // Efeito de bootstrap/sincronização de dados com o backend.
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (ageGroupId) void loadEvents();
   }, [ageGroupId, weekStart, loadEvents]);
 

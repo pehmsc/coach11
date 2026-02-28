@@ -21,7 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { exportMatchReportPDF } from "@/lib/pdf/matchReport";
-import { resolveShortName } from "@/lib/football/short-name";
+import { resolveFixtureScoreboardShortNames } from "@/lib/games/display";
 import type { Game, Player, GameEvent, GameEventType } from "@/types/database";
 
 interface LivePlayer extends Player {
@@ -1760,18 +1760,14 @@ export default function LiveGamePage() {
   const matchMetaLabel = game.location
     ? `${matchDateTimeLabel} · ${game.location}`
     : matchDateTimeLabel;
-  const ourTeamShortName = resolveShortName(
-    homeClubShortName,
-    homeClubName || "Casa",
-    "CASA",
-  );
-  const opponentTeamShortName = resolveShortName(
-    game.opponent_short_name,
-    game.opponent_name || "Adversário",
-    "FORA",
-  );
-  const homeShortName = game.is_home ? ourTeamShortName : opponentTeamShortName;
-  const awayShortName = game.is_home ? opponentTeamShortName : ourTeamShortName;
+  const { homeShortName, awayShortName, ourTeamShortName, opponentTeamShortName } =
+    resolveFixtureScoreboardShortNames({
+    isHome: game.is_home,
+    ourTeamPreferredShortName: homeClubShortName,
+    ourTeamName: homeClubName || "Casa",
+    opponentPreferredShortName: game.opponent_short_name,
+    opponentName: game.opponent_name || "Adversário",
+    });
 
   return (
     <div className="p-4 md:p-8 max-w-2xl mx-auto pb-24">

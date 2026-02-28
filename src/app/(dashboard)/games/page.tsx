@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { format, parseISO, isToday, isFuture, isPast } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { pt } from "date-fns/locale";
 import {
   Loader2,
@@ -24,6 +24,10 @@ import {
   isValidManualShortName,
   normalizeManualShortName,
 } from "@/lib/football/short-name";
+import {
+  formatFixtureOpponentLabel,
+  isClosedGameStatus,
+} from "@/lib/games/display";
 
 interface GameRow {
   id: string;
@@ -51,7 +55,7 @@ type CompetitionsResponse = {
 };
 
 function statusBadge(game: GameRow) {
-  if (game.status === "completed" || game.status === "cancelled") {
+  if (isClosedGameStatus(game.status)) {
     return (
       <span className="text-[10px] font-bold bg-slate-100 text-slate-500 rounded px-1.5 py-0.5">
         Fechado
@@ -87,7 +91,6 @@ export default function GamesPage() {
 
   useEffect(() => {
     void Promise.all([loadGames(), loadCompetitions()]);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function loadGames() {
@@ -214,8 +217,8 @@ export default function GamesPage() {
   }
 
   // Split future vs past
-  const upcoming = games.filter((g) => isFuture(parseISO(g.game_datetime)) || isToday(parseISO(g.game_datetime)));
-  const past = games.filter((g) => isPast(parseISO(g.game_datetime)) && !isToday(parseISO(g.game_datetime)));
+  const upcoming = games.filter((g) => !isClosedGameStatus(g.status));
+  const past = games.filter((g) => isClosedGameStatus(g.status));
 
   if (loading) {
     return (
@@ -300,7 +303,10 @@ export default function GamesPage() {
         <section>
           <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Jogados</h2>
           <div className="space-y-2">
-            {past.map((game) => <GameCard key={game.id} game={game} onClick={() => router.push(`/games/${game.id}`)} />)}
+            {past
+              .slice()
+              .sort((a, b) => new Date(b.game_datetime).getTime() - new Date(a.game_datetime).getTime())
+              .map((game) => <GameCard key={game.id} game={game} onClick={() => router.push(`/games/${game.id}`)} />)}
           </div>
         </section>
       )}
@@ -363,7 +369,8 @@ export default function GamesPage() {
 
 function GameCard({ game, onClick }: { game: GameRow; onClick: () => void }) {
   const dt = parseISO(game.game_datetime);
-  const hasResult = game.status === "completed" && game.score_home != null && game.score_away != null;
+  const hasResult =
+    isClosedGameStatus(game.status) && game.score_home != null && game.score_away != null;
 
   return (
     <button
@@ -401,8 +408,11 @@ function GameCard({ game, onClick }: { game: GameRow; onClick: () => void }) {
           {statusBadge(game)}
         </div>
         <p className="text-sm font-semibold text-slate-800 truncate mt-0.5">
-          {game.is_home ? "vs" : "@"} {game.opponent_name || "Adversário"}
-          {game.opponent_short_name ? ` (${game.opponent_short_name})` : ""}
+          {formatFixtureOpponentLabel({
+            isHome: game.is_home,
+            opponentName: game.opponent_name,
+            opponentShortName: game.opponent_short_name,
+          })}
         </p>
         {game.location && (
           <p className="text-xs text-slate-400 truncate">{game.location}</p>

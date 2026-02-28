@@ -20,6 +20,7 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import RedeemInviteGate from "@/components/invite/RedeemInviteGate";
+import { formatFixtureOpponentLabel } from "@/lib/games/display";
 import type { TrainingSession, Game } from "@/types/database";
 
 export const dynamic = "force-dynamic";
@@ -179,8 +180,10 @@ export default async function DashboardPage() {
   let activeLiveGame: {
     id: string;
     opponent_name: string | null;
+    opponent_short_name: string | null;
     game_datetime: string;
     location: string | null;
+    is_home: boolean;
     phase: "first_half" | "second_half";
     minute: number;
   } | null = null;
@@ -199,7 +202,7 @@ export default async function DashboardPage() {
       const checkpointGameIds = checkpointRows.map((row) => row.game_id);
       const { data: liveGames } = await (admin ?? supabase)
         .from("games")
-        .select("id, team_id, opponent_name, game_datetime, location, status")
+        .select("id, team_id, opponent_name, opponent_short_name, game_datetime, location, status, is_home")
         .in("id", checkpointGameIds)
         .in("team_id", accessibleTeamIds)
         .neq("status", "completed");
@@ -225,8 +228,10 @@ export default async function DashboardPage() {
           activeLiveGame = {
             id: gameRow.id,
             opponent_name: gameRow.opponent_name ?? null,
+            opponent_short_name: gameRow.opponent_short_name ?? null,
             game_datetime: gameRow.game_datetime,
             location: gameRow.location ?? null,
+            is_home: gameRow.is_home ?? true,
             phase: activeCheckpoint.phase as "first_half" | "second_half",
             minute: Math.floor(totalSeconds / 60) + 1,
           };
@@ -239,7 +244,7 @@ export default async function DashboardPage() {
     if (!activeLiveGame) {
       const { data: fallbackLiveGames } = await (admin ?? supabase)
         .from("games")
-        .select("id, opponent_name, game_datetime, location, status, updated_at")
+        .select("id, opponent_name, opponent_short_name, game_datetime, location, status, updated_at, is_home")
         .in("team_id", accessibleTeamIds)
         .eq("status", "live")
         .order("updated_at", { ascending: false })
@@ -250,8 +255,10 @@ export default async function DashboardPage() {
         activeLiveGame = {
           id: fallbackGame.id,
           opponent_name: fallbackGame.opponent_name ?? null,
+          opponent_short_name: fallbackGame.opponent_short_name ?? null,
           game_datetime: fallbackGame.game_datetime,
           location: fallbackGame.location ?? null,
+          is_home: fallbackGame.is_home ?? true,
           phase: "first_half",
           minute: 1,
         };
@@ -386,7 +393,11 @@ export default async function DashboardPage() {
                     </p>
                     <p className="text-rose-700 text-xs truncate">
                       {activeLiveGame.opponent_name
-                        ? `vs ${activeLiveGame.opponent_name}`
+                        ? formatFixtureOpponentLabel({
+                            isHome: activeLiveGame.is_home,
+                            opponentName: activeLiveGame.opponent_name,
+                            opponentShortName: activeLiveGame.opponent_short_name,
+                          })
                         : "Jogo"}{" "}
                       · {activeLiveGame.phase === "first_half" ? "1ª parte" : "2ª parte"} ·{" "}
                       {activeLiveGame.minute}&apos;
@@ -472,7 +483,13 @@ export default async function DashboardPage() {
                       </div>
                       <div className="flex-1">
                         <p className="font-semibold text-blue-900 text-sm">
-                          {game.opponent_name ? `vs ${game.opponent_name}` : "Jogo"}
+                          {game.opponent_name
+                            ? formatFixtureOpponentLabel({
+                                isHome: game.is_home,
+                                opponentName: game.opponent_name,
+                                opponentShortName: game.opponent_short_name,
+                              })
+                            : "Jogo"}
                         </p>
                         <p className="text-blue-700 text-xs capitalize">
                           {relativeDay(game.game_datetime?.split("T")[0])}

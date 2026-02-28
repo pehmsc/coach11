@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import { pt } from "date-fns/locale";
 import { ArrowLeft, Star, AlertCircle, Loader2, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { resolveShortName } from "@/lib/football/short-name";
+import { resolveFixtureScoreboardShortNames } from "@/lib/games/display";
 import type { Game, GameEvent, GameFinalStats } from "@/types/database";
 
 type SummaryPlayer = {
@@ -62,7 +62,7 @@ export default function GameSummaryPage() {
   const [starterDraft, setStarterDraft] = useState<Set<string>>(new Set());
   const [finalMinuteDraft, setFinalMinuteDraft] = useState<string>("90");
 
-  function syncDraftsFromSummary(payload: SummaryPayload) {
+  const syncDraftsFromSummary = useCallback((payload: SummaryPayload) => {
     setRatingDraft(() => {
       const next: Record<string, string> = {};
       payload.finalStats.forEach((row) => {
@@ -86,9 +86,12 @@ export default function GameSummaryPage() {
       ),
     );
     setFinalMinuteDraft(String(payload.totalMinutes));
-  }
+  }, []);
 
-  async function loadSummary(options?: { keepLoading?: boolean; throwOnError?: boolean }) {
+  const loadSummary = useCallback(async (options?: {
+    keepLoading?: boolean;
+    throwOnError?: boolean;
+  }) => {
     const shouldSetLoading = options?.keepLoading !== false;
     if (shouldSetLoading) setLoading(true);
     setLoadError(null);
@@ -114,7 +117,7 @@ export default function GameSummaryPage() {
     } finally {
       if (shouldSetLoading) setLoading(false);
     }
-  }
+  }, [id, syncDraftsFromSummary]);
 
   useEffect(() => {
     let active = true;
@@ -132,7 +135,7 @@ export default function GameSummaryPage() {
     return () => {
       active = false;
     };
-  }, [id]);
+  }, [loadSummary]);
 
   useEffect(() => {
     if (summary?.game?.status && summary.game.status !== "completed") {
@@ -247,16 +250,13 @@ export default function GameSummaryPage() {
   const matchMetaLabel = game.location
     ? `${matchDateTimeLabel} · ${game.location}`
     : matchDateTimeLabel;
-  const homeShortName = resolveShortName(
-    summary.homeClubShortName,
-    summary.homeClubName,
-    "CASA",
-  );
-  const awayShortName = resolveShortName(
-    game.opponent_short_name,
-    game.opponent_name || "Adversário",
-    "FORA",
-  );
+  const { homeShortName, awayShortName } = resolveFixtureScoreboardShortNames({
+    isHome: game.is_home,
+    ourTeamPreferredShortName: summary.homeClubShortName,
+    ourTeamName: summary.homeClubName,
+    opponentPreferredShortName: game.opponent_short_name,
+    opponentName: game.opponent_name || "Adversário",
+  });
 
   return (
     <div className="p-4 md:p-8 max-w-3xl mx-auto pb-16">

@@ -1,7 +1,15 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { BarChart2, AlertTriangle, Users, Trophy } from "lucide-react";
+import {
+  BarChart2,
+  AlertTriangle,
+  Users,
+  Trophy,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+} from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Player } from "@/types/database";
@@ -35,6 +43,28 @@ interface GameStats {
 }
 
 type Tab = "attendance" | "game";
+type SortDir = "asc" | "desc";
+type AttendanceSortKey =
+  | "player"
+  | "minutos"
+  | "presencas"
+  | "ausencias"
+  | "lesionados";
+type GameSortKey =
+  | "player"
+  | "golos"
+  | "gs"
+  | "assistencias"
+  | "minutos"
+  | "titular"
+  | "suplente"
+  | "convocatorias"
+  | "mvp"
+  | "mediaMVP"
+  | "mediaNota"
+  | "mediaMin"
+  | "amarelos"
+  | "vermelhos";
 
 // ── API helpers ──────────────────────────────────────────────────────────────
 
@@ -87,6 +117,30 @@ function isGoalkeeper(player: Player | undefined) {
   return /gr|gk|guarda/i.test(player.preferred_position);
 }
 
+function playerFullName(player: Player) {
+  return `${player.first_name} ${player.last_name}`.trim();
+}
+
+function defaultSortDirForAttendance(key: AttendanceSortKey): SortDir {
+  return key === "player" ? "asc" : "desc";
+}
+
+function defaultSortDirForGame(key: GameSortKey): SortDir {
+  return key === "player" ? "asc" : "desc";
+}
+
+function compareNullableNumber(a: number | null, b: number | null, dir: SortDir) {
+  if (a === null && b === null) return 0;
+  if (a === null) return 1;
+  if (b === null) return -1;
+  return dir === "asc" ? a - b : b - a;
+}
+
+function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
+  if (!active) return <ArrowUpDown size={12} className="opacity-40" />;
+  return dir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />;
+}
+
 // ── Component ────────────────────────────────────────────────────────────────
 
 export default function StatisticsPage() {
@@ -96,6 +150,14 @@ export default function StatisticsPage() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [attendanceStats, setAttendanceStats] = useState<AttendanceStats[]>([]);
   const [gameStats, setGameStats] = useState<GameStats[]>([]);
+  const [attendanceSort, setAttendanceSort] = useState<{
+    key: AttendanceSortKey;
+    dir: SortDir;
+  }>({ key: "presencas", dir: "desc" });
+  const [gameSort, setGameSort] = useState<{
+    key: GameSortKey;
+    dir: SortDir;
+  }>({ key: "golos", dir: "desc" });
 
   useEffect(() => {
     void loadAll();
@@ -262,21 +324,114 @@ export default function StatisticsPage() {
     [gameStats],
   );
 
-  // ── Sorting for game stats ──
+  function toggleAttendanceSort(key: AttendanceSortKey) {
+    setAttendanceSort((prev) =>
+      prev.key === key
+        ? { key, dir: prev.dir === "asc" ? "desc" : "asc" }
+        : { key, dir: defaultSortDirForAttendance(key) },
+    );
+  }
+
+  function toggleGameSort(key: GameSortKey) {
+    setGameSort((prev) =>
+      prev.key === key
+        ? { key, dir: prev.dir === "asc" ? "desc" : "asc" }
+        : { key, dir: defaultSortDirForGame(key) },
+    );
+  }
+
   const sortedGameStats = useMemo(
-    () =>
-      [...gameStats].sort(
-        (a, b) => b.golos - a.golos || b.assistencias - a.assistencias || b.minutos - a.minutos,
-      ),
-    [gameStats],
+    () => {
+      const dir = gameSort.dir;
+      return [...gameStats].sort((a, b) => {
+        switch (gameSort.key) {
+          case "player":
+            return playerFullName(a.player).localeCompare(playerFullName(b.player), "pt");
+          case "golos":
+            return (dir === "asc" ? a.golos - b.golos : b.golos - a.golos) ||
+              playerFullName(a.player).localeCompare(playerFullName(b.player), "pt");
+          case "gs":
+            return (dir === "asc" ? a.gs - b.gs : b.gs - a.gs) ||
+              playerFullName(a.player).localeCompare(playerFullName(b.player), "pt");
+          case "assistencias":
+            return (dir === "asc"
+              ? a.assistencias - b.assistencias
+              : b.assistencias - a.assistencias) ||
+              playerFullName(a.player).localeCompare(playerFullName(b.player), "pt");
+          case "minutos":
+            return (dir === "asc" ? a.minutos - b.minutos : b.minutos - a.minutos) ||
+              playerFullName(a.player).localeCompare(playerFullName(b.player), "pt");
+          case "titular":
+            return (dir === "asc" ? a.titular - b.titular : b.titular - a.titular) ||
+              playerFullName(a.player).localeCompare(playerFullName(b.player), "pt");
+          case "suplente":
+            return (dir === "asc" ? a.suplente - b.suplente : b.suplente - a.suplente) ||
+              playerFullName(a.player).localeCompare(playerFullName(b.player), "pt");
+          case "convocatorias":
+            return (dir === "asc"
+              ? a.convocatorias - b.convocatorias
+              : b.convocatorias - a.convocatorias) ||
+              playerFullName(a.player).localeCompare(playerFullName(b.player), "pt");
+          case "mvp":
+            return (dir === "asc" ? a.mvp - b.mvp : b.mvp - a.mvp) ||
+              playerFullName(a.player).localeCompare(playerFullName(b.player), "pt");
+          case "mediaMVP":
+            return compareNullableNumber(
+              a.totalJogos > 0 ? a.mvp / a.totalJogos : null,
+              b.totalJogos > 0 ? b.mvp / b.totalJogos : null,
+              dir,
+            ) || playerFullName(a.player).localeCompare(playerFullName(b.player), "pt");
+          case "mediaNota":
+            return compareNullableNumber(
+              a.mediaNotaCount > 0 ? a.mediaNotaSum / a.mediaNotaCount : null,
+              b.mediaNotaCount > 0 ? b.mediaNotaSum / b.mediaNotaCount : null,
+              dir,
+            ) || playerFullName(a.player).localeCompare(playerFullName(b.player), "pt");
+          case "mediaMin":
+            return compareNullableNumber(
+              a.totalJogos > 0 ? a.minutos / a.totalJogos : null,
+              b.totalJogos > 0 ? b.minutos / b.totalJogos : null,
+              dir,
+            ) || playerFullName(a.player).localeCompare(playerFullName(b.player), "pt");
+          case "amarelos":
+            return (dir === "asc" ? a.amarelos - b.amarelos : b.amarelos - a.amarelos) ||
+              playerFullName(a.player).localeCompare(playerFullName(b.player), "pt");
+          case "vermelhos":
+            return (dir === "asc" ? a.vermelhos - b.vermelhos : b.vermelhos - a.vermelhos) ||
+              playerFullName(a.player).localeCompare(playerFullName(b.player), "pt");
+          default:
+            return 0;
+        }
+      });
+    },
+    [gameStats, gameSort],
   );
 
   const sortedAttendance = useMemo(
-    () =>
-      [...attendanceStats].sort(
-        (a, b) => b.presencas - a.presencas || a.player.first_name.localeCompare(b.player.first_name),
-      ),
-    [attendanceStats],
+    () => {
+      const dir = attendanceSort.dir;
+      return [...attendanceStats].sort((a, b) => {
+        switch (attendanceSort.key) {
+          case "player":
+            return playerFullName(a.player).localeCompare(playerFullName(b.player), "pt");
+          case "minutos":
+            return (dir === "asc" ? a.minutos - b.minutos : b.minutos - a.minutos) ||
+              playerFullName(a.player).localeCompare(playerFullName(b.player), "pt");
+          case "presencas":
+            return (dir === "asc" ? a.presencas - b.presencas : b.presencas - a.presencas) ||
+              playerFullName(a.player).localeCompare(playerFullName(b.player), "pt");
+          case "ausencias":
+            return (dir === "asc" ? a.ausencias - b.ausencias : b.ausencias - a.ausencias) ||
+              playerFullName(a.player).localeCompare(playerFullName(b.player), "pt");
+          case "lesionados":
+            return (dir === "asc" ? a.lesionados - b.lesionados : b.lesionados - a.lesionados) ||
+              playerFullName(a.player).localeCompare(playerFullName(b.player), "pt");
+          default:
+            return 0;
+        }
+      });
+    },
+    [attendanceStats, attendanceSort],
   );
 
   // ── Render ──
@@ -365,11 +520,71 @@ export default function StatisticsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-xs text-slate-400 border-b border-slate-100">
-                  <th className="text-left pb-2 font-medium">Jogador</th>
-                  <th className="text-center pb-2 font-medium px-2 whitespace-nowrap">Min</th>
-                  <th className="text-center pb-2 font-medium px-2 whitespace-nowrap">✅ Pres.</th>
-                  <th className="text-center pb-2 font-medium px-2 whitespace-nowrap">❌ Aus.</th>
-                  <th className="text-center pb-2 font-medium px-2 whitespace-nowrap">🤕 Les.</th>
+                  <th className="text-left pb-2 font-medium">
+                    <button
+                      type="button"
+                      onClick={() => toggleAttendanceSort("player")}
+                      className="inline-flex items-center gap-1"
+                    >
+                      Jogador
+                      <SortIcon
+                        active={attendanceSort.key === "player"}
+                        dir={attendanceSort.dir}
+                      />
+                    </button>
+                  </th>
+                  <th className="text-center pb-2 font-medium px-2 whitespace-nowrap">
+                    <button
+                      type="button"
+                      onClick={() => toggleAttendanceSort("minutos")}
+                      className="inline-flex items-center gap-1"
+                    >
+                      Min
+                      <SortIcon
+                        active={attendanceSort.key === "minutos"}
+                        dir={attendanceSort.dir}
+                      />
+                    </button>
+                  </th>
+                  <th className="text-center pb-2 font-medium px-2 whitespace-nowrap">
+                    <button
+                      type="button"
+                      onClick={() => toggleAttendanceSort("presencas")}
+                      className="inline-flex items-center gap-1"
+                    >
+                      ✅ Pres.
+                      <SortIcon
+                        active={attendanceSort.key === "presencas"}
+                        dir={attendanceSort.dir}
+                      />
+                    </button>
+                  </th>
+                  <th className="text-center pb-2 font-medium px-2 whitespace-nowrap">
+                    <button
+                      type="button"
+                      onClick={() => toggleAttendanceSort("ausencias")}
+                      className="inline-flex items-center gap-1"
+                    >
+                      ❌ Aus.
+                      <SortIcon
+                        active={attendanceSort.key === "ausencias"}
+                        dir={attendanceSort.dir}
+                      />
+                    </button>
+                  </th>
+                  <th className="text-center pb-2 font-medium px-2 whitespace-nowrap">
+                    <button
+                      type="button"
+                      onClick={() => toggleAttendanceSort("lesionados")}
+                      className="inline-flex items-center gap-1"
+                    >
+                      🤕 Les.
+                      <SortIcon
+                        active={attendanceSort.key === "lesionados"}
+                        dir={attendanceSort.dir}
+                      />
+                    </button>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -445,20 +660,146 @@ export default function StatisticsPage() {
               <table className="w-full text-xs">
                 <thead>
                   <tr className="text-slate-400 border-b border-slate-100">
-                    <th className="text-left pb-2 font-medium text-sm">Jogador</th>
-                    <th className="text-center pb-2 font-medium px-1.5" title="Golos">⚽</th>
-                    <th className="text-center pb-2 font-medium px-1.5" title="Golos Sofridos">GS</th>
-                    <th className="text-center pb-2 font-medium px-1.5" title="Assistências">🅰️</th>
-                    <th className="text-center pb-2 font-medium px-1.5 whitespace-nowrap" title="Minutos totais">Min</th>
-                    <th className="text-center pb-2 font-medium px-1.5" title="Jogos como titular">T</th>
-                    <th className="text-center pb-2 font-medium px-1.5" title="Jogos como suplente">S</th>
-                    <th className="text-center pb-2 font-medium px-1.5" title="Convocatórias">Conv</th>
-                    <th className="text-center pb-2 font-medium px-1.5" title="MVP">⭐</th>
-                    <th className="text-center pb-2 font-medium px-1.5 whitespace-nowrap" title="Média MVP">%MVP</th>
-                    <th className="text-center pb-2 font-medium px-1.5 whitespace-nowrap" title="Média Nota">Nota</th>
-                    <th className="text-center pb-2 font-medium px-1.5 whitespace-nowrap" title="Média minutos/jogo">Min/J</th>
-                    <th className="text-center pb-2 font-medium px-1.5" title="Cartões Amarelos">🟨</th>
-                    <th className="text-center pb-2 font-medium px-1.5" title="Cartões Vermelhos">🟥</th>
+                    <th className="text-left pb-2 font-medium text-sm">
+                      <button
+                        type="button"
+                        onClick={() => toggleGameSort("player")}
+                        className="inline-flex items-center gap-1"
+                      >
+                        Jogador
+                        <SortIcon active={gameSort.key === "player"} dir={gameSort.dir} />
+                      </button>
+                    </th>
+                    <th className="text-center pb-2 font-medium px-1.5" title="Golos">
+                      <button
+                        type="button"
+                        onClick={() => toggleGameSort("golos")}
+                        className="inline-flex items-center gap-1"
+                      >
+                        ⚽
+                        <SortIcon active={gameSort.key === "golos"} dir={gameSort.dir} />
+                      </button>
+                    </th>
+                    <th className="text-center pb-2 font-medium px-1.5" title="Golos Sofridos">
+                      <button
+                        type="button"
+                        onClick={() => toggleGameSort("gs")}
+                        className="inline-flex items-center gap-1"
+                      >
+                        GS
+                        <SortIcon active={gameSort.key === "gs"} dir={gameSort.dir} />
+                      </button>
+                    </th>
+                    <th className="text-center pb-2 font-medium px-1.5" title="Assistências">
+                      <button
+                        type="button"
+                        onClick={() => toggleGameSort("assistencias")}
+                        className="inline-flex items-center gap-1"
+                      >
+                        🅰️
+                        <SortIcon active={gameSort.key === "assistencias"} dir={gameSort.dir} />
+                      </button>
+                    </th>
+                    <th className="text-center pb-2 font-medium px-1.5 whitespace-nowrap" title="Minutos totais">
+                      <button
+                        type="button"
+                        onClick={() => toggleGameSort("minutos")}
+                        className="inline-flex items-center gap-1"
+                      >
+                        Min
+                        <SortIcon active={gameSort.key === "minutos"} dir={gameSort.dir} />
+                      </button>
+                    </th>
+                    <th className="text-center pb-2 font-medium px-1.5" title="Jogos como titular">
+                      <button
+                        type="button"
+                        onClick={() => toggleGameSort("titular")}
+                        className="inline-flex items-center gap-1"
+                      >
+                        T
+                        <SortIcon active={gameSort.key === "titular"} dir={gameSort.dir} />
+                      </button>
+                    </th>
+                    <th className="text-center pb-2 font-medium px-1.5" title="Jogos como suplente">
+                      <button
+                        type="button"
+                        onClick={() => toggleGameSort("suplente")}
+                        className="inline-flex items-center gap-1"
+                      >
+                        S
+                        <SortIcon active={gameSort.key === "suplente"} dir={gameSort.dir} />
+                      </button>
+                    </th>
+                    <th className="text-center pb-2 font-medium px-1.5" title="Convocatórias">
+                      <button
+                        type="button"
+                        onClick={() => toggleGameSort("convocatorias")}
+                        className="inline-flex items-center gap-1"
+                      >
+                        Conv
+                        <SortIcon active={gameSort.key === "convocatorias"} dir={gameSort.dir} />
+                      </button>
+                    </th>
+                    <th className="text-center pb-2 font-medium px-1.5" title="MVP">
+                      <button
+                        type="button"
+                        onClick={() => toggleGameSort("mvp")}
+                        className="inline-flex items-center gap-1"
+                      >
+                        ⭐
+                        <SortIcon active={gameSort.key === "mvp"} dir={gameSort.dir} />
+                      </button>
+                    </th>
+                    <th className="text-center pb-2 font-medium px-1.5 whitespace-nowrap" title="Média MVP">
+                      <button
+                        type="button"
+                        onClick={() => toggleGameSort("mediaMVP")}
+                        className="inline-flex items-center gap-1"
+                      >
+                        %MVP
+                        <SortIcon active={gameSort.key === "mediaMVP"} dir={gameSort.dir} />
+                      </button>
+                    </th>
+                    <th className="text-center pb-2 font-medium px-1.5 whitespace-nowrap" title="Média Nota">
+                      <button
+                        type="button"
+                        onClick={() => toggleGameSort("mediaNota")}
+                        className="inline-flex items-center gap-1"
+                      >
+                        Nota
+                        <SortIcon active={gameSort.key === "mediaNota"} dir={gameSort.dir} />
+                      </button>
+                    </th>
+                    <th className="text-center pb-2 font-medium px-1.5 whitespace-nowrap" title="Média minutos/jogo">
+                      <button
+                        type="button"
+                        onClick={() => toggleGameSort("mediaMin")}
+                        className="inline-flex items-center gap-1"
+                      >
+                        Min/J
+                        <SortIcon active={gameSort.key === "mediaMin"} dir={gameSort.dir} />
+                      </button>
+                    </th>
+                    <th className="text-center pb-2 font-medium px-1.5" title="Cartões Amarelos">
+                      <button
+                        type="button"
+                        onClick={() => toggleGameSort("amarelos")}
+                        className="inline-flex items-center gap-1"
+                      >
+                        🟨
+                        <SortIcon active={gameSort.key === "amarelos"} dir={gameSort.dir} />
+                      </button>
+                    </th>
+                    <th className="text-center pb-2 font-medium px-1.5" title="Cartões Vermelhos">
+                      <button
+                        type="button"
+                        onClick={() => toggleGameSort("vermelhos")}
+                        className="inline-flex items-center gap-1"
+                      >
+                        🟥
+                        <SortIcon active={gameSort.key === "vermelhos"} dir={gameSort.dir} />
+                      </button>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>

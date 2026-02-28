@@ -1,10 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { Resend } from "resend";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { checkInviteSendLimit } from "@/lib/rate-limit";
 import { getCanonicalAppUrl } from "@/lib/config/canonical-app-url";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
+import { resolveUserTeamContext } from "@/lib/auth/team-context";
 
 export const runtime = "nodejs";
 
@@ -32,6 +34,7 @@ const roleLabel: Record<string, string> = {
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
+    const admin = createAdminClient();
 
     // 🔐 Autenticação
     const {
@@ -51,12 +54,21 @@ export async function POST(request: Request) {
       );
     }
 
-    // 🏟 Buscar escalão do coordinator
-    const { data: ageGroup, error: ageGroupError } = await supabase
+    const context = await resolveUserTeamContext(admin, user.id);
+    if (context.source !== "coordinator" || !context.ageGroup?.id) {
+      return NextResponse.json(
+        { error: "Apenas o coordenador pode enviar convites." },
+        { status: 403 },
+      );
+    }
+
+    // 🏟 Buscar escalão ativo do coordenador
+    const { data: ageGroup, error: ageGroupError } = await admin
       .from("age_groups")
-      .select("id, name, club_name")
+      .select("id, name, club_name, club_id")
+      .eq("id", context.ageGroup.id)
       .eq("coordinator_id", user.id)
-      .single();
+      .maybeSingle();
 
     if (ageGroupError || !ageGroup) {
       return NextResponse.json(
@@ -81,7 +93,7 @@ export async function POST(request: Request) {
     let attempts = 0;
 
     while (attempts < 5) {
-      const { data: existing } = await supabase
+      const { data: existing } = await admin
         .from("staff_invites")
         .select("id")
         .eq("invite_code", inviteCode)
@@ -94,7 +106,8 @@ export async function POST(request: Request) {
     }
 
     // 💾 Guardar convite na DB
-    const { error: dbError } = await supabase.from("staff_invites").insert({
+    const { data: createdInvite, error: dbError } = await admin.from("staff_invites").insert({
+      club_id: ageGroup.club_id,
       age_group_id: ageGroup.id,
       invited_by: user.id,
       first_name: firstName,
@@ -103,7 +116,7 @@ export async function POST(request: Request) {
       phone: phone || null,
       role,
       invite_code: inviteCode,
-    });
+    }).select("id").maybeSingle();
 
     if (dbError) {
       console.error("Erro ao criar convite:", dbError);
@@ -116,7 +129,7 @@ export async function POST(request: Request) {
     // 👤 Nome do coordenador
     let coordinatorName = "O coordenador";
 
-    const { data: profile } = await supabase
+    const { data: profile } = await admin
       .from("profiles")
       .select("full_name")
       .eq("id", user.id)
@@ -137,6 +150,7 @@ export async function POST(request: Request) {
       console.error("RESEND_API_KEY não definida.");
       return NextResponse.json({
         success: true,
+        inviteId: createdInvite?.id ?? null,
         inviteCode,
         emailSent: false,
         warning: "Convite criado mas email não enviado (API key em falta).",
@@ -185,6 +199,7 @@ export async function POST(request: Request) {
       console.error("Resend error:", emailError);
       return NextResponse.json({
         success: true,
+        inviteId: createdInvite?.id ?? null,
         inviteCode,
         emailSent: false,
         warning: "Convite criado mas email não enviado.",
@@ -195,6 +210,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
+      inviteId: createdInvite?.id ?? null,
       inviteCode,
       emailSent: true,
     });

@@ -6,6 +6,7 @@ import {
   isValidManualShortName,
   normalizeManualShortName,
 } from "@/lib/football/short-name";
+import { formatFixtureOpponentLabel } from "@/lib/games/display";
 import { NextResponse } from "next/server";
 import { SHORT_PRIVATE_CACHE_CONTROL } from "@/lib/http/cache";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
@@ -81,6 +82,18 @@ function normalizePayload(value: unknown): CalendarPayload {
     notes: normalizeOptionalText(row.notes),
     image_url: normalizeOptionalText(row.image_url),
   };
+}
+
+function resolveGameTitle(payload: CalendarPayload) {
+  if (payload.title) return payload.title;
+  if (payload.opponent_name || payload.opponent_short_name) {
+    return formatFixtureOpponentLabel({
+      isHome: payload.is_home ?? true,
+      opponentName: payload.opponent_name,
+      opponentShortName: payload.opponent_short_name,
+    });
+  }
+  return "Jogo";
 }
 
 async function buildRouteContext(): Promise<RouteContextData | NextResponse> {
@@ -405,7 +418,7 @@ export async function POST(request: Request) {
       .insert({
         age_group_id: targetAgeGroupId,
         team_id: targetTeamId,
-        title: payload.title || (payload.opponent_name ? `vs ${payload.opponent_name}` : "Jogo"),
+        title: resolveGameTitle(payload),
         game_datetime: gameDatetime,
         competition_id: competitionResult.id,
         opponent_name: payload.opponent_name,
@@ -589,7 +602,7 @@ export async function PATCH(request: Request) {
       .update({
         age_group_id: targetAgeGroupId,
         team_id: targetTeamId,
-        title: payload.title || (payload.opponent_name ? `vs ${payload.opponent_name}` : "Jogo"),
+        title: resolveGameTitle(payload),
         game_datetime: gameDatetime,
         competition_id: competitionResult.id,
         opponent_name: payload.opponent_name,
