@@ -88,6 +88,27 @@ const EMPTY_GAME_FORM: GameForm = {
   round_number: "",
 };
 
+function extractRoundNumber(title: string | null | undefined) {
+  if (!title) return null;
+  const match = title.match(/\b(?:jornada|j)\s*(\d+)\b/i);
+  if (!match) return null;
+  const round = Number.parseInt(match[1], 10);
+  return Number.isFinite(round) ? round : null;
+}
+
+function compareCompetitionGames(a: Game, b: Game) {
+  const roundA = extractRoundNumber(a.title);
+  const roundB = extractRoundNumber(b.title);
+
+  if (roundA !== null || roundB !== null) {
+    if (roundA === null) return 1;
+    if (roundB === null) return -1;
+    if (roundA !== roundB) return roundB - roundA;
+  }
+
+  return new Date(b.game_datetime).getTime() - new Date(a.game_datetime).getTime();
+}
+
 export default function CompetitionsPage() {
   const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
@@ -391,11 +412,7 @@ export default function CompetitionsPage() {
       ) : (
         <div className="space-y-4">
           {competitions.map((comp) => {
-            const games = (comp.games || []).sort(
-              (a, b) =>
-                new Date(a.game_datetime).getTime() -
-                new Date(b.game_datetime).getTime(),
-            );
+            const games = (comp.games || []).slice().sort(compareCompetitionGames);
             const upcoming = games.filter((g) => !isClosedGameStatus(g.status));
             const played = games.filter((g) => isClosedGameStatus(g.status));
 
@@ -521,8 +538,7 @@ export default function CompetitionsPage() {
 
                   {/* Resultados recentes */}
                   {played
-                    .slice(-2)
-                    .reverse()
+                    .slice(0, 2)
                     .map((game) => (
                       <button
                         key={game.id}
