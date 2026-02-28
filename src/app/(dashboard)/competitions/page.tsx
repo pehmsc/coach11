@@ -9,6 +9,8 @@ import {
   Plus,
   Trophy,
   ChevronRight,
+  ChevronUp,
+  ChevronDown,
   X,
   Loader2,
   Trash2,
@@ -88,6 +90,8 @@ const EMPTY_GAME_FORM: GameForm = {
   round_number: "",
 };
 
+const COMPETITION_GAMES_WINDOW_SIZE = 5;
+
 function extractRoundNumber(title: string | null | undefined) {
   if (!title) return null;
   const match = title.match(/\b(?:jornada|j)\s*(\d+)\b/i);
@@ -107,6 +111,25 @@ function compareCompetitionGames(a: Game, b: Game) {
   }
 
   return new Date(b.game_datetime).getTime() - new Date(a.game_datetime).getTime();
+}
+
+function getDefaultCompetitionWindowStart(games: Game[]) {
+  if (games.length <= COMPETITION_GAMES_WINDOW_SIZE) return 0;
+
+  let anchorIndex = -1;
+  for (let index = games.length - 1; index >= 0; index -= 1) {
+    if (!isClosedGameStatus(games[index].status)) {
+      anchorIndex = index;
+      break;
+    }
+  }
+
+  if (anchorIndex === -1) {
+    anchorIndex = 0;
+  }
+
+  const maxStart = Math.max(0, games.length - COMPETITION_GAMES_WINDOW_SIZE);
+  return Math.min(Math.max(anchorIndex - 2, 0), maxStart);
 }
 
 export default function CompetitionsPage() {
@@ -131,12 +154,35 @@ export default function CompetitionsPage() {
   const [addingGameToCompId, setAddingGameToCompId] = useState<string | null>(null);
   const [gameForm, setGameForm] = useState(EMPTY_GAME_FORM);
   const [savingGame, setSavingGame] = useState(false);
+  const [competitionWindowStarts, setCompetitionWindowStarts] = useState<Record<string, number>>(
+    {},
+  );
 
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    setCompetitionWindowStarts((prev) => {
+      const next: Record<string, number> = {};
+
+      competitions.forEach((competition) => {
+        const games = (competition.games || []).slice().sort(compareCompetitionGames);
+        const maxStart = Math.max(0, games.length - COMPETITION_GAMES_WINDOW_SIZE);
+        const defaultStart = getDefaultCompetitionWindowStart(games);
+        const previousStart = prev[competition.id];
+
+        next[competition.id] =
+          typeof previousStart === "number"
+            ? Math.min(Math.max(previousStart, 0), maxStart)
+            : defaultStart;
+      });
+
+      return next;
+    });
+  }, [competitions]);
 
   async function loadData() {
     setError(null);
@@ -341,6 +387,31 @@ export default function CompetitionsPage() {
     return `${game.score_home}–${game.score_away}`;
   }
 
+  function shiftCompetitionWindow(competitionId: string, direction: "up" | "down") {
+    setCompetitionWindowStarts((prev) => {
+      const competition = competitions.find((item) => item.id === competitionId);
+      if (!competition) return prev;
+
+      const games = (competition.games || []).slice().sort(compareCompetitionGames);
+      const maxStart = Math.max(0, games.length - COMPETITION_GAMES_WINDOW_SIZE);
+      const currentStart =
+        typeof prev[competitionId] === "number"
+          ? prev[competitionId]
+          : getDefaultCompetitionWindowStart(games);
+      const nextStart =
+        direction === "up"
+          ? Math.max(0, currentStart - 1)
+          : Math.min(maxStart, currentStart + 1);
+
+      if (nextStart === currentStart) return prev;
+
+      return {
+        ...prev,
+        [competitionId]: nextStart,
+      };
+    });
+  }
+
   if (loading) {
     return (
       <div className="p-4 md:p-8 max-w-2xl mx-auto space-y-4">
@@ -413,8 +484,15 @@ export default function CompetitionsPage() {
         <div className="space-y-4">
           {competitions.map((comp) => {
             const games = (comp.games || []).slice().sort(compareCompetitionGames);
-            const upcoming = games.filter((g) => !isClosedGameStatus(g.status));
-            const played = games.filter((g) => isClosedGameStatus(g.status));
+            const windowStart =
+              competitionWindowStarts[comp.id] ?? getDefaultCompetitionWindowStart(games);
+            const visibleGames = games.slice(
+              windowStart,
+              windowStart + COMPETITION_GAMES_WINDOW_SIZE,
+            );
+            const canMoveUp = windowStart > 0;
+            const canMoveDown =
+              windowStart + COMPETITION_GAMES_WINDOW_SIZE < games.length;
 
             return (
               <Card key={comp.id}>
@@ -491,92 +569,114 @@ export default function CompetitionsPage() {
                 </CardHeader>
 
                 <CardContent className="pt-0 space-y-1">
-                  {/* Próximos jogos */}
-                  {upcoming.slice(0, 3).map((game) => (
-                    <button
-                      key={game.id}
-                      onClick={() => router.push(`/games/${game.id}`)}
-                      className="w-full flex items-center gap-3 p-3 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors text-left"
-                    >
-                      <Calendar
-                        size={14}
-                        className="text-blue-500 flex-shrink-0"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          {game.title && (
-                            <span className="text-[10px] font-bold bg-blue-100 text-blue-700 rounded px-1 py-0.5 flex-shrink-0">
-                              {game.title.replace("Jornada ", "J")}
-                            </span>
-                          )}
-                          <p className="text-sm font-medium text-slate-800 truncate">
-                            {formatFixtureOpponentLabel({
-                              isHome: game.is_home,
-                              opponentName: game.opponent_name,
-                              opponentShortName: game.opponent_short_name,
-                            })}
-                          </p>
-                        </div>
-                        <p className="text-xs text-slate-400">
-                          {format(
-                            parseISO(game.game_datetime),
-                            "d MMM · HH:mm",
-                            { locale: pt },
-                          )}
-                          {game.location ? ` · ${game.location}` : ""}
-                        </p>
+                  {games.length > 0 && (
+                    <div className="space-y-1">
+                      <div className="flex justify-center pb-1">
+                        <button
+                          type="button"
+                          onClick={() => shiftCompetitionWindow(comp.id, "up")}
+                          disabled={!canMoveUp}
+                          aria-label="Ver jogos acima"
+                          className={`flex h-7 w-7 items-center justify-center rounded-full border transition-colors ${
+                            canMoveUp
+                              ? "border-slate-200 text-slate-500 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700"
+                              : "border-slate-100 text-slate-300 opacity-50"
+                          }`}
+                        >
+                          <ChevronUp size={14} />
+                        </button>
                       </div>
-                      <ChevronRight size={14} className="text-slate-300" />
-                    </button>
-                  ))}
 
-                  {upcoming.length > 3 && (
-                    <p className="text-xs text-slate-400 text-center py-1">
-                      +{upcoming.length - 3} jogo{upcoming.length - 3 !== 1 ? "s" : ""} por jogar
-                    </p>
-                  )}
-
-                  {/* Resultados recentes */}
-                  {played
-                    .slice(0, 2)
-                    .map((game) => (
-                      <button
-                        key={game.id}
-                        onClick={() => router.push(`/games/${game.id}`)}
-                        className="w-full flex items-center gap-3 p-3 rounded-xl bg-white border border-slate-100 hover:bg-slate-50 transition-colors text-left"
-                      >
-                        <span className="text-xs text-slate-400 w-4 text-center">
-                          ✓
-                        </span>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            {game.title && (
-                              <span className="text-[10px] font-bold bg-slate-100 text-slate-500 rounded px-1 py-0.5 flex-shrink-0">
-                                {game.title.replace("Jornada ", "J")}
+                      {visibleGames.map((game) => {
+                        const isClosed = isClosedGameStatus(game.status);
+                        return (
+                          <button
+                            key={game.id}
+                            onClick={() => router.push(`/games/${game.id}`)}
+                            className={`w-full flex items-center gap-3 p-3 rounded-xl transition-colors text-left ${
+                              isClosed
+                                ? "bg-white border border-slate-100 hover:bg-slate-50"
+                                : "bg-slate-50 hover:bg-slate-100"
+                            }`}
+                          >
+                            {isClosed ? (
+                              <span className="text-xs text-slate-400 w-4 text-center">
+                                ✓
+                              </span>
+                            ) : (
+                              <Calendar
+                                size={14}
+                                className="text-blue-500 flex-shrink-0"
+                              />
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                {game.title && (
+                                  <span
+                                    className={`text-[10px] font-bold rounded px-1 py-0.5 flex-shrink-0 ${
+                                      isClosed
+                                        ? "bg-slate-100 text-slate-500"
+                                        : "bg-blue-100 text-blue-700"
+                                    }`}
+                                  >
+                                    {game.title.replace("Jornada ", "J")}
+                                  </span>
+                                )}
+                                <p
+                                  className={`text-sm font-medium truncate ${
+                                    isClosed ? "text-slate-600" : "text-slate-800"
+                                  }`}
+                                >
+                                  {formatFixtureOpponentLabel({
+                                    isHome: game.is_home,
+                                    opponentName: game.opponent_name,
+                                    opponentShortName: game.opponent_short_name,
+                                  })}
+                                </p>
+                              </div>
+                              <p className="text-xs text-slate-400">
+                                {format(
+                                  parseISO(game.game_datetime),
+                                  isClosed ? "d MMM" : "d MMM · HH:mm",
+                                  { locale: pt },
+                                )}
+                                {!isClosed && game.location ? ` · ${game.location}` : ""}
+                              </p>
+                            </div>
+                            {gameResultLabel(game) && (
+                              <span className="text-sm font-bold text-slate-700">
+                                {gameResultLabel(game)}
                               </span>
                             )}
-                            <p className="text-sm font-medium text-slate-600 truncate">
-                              {formatFixtureOpponentLabel({
-                                isHome: game.is_home,
-                                opponentName: game.opponent_name,
-                                opponentShortName: game.opponent_short_name,
-                              })}
-                            </p>
-                          </div>
-                          <p className="text-xs text-slate-400">
-                            {format(parseISO(game.game_datetime), "d MMM", {
-                              locale: pt,
-                            })}
-                          </p>
-                        </div>
-                        {gameResultLabel(game) && (
-                          <span className="text-sm font-bold text-slate-700">
-                            {gameResultLabel(game)}
-                          </span>
-                        )}
-                        <ChevronRight size={14} className="text-slate-300" />
-                      </button>
-                    ))}
+                            <ChevronRight size={14} className="text-slate-300" />
+                          </button>
+                        );
+                      })}
+
+                      <div className="flex justify-center pt-1">
+                        <button
+                          type="button"
+                          onClick={() => shiftCompetitionWindow(comp.id, "down")}
+                          disabled={!canMoveDown}
+                          aria-label="Ver jogos abaixo"
+                          className={`flex h-7 w-7 items-center justify-center rounded-full border transition-colors ${
+                            canMoveDown
+                              ? "border-slate-200 text-slate-500 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700"
+                              : "border-slate-100 text-slate-300 opacity-50"
+                          }`}
+                        >
+                          <ChevronDown size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Adicionar jogo */}
+                  {games.length === 0 && addingGameToCompId !== comp.id && (
+                    <p className="text-xs text-slate-400 text-center py-2">
+                      Ainda sem jogos nesta competição.
+                    </p>
+                  )}
 
                   {/* Adicionar jogo */}
                   {addingGameToCompId === comp.id ? (
