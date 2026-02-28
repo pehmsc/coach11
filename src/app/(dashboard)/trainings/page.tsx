@@ -110,7 +110,7 @@ export default function TrainingsPage() {
     if (rows.length > 0) {
       const sessionIds = rows.map((s) => s.id);
       const { data: attRows } = await supabase
-        .from("attendance_records")
+        .from("training_attendance")
         .select("training_session_id, status")
         .in("training_session_id", sessionIds);
 
@@ -145,7 +145,7 @@ export default function TrainingsPage() {
 
     // Load attendance for this specific session
     const { data: attRows } = await supabase
-      .from("attendance_records")
+      .from("training_attendance")
       .select("player_id, status")
       .eq("training_session_id", session.id);
 
