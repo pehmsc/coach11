@@ -8,6 +8,8 @@ export function createClient() {
     {
       cookieOptions: SUPABASE_AUTH_COOKIE_OPTIONS,
       auth: {
+        persistSession: true,
+        autoRefreshToken: true,
         flowType: "pkce",
         // O callback OAuth é tratado explicitamente em /auth/callback/client.
         detectSessionInUrl: false,

@@ -1,4 +1,3 @@
-import type { UserTeamContext } from "@/lib/auth/team-context";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
@@ -38,8 +37,6 @@ export type NotificationListItem = {
 
 type ScopedNotificationFilter = {
   userId: string;
-  teamIds?: string[];
-  ageGroupIds?: string[];
   type?: string | null;
   onlyRead?: boolean;
   onlyUnread?: boolean;
@@ -47,22 +44,6 @@ type ScopedNotificationFilter = {
 };
 
 export type BulkNotificationAction = "mark_read" | "mark_unread" | "clear";
-
-function buildScopeFilter(teamIds?: string[], ageGroupIds?: string[]) {
-  const clauses: string[] = [];
-
-  if ((teamIds || []).length > 0) {
-    clauses.push(`team_id.in.(${(teamIds || []).join(",")})`);
-  }
-
-  if ((ageGroupIds || []).length > 0) {
-    clauses.push(
-      `and(team_id.is.null,age_group_id.in.(${(ageGroupIds || []).join(",")}))`,
-    );
-  }
-
-  return clauses.join(",");
-}
 
 function normalizeLinkPath(row: NotificationInboxRow) {
   if (row.link_path && row.link_path.startsWith("/")) {
@@ -100,10 +81,6 @@ async function fetchScopedNotificationIds(
 
   if (filter.includeCleared !== true) {
     query = query.is("cleared_at", null);
-  }
-  const scopeFilter = buildScopeFilter(filter.teamIds, filter.ageGroupIds);
-  if (scopeFilter) {
-    query = query.or(scopeFilter);
   }
   if (filter.type) {
     query = query.eq("type", filter.type);
@@ -159,7 +136,6 @@ export async function listUserNotifications(
   admin: AdminClient,
   options: {
     userId: string;
-    context: UserTeamContext;
     limit: number;
     unreadOnly?: boolean;
   },
@@ -179,15 +155,6 @@ export async function listUserNotifications(
     .select("id", { count: "exact", head: true })
     .eq("user_id", options.userId)
     .is("cleared_at", null);
-
-  const scopeFilter = buildScopeFilter(
-    options.context.accessibleTeamIds,
-    options.context.accessibleAgeGroupIds,
-  );
-  if (scopeFilter) {
-    listQuery = listQuery.or(scopeFilter);
-    unreadQuery = unreadQuery.or(scopeFilter);
-  }
 
   if (options.unreadOnly) {
     listQuery = listQuery.is("read_at", null);
@@ -290,8 +257,6 @@ export async function bulkApplyNotificationAction(
   admin: AdminClient,
   options: {
     userId: string;
-    teamIds?: string[];
-    ageGroupIds?: string[];
     type?: string | null;
     onlyRead?: boolean;
     onlyUnread?: boolean;
@@ -301,8 +266,6 @@ export async function bulkApplyNotificationAction(
 ) {
   const ids = await fetchScopedNotificationIds(admin, {
     userId: options.userId,
-    teamIds: options.teamIds,
-    ageGroupIds: options.ageGroupIds,
     type: options.type,
     onlyRead: options.onlyRead,
     onlyUnread: options.onlyUnread,

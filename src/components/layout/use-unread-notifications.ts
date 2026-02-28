@@ -6,7 +6,9 @@ import { syncAppBadge } from "@/lib/pwa/badges";
 
 type NotificationsResponse = {
   success?: boolean;
+  linked?: boolean;
   unreadCount?: number;
+  error?: string;
 };
 
 export function useUnreadNotifications(profileId?: string | null) {
@@ -19,10 +21,32 @@ export function useUnreadNotifications(profileId?: string | null) {
       return;
     }
 
-    const res = await fetch("/api/notifications?limit=1", { cache: "no-store" });
-    const payload = (await res.json().catch(() => null)) as NotificationsResponse | null;
-    if (!res.ok || !payload?.success) return;
-    setUnreadCount(payload.unreadCount || 0);
+    try {
+      const res = await fetch("/api/notifications?limit=1", { cache: "no-store" });
+      const payload = (await res.json().catch(() => null)) as NotificationsResponse | null;
+
+      if (res.status === 401 || res.status === 403) {
+        setUnreadCount(0);
+        return;
+      }
+
+      if (!res.ok || !payload?.success) {
+        console.error("Erro ao atualizar badge de notificações.", {
+          status: res.status,
+          error: payload?.error,
+        });
+        return;
+      }
+
+      if (payload.linked === false) {
+        setUnreadCount(0);
+        return;
+      }
+
+      setUnreadCount(payload.unreadCount || 0);
+    } catch (error) {
+      console.error("Erro de rede ao atualizar badge de notificações.", error);
+    }
   }, [profileId]);
 
   useEffect(() => {

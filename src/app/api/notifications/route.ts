@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { resolveUserTeamContext } from "@/lib/auth/team-context";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 import {
   bulkApplyNotificationAction,
@@ -26,33 +25,11 @@ export async function GET(request: Request) {
     }
 
     const admin = createAdminClient();
-    const context = await resolveUserTeamContext(admin, user.id);
-    if (
-      context.accessibleTeamIds.length === 0 &&
-      context.accessibleAgeGroupIds.length === 0
-    ) {
-      return NextResponse.json(
-        {
-          success: true,
-          linked: false,
-          notifications: [],
-          unreadCount: 0,
-          currentUserId: user.id,
-        },
-        {
-          headers: {
-            "Cache-Control": "no-store",
-          },
-        },
-      );
-    }
-
     const { searchParams } = new URL(request.url);
     const limit = normalizeLimit(searchParams.get("limit"));
     const unreadOnly = searchParams.get("unreadOnly") === "true";
     const { notifications, unreadCount } = await listUserNotifications(admin, {
       userId: user.id,
-      context,
       limit,
       unreadOnly,
     });
@@ -88,14 +65,6 @@ export async function POST(request: Request) {
     }
 
     const admin = createAdminClient();
-    const context = await resolveUserTeamContext(admin, user.id);
-    if (
-      context.accessibleTeamIds.length === 0 &&
-      context.accessibleAgeGroupIds.length === 0
-    ) {
-      return NextResponse.json({ success: true, updated: 0, deleted: 0 });
-    }
-
     const body = await request.json().catch(() => null);
     const action =
       typeof body?.action === "string" ? body.action : "mark_all_read";
@@ -110,8 +79,6 @@ export async function POST(request: Request) {
     if (action === "delete_all" || action === "clear_all") {
       const deleted = await bulkApplyNotificationAction(admin, {
         userId: user.id,
-        teamIds: context.accessibleTeamIds,
-        ageGroupIds: context.accessibleAgeGroupIds,
         type,
         onlyRead,
         onlyUnread,
@@ -125,8 +92,6 @@ export async function POST(request: Request) {
 
     const updated = await bulkApplyNotificationAction(admin, {
       userId: user.id,
-      teamIds: context.accessibleTeamIds,
-      ageGroupIds: context.accessibleAgeGroupIds,
       type,
       onlyRead,
       onlyUnread,

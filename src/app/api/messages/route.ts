@@ -134,8 +134,6 @@ export async function GET(request: Request) {
     try {
       await bulkApplyNotificationAction(createAdminClient(), {
         userId: user.id,
-        teamIds: context.teamId ? [context.teamId] : [],
-        ageGroupIds: context.ageGroup?.id ? [context.ageGroup.id] : [],
         type: "message",
         onlyUnread: true,
         action: "mark_read",
