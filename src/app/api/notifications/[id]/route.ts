@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
+import {
+  clearNotificationForUser,
+  getUserNotification,
+  setNotificationReadState,
+} from "@/lib/notifications/store";
 
 export async function PATCH(
   request: Request,
@@ -24,6 +30,8 @@ export async function PATCH(
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
 
+    const admin = createAdminClient();
+
     const body = await request.json().catch(() => null);
     const action =
       typeof body?.action === "string" ? body.action : "mark_read";
@@ -32,21 +40,23 @@ export async function PATCH(
       return NextResponse.json({ error: "Ação inválida." }, { status: 400 });
     }
 
-    const readAtValue = action === "mark_read" ? new Date().toISOString() : null;
-    const { data, error } = await supabase
-      .from("notifications")
-      .update({ read_at: readAtValue })
-      .eq("id", id)
-      .eq("user_id", user.id)
-      .select(
-        "id, user_id, team_id, age_group_id, actor_id, type, entity_id, title, body, link_path, created_at, read_at",
-      )
-      .maybeSingle();
-
-    if (error) {
-      return respondInternalError("api.notifications.id.patch.update", error);
+    const updatedId = await setNotificationReadState(admin, {
+      userId: user.id,
+      notificationId: id,
+      readAt: action === "mark_read" ? new Date().toISOString() : null,
+    });
+    if (!updatedId) {
+      return NextResponse.json(
+        { error: "Notificação não encontrada." },
+        { status: 404 },
+      );
     }
-    if (!data) {
+
+    const notification = await getUserNotification(admin, {
+      userId: user.id,
+      notificationId: id,
+    });
+    if (!notification) {
       return NextResponse.json(
         { error: "Notificação não encontrada." },
         { status: 404 },
@@ -55,7 +65,7 @@ export async function PATCH(
 
     return NextResponse.json({
       success: true,
-      notification: data,
+      notification,
     });
   } catch (error) {
     return respondInternalError("api.notifications.id.patch", error);
@@ -84,25 +94,21 @@ export async function DELETE(
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
 
-    const { data, error } = await supabase
-      .from("notifications")
-      .delete()
-      .eq("id", id)
-      .eq("user_id", user.id)
-      .select("id")
-      .maybeSingle();
+    const admin = createAdminClient();
+    const clearedId = await clearNotificationForUser(admin, {
+      userId: user.id,
+      notificationId: id,
+      clearedAt: new Date().toISOString(),
+    });
 
-    if (error) {
-      return respondInternalError("api.notifications.id.delete.remove", error);
-    }
-    if (!data?.id) {
+    if (!clearedId) {
       return NextResponse.json(
         { error: "Notificação não encontrada." },
         { status: 404 },
       );
     }
 
-    return NextResponse.json({ success: true, id: data.id });
+    return NextResponse.json({ success: true, id: clearedId });
   } catch (error) {
     return respondInternalError("api.notifications.id.delete", error);
   }

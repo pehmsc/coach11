@@ -1,36 +1,17 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveUserTeamContext } from "@/lib/auth/team-context";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
-
-type NotificationRow = {
-  id: string;
-  user_id: string;
-  team_id: string | null;
-  age_group_id: string;
-  actor_id: string | null;
-  type: "new_game" | "new_training" | "message";
-  entity_id: string | null;
-  title: string;
-  body: string | null;
-  link_path: string | null;
-  created_at: string;
-  read_at: string | null;
-};
+import {
+  bulkApplyNotificationAction,
+  listUserNotifications,
+} from "@/lib/notifications/store";
 
 function normalizeLimit(value: string | null) {
   const parsed = Number.parseInt(value || "", 10);
   if (!Number.isFinite(parsed)) return 30;
   return Math.max(10, Math.min(100, parsed));
-}
-
-function normalizeLinkPath(row: NotificationRow) {
-  if (row.link_path && row.link_path.startsWith("/")) {
-    return row.link_path;
-  }
-  if (row.type === "new_game" && row.entity_id) return `/games/${row.entity_id}`;
-  if (row.type === "new_training") return "/calendar";
-  return "/messages";
 }
 
 export async function GET(request: Request) {
@@ -44,7 +25,8 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
 
-    const context = await resolveUserTeamContext(supabase, user.id);
+    const admin = createAdminClient();
+    const context = await resolveUserTeamContext(admin, user.id);
     if (context.accessibleTeamIds.length === 0 || !context.ageGroup) {
       return NextResponse.json(
         {
@@ -65,40 +47,12 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const limit = normalizeLimit(searchParams.get("limit"));
     const unreadOnly = searchParams.get("unreadOnly") === "true";
-
-    let listQuery = supabase
-      .from("notifications")
-      .select(
-        "id, user_id, team_id, age_group_id, actor_id, type, entity_id, title, body, link_path, created_at, read_at",
-      )
-      .eq("user_id", user.id)
-      .in("team_id", context.accessibleTeamIds)
-      .order("created_at", { ascending: false })
-      .limit(limit);
-
-    if (unreadOnly) {
-      listQuery = listQuery.is("read_at", null);
-    }
-
-    const [{ data: rows, error: listError }, unreadRes] = await Promise.all([
-      listQuery,
-      supabase
-        .from("notifications")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", user.id)
-        .in("team_id", context.accessibleTeamIds)
-        .is("read_at", null),
-    ]);
-
-    if (listError) {
-      return respondInternalError("api.notifications.get.list", listError);
-    }
-
-    const unreadCount = unreadRes.count ?? 0;
-    const notifications = ((rows || []) as NotificationRow[]).map((row) => ({
-      ...row,
-      link_path: normalizeLinkPath(row),
-    }));
+    const { notifications, unreadCount } = await listUserNotifications(admin, {
+      userId: user.id,
+      context,
+      limit,
+      unreadOnly,
+    });
 
     return NextResponse.json(
       {
@@ -130,7 +84,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
 
-    const context = await resolveUserTeamContext(supabase, user.id);
+    const admin = createAdminClient();
+    const context = await resolveUserTeamContext(admin, user.id);
     if (context.accessibleTeamIds.length === 0) {
       return NextResponse.json({ success: true, updated: 0, deleted: 0 });
     }
@@ -142,63 +97,39 @@ export async function POST(request: Request) {
     const onlyRead = body?.onlyRead === true;
     const onlyUnread = body?.onlyUnread === true;
 
-    if (!["mark_all_read", "mark_all_unread", "delete_all"].includes(action)) {
+    if (!["mark_all_read", "mark_all_unread", "delete_all", "clear_all"].includes(action)) {
       return NextResponse.json({ error: "Ação inválida." }, { status: 400 });
     }
 
-    if (action === "delete_all") {
-      let deleteQuery = supabase
-        .from("notifications")
-        .delete()
-        .eq("user_id", user.id)
-        .in("team_id", context.accessibleTeamIds);
-
-      if (type) {
-        deleteQuery = deleteQuery.eq("type", type);
-      }
-      if (onlyRead) {
-        deleteQuery = deleteQuery.not("read_at", "is", null);
-      }
-      if (onlyUnread) {
-        deleteQuery = deleteQuery.is("read_at", null);
-      }
-
-      const { data, error } = await deleteQuery.select("id");
-      if (error) {
-        return respondInternalError("api.notifications.post.delete_all", error);
-      }
-
+    if (action === "delete_all" || action === "clear_all") {
+      const deleted = await bulkApplyNotificationAction(admin, {
+        userId: user.id,
+        teamIds: context.accessibleTeamIds,
+        ageGroupIds: context.accessibleAgeGroupIds,
+        type,
+        onlyRead,
+        onlyUnread,
+        action: "clear",
+      });
       return NextResponse.json({
         success: true,
-        deleted: (data || []).length,
+        deleted,
       });
     }
 
-    const readAtValue =
-      action === "mark_all_read" ? new Date().toISOString() : null;
-    let updateQuery = supabase
-      .from("notifications")
-      .update({ read_at: readAtValue })
-      .eq("user_id", user.id)
-      .in("team_id", context.accessibleTeamIds);
-
-    if (action === "mark_all_read") {
-      updateQuery = updateQuery.is("read_at", null);
-    } else {
-      updateQuery = updateQuery.not("read_at", "is", null);
-    }
-    if (type) {
-      updateQuery = updateQuery.eq("type", type);
-    }
-
-    const { data, error } = await updateQuery.select("id");
-    if (error) {
-      return respondInternalError("api.notifications.post.update_all", error);
-    }
+    const updated = await bulkApplyNotificationAction(admin, {
+      userId: user.id,
+      teamIds: context.accessibleTeamIds,
+      ageGroupIds: context.accessibleAgeGroupIds,
+      type,
+      onlyRead,
+      onlyUnread,
+      action: action === "mark_all_read" ? "mark_read" : "mark_unread",
+    });
 
     return NextResponse.json({
       success: true,
-      updated: (data || []).length,
+      updated,
     });
   } catch (error) {
     return respondInternalError("api.notifications.post", error);

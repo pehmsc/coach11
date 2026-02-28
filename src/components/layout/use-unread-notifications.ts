@@ -41,7 +41,7 @@ export function useUnreadNotifications(profileId?: string | null) {
         {
           event: "*",
           schema: "public",
-          table: "notifications",
+          table: "notification_recipients",
           filter: `user_id=eq.${profileId}`,
         },
         () => {

@@ -1,5 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getTeamMemberProfileIds } from "@/lib/team/members";
+
+type AdminClient = ReturnType<typeof createAdminClient>;
 
 export type AppNotificationType = "new_game" | "new_training" | "message";
 
@@ -28,10 +31,88 @@ export type CreateUserNotificationsInput = {
   excludeActor?: boolean;
 };
 
+function buildNotificationPayload(
+  input: Pick<
+    CreateTeamNotificationInput | CreateUserNotificationsInput,
+    "type" | "title" | "body" | "linkPath" | "entityId"
+  >,
+) {
+  return {
+    type: input.type,
+    title: input.title,
+    ...(input.body ? { body: input.body } : {}),
+    ...(input.linkPath ? { link_path: input.linkPath } : {}),
+    ...(input.entityId ? { entity_id: input.entityId } : {}),
+  };
+}
+
+async function insertNotificationBroadcast(
+  admin: AdminClient,
+  input: {
+    ageGroupId: string;
+    teamId?: string | null;
+    actorId: string;
+    type: AppNotificationType;
+    entityId?: string | null;
+    title: string;
+    body?: string | null;
+    linkPath?: string | null;
+  },
+  recipientIds: string[],
+) {
+  const createdAt = new Date().toISOString();
+  const { data: notification, error: notificationError } = await admin
+    .from("notifications")
+    .insert({
+      user_id: null,
+      age_group_id: input.ageGroupId,
+      team_id: input.teamId ?? null,
+      actor_id: input.actorId,
+      type: input.type,
+      entity_id: input.entityId ?? null,
+      title: input.title,
+      body: input.body ?? null,
+      link_path: input.linkPath ?? null,
+      payload: buildNotificationPayload(input),
+      created_at: createdAt,
+      read_at: null,
+    })
+    .select("id, created_at")
+    .single();
+
+  if (notificationError || !notification?.id) {
+    throw new Error(
+      `Erro ao criar notificação base: ${
+        notificationError?.message || "INSERT_NOTIFICATION_EMPTY_RESULT"
+      }`,
+    );
+  }
+
+  const rows = recipientIds.map((userId) => ({
+    notification_id: notification.id,
+    user_id: userId,
+    read_at: null,
+    cleared_at: null,
+    created_at: notification.created_at || createdAt,
+  }));
+
+  const { error: recipientsError } = await admin
+    .from("notification_recipients")
+    .insert(rows);
+
+  if (recipientsError) {
+    await admin.from("notifications").delete().eq("id", notification.id);
+    throw new Error(`Erro ao criar recipients da notificação: ${recipientsError.message}`);
+  }
+
+  return { inserted: rows.length, notificationId: notification.id };
+}
+
 export async function createNotificationsForTeam(
-  admin: SupabaseClient,
+  _: SupabaseClient,
   input: CreateTeamNotificationInput,
 ) {
+  const admin = createAdminClient();
   const teamMembership = await getTeamMemberProfileIds(admin, input.teamId);
   const ageGroupId = input.ageGroupId ?? teamMembership.ageGroupId;
   if (!ageGroupId) return { inserted: 0 };
@@ -44,30 +125,27 @@ export async function createNotificationsForTeam(
     return { inserted: 0 };
   }
 
-  const rows = recipients.map((userId) => ({
-    user_id: userId,
-    age_group_id: ageGroupId,
-    team_id: input.teamId,
-    actor_id: input.actorId,
-    type: input.type,
-    entity_id: input.entityId ?? null,
-    title: input.title,
-    body: input.body ?? null,
-    link_path: input.linkPath ?? null,
-  }));
-
-  const { error } = await admin.from("notifications").insert(rows);
-  if (error) {
-    throw new Error(`Erro ao gerar notificações: ${error.message}`);
-  }
-
-  return { inserted: rows.length };
+  return insertNotificationBroadcast(
+    admin,
+    {
+      ageGroupId,
+      teamId: input.teamId,
+      actorId: input.actorId,
+      type: input.type,
+      entityId: input.entityId ?? null,
+      title: input.title,
+      body: input.body ?? null,
+      linkPath: input.linkPath ?? null,
+    },
+    recipients,
+  );
 }
 
 export async function createNotificationsForUsers(
-  admin: SupabaseClient,
+  _: SupabaseClient,
   input: CreateUserNotificationsInput,
 ) {
+  const admin = createAdminClient();
   const uniqueRecipientIds = Array.from(
     new Set(
       (input.recipientIds || []).filter((recipientId) =>
@@ -80,22 +158,18 @@ export async function createNotificationsForUsers(
     return { inserted: 0 };
   }
 
-  const rows = uniqueRecipientIds.map((userId) => ({
-    user_id: userId,
-    age_group_id: input.ageGroupId,
-    team_id: input.teamId ?? null,
-    actor_id: input.actorId,
-    type: input.type,
-    entity_id: input.entityId ?? null,
-    title: input.title,
-    body: input.body ?? null,
-    link_path: input.linkPath ?? null,
-  }));
-
-  const { error } = await admin.from("notifications").insert(rows);
-  if (error) {
-    throw new Error(`Erro ao gerar notificações direcionadas: ${error.message}`);
-  }
-
-  return { inserted: rows.length };
+  return insertNotificationBroadcast(
+    admin,
+    {
+      ageGroupId: input.ageGroupId,
+      teamId: input.teamId ?? null,
+      actorId: input.actorId,
+      type: input.type,
+      entityId: input.entityId ?? null,
+      title: input.title,
+      body: input.body ?? null,
+      linkPath: input.linkPath ?? null,
+    },
+    uniqueRecipientIds,
+  );
 }

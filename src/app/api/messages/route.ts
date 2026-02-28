@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveUserTeamContext } from "@/lib/auth/team-context";
 import {
   createNotificationsForTeam,
   createNotificationsForUsers,
 } from "@/lib/notifications/service";
+import { bulkApplyNotificationAction } from "@/lib/notifications/store";
 import { getTeamMembersDetailed } from "@/lib/team/members";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 
@@ -129,13 +131,22 @@ export async function GET(request: Request) {
     }));
 
     const nowIso = new Date().toISOString();
-    await supabase
-      .from("notifications")
-      .update({ read_at: nowIso })
-      .eq("user_id", user.id)
-      .eq("type", "message")
-      .eq("team_id", context.teamId)
-      .is("read_at", null);
+    try {
+      await bulkApplyNotificationAction(createAdminClient(), {
+        userId: user.id,
+        teamIds: context.teamId ? [context.teamId] : [],
+        ageGroupIds: context.ageGroup?.id ? [context.ageGroup.id] : [],
+        type: "message",
+        onlyUnread: true,
+        action: "mark_read",
+        nowIso,
+      });
+    } catch (notificationReadError) {
+      console.error(
+        "Erro ao atualizar estado das notificações de mensagem:",
+        notificationReadError,
+      );
+    }
 
     return NextResponse.json(
       {

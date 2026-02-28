@@ -94,7 +94,7 @@ export default function NotificationsPage() {
         {
           event: "*",
           schema: "public",
-          table: "notifications",
+          table: "notification_recipients",
           filter: `user_id=eq.${currentUserId}`,
         },
         () => {
