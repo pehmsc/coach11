@@ -8,6 +8,7 @@ import { Bell, CheckCheck, Loader2, Trash2, Eye, EyeOff } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { syncAppBadge } from "@/lib/pwa/badges";
 
 type NotificationItem = {
   id: string;
@@ -107,6 +108,10 @@ export default function NotificationsPage() {
       void supabase.removeChannel(channel);
     };
   }, [currentUserId, loadNotifications, supabase]);
+
+  useEffect(() => {
+    void syncAppBadge(unreadCount);
+  }, [unreadCount]);
 
   async function updateNotificationReadState(id: string, markAsRead: boolean) {
     setUpdatingId(id);

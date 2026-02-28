@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import type { EmailOtpType } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { sanitizeNextPath } from "@/lib/auth/sanitize-next";
+import { markIOSInstallPromptAfterLogin } from "@/lib/pwa/install-state";
 
 function parseOtpType(rawType: string | null): EmailOtpType | null {
   if (!rawType) return null;
@@ -130,6 +131,7 @@ function OAuthCallbackClientContent() {
       await fetch("/api/invite/sync", { method: "POST" }).catch(() => null);
 
       if (!cancelled) {
+        markIOSInstallPromptAfterLogin();
         window.location.replace(next);
       }
     };

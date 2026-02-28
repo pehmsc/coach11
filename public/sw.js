@@ -1,4 +1,4 @@
-const SW_VERSION = "coach11-pwa-v1";
+const SW_VERSION = "coach11-pwa-v2";
 const STATIC_CACHE = `coach11-static-${SW_VERSION}`;
 const OFFLINE_URL = "/offline.html";
 const PUSH_FEATURE_ENABLED = false;
@@ -13,25 +13,35 @@ const PRECACHE_URLS = [
   "/icons/apple-touch-icon-180.png",
 ];
 
-function isCacheableAsset(url) {
-  if (url.pathname.startsWith("/_next/static/")) return true;
-  if (url.pathname.startsWith("/icons/")) return true;
-  if (url.pathname === "/manifest.webmanifest") return true;
-
-  return /\.(?:css|js|png|svg|jpg|jpeg|webp|avif|gif|ico|woff2?)$/i.test(
-    url.pathname,
+function isStaticCacheablePath(pathname) {
+  return (
+    pathname.startsWith("/_next/static/") ||
+    pathname.startsWith("/icons/") ||
+    pathname === "/manifest.webmanifest" ||
+    pathname === OFFLINE_URL
   );
 }
 
-function shouldBypassRequest(request, url) {
+function isPublicNavigationPath(pathname) {
+  return (
+    pathname === "/login" ||
+    pathname.startsWith("/login/") ||
+    pathname === "/register" ||
+    pathname.startsWith("/register/") ||
+    pathname === "/invite" ||
+    pathname.startsWith("/invite/")
+  );
+}
+
+function shouldBypassStaticCache(request, url) {
   if (request.method !== "GET") return true;
   if (url.origin !== self.location.origin) return true;
+  if (!isStaticCacheablePath(url.pathname)) return true;
   if (url.pathname.startsWith("/api/")) return true;
   if (url.pathname.startsWith("/_next/data/")) return true;
-  if (url.pathname.startsWith("/auth")) return true;
-  if (url.pathname.startsWith("/login")) return true;
-  if (url.pathname.startsWith("/register")) return true;
-  if (url.pathname.startsWith("/invite")) return true;
+  if (request.headers.get("authorization")) return true;
+  if (request.credentials === "include") return true;
+  if (request.mode === "navigate") return true;
   if (request.headers.get("x-middleware-prefetch") === "1") return true;
 
   return false;
@@ -62,7 +72,7 @@ async function staleWhileRevalidate(request) {
   return Response.error();
 }
 
-async function handleNavigation(request) {
+async function handlePublicNavigation(request) {
   try {
     return await fetch(request);
   } catch {
@@ -103,17 +113,20 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
 
   if (request.mode === "navigate") {
-    event.respondWith(handleNavigation(request));
+    if (isPublicNavigationPath(url.pathname)) {
+      event.respondWith(handlePublicNavigation(request));
+      return;
+    }
+
+    event.respondWith(fetch(request));
     return;
   }
 
-  if (shouldBypassRequest(request, url)) {
+  if (shouldBypassStaticCache(request, url)) {
     return;
   }
 
-  if (isCacheableAsset(url)) {
-    event.respondWith(staleWhileRevalidate(request));
-  }
+  event.respondWith(staleWhileRevalidate(request));
 });
 
 self.addEventListener("message", (event) => {

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { syncAppBadge } from "@/lib/pwa/badges";
 
 type NotificationsResponse = {
   success?: boolean;
@@ -56,6 +57,10 @@ export function useUnreadNotifications(profileId?: string | null) {
       void supabase.removeChannel(channel);
     };
   }, [profileId, refreshCount, supabase]);
+
+  useEffect(() => {
+    void syncAppBadge(unreadCount);
+  }, [unreadCount]);
 
   return unreadCount;
 }

@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { markIOSInstallPromptAfterLogin } from "@/lib/pwa/install-state";
 import {
   Card,
   CardContent,
@@ -54,6 +55,7 @@ function LoginForm() {
     }
     // Se há código de convite na URL, redirecionar para dashboard com o código
     const dest = inviteCode ? `/dashboard?code=${inviteCode}` : "/dashboard";
+    markIOSInstallPromptAfterLogin();
     router.push(dest);
     router.refresh();
   }

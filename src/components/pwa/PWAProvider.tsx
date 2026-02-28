@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import {
   createContext,
   useCallback,
@@ -12,6 +13,11 @@ import {
 import { Download, RefreshCcw, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { IOSInstallModal } from "@/components/pwa/IOSInstallModal";
+import {
+  consumeIOSInstallPromptAfterLogin,
+  dismissIOSInstallPromptPermanently,
+  isIOSInstallDismissed,
+} from "@/lib/pwa/install-state";
 import { cn } from "@/lib/utils";
 
 type BeforeInstallPromptEvent = Event & {
@@ -35,8 +41,6 @@ type PWAContextValue = {
   applyServiceWorkerUpdate: () => void;
   dismissUpdatePrompt: () => void;
 };
-
-const IOS_INSTALL_DISMISSED_KEY = "coach11:pwa:ios-install-dismissed";
 
 const PWAContext = createContext<PWAContextValue | null>(null);
 
@@ -76,6 +80,17 @@ function canRegisterServiceWorker() {
     window.isSecureContext ||
     window.location.hostname === "localhost" ||
     window.location.hostname === "127.0.0.1"
+  );
+}
+
+function isPrivateAppPath(pathname: string | null) {
+  if (!pathname) return false;
+
+  return !(
+    pathname === "/login" ||
+    pathname === "/register" ||
+    pathname === "/invite" ||
+    pathname.startsWith("/auth")
   );
 }
 
@@ -127,6 +142,7 @@ export function PWAProvider({
 }: {
   children: React.ReactNode;
 }) {
+  const pathname = usePathname();
   const [deferredPrompt, setDeferredPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(() =>
@@ -136,14 +152,11 @@ export function PWAProvider({
     typeof window !== "undefined" ? isIOSSafari() && !isStandaloneMode() : false,
   );
   const [iosInstallDismissed, setIosInstallDismissed] = useState(() =>
-    typeof window !== "undefined"
-      ? window.localStorage.getItem(IOS_INSTALL_DISMISSED_KEY) === "1"
-      : false,
+    typeof window !== "undefined" ? isIOSInstallDismissed() : false,
   );
   const [iosModalOpen, setIosModalOpen] = useState(false);
   const [updateReady, setUpdateReady] = useState(false);
   const waitingWorkerRef = useRef<ServiceWorker | null>(null);
-  const hasTriggeredRefreshRef = useRef(false);
 
   useEffect(() => {
     if (!canRegisterServiceWorker()) return;
@@ -157,9 +170,8 @@ export function PWAProvider({
     }
 
     function handleControllerChange() {
-      if (hasTriggeredRefreshRef.current) return;
-      hasTriggeredRefreshRef.current = true;
-      window.location.reload();
+      waitingWorkerRef.current = null;
+      setUpdateReady(false);
     }
 
     async function registerServiceWorker() {
@@ -216,6 +228,20 @@ export function PWAProvider({
   }, []);
 
   useEffect(() => {
+    if (!isIOSInstallFlow || iosInstallDismissed || isInstalled) return;
+    if (!isPrivateAppPath(pathname)) return;
+    if (!consumeIOSInstallPromptAfterLogin()) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setIosModalOpen(true);
+    }, 350);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [iosInstallDismissed, isIOSInstallFlow, isInstalled, pathname]);
+
+  useEffect(() => {
     function handleBeforeInstallPrompt(event: Event) {
       event.preventDefault();
       setDeferredPrompt(event as BeforeInstallPromptEvent);
@@ -257,17 +283,50 @@ export function PWAProvider({
   }, [deferredPrompt, iosInstallDismissed, isIOSInstallFlow]);
 
   const dismissIOSInstallPermanently = useCallback(() => {
-    window.localStorage.setItem(IOS_INSTALL_DISMISSED_KEY, "1");
+    dismissIOSInstallPromptPermanently();
     setIosInstallDismissed(true);
     setIosModalOpen(false);
   }, []);
 
-  const applyServiceWorkerUpdate = useCallback(() => {
-    const waitingWorker = waitingWorkerRef.current;
+  const applyServiceWorkerUpdate = useCallback(async () => {
+    if (!canRegisterServiceWorker()) return;
+
+    const registration = await navigator.serviceWorker.getRegistration("/");
+    const waitingWorker = waitingWorkerRef.current || registration?.waiting || null;
     if (!waitingWorker) return;
 
-    hasTriggeredRefreshRef.current = false;
-    waitingWorker.postMessage({ type: "SKIP_WAITING" });
+    setUpdateReady(false);
+    waitingWorkerRef.current = waitingWorker;
+
+    await new Promise<void>((resolve) => {
+      function handleControllerChange() {
+        navigator.serviceWorker.removeEventListener(
+          "controllerchange",
+          handleControllerChange,
+        );
+        resolve();
+      }
+
+      navigator.serviceWorker.addEventListener(
+        "controllerchange",
+        handleControllerChange,
+      );
+      waitingWorker.postMessage({ type: "SKIP_WAITING" });
+    });
+
+    window.location.reload();
+  }, []);
+
+  const dismissUpdatePrompt = useCallback(() => {
+    setUpdateReady(false);
+  }, []);
+
+  const openIOSInstallModal = useCallback(() => {
+    setIosModalOpen(true);
+  }, []);
+
+  const closeIOSInstallModal = useCallback(() => {
+    setIosModalOpen(false);
   }, []);
 
   const value = useMemo<PWAContextValue>(() => {
@@ -282,20 +341,23 @@ export function PWAProvider({
       iosModalOpen,
       updateReady,
       promptInstall,
-      openIOSInstallModal: () => setIosModalOpen(true),
-      closeIOSInstallModal: () => setIosModalOpen(false),
+      openIOSInstallModal,
+      closeIOSInstallModal,
       dismissIOSInstallPermanently,
       applyServiceWorkerUpdate,
-      dismissUpdatePrompt: () => setUpdateReady(false),
+      dismissUpdatePrompt,
     };
   }, [
     applyServiceWorkerUpdate,
+    closeIOSInstallModal,
     deferredPrompt,
     dismissIOSInstallPermanently,
+    dismissUpdatePrompt,
     iosInstallDismissed,
     iosModalOpen,
     isIOSInstallFlow,
     isInstalled,
+    openIOSInstallModal,
     promptInstall,
     updateReady,
   ]);
