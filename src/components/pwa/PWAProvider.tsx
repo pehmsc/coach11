@@ -1,0 +1,326 @@
+"use client";
+
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { Download, RefreshCcw, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { IOSInstallModal } from "@/components/pwa/IOSInstallModal";
+import { cn } from "@/lib/utils";
+
+type BeforeInstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{
+    outcome: "accepted" | "dismissed";
+    platform: string;
+  }>;
+};
+
+type PWAContextValue = {
+  canInstall: boolean;
+  isIOSInstallFlow: boolean;
+  isInstalled: boolean;
+  iosModalOpen: boolean;
+  updateReady: boolean;
+  promptInstall: () => Promise<void>;
+  openIOSInstallModal: () => void;
+  closeIOSInstallModal: () => void;
+  dismissIOSInstallPermanently: () => void;
+  applyServiceWorkerUpdate: () => void;
+  dismissUpdatePrompt: () => void;
+};
+
+const IOS_INSTALL_DISMISSED_KEY = "coach11:pwa:ios-install-dismissed";
+
+const PWAContext = createContext<PWAContextValue | null>(null);
+
+function isStandaloneMode() {
+  if (typeof window === "undefined") return false;
+
+  return (
+    window.matchMedia?.("(display-mode: standalone)").matches === true ||
+    (window.navigator as Navigator & { standalone?: boolean }).standalone === true
+  );
+}
+
+function isIOSDevice() {
+  if (typeof window === "undefined") return false;
+
+  const platform = window.navigator.platform || "";
+  const userAgent = window.navigator.userAgent || "";
+  const touchMac =
+    platform === "MacIntel" && typeof navigator.maxTouchPoints === "number" && navigator.maxTouchPoints > 1;
+
+  return /iPad|iPhone|iPod/.test(platform) || /iPad|iPhone|iPod/.test(userAgent) || touchMac;
+}
+
+function isIOSSafari() {
+  if (!isIOSDevice() || typeof window === "undefined") return false;
+
+  const userAgent = window.navigator.userAgent || "";
+  return /Safari/i.test(userAgent) && !/CriOS|FxiOS|EdgiOS|OPiOS/i.test(userAgent);
+}
+
+function canRegisterServiceWorker() {
+  if (typeof window === "undefined") return false;
+  if (process.env.NODE_ENV !== "production") return false;
+  if (!("serviceWorker" in navigator)) return false;
+
+  return (
+    window.isSecureContext ||
+    window.location.hostname === "localhost" ||
+    window.location.hostname === "127.0.0.1"
+  );
+}
+
+function UpdateSnackbar({
+  open,
+  onDismiss,
+  onUpdate,
+}: {
+  open: boolean;
+  onDismiss: () => void;
+  onUpdate: () => void;
+}) {
+  return (
+    <div
+      className={cn(
+        "pointer-events-none fixed inset-x-0 bottom-[calc(var(--mobile-footer-height)+env(safe-area-inset-bottom)+0.75rem)] z-[70] flex justify-center px-4 transition-all duration-200 md:bottom-4",
+        open ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0",
+      )}
+      aria-hidden={!open}
+    >
+      <div className="pointer-events-auto flex w-full max-w-md items-center gap-3 rounded-2xl border border-slate-200 bg-white/98 px-4 py-3 shadow-2xl backdrop-blur">
+        <div className="flex size-10 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+          <RefreshCcw size={18} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-slate-900">Atualização disponível</p>
+          <p className="text-xs text-slate-500">
+            Existe uma nova versão da app pronta a aplicar.
+          </p>
+        </div>
+        <Button size="sm" className="shrink-0" onClick={onUpdate}>
+          Atualizar
+        </Button>
+        <button
+          type="button"
+          aria-label="Fechar aviso de atualização"
+          className="text-slate-400 transition-colors hover:text-slate-700"
+          onClick={onDismiss}
+        >
+          <X size={16} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export function PWAProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const [deferredPrompt, setDeferredPrompt] =
+    useState<BeforeInstallPromptEvent | null>(null);
+  const [isInstalled, setIsInstalled] = useState(() =>
+    typeof window !== "undefined" ? isStandaloneMode() : false,
+  );
+  const [isIOSInstallFlow] = useState(() =>
+    typeof window !== "undefined" ? isIOSSafari() && !isStandaloneMode() : false,
+  );
+  const [iosInstallDismissed, setIosInstallDismissed] = useState(() =>
+    typeof window !== "undefined"
+      ? window.localStorage.getItem(IOS_INSTALL_DISMISSED_KEY) === "1"
+      : false,
+  );
+  const [iosModalOpen, setIosModalOpen] = useState(false);
+  const [updateReady, setUpdateReady] = useState(false);
+  const waitingWorkerRef = useRef<ServiceWorker | null>(null);
+  const hasTriggeredRefreshRef = useRef(false);
+
+  useEffect(() => {
+    if (!canRegisterServiceWorker()) return;
+
+    let cancelled = false;
+    let handleVisibilityChange: (() => void) | null = null;
+
+    function markWaitingWorker(worker: ServiceWorker | null) {
+      waitingWorkerRef.current = worker;
+      setUpdateReady(!!worker);
+    }
+
+    function handleControllerChange() {
+      if (hasTriggeredRefreshRef.current) return;
+      hasTriggeredRefreshRef.current = true;
+      window.location.reload();
+    }
+
+    async function registerServiceWorker() {
+      try {
+        const registration = await navigator.serviceWorker.register("/sw.js", {
+          scope: "/",
+        });
+
+        if (cancelled) return;
+
+        if (registration.waiting) {
+          markWaitingWorker(registration.waiting);
+        }
+
+        registration.addEventListener("updatefound", () => {
+          const installingWorker = registration.installing;
+          if (!installingWorker) return;
+
+          installingWorker.addEventListener("statechange", () => {
+            if (
+              installingWorker.state === "installed" &&
+              navigator.serviceWorker.controller
+            ) {
+              markWaitingWorker(registration.waiting || installingWorker);
+            }
+          });
+        });
+
+        handleVisibilityChange = () => {
+          if (document.visibilityState === "visible") {
+            void registration.update();
+          }
+        };
+
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+      } catch (error) {
+        console.error("Erro ao registar service worker:", error);
+      }
+    }
+
+    navigator.serviceWorker.addEventListener("controllerchange", handleControllerChange);
+    void registerServiceWorker();
+
+    return () => {
+      cancelled = true;
+      navigator.serviceWorker.removeEventListener(
+        "controllerchange",
+        handleControllerChange,
+      );
+      if (handleVisibilityChange) {
+        document.removeEventListener("visibilitychange", handleVisibilityChange);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    function handleBeforeInstallPrompt(event: Event) {
+      event.preventDefault();
+      setDeferredPrompt(event as BeforeInstallPromptEvent);
+    }
+
+    function handleAppInstalled() {
+      setIsInstalled(true);
+      setDeferredPrompt(null);
+      setIosModalOpen(false);
+    }
+
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    window.addEventListener("appinstalled", handleAppInstalled);
+
+    return () => {
+      window.removeEventListener(
+        "beforeinstallprompt",
+        handleBeforeInstallPrompt,
+      );
+      window.removeEventListener("appinstalled", handleAppInstalled);
+    };
+  }, []);
+
+  const promptInstall = useCallback(async () => {
+    if (deferredPrompt) {
+      await deferredPrompt.prompt();
+      const choice = await deferredPrompt.userChoice.catch(() => null);
+      setDeferredPrompt(null);
+
+      if (choice?.outcome === "accepted") {
+        setIsInstalled(true);
+      }
+      return;
+    }
+
+    if (isIOSInstallFlow && !iosInstallDismissed) {
+      setIosModalOpen(true);
+    }
+  }, [deferredPrompt, iosInstallDismissed, isIOSInstallFlow]);
+
+  const dismissIOSInstallPermanently = useCallback(() => {
+    window.localStorage.setItem(IOS_INSTALL_DISMISSED_KEY, "1");
+    setIosInstallDismissed(true);
+    setIosModalOpen(false);
+  }, []);
+
+  const applyServiceWorkerUpdate = useCallback(() => {
+    const waitingWorker = waitingWorkerRef.current;
+    if (!waitingWorker) return;
+
+    hasTriggeredRefreshRef.current = false;
+    waitingWorker.postMessage({ type: "SKIP_WAITING" });
+  }, []);
+
+  const value = useMemo<PWAContextValue>(() => {
+    const canInstall =
+      !isInstalled &&
+      (!!deferredPrompt || (isIOSInstallFlow && !iosInstallDismissed));
+
+    return {
+      canInstall,
+      isIOSInstallFlow: isIOSInstallFlow && !iosInstallDismissed && !isInstalled,
+      isInstalled,
+      iosModalOpen,
+      updateReady,
+      promptInstall,
+      openIOSInstallModal: () => setIosModalOpen(true),
+      closeIOSInstallModal: () => setIosModalOpen(false),
+      dismissIOSInstallPermanently,
+      applyServiceWorkerUpdate,
+      dismissUpdatePrompt: () => setUpdateReady(false),
+    };
+  }, [
+    applyServiceWorkerUpdate,
+    deferredPrompt,
+    dismissIOSInstallPermanently,
+    iosInstallDismissed,
+    iosModalOpen,
+    isIOSInstallFlow,
+    isInstalled,
+    promptInstall,
+    updateReady,
+  ]);
+
+  return (
+    <PWAContext.Provider value={value}>
+      {children}
+      <IOSInstallModal />
+      <UpdateSnackbar
+        open={updateReady}
+        onDismiss={value.dismissUpdatePrompt}
+        onUpdate={value.applyServiceWorkerUpdate}
+      />
+    </PWAContext.Provider>
+  );
+}
+
+export function usePWA() {
+  const context = useContext(PWAContext);
+  if (!context) {
+    throw new Error("usePWA must be used within PWAProvider");
+  }
+  return context;
+}
+
+export function InstallPromptIcon() {
+  return <Download size={16} />;
+}

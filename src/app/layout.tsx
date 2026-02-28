@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { PWAClient } from "@/components/pwa/PWAClient";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -13,12 +14,34 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Coach11",
+  applicationName: "Coach11",
+  title: {
+    default: "Coach11",
+    template: "%s | Coach11",
+  },
   description:
-    "A football coaching app that helps coaches create training sessions, manage their teams, and track player progress.",
+    "Plataforma de gestão desportiva para treinadores, equipas técnicas e coordenação.",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Coach11",
+  },
+  formatDetection: {
+    telephone: false,
+  },
   icons: {
-    icon: "./favicon.ico",
-    apple: "/apple-touch-icon.png",
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/icons/icon-192.png", type: "image/png", sizes: "192x192" },
+      { url: "/icons/icon-512.png", type: "image/png", sizes: "512x512" },
+    ],
+    apple: [{ url: "/icons/apple-touch-icon-180.png", sizes: "180x180" }],
+  },
+  keywords: ["coach", "football", "team management", "training", "pwa"],
+  other: {
+    "mobile-web-app-capable": "yes",
+    "apple-mobile-web-app-capable": "yes",
   },
 };
 
@@ -26,6 +49,9 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
+  themeColor: "#0f172a",
+  colorScheme: "light",
+  interactiveWidget: "resizes-content",
 };
 
 export default function RootLayout({
@@ -34,11 +60,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="pt-PT">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {children}
+        <PWAClient>{children}</PWAClient>
       </body>
     </html>
   );

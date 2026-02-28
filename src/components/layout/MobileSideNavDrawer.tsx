@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { LogOut, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useUnreadNotifications } from "@/components/layout/use-unread-notifications";
+import { InstallPWAButton } from "@/components/pwa/InstallPWAButton";
 import {
   APP_NAV_SECTIONS,
   getRoleLabel,
@@ -222,6 +223,11 @@ export function MobileSideNavDrawer({
             </p>
           ) : null}
           <div className="space-y-1">
+            <InstallPWAButton
+              fullWidth
+              variant="ghost"
+              className="justify-start rounded-xl px-3 py-3 text-left text-sm font-medium text-slate-300 hover:bg-slate-800 hover:text-white"
+            />
             {settingsSection?.items.map((item) => {
               const isActive = isNavItemActive(pathname, item);
               return (
