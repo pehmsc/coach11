@@ -319,12 +319,12 @@ export default function CompetitionsPage() {
   }
 
   const competitionSelectOptions: GameCompetitionOption[] = competitions
-    .filter((competition) => competition.is_active !== false)
     .map((competition) => ({
       id: competition.id,
       name: competition.name,
       season: competition.season,
       team_label: competition.team_label || null,
+      inactive: competition.is_active === false,
     }));
 
   if (loading) {

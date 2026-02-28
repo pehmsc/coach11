@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveUserTeamContext } from "@/lib/auth/team-context";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -34,7 +35,14 @@ async function getRouteContext() {
     };
   }
 
-  const context = await resolveUserTeamContext(supabase, user.id);
+  let db = supabase;
+  try {
+    db = createAdminClient();
+  } catch {
+    db = supabase;
+  }
+
+  const context = await resolveUserTeamContext(db, user.id);
 
   if (context.accessibleAgeGroupIds.length === 0) {
     return {
@@ -45,7 +53,7 @@ async function getRouteContext() {
     };
   }
 
-  return { userId: user.id, supabase, context };
+  return { userId: user.id, supabase: db, context };
 }
 
 function resolveTargetAgeGroupId(

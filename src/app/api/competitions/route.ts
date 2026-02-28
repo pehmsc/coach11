@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveUserTeamContext } from "@/lib/auth/team-context";
 import { NextResponse } from "next/server";
 import { SHORT_PRIVATE_CACHE_CONTROL } from "@/lib/http/cache";
@@ -15,7 +16,14 @@ export async function GET() {
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
 
-    const context = await resolveUserTeamContext(supabase, user.id);
+    let db = supabase;
+    try {
+      db = createAdminClient();
+    } catch {
+      db = supabase;
+    }
+
+    const context = await resolveUserTeamContext(db, user.id);
     const isCoordinator = context.source === "coordinator";
 
     if (!context.ageGroup || !context.teamId) {
@@ -35,12 +43,19 @@ export async function GET() {
       );
     }
 
-    const competitionsRes = await supabase
+    const teamIds =
+      context.accessibleTeamIds.length > 0
+        ? context.accessibleTeamIds
+        : context.teamId
+          ? [context.teamId]
+          : [];
+
+    const competitionsRes = await db
       .from("competitions")
       .select(
         "id, team_id, name, season, phase, team_label, num_opponents, total_rounds, has_two_legs, created_at",
       )
-      .eq("team_id", context.teamId)
+      .in("team_id", teamIds)
       .order("created_at", { ascending: false });
 
     if (competitionsRes.error) {
@@ -54,7 +69,7 @@ export async function GET() {
 
     const gamesByCompetition = new Map<string, Record<string, unknown>[]>();
     if (competitionIds.length > 0) {
-      const gamesRes = await supabase
+      const gamesRes = await db
         .from("games")
         .select(
           "id, competition_id, game_datetime, opponent_name, opponent_short_name, is_home, status, score_home, score_away, location, title, created_at",

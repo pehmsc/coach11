@@ -9,6 +9,7 @@ export type GameCompetitionOption = {
   name: string;
   season?: string | null;
   team_label?: string | null;
+  inactive?: boolean;
 };
 
 export type SharedGameFormValues = {
@@ -34,7 +35,8 @@ type Props = {
 function competitionLabel(option: GameCompetitionOption) {
   const teamTag = option.team_label ? ` · Equipa ${option.team_label}` : "";
   const seasonTag = option.season ? ` · ${option.season}` : "";
-  return `${option.name}${teamTag}${seasonTag}`;
+  const stateTag = option.inactive ? " · Fechada" : "";
+  return `${option.name}${teamTag}${seasonTag}${stateTag}`;
 }
 
 export function GameFormFields({
@@ -163,4 +165,3 @@ export function GameFormFields({
     </div>
   );
 }
-

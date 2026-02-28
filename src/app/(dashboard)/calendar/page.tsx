@@ -254,12 +254,13 @@ export default function CalendarPage() {
       setTeamId(payload?.teamId ?? null);
 
       const options = (competitionsPayload?.competitions || [])
-        .filter((competition) => !!competition.id && competition.is_active !== false)
+        .filter((competition) => !!competition.id)
         .map((competition) => ({
           id: competition.id as string,
           name: competition.name || "Competição",
           season: competition.season || null,
           team_label: competition.team_label || null,
+          inactive: competition.is_active === false,
         }));
       setCompetitionOptions(options);
       setLoading(false);

@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveUserTeamContext } from "@/lib/auth/team-context";
 import { getTeamMembersDetailed } from "@/lib/team/members";
 import { NextResponse } from "next/server";
@@ -33,13 +34,20 @@ export async function GET() {
       return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
     }
 
-    const { data: profile } = await supabase
+    let db = supabase;
+    try {
+      db = createAdminClient();
+    } catch {
+      db = supabase;
+    }
+
+    const { data: profile } = await db
       .from("profiles")
       .select("id, full_name, role, email, phone")
       .eq("id", user.id)
       .maybeSingle();
 
-    const context = await resolveUserTeamContext(supabase, user.id);
+    const context = await resolveUserTeamContext(db, user.id);
 
     if (!context.ageGroup) {
       return NextResponse.json(
@@ -66,7 +74,7 @@ export async function GET() {
       );
     }
 
-    const { data: ageGroupMeta } = await supabase
+    const { data: ageGroupMeta } = await db
       .from("age_groups")
       .select("coordinator_id")
       .eq("id", context.ageGroup.id)
@@ -74,7 +82,7 @@ export async function GET() {
     const canManageStaff = ageGroupMeta?.coordinator_id === user.id;
 
     const staffContext = context.teamId
-      ? await getTeamMembersDetailed(supabase, {
+      ? await getTeamMembersDetailed(db, {
           teamId: context.teamId,
           ageGroupId: context.ageGroup.id,
         })
@@ -82,7 +90,7 @@ export async function GET() {
 
     const [kitsRes, invitesRes] = await Promise.all([
       context.teamId
-        ? supabase
+        ? db
             .from("kit_pieces")
             .select("*")
             .eq("team_id", context.teamId)
@@ -91,7 +99,7 @@ export async function GET() {
             .order("piece_type")
         : Promise.resolve({ data: [], error: null }),
       canManageStaff
-        ? supabase
+        ? db
             .from("staff_invites")
             .select("*")
             .eq("age_group_id", context.ageGroup.id)

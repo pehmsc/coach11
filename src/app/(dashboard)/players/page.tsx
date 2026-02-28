@@ -74,6 +74,7 @@ export default function PlayersPage() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [ageGroup, setAgeGroup] = useState<AgeGroup | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editingPlayer, setEditingPlayer] = useState<Player | null>(null);
   const [saving, setSaving] = useState(false);
@@ -89,6 +90,7 @@ export default function PlayersPage() {
 
   async function loadData() {
     setLoading(true);
+    setLoadError(null);
     const res = await fetch("/api/players", { cache: "no-store" });
     const payload = (await res.json().catch(() => null)) as
       | { success?: boolean; ageGroup?: AgeGroup; players?: Player[]; error?: string }
@@ -97,12 +99,14 @@ export default function PlayersPage() {
     if (!res.ok || !payload?.success) {
       setAgeGroup(null);
       setPlayers([]);
+      setLoadError(payload?.error || "Erro ao carregar plantel.");
       setLoading(false);
       return;
     }
 
     setAgeGroup(payload.ageGroup || null);
     setPlayers(payload.players || []);
+    setLoadError(null);
     setLoading(false);
   }
 
@@ -289,7 +293,9 @@ export default function PlayersPage() {
   if (!ageGroup)
     return (
       <div className="p-4 md:p-8 text-center py-16">
-        <p className="text-slate-500">Configura o escalão primeiro.</p>
+        <p className="text-slate-500">
+          {loadError || "Configura o escalão primeiro."}
+        </p>
       </div>
     );
 
