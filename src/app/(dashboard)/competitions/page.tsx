@@ -20,7 +20,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   GameFormFields,
-  type GameCompetitionOption,
   type SharedGameFormValues,
 } from "@/components/games/game-form-fields";
 import {
@@ -321,15 +320,6 @@ export default function CompetitionsPage() {
     return `${game.score_home}–${game.score_away}`;
   }
 
-  const competitionSelectOptions: GameCompetitionOption[] = competitions
-    .map((competition) => ({
-      id: competition.id,
-      name: competition.name,
-      season: competition.season,
-      team_label: competition.team_label || null,
-      inactive: competition.is_active === false,
-    }));
-
   if (loading) {
     return (
       <div className="p-4 md:p-8 max-w-2xl mx-auto space-y-4">
@@ -584,11 +574,13 @@ export default function CompetitionsPage() {
                         </button>
                       </div>
                       <form onSubmit={handleSaveGame} className="space-y-2">
+                        <p className="text-[11px] text-emerald-700">
+                          O jogo será criado diretamente na competição <strong>{comp.name}</strong>.
+                        </p>
                         <GameFormFields
                           values={gameForm}
                           onFieldChange={handleGameFieldChange}
-                          competitionOptions={competitionSelectOptions}
-                          showCompetitionSelect
+                          showCompetitionSelect={false}
                           compact
                         />
                         <div className="grid grid-cols-2 gap-2">
