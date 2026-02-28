@@ -6,7 +6,6 @@ import { LogOut } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { Profile } from "@/types/database";
 import { useUnreadNotifications } from "@/components/layout/use-unread-notifications";
-import { InstallPWAButton } from "@/components/pwa/InstallPWAButton";
 import {
   APP_NAV_SECTIONS,
   getRoleLabel,
@@ -95,11 +94,6 @@ export function Sidebar({ profile, avatarUrl }: SidebarProps) {
             {settingsSection.title}
           </p>
         ) : null}
-        <InstallPWAButton
-          fullWidth
-          variant="ghost"
-          className="justify-start rounded-lg px-3 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-white"
-        />
         {settingsSection?.items.map((item) => {
           const isActive = isNavItemActive(pathname, item);
           const Icon = item.icon;

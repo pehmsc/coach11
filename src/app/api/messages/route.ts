@@ -180,6 +180,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
 
+    let db = supabase;
+    try {
+      db = createAdminClient();
+    } catch {
+      db = supabase;
+    }
+
     const body = await request.json().catch(() => null);
     const content = normalizeContent(body?.content);
     const mentionUserIds = normalizeMentionUserIds(body?.mentionUserIds);
@@ -196,7 +203,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const context = await resolveUserTeamContext(supabase, user.id);
+    const context = await resolveUserTeamContext(db, user.id);
     if (!context.teamId || !context.ageGroup) {
       return NextResponse.json(
         { error: "Sem equipa associada para enviar mensagens." },
@@ -204,7 +211,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const memberContext = await getTeamMembersDetailed(supabase, {
+    const memberContext = await getTeamMembersDetailed(db, {
       teamId: context.teamId,
       ageGroupId: context.ageGroup.id,
     });
@@ -215,7 +222,7 @@ export async function POST(request: Request) {
       (memberId) => validMemberIds.has(memberId) && memberId !== user.id,
     );
 
-    const { data: inserted, error: insertError } = await supabase
+    const { data: inserted, error: insertError } = await db
       .from("team_messages")
       .insert({
         team_id: context.teamId,
@@ -233,14 +240,14 @@ export async function POST(request: Request) {
       );
     }
 
-    const { data: senderProfile } = await supabase
+    const { data: senderProfile } = await db
       .from("profiles")
       .select("id, full_name, avatar_url")
       .eq("id", user.id)
       .maybeSingle();
 
     try {
-      await createNotificationsForTeam(supabase, {
+      await createNotificationsForTeam(db, {
         teamId: context.teamId,
         ageGroupId: context.ageGroup.id,
         actorId: user.id,
@@ -260,7 +267,7 @@ export async function POST(request: Request) {
 
     if (mentionRecipientIds.length > 0) {
       try {
-        await createNotificationsForUsers(supabase, {
+        await createNotificationsForUsers(db, {
           recipientIds: mentionRecipientIds,
           actorId: user.id,
           ageGroupId: context.ageGroup.id,

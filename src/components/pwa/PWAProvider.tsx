@@ -106,7 +106,7 @@ function UpdateSnackbar({
   return (
     <div
       className={cn(
-        "pointer-events-none fixed inset-x-0 bottom-[calc(var(--mobile-footer-height)+env(safe-area-inset-bottom)+0.75rem)] z-[70] flex justify-center px-4 transition-all duration-200 md:bottom-4",
+        "pointer-events-none fixed inset-x-0 bottom-[calc(var(--mobile-footer-height)+env(safe-area-inset-bottom)+0.75rem)] z-[70] flex justify-center px-4 transition-all duration-200 md:bottom-auto md:left-auto md:right-4 md:top-4 md:inset-x-auto md:w-auto md:px-0",
         open ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0",
       )}
       aria-hidden={!open}

@@ -397,13 +397,19 @@ export default function MessagesPage() {
             </div>
             <Button
               type="submit"
-              className="bg-emerald-600 hover:bg-emerald-700 h-10 w-full md:w-auto md:h-11"
+              className="h-10 w-full rounded-xl bg-emerald-600 px-4 font-semibold text-white hover:bg-emerald-700 md:h-11 md:min-w-[124px] md:w-auto md:rounded-2xl md:px-5 md:shadow-sm"
               disabled={sending || !draft.trim()}
             >
               {sending ? (
-                <Loader2 size={16} className="animate-spin" />
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  <span>A enviar...</span>
+                </>
               ) : (
-                <Send size={15} />
+                <>
+                  <Send size={15} />
+                  <span>Enviar</span>
+                </>
               )}
             </Button>
           </form>
