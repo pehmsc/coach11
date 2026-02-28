@@ -18,6 +18,7 @@ import {
   X,
   UserCircle,
   Pencil,
+  Trash2,
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
@@ -78,15 +79,11 @@ export default function PlayersPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingPlayer, setEditingPlayer] = useState<Player | null>(null);
   const [saving, setSaving] = useState(false);
+  const [deletingPlayerId, setDeletingPlayerId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [form, setForm] = useState(EMPTY_FORM);
-
-  useEffect(() => {
-    loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   async function loadData() {
     setLoading(true);
@@ -109,6 +106,11 @@ export default function PlayersPage() {
     setLoadError(null);
     setLoading(false);
   }
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadData();
+  }, []);
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) {
@@ -212,6 +214,38 @@ export default function PlayersPage() {
     setPlayers((prev) =>
       prev.map((p) => (p.id === playerId ? { ...p, status } : p)),
     );
+  }
+
+  async function handleDeletePlayer(player: Player) {
+    const confirmed = window.confirm(
+      `Apagar ${player.first_name} ${player.last_name} do plantel? Esta ação remove também os registos associados ao atleta.`,
+    );
+    if (!confirmed) return;
+
+    setDeletingPlayerId(player.id);
+    setError(null);
+
+    const res = await fetch(`/api/players/${player.id}`, {
+      method: "DELETE",
+    });
+    const data = await res.json().catch(() => null);
+
+    if (!res.ok || !data?.success) {
+      const message = data?.error || "Erro ao apagar atleta.";
+      setError(message);
+      toast.error("Erro ao apagar atleta", {
+        description: message,
+      });
+      setDeletingPlayerId(null);
+      return;
+    }
+
+    setPlayers((prev) => prev.filter((p) => p.id !== player.id));
+    setDeletingPlayerId(null);
+    closeForm();
+    toast.success("Atleta apagado", {
+      description: `${player.first_name} ${player.last_name} foi removido do plantel.`,
+    });
   }
 
   async function sendInvite(
@@ -518,10 +552,22 @@ export default function PlayersPage() {
                 </div>
 
                 <div className="flex gap-3 pt-3 mt-3 border-t bg-white shrink-0 pb-[max(1rem,env(safe-area-inset-bottom))]">
+                  {editingPlayer && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => handleDeletePlayer(editingPlayer)}
+                      disabled={saving || deletingPlayerId === editingPlayer.id}
+                      className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
+                    >
+                      <Trash2 size={14} className="mr-1" />
+                      {deletingPlayerId === editingPlayer.id ? "A apagar..." : "Apagar"}
+                    </Button>
+                  )}
                   <Button
                     type="submit"
                     className="flex-1 bg-emerald-600 hover:bg-emerald-700"
-                    disabled={saving}
+                    disabled={saving || deletingPlayerId === editingPlayer?.id}
                   >
                     {saving
                       ? "A guardar..."
@@ -529,7 +575,12 @@ export default function PlayersPage() {
                         ? "Guardar alterações"
                         : "Adicionar"}
                   </Button>
-                  <Button type="button" variant="outline" onClick={closeForm}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={closeForm}
+                    disabled={deletingPlayerId === editingPlayer?.id}
+                  >
                     Cancelar
                   </Button>
                 </div>

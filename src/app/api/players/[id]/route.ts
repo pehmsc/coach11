@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveUserTeamContext } from "@/lib/auth/team-context";
+import { deletePlayerCascade } from "@/lib/events/delete-cascade";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { NextResponse } from "next/server";
 
@@ -169,5 +170,53 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     return NextResponse.json({ success: true, player: data });
   } catch (error) {
     return respondInternalError("api.players.id.patch", error);
+  }
+}
+
+export async function DELETE(_request: Request, { params }: RouteContext) {
+  try {
+    const { id } = await params;
+    if (!id) {
+      return NextResponse.json({ error: "ID inválido." }, { status: 400 });
+    }
+
+    const routeContext = await getRouteContext();
+    if ("error" in routeContext) return routeContext.error;
+    const { supabase, context } = routeContext;
+
+    const { data: existingPlayer, error: existingError } = await supabase
+      .from("players")
+      .select("id, age_group_id, first_name, last_name")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (existingError) {
+      return NextResponse.json(
+        { error: "Erro ao validar atleta." },
+        { status: 500 },
+      );
+    }
+    if (!existingPlayer) {
+      return NextResponse.json({ error: "Atleta não encontrado." }, { status: 404 });
+    }
+    if (!context.accessibleAgeGroupIds.includes(existingPlayer.age_group_id)) {
+      return NextResponse.json(
+        { error: "Sem permissões para apagar este atleta." },
+        { status: 403 },
+      );
+    }
+
+    await deletePlayerCascade(supabase, id);
+
+    return NextResponse.json({
+      success: true,
+      player: {
+        id: existingPlayer.id,
+        first_name: existingPlayer.first_name,
+        last_name: existingPlayer.last_name,
+      },
+    });
+  } catch (error) {
+    return respondInternalError("api.players.id.delete", error);
   }
 }

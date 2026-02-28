@@ -176,3 +176,57 @@ export async function deleteGameCascade(admin: SupabaseClient, gameId: string) {
     value: gameId,
   });
 }
+
+export async function deletePlayerCascade(
+  admin: SupabaseClient,
+  playerId: string,
+) {
+  await Promise.all([
+    deleteRows(admin, "pse_records", {
+      type: "eq",
+      column: "player_id",
+      value: playerId,
+    }, { optional: true }),
+    deleteRows(admin, "training_attendance", {
+      type: "eq",
+      column: "player_id",
+      value: playerId,
+    }, { optional: true }),
+    deleteRows(admin, "attendance_records", {
+      type: "eq",
+      column: "player_id",
+      value: playerId,
+    }, { optional: true }),
+    deleteRows(admin, "convocation_players", {
+      type: "eq",
+      column: "player_id",
+      value: playerId,
+    }, { optional: true }),
+    deleteRows(admin, "game_events", {
+      type: "eq",
+      column: "player_id",
+      value: playerId,
+    }, { optional: true }),
+    deleteRows(admin, "game_events", {
+      type: "eq",
+      column: "related_player_id",
+      value: playerId,
+    }, { optional: true }),
+    deleteRows(admin, "game_stats_live", {
+      type: "eq",
+      column: "player_id",
+      value: playerId,
+    }, { optional: true }),
+    deleteRows(admin, "game_final_stats", {
+      type: "eq",
+      column: "player_id",
+      value: playerId,
+    }, { optional: true }),
+  ]);
+
+  await deleteRows(admin, "players", {
+    type: "eq",
+    column: "id",
+    value: playerId,
+  });
+}
