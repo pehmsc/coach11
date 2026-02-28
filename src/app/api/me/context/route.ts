@@ -43,9 +43,27 @@ export async function GET() {
 
     const { data: profile } = await db
       .from("profiles")
-      .select("id, full_name, role, email, phone")
+      .select("id, full_name, role, email, phone, avatar_url")
       .eq("id", user.id)
       .maybeSingle();
+    const metadataAvatarUrl =
+      typeof user.user_metadata?.avatar_url === "string"
+        ? user.user_metadata.avatar_url
+        : typeof user.user_metadata?.picture === "string"
+          ? user.user_metadata.picture
+          : null;
+    const resolvedProfile =
+      profile && typeof profile === "object"
+        ? {
+            ...profile,
+            avatar_url:
+              "avatar_url" in profile &&
+              typeof profile.avatar_url === "string" &&
+              profile.avatar_url.length > 0
+                ? profile.avatar_url
+                : metadataAvatarUrl,
+          }
+        : profile;
 
     const context = await resolveUserTeamContext(db, user.id);
 
@@ -64,7 +82,7 @@ export async function GET() {
           staffMembers: [],
           activeStaffProfileIds: [],
           staffInvites: [],
-          profile: profile || null,
+          profile: resolvedProfile || null,
         },
         {
           headers: {
@@ -115,7 +133,9 @@ export async function GET() {
       full_name: member.fullName,
       email: member.email,
       phone: member.phone,
-      avatar_url: member.avatarUrl,
+      avatar_url:
+        member.avatarUrl ||
+        (member.profileId === user.id ? metadataAvatarUrl : null),
     }));
     const staffProfileIds = staffContext.members.map((member) => member.profileId);
 
@@ -135,7 +155,7 @@ export async function GET() {
         activeStaffProfileIds: staffProfileIds,
         staffMembers,
         staffInvites: invitesRes.data || [],
-        profile: profile || null,
+        profile: resolvedProfile || null,
       },
       {
         headers: {

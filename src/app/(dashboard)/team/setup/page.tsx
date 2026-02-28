@@ -149,6 +149,7 @@ export default function TeamSetupPage() {
     emailSent: boolean;
     name: string;
   } | null>(null);
+  const [staffInvitesExpanded, setStaffInvitesExpanded] = useState(false);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -231,7 +232,11 @@ export default function TeamSetupPage() {
       setTeamId(resolvedTeamId);
       setKitPieces((payload?.kits as KitPiece[]) || []);
       setActiveStaffProfileIds((payload?.activeStaffProfileIds as string[]) || []);
-      setStaffInvites((payload?.staffInvites as StaffInvite[]) || []);
+      const nextStaffInvites = (payload?.staffInvites as StaffInvite[]) || [];
+      setStaffInvites(nextStaffInvites);
+      if (nextStaffInvites.length === 0) {
+        setStaffInvitesExpanded(false);
+      }
     } catch {
       setError("Erro de ligação ao carregar a equipa.");
     } finally {
@@ -476,6 +481,7 @@ export default function TeamSetupPage() {
         emailSent: data.emailSent,
         name: staffForm.firstName,
       });
+      setStaffInvitesExpanded(true);
       setStaffForm(EMPTY_STAFF_FORM);
       loadData();
     } else {
@@ -1023,118 +1029,142 @@ export default function TeamSetupPage() {
             )}
 
             {staffInvites.length > 0 ? (
-              <div className="space-y-2">
-                {staffInvites.map((invite) => {
-                  const isActiveMember =
-                    !!invite.accepted_at &&
-                    !!invite.accepted_by &&
-                    activeStaffProfileIds.includes(invite.accepted_by);
-
-                  return (
-                  <div
-                    key={invite.id}
-                    className="rounded-xl border border-slate-100 bg-slate-50"
-                  >
-                    <div className="flex items-center gap-3 p-3">
-                      <div className="w-9 h-9 rounded-full bg-slate-200 flex items-center justify-center flex-shrink-0">
-                        <span className="text-xs font-bold text-slate-500">
-                          {invite.first_name?.[0]}
-                          {invite.last_name?.[0]}
-                        </span>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-slate-800 text-sm truncate">
-                          {invite.first_name} {invite.last_name}
-                        </p>
-                        <p className="text-xs text-slate-400 truncate">
-                          {ROLE_LABELS[invite.role] || invite.role} ·{" "}
-                          {invite.email}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-1.5 flex-shrink-0">
-                        {isActiveMember ? (
-                          <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium">
-                            Activo
-                          </span>
-                        ) : invite.accepted_at ? (
-                          <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">
-                            Aceite (pendente)
-                          </span>
-                        ) : (
-                          <>
-                            <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">
-                              Pendente
-                            </span>
-                            {accountRole === "coordinator" && (
-                              <button
-                                onClick={() => copyCode(invite.invite_code)}
-                                title="Copiar código"
-                                className="p-1.5 hover:bg-slate-200 rounded-lg transition-colors"
-                              >
-                                {copiedCode === invite.invite_code ? (
-                                  <Check size={14} className="text-emerald-500" />
-                                ) : (
-                                  <Copy size={14} className="text-slate-400" />
-                                )}
-                              </button>
-                            )}
-                          </>
-                        )}
-                        {accountRole === "coordinator" && (
-                          <button
-                            onClick={() =>
-                              setConfirmDeleteId(
-                                confirmDeleteId === invite.id ? null : invite.id,
-                              )
-                            }
-                            disabled={deletingId === invite.id}
-                            title={
-                              invite.accepted_at
-                                ? "Remover membro"
-                                : "Cancelar convite"
-                            }
-                            className="p-1.5 hover:bg-red-50 rounded-lg transition-colors group"
-                          >
-                            {deletingId === invite.id ? (
-                              <Loader2
-                                size={14}
-                                className="text-slate-300 animate-spin"
-                              />
-                            ) : (
-                              <Trash2
-                                size={14}
-                                className="text-slate-300 group-hover:text-red-500 transition-colors"
-                              />
-                            )}
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    {accountRole === "coordinator" && confirmDeleteId === invite.id && (
-                      <div className="px-3 pb-3 flex items-center gap-2">
-                        <p className="text-xs text-red-600 flex-1">
-                          {invite.accepted_at
-                            ? "Remover este membro da equipa técnica?"
-                            : "Cancelar este convite?"}
-                        </p>
-                        <button
-                          onClick={() => handleDeleteInvite(invite)}
-                          className="text-xs font-semibold text-white bg-red-500 hover:bg-red-600 px-3 py-1 rounded-lg transition-colors"
-                        >
-                          Confirmar
-                        </button>
-                        <button
-                          onClick={() => setConfirmDeleteId(null)}
-                          className="text-xs font-semibold text-slate-500 hover:text-slate-700 px-2 py-1 rounded-lg transition-colors"
-                        >
-                          Cancelar
-                        </button>
-                      </div>
-                    )}
+              <div className="rounded-xl border border-slate-200 bg-slate-50 overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setStaffInvitesExpanded((prev) => !prev)}
+                  className="w-full flex items-center justify-between gap-3 p-3 text-left hover:bg-slate-100 transition-colors"
+                >
+                  <div>
+                    <p className="text-sm font-semibold text-slate-800">
+                      Convites enviados
+                    </p>
+                    <p className="text-xs text-slate-400">
+                      {staffInvites.length} convite{staffInvites.length !== 1 ? "s" : ""}
+                    </p>
                   </div>
-                  );
-                })}
+                  {staffInvitesExpanded ? (
+                    <ChevronUp size={16} className="text-slate-400" />
+                  ) : (
+                    <ChevronDown size={16} className="text-slate-400" />
+                  )}
+                </button>
+
+                {staffInvitesExpanded && (
+                  <div className="space-y-2 border-t border-slate-200 p-3">
+                    {staffInvites.map((invite) => {
+                      const isActiveMember =
+                        !!invite.accepted_at &&
+                        !!invite.accepted_by &&
+                        activeStaffProfileIds.includes(invite.accepted_by);
+
+                      return (
+                        <div
+                          key={invite.id}
+                          className="rounded-xl border border-slate-100 bg-white"
+                        >
+                          <div className="flex items-center gap-3 p-3">
+                            <div className="w-9 h-9 rounded-full bg-slate-200 flex items-center justify-center flex-shrink-0">
+                              <span className="text-xs font-bold text-slate-500">
+                                {invite.first_name?.[0]}
+                                {invite.last_name?.[0]}
+                              </span>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium text-slate-800 text-sm truncate">
+                                {invite.first_name} {invite.last_name}
+                              </p>
+                              <p className="text-xs text-slate-400 truncate">
+                                {ROLE_LABELS[invite.role] || invite.role} ·{" "}
+                                {invite.email}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-1.5 flex-shrink-0">
+                              {isActiveMember ? (
+                                <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium">
+                                  Activo
+                                </span>
+                              ) : invite.accepted_at ? (
+                                <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">
+                                  Aceite (pendente)
+                                </span>
+                              ) : (
+                                <>
+                                  <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">
+                                    Pendente
+                                  </span>
+                                  {accountRole === "coordinator" && (
+                                    <button
+                                      onClick={() => copyCode(invite.invite_code)}
+                                      title="Copiar código"
+                                      className="p-1.5 hover:bg-slate-200 rounded-lg transition-colors"
+                                    >
+                                      {copiedCode === invite.invite_code ? (
+                                        <Check size={14} className="text-emerald-500" />
+                                      ) : (
+                                        <Copy size={14} className="text-slate-400" />
+                                      )}
+                                    </button>
+                                  )}
+                                </>
+                              )}
+                              {accountRole === "coordinator" && (
+                                <button
+                                  onClick={() =>
+                                    setConfirmDeleteId(
+                                      confirmDeleteId === invite.id ? null : invite.id,
+                                    )
+                                  }
+                                  disabled={deletingId === invite.id}
+                                  title={
+                                    invite.accepted_at
+                                      ? "Remover membro"
+                                      : "Cancelar convite"
+                                  }
+                                  className="p-1.5 hover:bg-red-50 rounded-lg transition-colors group"
+                                >
+                                  {deletingId === invite.id ? (
+                                    <Loader2
+                                      size={14}
+                                      className="text-slate-300 animate-spin"
+                                    />
+                                  ) : (
+                                    <Trash2
+                                      size={14}
+                                      className="text-slate-300 group-hover:text-red-500 transition-colors"
+                                    />
+                                  )}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          {accountRole === "coordinator" && confirmDeleteId === invite.id && (
+                            <div className="px-3 pb-3 flex items-center gap-2">
+                              <p className="text-xs text-red-600 flex-1">
+                                {invite.accepted_at
+                                  ? "Remover este membro da equipa técnica?"
+                                  : "Cancelar este convite?"}
+                              </p>
+                              <button
+                                onClick={() => handleDeleteInvite(invite)}
+                                className="text-xs font-semibold text-white bg-red-500 hover:bg-red-600 px-3 py-1 rounded-lg transition-colors"
+                              >
+                                Confirmar
+                              </button>
+                              <button
+                                onClick={() => setConfirmDeleteId(null)}
+                                className="text-xs font-semibold text-slate-500 hover:text-slate-700 px-2 py-1 rounded-lg transition-colors"
+                              >
+                                Cancelar
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             ) : (
               !showStaffForm && (

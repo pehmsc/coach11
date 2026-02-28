@@ -64,6 +64,7 @@ interface StaffInvite {
   role: string;
   invite_code: string;
   accepted_at?: string;
+  accepted_by?: string;
   invite_sent_at: string;
 }
 
@@ -87,6 +88,7 @@ export default function StaffPage() {
 
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [invites, setInvites] = useState<StaffInvite[]>([]);
+  const [activeStaffProfileIds, setActiveStaffProfileIds] = useState<string[]>([]);
 
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -122,6 +124,11 @@ export default function StaffPage() {
 
     // Invites from context
     setInvites((ctx?.staffInvites as StaffInvite[]) || []);
+    setActiveStaffProfileIds(
+      Array.isArray(ctx?.activeStaffProfileIds)
+        ? (ctx.activeStaffProfileIds as string[])
+        : [],
+    );
 
     type CtxStaffMember = {
       id: string;
@@ -416,50 +423,95 @@ export default function StaffPage() {
           </CardHeader>
           <CardContent className="space-y-2">
             {invites.map((invite) => (
-              <div key={invite.id} className="flex items-center gap-3 p-3 bg-amber-50 border border-amber-100 rounded-xl">
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-slate-800">
-                    {invite.first_name} {invite.last_name}
-                  </p>
-                  <p className="text-xs text-slate-500">{invite.email} · {ROLE_LABELS[invite.role] || invite.role}</p>
-                  {invite.accepted_at && (
-                    <span className="text-[10px] text-emerald-600 font-medium">Aceite ✓</span>
-                  )}
-                </div>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => copyCode(invite.invite_code)}
-                    className="p-1.5 hover:bg-amber-100 rounded-lg text-amber-600"
-                    title="Copiar código"
+              (() => {
+                const isActiveMember =
+                  !!invite.accepted_at &&
+                  !!invite.accepted_by &&
+                  activeStaffProfileIds.includes(invite.accepted_by);
+
+                const statusBadge = isActiveMember ? (
+                  <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium">
+                    Activo
+                  </span>
+                ) : invite.accepted_at ? (
+                  <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">
+                    Aceite (pendente)
+                  </span>
+                ) : (
+                  <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">
+                    Pendente
+                  </span>
+                );
+
+                return (
+                  <div
+                    key={invite.id}
+                    className={`flex items-center gap-3 p-3 border rounded-xl ${
+                      isActiveMember
+                        ? "bg-emerald-50 border-emerald-100"
+                        : "bg-amber-50 border-amber-100"
+                    }`}
                   >
-                    {copiedCode === invite.invite_code ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
-                  </button>
-                  {canManageStaff && (
-                    confirmDeleteInviteId === invite.id ? (
-                      <>
-                        <button
-                          onClick={() => void handleDeleteInvite(invite.id)}
-                          disabled={deletingInviteId === invite.id}
-                          className="text-xs font-semibold text-white bg-red-500 hover:bg-red-600 px-2 py-1 rounded-lg"
-                        >
-                          {deletingInviteId === invite.id ? <Loader2 size={12} className="animate-spin" /> : "Cancelar"}
-                        </button>
-                        <button onClick={() => setConfirmDeleteInviteId(null)} className="text-xs text-slate-400 px-1.5 py-1">
-                          Não
-                        </button>
-                      </>
-                    ) : (
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-slate-800">
+                        {invite.first_name} {invite.last_name}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        {invite.email} · {ROLE_LABELS[invite.role] || invite.role}
+                      </p>
+                      <div className="mt-1">{statusBadge}</div>
+                    </div>
+                    <div className="flex items-center gap-1">
                       <button
-                        onClick={() => setConfirmDeleteInviteId(invite.id)}
-                        className="p-1.5 hover:bg-red-50 rounded-lg group"
-                        title="Cancelar convite"
+                        onClick={() => copyCode(invite.invite_code)}
+                        className="p-1.5 hover:bg-amber-100 rounded-lg text-amber-600"
+                        title="Copiar código"
                       >
-                        <X size={14} className="text-slate-300 group-hover:text-red-500 transition-colors" />
+                        {copiedCode === invite.invite_code ? (
+                          <Check size={14} className="text-emerald-600" />
+                        ) : (
+                          <Copy size={14} />
+                        )}
                       </button>
-                    )
-                  )}
-                </div>
-              </div>
+                      {canManageStaff &&
+                        (confirmDeleteInviteId === invite.id ? (
+                          <>
+                            <button
+                              onClick={() => void handleDeleteInvite(invite.id)}
+                              disabled={deletingInviteId === invite.id}
+                              className="text-xs font-semibold text-white bg-red-500 hover:bg-red-600 px-2 py-1 rounded-lg"
+                            >
+                              {deletingInviteId === invite.id ? (
+                                <Loader2 size={12} className="animate-spin" />
+                              ) : invite.accepted_at ? (
+                                "Remover"
+                              ) : (
+                                "Cancelar"
+                              )}
+                            </button>
+                            <button
+                              onClick={() => setConfirmDeleteInviteId(null)}
+                              className="text-xs text-slate-400 px-1.5 py-1"
+                            >
+                              Não
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            onClick={() => setConfirmDeleteInviteId(invite.id)}
+                            className="p-1.5 hover:bg-red-50 rounded-lg group"
+                            title={invite.accepted_at ? "Remover membro" : "Cancelar convite"}
+                          >
+                            <X
+                              size={14}
+                              className="text-slate-300 group-hover:text-red-500 transition-colors"
+                            />
+                          </button>
+                        ))}
+                    </div>
+                  </div>
+                );
+              })()
             ))}
           </CardContent>
         </Card>
