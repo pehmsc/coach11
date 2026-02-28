@@ -6,16 +6,9 @@ import Image from "next/image";
 import { format, addDays, addHours, parseISO, isToday, isTomorrow } from "date-fns";
 import { pt } from "date-fns/locale";
 import {
-  Users,
   Calendar,
-  Trophy,
-  Shield,
   AlertCircle,
-  Sword,
-  Dumbbell,
-  Briefcase,
   Play,
-  Settings,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -311,16 +304,6 @@ export default async function DashboardPage() {
   const today = format(new Date(), "EEEE, d 'de' MMMM", { locale: pt });
   const firstName = profile?.full_name?.split(" ")[0] || "Treinador";
 
-  const mobileShortcutCards = [
-    { href: "/games", icon: Sword, label: "Jogos", color: "text-indigo-600" },
-    { href: "/trainings", icon: Dumbbell, label: "Treinos", color: "text-emerald-600" },
-    { href: "/competitions", icon: Trophy, label: "Competições", color: "text-amber-600" },
-    { href: "/players", icon: Users, label: "Plantel", color: "text-blue-600" },
-    { href: "/team", icon: Shield, label: "Equipa", color: "text-teal-600" },
-    { href: "/staff", icon: Briefcase, label: "Equipa Técnica", color: "text-rose-600" },
-    { href: "/settings", icon: Settings, label: "Configurações", color: "text-slate-600" },
-  ];
-
   const hasPending =
     !!activeLiveGame ||
     !!todayTraining ||
@@ -531,27 +514,6 @@ export default async function DashboardPage() {
             )}
           </div>
         )}
-
-        {/* Atalhos mobile (apenas itens fora da bottom nav principal) */}
-        <div className="md:hidden mt-6">
-          <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">
-            Atalhos rápidos
-          </h2>
-          <div className="grid grid-cols-2 gap-3 items-stretch">
-            {mobileShortcutCards.map(({ href, icon: Icon, label, color }) => (
-              <Link key={href} href={href}>
-                <Card className="hover:shadow-md transition-all cursor-pointer border-2 hover:border-emerald-200 h-full">
-                  <CardContent className="pt-5 pb-4 flex flex-col items-center justify-center text-center min-h-[90px]">
-                    <Icon className={`mb-2 ${color}`} size={26} />
-                    <p className="font-semibold text-sm text-slate-700 leading-tight">
-                      {label}
-                    </p>
-                  </CardContent>
-                </Card>
-              </Link>
-            ))}
-          </div>
-        </div>
       </div>
     </>
   );

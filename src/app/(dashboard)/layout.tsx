@@ -40,10 +40,12 @@ export default async function DashboardLayout({
       <Sidebar profile={profile} avatarUrl={avatarUrl} />
 
       {/* Conteúdo principal */}
-      <main className="pb-20 md:pb-0 md:ml-64">{children}</main>
+      <main className="pb-[calc(var(--mobile-footer-height)+env(safe-area-inset-bottom)+1rem)] md:pb-0 md:ml-64">
+        {children}
+      </main>
 
       {/* Navegação inferior — visível apenas em mobile */}
-      <BottomNav profileId={profile?.id} />
+      <BottomNav profile={profile} avatarUrl={avatarUrl} />
     </div>
   );
 }

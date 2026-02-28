@@ -49,6 +49,7 @@
 
 :root {
   --radius: 0.625rem;
+  --mobile-footer-height: 4.75rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.129 0.042 264.695);
   --card: oklch(1 0 0);
@@ -117,11 +118,21 @@
 }
 
 @layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-padding-bottom: calc(var(--mobile-footer-height) + env(safe-area-inset-bottom));
+  }
   * {
     @apply border-border outline-ring/50;
   }
   body {
     @apply bg-background text-foreground;
+    min-height: 100dvh;
+  }
+  input,
+  textarea,
+  select {
+    scroll-margin-bottom: calc(var(--mobile-footer-height) + env(safe-area-inset-bottom) + 1rem);
   }
 }
 
