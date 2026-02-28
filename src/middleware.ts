@@ -2,7 +2,40 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { SUPABASE_AUTH_COOKIE_OPTIONS } from "@/lib/supabase/config";
 
+const STATIC_EXACT_PATHS = new Set([
+  "/manifest.webmanifest",
+  "/sw.js",
+  "/offline.html",
+  "/favicon.ico",
+  "/robots.txt",
+  "/sitemap.xml",
+]);
+
+const STATIC_PREFIXES = [
+  "/_next/static/",
+  "/_next/image/",
+  "/icons/",
+  "/fonts/",
+  "/assets/",
+];
+
+const STATIC_FILE_PATTERN =
+  /\.(?:svg|png|jpg|jpeg|gif|webp|avif|ico|txt|xml|html|webmanifest|woff2?)$/i;
+
+function shouldBypassAuthMiddleware(pathname: string) {
+  if (STATIC_EXACT_PATHS.has(pathname)) return true;
+  if (STATIC_PREFIXES.some((prefix) => pathname.startsWith(prefix))) return true;
+  return STATIC_FILE_PATTERN.test(pathname);
+}
+
 export async function middleware(request: NextRequest) {
+  const path = request.nextUrl.pathname;
+
+  // Nunca interceptar ficheiros estáticos da app shell/PWA.
+  if (shouldBypassAuthMiddleware(path)) {
+    return NextResponse.next();
+  }
+
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -32,8 +65,6 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const path = request.nextUrl.pathname;
-
   // Rotas que não precisam de autenticação
   const isPublic =
     path.startsWith("/login") ||
@@ -61,6 +92,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|invite|login|register|auth|api|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!api|invite|login|register|auth|_next/static|_next/image|icons|fonts|assets|manifest\\.webmanifest|sw\\.js|offline\\.html|favicon\\.ico|robots\\.txt|sitemap\\.xml|.*\\.(?:svg|png|jpg|jpeg|gif|webp|avif|ico|txt|xml|html|webmanifest|woff2?)$).*)",
   ],
 };

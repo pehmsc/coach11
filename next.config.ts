@@ -122,6 +122,10 @@ const nextConfig: NextConfig = {
         headers: [
           ...securityHeaders,
           {
+            key: "Content-Type",
+            value: "application/javascript; charset=utf-8",
+          },
+          {
             key: "Cache-Control",
             value: "no-cache, no-store, must-revalidate",
           },
@@ -131,6 +135,10 @@ const nextConfig: NextConfig = {
         source: "/manifest.webmanifest",
         headers: [
           ...securityHeaders,
+          {
+            key: "Content-Type",
+            value: "application/manifest+json; charset=utf-8",
+          },
           {
             key: "Cache-Control",
             value: "public, max-age=0, must-revalidate",
@@ -142,8 +150,36 @@ const nextConfig: NextConfig = {
         headers: [
           ...securityHeaders,
           {
+            key: "Content-Type",
+            value: "text/html; charset=utf-8",
+          },
+          {
             key: "Cache-Control",
             value: "public, max-age=0, must-revalidate",
+          },
+        ],
+      },
+      {
+        source: "/fonts/:path*",
+        headers: [
+          ...securityHeaders,
+          {
+            key: "Content-Type",
+            value: "font/woff2",
+          },
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+        ],
+      },
+      {
+        source: "/icons/:path*",
+        headers: [
+          ...securityHeaders,
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
           },
         ],
       },

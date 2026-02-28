@@ -27,7 +27,10 @@ export async function GET(request: Request) {
 
     const admin = createAdminClient();
     const context = await resolveUserTeamContext(admin, user.id);
-    if (context.accessibleTeamIds.length === 0 || !context.ageGroup) {
+    if (
+      context.accessibleTeamIds.length === 0 &&
+      context.accessibleAgeGroupIds.length === 0
+    ) {
       return NextResponse.json(
         {
           success: true,
@@ -86,7 +89,10 @@ export async function POST(request: Request) {
 
     const admin = createAdminClient();
     const context = await resolveUserTeamContext(admin, user.id);
-    if (context.accessibleTeamIds.length === 0) {
+    if (
+      context.accessibleTeamIds.length === 0 &&
+      context.accessibleAgeGroupIds.length === 0
+    ) {
       return NextResponse.json({ success: true, updated: 0, deleted: 0 });
     }
 

@@ -3,7 +3,7 @@
   "name": "Coach11",
   "short_name": "Coach11",
   "description": "Plataforma de gestão desportiva para treinadores, equipas técnicas e coordenação.",
-  "start_url": "/dashboard",
+  "start_url": "/login",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
