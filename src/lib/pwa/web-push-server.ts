@@ -1,5 +1,9 @@
 import webpush, { type PushSubscription } from "web-push";
 import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  getPushSubscriptionsSchemaHint,
+  isPushSubscriptionsSchemaError,
+} from "@/lib/pwa/push-subscriptions-schema";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -48,6 +52,14 @@ async function listActiveSubscriptions(admin: AdminClient, userIds: string[]) {
     .is("revoked_at", null);
 
   if (error) {
+    if (isPushSubscriptionsSchemaError(error)) {
+      console.warn("[push.schema]", {
+        stage: "listActiveSubscriptions",
+        hint: getPushSubscriptionsSchemaHint(),
+        error,
+      });
+      return null;
+    }
     throw error;
   }
 
@@ -62,9 +74,9 @@ async function listUnreadCounts(admin: AdminClient, userIds: string[]) {
       const { count, error } = await admin
         .from("notification_recipients")
         .select("notification_id", { count: "exact", head: true })
-        .eq("user_id", userId)
-        .is("cleared_at", null)
-        .is("read_at", null);
+      .eq("user_id", userId)
+      .is("cleared_at", null)
+      .is("read_at", null);
 
       if (error) {
         throw error;
@@ -126,6 +138,16 @@ export async function sendWebPushToUsers(
     listActiveSubscriptions(admin, uniqueUserIds),
     listUnreadCounts(admin, uniqueUserIds),
   ]);
+
+  if (subscriptions === null) {
+    return {
+      attempted: 0,
+      sent: 0,
+      revoked: 0,
+      skipped: true as const,
+      reason: "schema_unavailable" as const,
+    };
+  }
 
   if (subscriptions.length === 0) {
     return { attempted: 0, sent: 0, revoked: 0, skipped: false as const };

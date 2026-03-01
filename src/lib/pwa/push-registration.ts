@@ -7,6 +7,7 @@ type PushStatusResponse = {
   enabled?: boolean;
   active?: boolean;
   activeCount?: number;
+  code?: string;
   error?: string;
 };
 
@@ -128,7 +129,7 @@ export async function registerPushSubscriptionFromUserAction() {
   });
 
   const payload = (await res.json().catch(() => null)) as
-    | { success?: boolean; error?: string }
+    | { success?: boolean; error?: string; active?: boolean; activeCount?: number }
     | null;
 
   if (!res.ok || !payload?.success) {
@@ -141,6 +142,8 @@ export async function registerPushSubscriptionFromUserAction() {
   return {
     ok: true as const,
     endpoint: subscription.endpoint,
+    active: payload.active === true,
+    activeCount: payload.activeCount || 0,
   };
 }
 
@@ -169,7 +172,7 @@ export async function unregisterPushSubscriptionFromUserAction() {
     body: JSON.stringify({ endpoint }),
   });
   const payload = (await res.json().catch(() => null)) as
-    | { success?: boolean; error?: string }
+    | { success?: boolean; error?: string; active?: boolean; activeCount?: number }
     | null;
 
   if (!res.ok || !payload?.success) {
@@ -182,5 +185,7 @@ export async function unregisterPushSubscriptionFromUserAction() {
   return {
     ok: true as const,
     endpoint,
+    active: payload.active === true,
+    activeCount: payload.activeCount || 0,
   };
 }

@@ -98,13 +98,18 @@ export function PushNotificationsControl({
       } else if (result.reason === "default") {
         toast.message("Permissão de notificações não concedida.");
       } else {
-        toast.error("Não foi possível ativar notificações push.");
+        toast.error(
+          result.reason || "Não foi possível ativar notificações push.",
+        );
       }
       setWorking(false);
       await loadStatus();
       return;
     }
 
+    setServerEnabled(true);
+    setActive(true);
+    setActiveCount(result.activeCount || Math.max(activeCount, 1));
     toast.success("Notificações push ativadas.");
     setWorking(false);
     await loadStatus();
@@ -118,12 +123,16 @@ export function PushNotificationsControl({
     }));
 
     if (!result.ok) {
-      toast.error("Não foi possível desativar notificações push.");
+      toast.error(
+        result.reason || "Não foi possível desativar notificações push.",
+      );
       setWorking(false);
       await loadStatus();
       return;
     }
 
+    setActive(result.active === true);
+    setActiveCount(result.activeCount || 0);
     toast.success("Notificações push desativadas.");
     setWorking(false);
     await loadStatus();

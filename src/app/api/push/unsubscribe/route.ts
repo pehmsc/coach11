@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
+import {
+  getPushSubscriptionsSchemaHint,
+  isPushSubscriptionsSchemaError,
+} from "@/lib/pwa/push-subscriptions-schema";
 
 function normalizeString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
@@ -38,12 +42,41 @@ export async function POST(request: Request) {
       .is("revoked_at", null);
 
     if (error) {
+      if (isPushSubscriptionsSchemaError(error)) {
+        return NextResponse.json(
+          {
+            error: getPushSubscriptionsSchemaHint(),
+            code: "push_schema_unavailable",
+          },
+          { status: 503 },
+        );
+      }
       throw error;
+    }
+
+    const { count, error: countError } = await admin
+      .from("push_subscriptions")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .is("revoked_at", null);
+
+    if (countError) {
+      if (isPushSubscriptionsSchemaError(countError)) {
+        return NextResponse.json({
+          success: true,
+          endpoint,
+          active: false,
+          activeCount: 0,
+        });
+      }
+      throw countError;
     }
 
     return NextResponse.json({
       success: true,
       endpoint,
+      active: (count ?? 0) > 0,
+      activeCount: count ?? 0,
     });
   } catch (error) {
     return respondInternalError("api.push.unsubscribe.post", error);

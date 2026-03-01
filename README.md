@@ -18,7 +18,44 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Web Push
+
+Web Push usa:
+- `NEXT_PUBLIC_ENABLE_WEB_PUSH=true`
+- `NEXT_PUBLIC_VAPID_PUBLIC_KEY=...`
+- `VAPID_PRIVATE_KEY=...`
+- `VAPID_SUBJECT=mailto:...`
+- `PUSH_TEST_SECRET=...` opcional para `/api/push/test`
+
+### Base de dados
+
+Aplicar migrations Supabase antes de testar Web Push:
+
+```bash
+supabase db push
+```
+
+Se o backend devolver `PGRST205` / `Could not find the table 'public.push_subscriptions' in the schema cache`:
+1. confirmar que a migration `push_subscriptions` foi aplicada
+2. no Supabase Dashboard ir a `Settings > API`
+3. clicar `Reload schema`
+4. aguardar alguns segundos e testar novamente
+
+### Teste rápido iPhone
+
+1. Instalar a PWA via Safari `Partilhar -> Adicionar ao Ecrã principal`
+2. Abrir a app instalada
+3. Ativar notificações push no menu/definições
+4. Confirmar que a UI muda para `Notificações push ativas`
+5. Testar envio manual:
+
+```bash
+curl -X POST https://coach11.vercel.app/api/push/test \
+  -H "x-push-test-secret: $PUSH_TEST_SECRET" \
+  -H "Content-Type: application/json" \
+  --cookie "..." \
+  -d '{"title":"Teste Coach11","body":"Push de teste","url":"/notifications"}'
+```
 
 ## Learn More
 

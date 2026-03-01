@@ -125,11 +125,21 @@ async function insertNotificationBroadcast(
   }
 
   try {
-    await sendWebPushToUsers(admin, recipientIds, {
+    const pushResult = await sendWebPushToUsers(admin, recipientIds, {
       type: input.type,
       title: input.title,
       body: input.body ?? null,
       url: resolvePushUrl(input),
+    });
+    console.info("[notifications.push]", {
+      type: input.type,
+      notificationId: notification.id,
+      recipients: recipientIds.length,
+      attempted: pushResult.attempted,
+      sent: pushResult.sent,
+      revoked: pushResult.revoked,
+      skipped: pushResult.skipped,
+      reason: "reason" in pushResult ? pushResult.reason : null,
     });
   } catch (pushError) {
     console.error("[notifications.push]", {

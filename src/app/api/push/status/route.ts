@@ -3,6 +3,10 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { isWebPushConfiguredOnServer } from "@/lib/pwa/web-push-server";
+import {
+  getPushSubscriptionsSchemaHint,
+  isPushSubscriptionsSchemaError,
+} from "@/lib/pwa/push-subscriptions-schema";
 
 export async function GET() {
   try {
@@ -23,6 +27,19 @@ export async function GET() {
       .is("revoked_at", null);
 
     if (error) {
+      if (isPushSubscriptionsSchemaError(error)) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: getPushSubscriptionsSchemaHint(),
+            code: "push_schema_unavailable",
+            enabled: isWebPushConfiguredOnServer(),
+            active: false,
+            activeCount: 0,
+          },
+          { status: 503 },
+        );
+      }
       throw error;
     }
 
