@@ -20,7 +20,7 @@ export type NavProfile = {
   role?: string | null;
 } | null;
 
-export type AppNavBadgeKey = "notifications";
+export type AppNavBadgeKey = "notifications" | "messages";
 
 export type AppNavItem = {
   id: string;
@@ -56,6 +56,7 @@ const NAV_ITEMS = {
     href: "/messages",
     label: "Mensagens",
     icon: MessageSquare,
+    badgeKey: "messages" as const,
   },
   players: {
     id: "players",

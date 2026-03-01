@@ -21,7 +21,10 @@ interface SidebarProps {
 export function Sidebar({ profile, avatarUrl }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const unreadCount = useUnreadNotifications(profile?.id ?? null);
+  const unreadNotificationsCount = useUnreadNotifications(profile?.id ?? null);
+  const unreadMessagesCount = useUnreadNotifications(profile?.id ?? null, {
+    type: "message",
+  });
   const mainSection = APP_NAV_SECTIONS.find((section) => section.id === "main");
   const settingsSection = APP_NAV_SECTIONS.find((section) => section.id === "settings");
 
@@ -63,6 +66,12 @@ export function Sidebar({ profile, avatarUrl }: SidebarProps) {
           {mainSection?.items.map((item) => {
             const isActive = isNavItemActive(pathname, item);
             const Icon = item.icon;
+            const badgeCount =
+              item.badgeKey === "messages"
+                ? unreadMessagesCount
+                : item.badgeKey === "notifications"
+                  ? unreadNotificationsCount
+                  : 0;
 
             return (
               <Link
@@ -76,9 +85,9 @@ export function Sidebar({ profile, avatarUrl }: SidebarProps) {
               >
                 <Icon size={18} />
                 <span className="flex-1">{item.label}</span>
-                {item.badgeKey === "notifications" && unreadCount > 0 ? (
+                {item.badgeKey && badgeCount > 0 ? (
                   <span className="min-w-5 h-5 px-1 rounded-full bg-red-500 text-white text-[11px] font-bold inline-flex items-center justify-center">
-                    {unreadCount > 99 ? "99+" : unreadCount}
+                    {badgeCount > 99 ? "99+" : badgeCount}
                   </span>
                 ) : null}
               </Link>

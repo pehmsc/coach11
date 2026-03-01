@@ -11,9 +11,15 @@ type NotificationsResponse = {
   error?: string;
 };
 
-export function useUnreadNotifications(profileId?: string | null) {
+export function useUnreadNotifications(
+  profileId?: string | null,
+  options?: {
+    type?: string;
+  },
+) {
   const supabase = useMemo(() => createClient(), []);
   const [unreadCount, setUnreadCount] = useState(0);
+  const typeFilter = options?.type?.trim() || null;
 
   const refreshCount = useCallback(async () => {
     if (!profileId) {
@@ -22,7 +28,14 @@ export function useUnreadNotifications(profileId?: string | null) {
     }
 
     try {
-      const res = await fetch("/api/notifications?limit=1", { cache: "no-store" });
+      const params = new URLSearchParams({ limit: "1" });
+      if (typeFilter) {
+        params.set("type", typeFilter);
+      }
+
+      const res = await fetch(`/api/notifications?${params.toString()}`, {
+        cache: "no-store",
+      });
       const payload = (await res.json().catch(() => null)) as NotificationsResponse | null;
 
       if (res.status === 401 || res.status === 403) {
@@ -47,7 +60,7 @@ export function useUnreadNotifications(profileId?: string | null) {
     } catch (error) {
       console.error("Erro de rede ao atualizar badge de notificações.", error);
     }
-  }, [profileId]);
+  }, [profileId, typeFilter]);
 
   useEffect(() => {
     if (!profileId) return;

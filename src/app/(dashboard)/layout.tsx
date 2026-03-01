@@ -1,5 +1,8 @@
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
+import { AuthRecoveryGate } from "@/components/auth/AuthRecoveryGate";
 import { createClient } from "@/lib/supabase/server";
+import { hasSupabaseAuthCookies } from "@/lib/supabase/auth-cookie";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { Sidebar } from "@/components/layout/Sidebar";
 
@@ -9,11 +12,15 @@ export default async function DashboardLayout({
   children: React.ReactNode;
 }) {
   const supabase = await createClient();
+  const cookieStore = await cookies();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   if (!user) {
+    if (hasSupabaseAuthCookies(cookieStore.getAll())) {
+      return <AuthRecoveryGate />;
+    }
     redirect("/login");
   }
 

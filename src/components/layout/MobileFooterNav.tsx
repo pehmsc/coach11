@@ -21,7 +21,10 @@ export function MobileFooterNav({
   avatarUrl?: string | null;
 }) {
   const pathname = usePathname();
-  const unreadCount = useUnreadNotifications(profile?.id ?? null);
+  const unreadNotificationsCount = useUnreadNotifications(profile?.id ?? null);
+  const unreadMessagesCount = useUnreadNotifications(profile?.id ?? null, {
+    type: "message",
+  });
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   return (
@@ -65,6 +68,12 @@ export function MobileFooterNav({
           {MOBILE_FOOTER_NAV_ITEMS.map((item) => {
             const isActive = isNavItemActive(pathname, item);
             const label = item.mobileLabel || item.label;
+            const badgeCount =
+              item.badgeKey === "messages"
+                ? unreadMessagesCount
+                : item.badgeKey === "notifications"
+                  ? unreadNotificationsCount
+                  : 0;
 
             return (
               <Link
@@ -79,9 +88,9 @@ export function MobileFooterNav({
               >
                 <span className="relative">
                   <item.icon size={21} />
-                  {item.badgeKey === "notifications" && unreadCount > 0 ? (
+                  {item.badgeKey && badgeCount > 0 ? (
                     <span className="absolute -right-2 -top-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white">
-                      {unreadCount > 99 ? "99+" : unreadCount}
+                      {badgeCount > 99 ? "99+" : badgeCount}
                     </span>
                   ) : null}
                 </span>

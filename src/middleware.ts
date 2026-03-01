@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { hasSupabaseAuthCookies } from "@/lib/supabase/auth-cookie";
 import { SUPABASE_AUTH_COOKIE_OPTIONS } from "@/lib/supabase/config";
 
 const STATIC_EXACT_PATHS = new Set([
@@ -30,6 +31,7 @@ function shouldBypassAuthMiddleware(pathname: string) {
 
 export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
+  const debugAuth = process.env.NODE_ENV !== "production";
 
   // Nunca interceptar ficheiros estáticos da app shell/PWA.
   if (shouldBypassAuthMiddleware(path)) {
@@ -63,7 +65,9 @@ export async function middleware(request: NextRequest) {
   // IMPORTANTE: não usar getSession() — usar getUser() para segurança
   const {
     data: { user },
+    error: authError,
   } = await supabase.auth.getUser();
+  const hasAuthCookies = hasSupabaseAuthCookies(request.cookies.getAll());
 
   // Rotas que não precisam de autenticação
   const isPublic =
@@ -75,6 +79,22 @@ export async function middleware(request: NextRequest) {
 
   // Não autenticado a tentar aceder a rota privada
   if (!user && !isPublic) {
+    if (hasAuthCookies) {
+      if (debugAuth) {
+        console.warn("[auth.debug] allowing request through for recovery", {
+          path,
+          authError: authError?.message || null,
+        });
+      }
+      return supabaseResponse;
+    }
+
+    if (debugAuth) {
+      console.info("[auth.debug] redirecting to login", {
+        path,
+        reason: "no_user_no_auth_cookie",
+      });
+    }
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
@@ -82,6 +102,12 @@ export async function middleware(request: NextRequest) {
 
   // Autenticado a tentar aceder ao login/registo
   if (user && (path.startsWith("/login") || path.startsWith("/register"))) {
+    if (debugAuth) {
+      console.info("[auth.debug] redirecting authenticated user", {
+        path,
+        reason: "auth_page_with_user",
+      });
+    }
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
     return NextResponse.redirect(url);

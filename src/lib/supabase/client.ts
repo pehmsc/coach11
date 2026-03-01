@@ -11,8 +11,7 @@ export function createClient() {
         persistSession: true,
         autoRefreshToken: true,
         flowType: "pkce",
-        // O callback OAuth é tratado explicitamente em /auth/callback/client.
-        detectSessionInUrl: false,
+        detectSessionInUrl: true,
       },
     }
   )

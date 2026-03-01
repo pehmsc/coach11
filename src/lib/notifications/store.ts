@@ -138,6 +138,7 @@ export async function listUserNotifications(
     userId: string;
     limit: number;
     unreadOnly?: boolean;
+    type?: string | null;
   },
 ) {
   let listQuery = admin
@@ -155,6 +156,11 @@ export async function listUserNotifications(
     .select("id", { count: "exact", head: true })
     .eq("user_id", options.userId)
     .is("cleared_at", null);
+
+  if (options.type) {
+    listQuery = listQuery.eq("type", options.type);
+    unreadQuery = unreadQuery.eq("type", options.type);
+  }
 
   if (options.unreadOnly) {
     listQuery = listQuery.is("read_at", null);

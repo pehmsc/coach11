@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { waitForSessionPersistence } from "@/lib/supabase/browser-session";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -55,6 +56,10 @@ function LoginForm() {
     }
     // Se há código de convite na URL, redirecionar para dashboard com o código
     const dest = inviteCode ? `/dashboard?code=${inviteCode}` : "/dashboard";
+    await waitForSessionPersistence(supabase, {
+      attempts: 10,
+      delayMs: 100,
+    });
     markIOSInstallPromptAfterLogin();
     router.push(dest);
     router.refresh();

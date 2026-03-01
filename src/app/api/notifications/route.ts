@@ -28,10 +28,14 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const limit = normalizeLimit(searchParams.get("limit"));
     const unreadOnly = searchParams.get("unreadOnly") === "true";
+    const type = typeof searchParams.get("type") === "string"
+      ? searchParams.get("type")
+      : null;
     const { notifications, unreadCount } = await listUserNotifications(admin, {
       userId: user.id,
       limit,
       unreadOnly,
+      type,
     });
 
     return NextResponse.json(

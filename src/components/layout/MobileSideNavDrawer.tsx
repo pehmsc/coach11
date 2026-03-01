@@ -39,7 +39,10 @@ export function MobileSideNavDrawer({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const unreadCount = useUnreadNotifications(profile?.id ?? null);
+  const unreadNotificationsCount = useUnreadNotifications(profile?.id ?? null);
+  const unreadMessagesCount = useUnreadNotifications(profile?.id ?? null, {
+    type: "message",
+  });
   const titleId = useId();
   const drawerRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -191,6 +194,12 @@ export function MobileSideNavDrawer({
           <div className="space-y-1">
             {mainSection?.items.map((item) => {
               const isActive = isNavItemActive(pathname, item);
+              const badgeCount =
+                item.badgeKey === "messages"
+                  ? unreadMessagesCount
+                  : item.badgeKey === "notifications"
+                    ? unreadNotificationsCount
+                    : 0;
               return (
                 <Link
                   key={item.id}
@@ -205,9 +214,9 @@ export function MobileSideNavDrawer({
                 >
                   <item.icon size={18} />
                   <span className="flex-1">{item.label}</span>
-                  {item.badgeKey === "notifications" && unreadCount > 0 ? (
+                  {item.badgeKey && badgeCount > 0 ? (
                     <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[11px] font-bold text-white">
-                      {unreadCount > 99 ? "99+" : unreadCount}
+                      {badgeCount > 99 ? "99+" : badgeCount}
                     </span>
                   ) : null}
                 </Link>

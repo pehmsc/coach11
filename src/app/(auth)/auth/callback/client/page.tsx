@@ -7,6 +7,7 @@ import type { EmailOtpType } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { sanitizeNextPath } from "@/lib/auth/sanitize-next";
 import { markIOSInstallPromptAfterLogin } from "@/lib/pwa/install-state";
+import { waitForSessionPersistence } from "@/lib/supabase/browser-session";
 
 function parseOtpType(rawType: string | null): EmailOtpType | null {
   if (!rawType) return null;
@@ -127,6 +128,10 @@ function OAuthCallbackClientContent() {
         return;
       }
 
+      await waitForSessionPersistence(supabase, {
+        attempts: 12,
+        delayMs: 120,
+      });
       await fetch("/api/auth/ensure-profile", { method: "POST" }).catch(() => null);
       await fetch("/api/invite/sync", { method: "POST" }).catch(() => null);
 

@@ -11,8 +11,13 @@ import {
   useState,
 } from "react";
 import { Download, RefreshCcw, X } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { IOSInstallModal } from "@/components/pwa/IOSInstallModal";
+import {
+  isSessionExpiringSoon,
+  waitForSessionPersistence,
+} from "@/lib/supabase/browser-session";
 import {
   consumeIOSInstallPromptAfterLogin,
   dismissIOSInstallPromptPermanently,
@@ -143,6 +148,7 @@ export function PWAProvider({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const supabase = useMemo(() => createClient(), []);
   const [deferredPrompt, setDeferredPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(() =>
@@ -157,6 +163,73 @@ export function PWAProvider({
   const [iosModalOpen, setIosModalOpen] = useState(false);
   const [updateReady, setUpdateReady] = useState(false);
   const waitingWorkerRef = useRef<ServiceWorker | null>(null);
+
+  useEffect(() => {
+    const debugAuth = process.env.NODE_ENV !== "production";
+    if (!debugAuth) return;
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      console.info("[auth.debug] onAuthStateChange", {
+        event,
+        hasSession: !!session,
+        userId: session?.user?.id || null,
+        expiresAt: session?.expires_at || null,
+      });
+    });
+
+    void supabase.auth.getSession().then(({ data: { session } }) => {
+      console.info("[auth.debug] initial session", {
+        hasSession: !!session,
+        userId: session?.user?.id || null,
+        expiresAt: session?.expires_at || null,
+      });
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [supabase]);
+
+  useEffect(() => {
+    async function ensureForegroundSession() {
+      if (document.visibilityState !== "visible") return;
+
+      const debugAuth = process.env.NODE_ENV !== "production";
+      const session = await waitForSessionPersistence(supabase, {
+        attempts: 2,
+        delayMs: 60,
+      });
+      if (!session) {
+        if (debugAuth) {
+          console.warn("[auth.debug] no session on foreground", { pathname });
+        }
+        return;
+      }
+
+      if (!isSessionExpiringSoon(session)) {
+        return;
+      }
+
+      const { data, error } = await supabase.auth.refreshSession();
+      if (debugAuth) {
+        console.info("[auth.debug] foreground refresh", {
+          pathname,
+          refreshed: !!data.session,
+          error: error?.message || null,
+        });
+      }
+    }
+
+    document.addEventListener("visibilitychange", ensureForegroundSession);
+    window.addEventListener("focus", ensureForegroundSession);
+
+    return () => {
+      document.removeEventListener("visibilitychange", ensureForegroundSession);
+      window.removeEventListener("focus", ensureForegroundSession);
+    };
+  }, [pathname, supabase]);
 
   useEffect(() => {
     if (!canRegisterServiceWorker()) return;
@@ -225,7 +298,7 @@ export function PWAProvider({
         document.removeEventListener("visibilitychange", handleVisibilityChange);
       }
     };
-  }, []);
+  }, [supabase]);
 
   useEffect(() => {
     if (!isIOSInstallFlow || iosInstallDismissed || isInstalled) return;
