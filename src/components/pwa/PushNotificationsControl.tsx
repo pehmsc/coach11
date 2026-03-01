@@ -20,8 +20,16 @@ type PushNotificationsControlProps = {
   className?: string;
 };
 
+function getNotificationPermission(): NotificationPermission | null {
+  if (typeof window === "undefined" || !("Notification" in window)) {
+    return null;
+  }
+
+  return window.Notification.permission;
+}
+
 function isDeniedPermission() {
-  return typeof window !== "undefined" && Notification.permission === "denied";
+  return getNotificationPermission() === "denied";
 }
 
 export function PushNotificationsControl({

@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { useState, useEffect } from "react";
 import { format, parseISO, isToday, isFuture } from "date-fns";
 import { pt } from "date-fns/locale";
 import { Loader2, Dumbbell, X, Users, Clock, MapPin, Plus, Trash2 } from "lucide-react";
@@ -32,6 +31,7 @@ interface SessionDetail {
   session: TrainingRow;
   attendance: Record<string, { player: Player; status: string }>;
   summary: AttendanceSummary;
+  hasRecordedAttendance: boolean;
 }
 
 function groupByMonth(sessions: TrainingRow[]): { label: string; sessions: TrainingRow[] }[] {
@@ -46,12 +46,9 @@ function groupByMonth(sessions: TrainingRow[]): { label: string; sessions: Train
 }
 
 export default function TrainingsPage() {
-  const supabase = useMemo(() => createClient(), []);
-
   const [loading, setLoading] = useState(true);
   const [sessions, setSessions] = useState<TrainingRow[]>([]);
   const [attendance, setAttendance] = useState<AttendanceSummary[]>([]);
-  const [players, setPlayers] = useState<Player[]>([]);
   const [ageGroupId, setAgeGroupId] = useState<string | null>(null);
 
   const [selectedSession, setSelectedSession] = useState<SessionDetail | null>(null);
@@ -71,7 +68,6 @@ export default function TrainingsPage() {
 
   useEffect(() => {
     void loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function loadData() {
@@ -88,48 +84,26 @@ export default function TrainingsPage() {
     const agId: string = (ctx.ageGroup as { id: string }).id;
     setAgeGroupId(agId);
 
-    const [{ data: sessionData }, { data: playerData }] = await Promise.all([
-      supabase
-        .from("training_sessions")
-        .select("id, session_date, start_time, end_time, title, location, status, age_group_id, team_id")
-        .eq("age_group_id", agId)
-        .order("session_date", { ascending: false })
-        .order("start_time", { ascending: false }),
-      supabase
-        .from("players")
-        .select("*")
-        .eq("age_group_id", agId)
-        .eq("status", "active"),
-    ]);
+    const trainingsRes = await fetch("/api/trainings", { cache: "no-store" });
+    const trainingsPayload = (await trainingsRes.json().catch(() => null)) as
+      | {
+          success?: boolean;
+          linked?: boolean;
+          sessions?: TrainingRow[];
+          summaries?: AttendanceSummary[];
+          error?: string;
+        }
+      | null;
 
-    const rows = (sessionData as TrainingRow[]) || [];
-    setSessions(rows);
-    setPlayers((playerData as Player[]) || []);
-
-    // Load attendance counts for all sessions
-    if (rows.length > 0) {
-      const sessionIds = rows.map((s) => s.id);
-      const { data: attRows } = await supabase
-        .from("training_attendance")
-        .select("training_session_id, status")
-        .in("training_session_id", sessionIds);
-
-      // Build summary per session
-      const summaryMap = new Map<string, AttendanceSummary>();
-      const totalPlayers = (playerData as Player[])?.length ?? 0;
-
-      for (const row of attRows || []) {
-        const sid = (row as { training_session_id: string; status: string }).training_session_id;
-        const st = (row as { training_session_id: string; status: string }).status;
-        const s = summaryMap.get(sid) ?? { session_id: sid, present: 0, absent: 0, injured: 0, total: totalPlayers };
-        if (st === "present") s.present++;
-        else if (st === "absent") s.absent++;
-        else if (st === "injured") s.injured++;
-        summaryMap.set(sid, s);
-      }
-
-      setAttendance(Array.from(summaryMap.values()));
+    if (!trainingsRes.ok || !trainingsPayload?.success) {
+      setSessions([]);
+      setAttendance([]);
+      setLoading(false);
+      return;
     }
+
+    setSessions(trainingsPayload.sessions || []);
+    setAttendance(trainingsPayload.summaries || []);
 
     setLoading(false);
   }
@@ -143,35 +117,47 @@ export default function TrainingsPage() {
     setDetailError(null);
     setShowDeleteConfirm(false);
 
-    // Load attendance for this specific session
-    const { data: attRows } = await supabase
-      .from("training_attendance")
-      .select("player_id, status")
-      .eq("training_session_id", session.id);
+    try {
+      const detailRes = await fetch(`/api/trainings?sessionId=${session.id}`, {
+        cache: "no-store",
+      });
+      const detailPayload = (await detailRes.json().catch(() => null)) as
+        | {
+            success?: boolean;
+            session?: TrainingRow;
+            attendance?: Array<{ player: Player; status: string }>;
+            summary?: AttendanceSummary;
+            hasRecordedAttendance?: boolean;
+            error?: string;
+          }
+        | null;
 
-    const attMap = new Map((attRows || []).map((r) => [
-      (r as { player_id: string; status: string }).player_id,
-      (r as { player_id: string; status: string }).status,
-    ]));
+      if (!detailRes.ok || !detailPayload?.success || !detailPayload.session || !detailPayload.summary) {
+        setDetailError(detailPayload?.error || "Erro ao carregar detalhe do treino.");
+        setLoadingDetail(false);
+        return;
+      }
 
-    const playerMap: Record<string, { player: Player; status: string }> = {};
-    for (const player of players) {
-      playerMap[player.id] = {
-        player,
-        status: attMap.get(player.id) ?? "present",
-      };
+      const playerMap: Record<string, { player: Player; status: string }> = {};
+      for (const entry of detailPayload.attendance || []) {
+        if (!entry?.player?.id) continue;
+        playerMap[entry.player.id] = {
+          player: entry.player,
+          status: entry.status,
+        };
+      }
+
+      setSelectedSession({
+        session: detailPayload.session,
+        attendance: playerMap,
+        summary: detailPayload.summary,
+        hasRecordedAttendance: detailPayload.hasRecordedAttendance === true,
+      });
+    } catch {
+      setDetailError("Erro de ligação ao carregar detalhe do treino.");
+    } finally {
+      setLoadingDetail(false);
     }
-
-    const summary: AttendanceSummary = {
-      session_id: session.id,
-      present: Object.values(playerMap).filter((p) => p.status === "present").length,
-      absent: Object.values(playerMap).filter((p) => p.status === "absent").length,
-      injured: Object.values(playerMap).filter((p) => p.status === "injured").length,
-      total: players.length,
-    };
-
-    setSelectedSession({ session, attendance: playerMap, summary });
-    setLoadingDetail(false);
   }
 
   async function handleDeleteSelectedSession() {
@@ -571,6 +557,18 @@ export default function TrainingsPage() {
             {loadingDetail ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 size={20} className="animate-spin text-slate-400" />
+              </div>
+            ) : selectedSession.session.status === "completed" &&
+              !selectedSession.hasRecordedAttendance ? (
+              <div className="flex flex-1 items-center justify-center px-6 py-10 text-center">
+                <div>
+                  <p className="text-sm font-semibold text-slate-700">
+                    Sem presenças gravadas para este treino.
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    O treino está fechado, mas não existem registos de presenças associados.
+                  </p>
+                </div>
               </div>
             ) : (
               <div className="overflow-y-auto flex-1 divide-y">

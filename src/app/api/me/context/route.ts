@@ -125,6 +125,53 @@ export async function GET() {
         : Promise.resolve({ data: [], error: null }),
     ]);
 
+    const missingAvatarProfileIds = Array.from(
+      new Set(
+        staffContext.members
+          .filter(
+            (member) =>
+              (!member.avatarUrl || member.avatarUrl.length === 0) &&
+              member.profileId !== user.id,
+          )
+          .map((member) => member.profileId),
+      ),
+    );
+
+    const authAvatarUrlByProfileId = new Map<string, string>();
+
+    if (missingAvatarProfileIds.length > 0) {
+      const authUsers = await Promise.allSettled(
+        missingAvatarProfileIds.map(async (profileId) => {
+          const { data, error } = await db.auth.admin.getUserById(profileId);
+          if (error || !data.user) {
+            return {
+              profileId,
+              avatarUrl: null as string | null,
+            };
+          }
+
+          const metadata = (data.user.user_metadata ?? {}) as Record<string, unknown>;
+          const avatarUrl =
+            (typeof metadata.avatar_url === "string" && metadata.avatar_url) ||
+            (typeof metadata.picture === "string" && metadata.picture) ||
+            null;
+
+          return {
+            profileId,
+            avatarUrl,
+          };
+        }),
+      );
+
+      for (const result of authUsers) {
+        if (result.status !== "fulfilled" || !result.value.avatarUrl) {
+          continue;
+        }
+
+        authAvatarUrlByProfileId.set(result.value.profileId, result.value.avatarUrl);
+      }
+    }
+
     const staffMembers = staffContext.members.map((member) => ({
       id: member.teamStaffId || `coordinator-${member.profileId}`,
       profile_id: member.profileId,
@@ -135,7 +182,9 @@ export async function GET() {
       phone: member.phone,
       avatar_url:
         member.avatarUrl ||
-        (member.profileId === user.id ? metadataAvatarUrl : null),
+        (member.profileId === user.id
+          ? metadataAvatarUrl
+          : authAvatarUrlByProfileId.get(member.profileId) || null),
     }));
     const staffProfileIds = staffContext.members.map((member) => member.profileId);
 
