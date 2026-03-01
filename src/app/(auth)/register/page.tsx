@@ -31,6 +31,14 @@ function RegisterForm() {
 
   const inviteCode = sp.get("code") ?? sp.get("inviteCode") ?? null;
 
+  function resolvePostAuthDestination(payload: { redirectTo?: string } | null) {
+    if (payload?.redirectTo === "/team/setup") {
+      return "/team/setup";
+    }
+
+    return inviteCode ? `/dashboard?code=${inviteCode}` : "/dashboard";
+  }
+
   async function checkBetaAccess(emailToCheck: string) {
     const res = await fetch("/api/auth/beta-access/check", {
       method: "POST",
@@ -128,8 +136,12 @@ function RegisterForm() {
       return;
     }
 
+    const ensureProfilePayload = await ensureProfileRes
+      .json()
+      .catch(() => null) as { redirectTo?: string } | null;
+
     markIOSInstallPromptAfterLogin();
-    const dest = next;
+    const dest = resolvePostAuthDestination(ensureProfilePayload);
     router.push(dest);
     router.refresh();
   }

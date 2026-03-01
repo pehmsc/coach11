@@ -5,8 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   countActiveBetaCoordinatorInvites,
-  normalizeEmail,
-} from "@/lib/auth/beta-access";
+} from "@/lib/auth/beta-access.server";
+import { normalizeEmail } from "@/lib/auth/beta-access";
 import { getCanonicalAppUrl } from "@/lib/config/canonical-app-url";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 

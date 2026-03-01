@@ -45,6 +45,17 @@ async function redirectToInviteOnly() {
   window.location.replace("/invite-only?reason=beta_access_required");
 }
 
+function resolvePostAuthRedirect(
+  next: string,
+  payload: { redirectTo?: string } | null,
+) {
+  if (payload?.redirectTo === "/team/setup") {
+    return "/team/setup";
+  }
+
+  return next;
+}
+
 function OAuthCallbackClientContent() {
   const searchParams = useSearchParams();
   const oauthCode = searchParams.get("code");
@@ -152,6 +163,10 @@ function OAuthCallbackClientContent() {
         return;
       }
 
+      const ensureProfilePayload = await ensureProfileRes
+        .json()
+        .catch(() => null) as { redirectTo?: string } | null;
+
       const inviteSyncRes = await fetch("/api/invite/sync", {
         method: "POST",
       }).catch(() => null);
@@ -163,7 +178,7 @@ function OAuthCallbackClientContent() {
 
       if (!cancelled) {
         markIOSInstallPromptAfterLogin();
-        window.location.replace(next);
+        window.location.replace(resolvePostAuthRedirect(next, ensureProfilePayload));
       }
     };
 

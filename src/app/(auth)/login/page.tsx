@@ -30,6 +30,14 @@ function LoginForm() {
 
   const inviteCode = sp.get("code") ?? sp.get("inviteCode") ?? null;
 
+  function resolvePostAuthDestination(payload: { redirectTo?: string } | null) {
+    if (payload?.redirectTo === "/team/setup") {
+      return "/team/setup";
+    }
+
+    return inviteCode ? `/dashboard?code=${inviteCode}` : "/dashboard";
+  }
+
   async function checkBetaAccess(emailToCheck: string) {
     const res = await fetch("/api/auth/beta-access/check", {
       method: "POST",
@@ -97,8 +105,6 @@ function LoginForm() {
       setLoading(false);
       return;
     }
-    // Se há código de convite na URL, redirecionar para dashboard com o código
-    const dest = inviteCode ? `/dashboard?code=${inviteCode}` : "/dashboard";
     await waitForSessionPersistence(supabase, {
       attempts: 10,
       delayMs: 100,
@@ -118,6 +124,11 @@ function LoginForm() {
       setLoading(false);
       return;
     }
+
+    const ensureProfilePayload = await ensureProfileRes
+      .json()
+      .catch(() => null) as { redirectTo?: string } | null;
+    const dest = resolvePostAuthDestination(ensureProfilePayload);
 
     markIOSInstallPromptAfterLogin();
     router.push(dest);
