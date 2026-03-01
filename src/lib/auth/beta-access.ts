@@ -20,6 +20,25 @@ export type BetaInviteRow = {
   created_at: string;
 };
 
+export type BetaAccessReason =
+  | "super_email"
+  | "legacy_access"
+  | "invite_ok"
+  | "no_invite"
+  | "no_email"
+  | "lookup_error";
+
+export type BetaAccessResult = {
+  allowed: boolean;
+  reason: BetaAccessReason;
+  invite: BetaInviteRow | null;
+};
+
+type BetaAccessParams = {
+  profileId?: string | null;
+  email: string | null | undefined;
+};
+
 function getAdminClient(admin?: SupabaseClient) {
   return admin ?? createAdminClient();
 }
@@ -30,6 +49,28 @@ export function normalizeEmail(email: string | null | undefined) {
 
 export function isSuperCoordinatorEmail(email: string | null | undefined) {
   return normalizeEmail(email) === SUPER_COORDINATOR_EMAIL;
+}
+
+async function findProfileIdByEmail(
+  email: string | null | undefined,
+  admin?: SupabaseClient,
+) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return null;
+
+  const db = getAdminClient(admin);
+  const { data, error } = await db
+    .from("profiles")
+    .select("id")
+    .eq("email", normalizedEmail)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`profile_email_lookup_failed:${error.message}`);
+  }
+
+  return typeof data?.id === "string" ? data.id : null;
 }
 
 export async function getActiveBetaInviteForEmail(
@@ -63,15 +104,113 @@ export async function getActiveBetaInviteForEmail(
   return (data as BetaInviteRow | null) ?? null;
 }
 
-export async function isBetaAllowed(
-  email: string | null | undefined,
+export async function isLegacyUser(
+  profileId: string | null | undefined,
   admin?: SupabaseClient,
 ) {
+  const normalizedProfileId =
+    typeof profileId === "string" ? profileId.trim() : "";
+  if (!normalizedProfileId) return false;
+
+  const db = getAdminClient(admin);
+
+  // Legacy access is derived from existing ownership or membership rows.
+  const [ownedAgeGroupRes, staffMembershipRes, clubMembershipRes] =
+    await Promise.all([
+      db
+        .from("age_groups")
+        .select("coordinator_id")
+        .eq("coordinator_id", normalizedProfileId)
+        .limit(1)
+        .maybeSingle(),
+      db
+        .from("team_staff")
+        .select("profile_id")
+        .eq("profile_id", normalizedProfileId)
+        .limit(1)
+        .maybeSingle(),
+      db
+        .from("club_memberships")
+        .select("profile_id")
+        .eq("profile_id", normalizedProfileId)
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+  const firstError =
+    ownedAgeGroupRes.error ??
+    staffMembershipRes.error ??
+    clubMembershipRes.error;
+
+  if (firstError) {
+    throw new Error(`legacy_user_lookup_failed:${firstError.message}`);
+  }
+
+  return !!(
+    ownedAgeGroupRes.data ||
+    staffMembershipRes.data ||
+    clubMembershipRes.data
+  );
+}
+
+export async function isBetaAllowed(
+  params: BetaAccessParams,
+  admin?: SupabaseClient,
+) : Promise<BetaAccessResult> {
+  const normalizedEmail = normalizeEmail(params.email);
+  if (!normalizedEmail) {
+    return {
+      allowed: false,
+      reason: "no_email",
+      invite: null,
+    };
+  }
+
+  if (isSuperCoordinatorEmail(normalizedEmail)) {
+    return {
+      allowed: true,
+      reason: "super_email",
+      invite: null,
+    };
+  }
+
   try {
-    const invite = await getActiveBetaInviteForEmail(email, admin);
-    return !!invite;
+    const normalizedProfileId =
+      typeof params.profileId === "string" ? params.profileId.trim() : "";
+    const resolvedProfileId =
+      normalizedProfileId || (await findProfileIdByEmail(normalizedEmail, admin));
+
+    if (resolvedProfileId) {
+      const legacy = await isLegacyUser(resolvedProfileId, admin);
+      if (legacy) {
+        return {
+          allowed: true,
+          reason: "legacy_access",
+          invite: null,
+        };
+      }
+    }
+
+    const invite = await getActiveBetaInviteForEmail(normalizedEmail, admin);
+    if (invite) {
+      return {
+        allowed: true,
+        reason: "invite_ok",
+        invite,
+      };
+    }
+
+    return {
+      allowed: false,
+      reason: "no_invite",
+      invite: null,
+    };
   } catch {
-    return false;
+    return {
+      allowed: false,
+      reason: "lookup_error",
+      invite: null,
+    };
   }
 }
 

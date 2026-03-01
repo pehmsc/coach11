@@ -214,13 +214,17 @@ export async function middleware(request: NextRequest) {
   }
 
   if (user) {
-    const betaAllowed = await isBetaAllowed(user.email ?? null);
+    const betaAccess = await isBetaAllowed({
+      profileId: user.id,
+      email: user.email ?? null,
+    });
 
-    if (!betaAllowed) {
+    if (!betaAccess.allowed) {
       if (debugAuth) {
         console.warn("[auth.debug] beta access blocked", {
           path,
           email: user.email ?? null,
+          reason: betaAccess.reason,
         });
       }
 

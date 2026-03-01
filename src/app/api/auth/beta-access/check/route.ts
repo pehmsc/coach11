@@ -17,9 +17,12 @@ export async function POST(request: Request) {
     }
 
     const email = normalizeEmail(parsed.data.email);
-    const allowed = await isBetaAllowed(email);
+    const access = await isBetaAllowed({ email });
 
-    return NextResponse.json({ allowed });
+    return NextResponse.json({
+      allowed: access.allowed,
+      reason: access.reason,
+    });
   } catch (error) {
     return respondInternalError("api.auth.beta-access.check.post", error);
   }

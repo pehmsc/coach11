@@ -146,6 +146,11 @@ function OAuthCallbackClientContent() {
         await redirectToInviteOnly();
         return;
       }
+      if (!ensureProfileRes?.ok) {
+        await supabase.auth.signOut().catch(() => null);
+        window.location.replace(buildLoginRedirectUrl(next, "profile_sync_failed"));
+        return;
+      }
 
       const inviteSyncRes = await fetch("/api/invite/sync", {
         method: "POST",

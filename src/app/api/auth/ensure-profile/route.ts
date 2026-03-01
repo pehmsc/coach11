@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
-  getActiveBetaInviteForEmail,
+  isBetaAllowed,
   isSuperCoordinatorEmail,
   markBetaInviteAccepted,
 } from "@/lib/auth/beta-access";
@@ -20,13 +20,24 @@ export async function POST() {
       return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
     }
 
-    const activeBetaInvite = await getActiveBetaInviteForEmail(user.email ?? null, admin);
-    if (!activeBetaInvite) {
+    const betaAccess = await isBetaAllowed(
+      {
+        profileId: user.id,
+        email: user.email ?? null,
+      },
+      admin,
+    );
+
+    if (!betaAccess.allowed) {
       return NextResponse.json(
         { error: "Acesso beta por convite obrigatório." },
         { status: 403 },
       );
     }
+
+    const activeBetaInvite = betaAccess.reason === "invite_ok"
+      ? betaAccess.invite
+      : null;
 
     const { data: existingProfile, error: existingProfileError } = await admin
       .from("profiles")
@@ -43,7 +54,7 @@ export async function POST() {
 
     const shouldBeCoordinator =
       existingProfile?.role === "coordinator" ||
-      activeBetaInvite.invite_type === "beta_coordinator" ||
+      activeBetaInvite?.invite_type === "beta_coordinator" ||
       isSuperCoordinatorEmail(user.email ?? null);
 
     const resolvedRole: "coordinator" | "coach" = shouldBeCoordinator
@@ -109,12 +120,15 @@ export async function POST() {
       }
     }
 
-    await markBetaInviteAccepted(normalizedEmail, admin);
+    if (activeBetaInvite) {
+      await markBetaInviteAccepted(normalizedEmail, admin);
+    }
 
     return NextResponse.json({
       success: true,
       betaAllowed: true,
-      inviteType: activeBetaInvite.invite_type,
+      reason: betaAccess.reason,
+      inviteType: activeBetaInvite?.invite_type ?? null,
     });
   } catch (error) {
     return respondInternalError("api.auth.ensure-profile.post", error);

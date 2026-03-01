@@ -44,7 +44,12 @@ function LoginForm() {
       );
     }
 
-    return (payload as { allowed?: boolean }).allowed === true;
+    const result = payload as { allowed?: boolean; reason?: string };
+
+    return {
+      allowed: result.allowed === true,
+      reason: typeof result.reason === "string" ? result.reason : null,
+    };
   }
 
   async function handleLogin(e: React.FormEvent) {
@@ -55,9 +60,15 @@ function LoginForm() {
     const normalizedEmail = email.trim().toLowerCase();
 
     try {
-      const allowed = await checkBetaAccess(normalizedEmail);
-      if (!allowed) {
-        router.replace("/invite-only?reason=beta_access_required");
+      const access = await checkBetaAccess(normalizedEmail);
+      if (!access.allowed) {
+        if (access.reason === "no_invite") {
+          router.replace("/invite-only?reason=beta_access_required");
+          return;
+        }
+
+        setError("Não foi possível validar o acesso beta agora. Tenta novamente.");
+        setLoading(false);
         return;
       }
     } catch (err) {
@@ -99,6 +110,12 @@ function LoginForm() {
     if (ensureProfileRes?.status === 403) {
       await supabase.auth.signOut().catch(() => null);
       router.replace("/invite-only?reason=beta_access_required");
+      return;
+    }
+    if (!ensureProfileRes?.ok) {
+      await supabase.auth.signOut().catch(() => null);
+      setError("Não foi possível validar o acesso agora. Tenta novamente.");
+      setLoading(false);
       return;
     }
 
@@ -152,6 +169,11 @@ function LoginForm() {
           {sp.get("error") === "invalid_callback" && (
             <div className="bg-amber-50 text-amber-700 text-sm p-3 rounded-md border border-amber-200">
               O link de autenticação é inválido ou expirou. Tenta novamente.
+            </div>
+          )}
+          {sp.get("error") === "profile_sync_failed" && (
+            <div className="bg-amber-50 text-amber-700 text-sm p-3 rounded-md border border-amber-200">
+              Não foi possível validar o acesso agora. Tenta novamente.
             </div>
           )}
 
