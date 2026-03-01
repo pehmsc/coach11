@@ -8,6 +8,7 @@ import { Bell, CheckCheck, Loader2, Trash2, Eye, EyeOff } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { dispatchUnreadCountPatch } from "@/lib/notifications/unread-sync";
 import { syncAppBadge } from "@/lib/pwa/badges";
 
 type NotificationItem = {
@@ -35,6 +36,21 @@ const TYPE_LABELS: Record<NotificationItem["type"], string> = {
   message: "Mensagem",
 };
 
+function countUnread(items: NotificationItem[]) {
+  return items.reduce(
+    (acc, item) => {
+      if (!item.read_at) {
+        acc.notifications += 1;
+        if (item.type === "message") {
+          acc.messages += 1;
+        }
+      }
+      return acc;
+    },
+    { notifications: 0, messages: 0 },
+  );
+}
+
 export default function NotificationsPage() {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -50,14 +66,18 @@ export default function NotificationsPage() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
 
-  const loadNotifications = useCallback(async () => {
-    setLoading(true);
+  const loadNotifications = useCallback(async (showLoading = true) => {
+    if (showLoading) {
+      setLoading(true);
+    }
     const res = await fetch("/api/notifications?limit=80", { cache: "no-store" });
     const payload = (await res.json().catch(() => null)) as NotificationsResponse | null;
 
     if (!res.ok || !payload) {
       setError(payload?.error || "Erro ao carregar notificações.");
-      setLoading(false);
+      if (showLoading) {
+        setLoading(false);
+      }
       return;
     }
 
@@ -66,16 +86,27 @@ export default function NotificationsPage() {
       setNotifications([]);
       setUnreadCount(0);
       setCurrentUserId(payload.currentUserId || null);
-      setLoading(false);
+      dispatchUnreadCountPatch({ notifications: 0, messages: 0 });
+      if (showLoading) {
+        setLoading(false);
+      }
       return;
     }
 
     setLinked(true);
     setError(null);
     setCurrentUserId(payload.currentUserId || null);
-    setNotifications(Array.isArray(payload.notifications) ? payload.notifications : []);
+    const nextNotifications = Array.isArray(payload.notifications) ? payload.notifications : [];
+    setNotifications(nextNotifications);
     setUnreadCount(payload.unreadCount || 0);
-    setLoading(false);
+    const unreadCounts = countUnread(nextNotifications);
+    dispatchUnreadCountPatch({
+      notifications: payload.unreadCount || 0,
+      messages: unreadCounts.messages,
+    });
+    if (showLoading) {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -115,26 +146,33 @@ export default function NotificationsPage() {
 
   async function updateNotificationReadState(id: string, markAsRead: boolean) {
     setUpdatingId(id);
+    const previousNotifications = notifications;
+    const nextNotifications = notifications.map((item) =>
+      item.id === id
+        ? {
+            ...item,
+            read_at: markAsRead ? item.read_at || new Date().toISOString() : null,
+          }
+        : item,
+    );
+    const unreadCounts = countUnread(nextNotifications);
+    setNotifications(nextNotifications);
+    setUnreadCount(unreadCounts.notifications);
+    dispatchUnreadCountPatch(unreadCounts);
+
     const res = await fetch(`/api/notifications/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: markAsRead ? "mark_read" : "mark_unread" }),
     }).catch(() => null);
 
-    if (res?.ok) {
-      setNotifications((prev) =>
-        prev.map((item) =>
-          item.id === id
-            ? {
-                ...item,
-                read_at: markAsRead ? item.read_at || new Date().toISOString() : null,
-              }
-            : item,
-        ),
-      );
-      setUnreadCount((prev) =>
-        markAsRead ? Math.max(0, prev - 1) : prev + 1,
-      );
+    if (!res?.ok) {
+      const rollbackCounts = countUnread(previousNotifications);
+      setNotifications(previousNotifications);
+      setUnreadCount(rollbackCounts.notifications);
+      dispatchUnreadCountPatch(rollbackCounts);
+    } else {
+      void loadNotifications(false);
     }
 
     setUpdatingId(null);
@@ -142,68 +180,102 @@ export default function NotificationsPage() {
 
   async function deleteNotification(id: string) {
     setDeletingId(id);
-    const wasUnread = notifications.find((item) => item.id === id)?.read_at == null;
+    const previousNotifications = notifications;
+    const nextNotifications = notifications.filter((item) => item.id !== id);
+    const unreadCounts = countUnread(nextNotifications);
+    setNotifications(nextNotifications);
+    setUnreadCount(unreadCounts.notifications);
+    dispatchUnreadCountPatch(unreadCounts);
+
     const res = await fetch(`/api/notifications/${id}`, {
       method: "DELETE",
     }).catch(() => null);
 
-    if (res?.ok) {
-      setNotifications((prev) => prev.filter((item) => item.id !== id));
-      if (wasUnread) {
-        setUnreadCount((prev) => Math.max(0, prev - 1));
-      }
+    if (!res?.ok) {
+      const rollbackCounts = countUnread(previousNotifications);
+      setNotifications(previousNotifications);
+      setUnreadCount(rollbackCounts.notifications);
+      dispatchUnreadCountPatch(rollbackCounts);
+    } else {
+      void loadNotifications(false);
     }
     setDeletingId(null);
   }
 
   async function handleMarkAllRead() {
     setMarkingAll(true);
+    const previousNotifications = notifications;
+    const nextNotifications = notifications.map((item) => ({
+      ...item,
+      read_at: item.read_at || new Date().toISOString(),
+    }));
+    setNotifications(nextNotifications);
+    setUnreadCount(0);
+    dispatchUnreadCountPatch({ notifications: 0, messages: 0 });
+
     const res = await fetch("/api/notifications", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "mark_all_read" }),
     });
-    if (res.ok) {
-      setNotifications((prev) =>
-        prev.map((item) => ({
-          ...item,
-          read_at: item.read_at || new Date().toISOString(),
-        })),
-      );
-      setUnreadCount(0);
+    if (!res.ok) {
+      const rollbackCounts = countUnread(previousNotifications);
+      setNotifications(previousNotifications);
+      setUnreadCount(rollbackCounts.notifications);
+      dispatchUnreadCountPatch(rollbackCounts);
+    } else {
+      void loadNotifications(false);
     }
     setMarkingAll(false);
   }
 
   async function handleMarkAllUnread() {
     setMarkingAll(true);
+    const previousNotifications = notifications;
+    const nextNotifications = notifications.map((item) => ({
+      ...item,
+      read_at: null,
+    }));
+    const unreadCounts = countUnread(nextNotifications);
+    setNotifications(nextNotifications);
+    setUnreadCount(unreadCounts.notifications);
+    dispatchUnreadCountPatch(unreadCounts);
+
     const res = await fetch("/api/notifications", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "mark_all_unread" }),
     });
-    if (res.ok) {
-      setNotifications((prev) =>
-        prev.map((item) => ({
-          ...item,
-          read_at: null,
-        })),
-      );
-      setUnreadCount(notifications.length);
+    if (!res.ok) {
+      const rollbackCounts = countUnread(previousNotifications);
+      setNotifications(previousNotifications);
+      setUnreadCount(rollbackCounts.notifications);
+      dispatchUnreadCountPatch(rollbackCounts);
+    } else {
+      void loadNotifications(false);
     }
     setMarkingAll(false);
   }
 
   async function handleClearAll() {
     setClearingAll(true);
+    const previousNotifications = notifications;
+    setNotifications([]);
+    setUnreadCount(0);
+    dispatchUnreadCountPatch({ notifications: 0, messages: 0 });
+
     const res = await fetch("/api/notifications", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "delete_all" }),
     });
-    if (res.ok) {
-      setNotifications([]);
-      setUnreadCount(0);
+    if (!res.ok) {
+      const rollbackCounts = countUnread(previousNotifications);
+      setNotifications(previousNotifications);
+      setUnreadCount(rollbackCounts.notifications);
+      dispatchUnreadCountPatch(rollbackCounts);
+    } else {
+      void loadNotifications(false);
     }
     setClearingAll(false);
   }

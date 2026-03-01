@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { sendWebPushToUsers } from "@/lib/pwa/web-push-server";
 import { getTeamMemberProfileIds } from "@/lib/team/members";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
@@ -44,6 +45,24 @@ function buildNotificationPayload(
     ...(input.linkPath ? { link_path: input.linkPath } : {}),
     ...(input.entityId ? { entity_id: input.entityId } : {}),
   };
+}
+
+function resolvePushUrl(
+  input: Pick<
+    CreateTeamNotificationInput | CreateUserNotificationsInput,
+    "type" | "entityId" | "linkPath"
+  >,
+) {
+  if (input.linkPath && input.linkPath.startsWith("/")) {
+    return input.linkPath;
+  }
+  if (input.type === "new_game" && input.entityId) {
+    return `/games/${input.entityId}`;
+  }
+  if (input.type === "new_training") {
+    return "/calendar";
+  }
+  return "/messages";
 }
 
 async function insertNotificationBroadcast(
@@ -103,6 +122,21 @@ async function insertNotificationBroadcast(
   if (recipientsError) {
     await admin.from("notifications").delete().eq("id", notification.id);
     throw new Error(`Erro ao criar recipients da notificação: ${recipientsError.message}`);
+  }
+
+  try {
+    await sendWebPushToUsers(admin, recipientIds, {
+      type: input.type,
+      title: input.title,
+      body: input.body ?? null,
+      url: resolvePushUrl(input),
+    });
+  } catch (pushError) {
+    console.error("[notifications.push]", {
+      type: input.type,
+      notificationId: notification.id,
+      pushError,
+    });
   }
 
   return { inserted: rows.length, notificationId: notification.id };

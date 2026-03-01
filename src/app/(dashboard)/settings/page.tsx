@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PushNotificationsControl } from "@/components/pwa/PushNotificationsControl";
 import { Loader2, User, Palette, Bell, Camera, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
@@ -458,15 +459,27 @@ export default function SettingsPage() {
 
       {/* Tab: Notificações */}
       {activeTab === "notifications" && (
-        <Card>
-          <CardContent className="pt-8 pb-8 text-center">
-            <Bell size={40} className="text-slate-200 mx-auto mb-3" />
-            <p className="font-semibold text-slate-700">Em Aquecimento...</p>
-            <p className="text-sm text-slate-400 mt-1">
-              Configurações de notificações em breve.
-            </p>
-          </CardContent>
-        </Card>
+        <div className="space-y-4">
+          <PushNotificationsControl />
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Bell size={16} className="text-slate-500" />
+                Notificações internas
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm text-slate-500">
+              <p>
+                Os alertas internos continuam ativos na app e alimentam os badges de
+                Alertas e Mensagens.
+              </p>
+              <p>
+                No iPhone, o Web Push só fica disponível depois de instalares a PWA no
+                ecrã principal.
+              </p>
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       {deleteModalOpen && (

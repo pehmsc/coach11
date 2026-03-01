@@ -97,7 +97,8 @@ const NAV_ITEMS = {
   notifications: {
     id: "notifications",
     href: "/notifications",
-    label: "Alertas",
+    label: "Notificações",
+    mobileLabel: "Alertas",
     icon: Bell,
     badgeKey: "notifications" as const,
   },
@@ -140,6 +141,26 @@ export const APP_NAV_SECTIONS: AppNavSection[] = [
   },
 ];
 
+export const MOBILE_APP_NAV_SECTIONS: AppNavSection[] = [
+  {
+    id: "main",
+    items: [
+      NAV_ITEMS.calendar,
+      NAV_ITEMS.players,
+      NAV_ITEMS.competitions,
+      NAV_ITEMS.games,
+      NAV_ITEMS.trainings,
+      NAV_ITEMS.team,
+      NAV_ITEMS.staff,
+    ],
+  },
+  {
+    id: "settings",
+    title: "Configurações",
+    items: [NAV_ITEMS.settings],
+  },
+];
+
 export const MOBILE_FOOTER_NAV_ITEMS: AppNavItem[] = [
   NAV_ITEMS.dashboard,
   NAV_ITEMS.messages,
@@ -163,10 +184,7 @@ export function isNavItemActive(pathname: string, item: AppNavItem) {
 }
 
 export function getProfileInitials(fullName?: string | null) {
-  const tokens = (fullName || "")
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
+  const tokens = (fullName || "").trim().split(/\s+/).filter(Boolean);
 
   if (tokens.length === 0) return "U";
   if (tokens.length === 1) return tokens[0].slice(0, 2).toUpperCase();

@@ -2,6 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import {
+  subscribeToUnreadCountPatch,
+  type UnreadCountPatch,
+} from "@/lib/notifications/unread-sync";
 import { syncAppBadge } from "@/lib/pwa/badges";
 
 type NotificationsResponse = {
@@ -20,6 +24,7 @@ export function useUnreadNotifications(
   const supabase = useMemo(() => createClient(), []);
   const [unreadCount, setUnreadCount] = useState(0);
   const typeFilter = options?.type?.trim() || null;
+  const pollingIntervalMs = typeFilter === "message" ? 15000 : 45000;
 
   const refreshCount = useCallback(async () => {
     if (!profileId) {
@@ -70,7 +75,15 @@ export function useUnreadNotifications(
     });
     const interval = window.setInterval(() => {
       void refreshCount();
-    }, 45000);
+    }, pollingIntervalMs);
+
+    const handleFocusRefresh = () => {
+      if (document.visibilityState === "visible") {
+        void refreshCount();
+      }
+    };
+    window.addEventListener("focus", handleFocusRefresh);
+    document.addEventListener("visibilitychange", handleFocusRefresh);
 
     const channel = supabase
       .channel(`notifications:${profileId}`)
@@ -91,13 +104,28 @@ export function useUnreadNotifications(
     return () => {
       window.cancelAnimationFrame(raf);
       window.clearInterval(interval);
+      window.removeEventListener("focus", handleFocusRefresh);
+      document.removeEventListener("visibilitychange", handleFocusRefresh);
       void supabase.removeChannel(channel);
     };
-  }, [profileId, refreshCount, supabase]);
+  }, [pollingIntervalMs, profileId, refreshCount, supabase]);
 
   useEffect(() => {
+    if (typeFilter) return;
     void syncAppBadge(unreadCount);
-  }, [unreadCount]);
+  }, [typeFilter, unreadCount]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeToUnreadCountPatch((detail: UnreadCountPatch) => {
+      const nextCount =
+        typeFilter === "message" ? detail.messages : detail.notifications;
+      if (typeof nextCount === "number") {
+        setUnreadCount(Math.max(0, nextCount));
+      }
+    });
+
+    return unsubscribe;
+  }, [typeFilter]);
 
   return unreadCount;
 }

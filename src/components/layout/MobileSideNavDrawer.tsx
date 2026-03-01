@@ -7,8 +7,9 @@ import { LogOut, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useUnreadNotifications } from "@/components/layout/use-unread-notifications";
 import { InstallPWAButton } from "@/components/pwa/InstallPWAButton";
+import { PushNotificationsControl } from "@/components/pwa/PushNotificationsControl";
 import {
-  APP_NAV_SECTIONS,
+  MOBILE_APP_NAV_SECTIONS,
   getRoleLabel,
   isNavItemActive,
   type NavProfile,
@@ -53,7 +54,9 @@ export function MobileSideNavDrawer({
     if (!open) return;
 
     previousFocusRef.current =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
 
     const previousOverflow = document.body.style.overflow;
     const previousOverscroll = document.body.style.overscrollBehavior;
@@ -81,7 +84,10 @@ export function MobileSideNavDrawer({
 
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
-      const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      const active =
+        document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null;
 
       if (event.shiftKey && active === first) {
         event.preventDefault();
@@ -124,14 +130,20 @@ export function MobileSideNavDrawer({
     router.refresh();
   }
 
-  const mainSection = APP_NAV_SECTIONS.find((section) => section.id === "main");
-  const settingsSection = APP_NAV_SECTIONS.find((section) => section.id === "settings");
+  const mainSection = MOBILE_APP_NAV_SECTIONS.find(
+    (section) => section.id === "main",
+  );
+  const settingsSection = MOBILE_APP_NAV_SECTIONS.find(
+    (section) => section.id === "settings",
+  );
 
   return (
     <div
       className={cn(
         "fixed inset-x-0 top-0 bottom-[calc(var(--mobile-footer-height)+env(safe-area-inset-bottom))] z-40 md:hidden transition-opacity duration-200",
-        open ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0",
+        open
+          ? "pointer-events-auto opacity-100"
+          : "pointer-events-none opacity-0",
       )}
       aria-hidden={!open}
     >
@@ -163,7 +175,10 @@ export function MobileSideNavDrawer({
                 fallbackClassName="bg-emerald-600 text-white"
               />
               <div className="min-w-0">
-                <p id={titleId} className="truncate text-sm font-semibold text-white">
+                <p
+                  id={titleId}
+                  className="truncate text-sm font-semibold text-white"
+                >
                   {profile?.full_name || "Utilizador"}
                 </p>
                 <p className="truncate text-xs text-slate-400">
@@ -237,6 +252,7 @@ export function MobileSideNavDrawer({
               variant="ghost"
               className="justify-start rounded-xl px-3 py-3 text-left text-sm font-medium text-slate-300 hover:bg-slate-800 hover:text-white"
             />
+            <PushNotificationsControl compact />
             {settingsSection?.items.map((item) => {
               const isActive = isNavItemActive(pathname, item);
               return (

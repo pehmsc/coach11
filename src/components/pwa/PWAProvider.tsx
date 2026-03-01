@@ -12,12 +12,14 @@ import {
 } from "react";
 import { Download, RefreshCcw, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { dispatchUnreadCountPatch } from "@/lib/notifications/unread-sync";
 import { Button } from "@/components/ui/button";
 import { IOSInstallModal } from "@/components/pwa/IOSInstallModal";
 import {
   isSessionExpiringSoon,
   waitForSessionPersistence,
 } from "@/lib/supabase/browser-session";
+import { syncAppBadge } from "@/lib/pwa/badges";
 import {
   consumeIOSInstallPromptAfterLogin,
   dismissIOSInstallPromptPermanently,
@@ -230,6 +232,31 @@ export function PWAProvider({
       window.removeEventListener("focus", ensureForegroundSession);
     };
   }, [pathname, supabase]);
+
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+
+    function handleServiceWorkerMessage(event: MessageEvent) {
+      const data = event.data as
+        | { type?: string; badgeCount?: number; messageBadgeCount?: number }
+        | undefined;
+      if (data?.type !== "COACH11_PUSH_RECEIVED") return;
+
+      if (typeof data.badgeCount === "number") {
+        dispatchUnreadCountPatch({ notifications: data.badgeCount });
+        void syncAppBadge(data.badgeCount);
+      }
+
+      if (typeof data.messageBadgeCount === "number") {
+        dispatchUnreadCountPatch({ messages: data.messageBadgeCount });
+      }
+    }
+
+    navigator.serviceWorker.addEventListener("message", handleServiceWorkerMessage);
+    return () => {
+      navigator.serviceWorker.removeEventListener("message", handleServiceWorkerMessage);
+    };
+  }, []);
 
   useEffect(() => {
     if (!canRegisterServiceWorker()) return;

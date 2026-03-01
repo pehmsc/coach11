@@ -1,7 +1,6 @@
-const SW_VERSION = "coach11-pwa-v2";
+const SW_VERSION = "coach11-pwa-v3";
 const STATIC_CACHE = `coach11-static-${SW_VERSION}`;
 const OFFLINE_URL = "/offline.html";
-const PUSH_FEATURE_ENABLED = false;
 
 const PRECACHE_URLS = [
   OFFLINE_URL,
@@ -136,18 +135,92 @@ self.addEventListener("message", (event) => {
 });
 
 self.addEventListener("push", (event) => {
-  if (!PUSH_FEATURE_ENABLED) {
-    return;
-  }
+  event.waitUntil(
+    (async () => {
+      let payload = {
+        type: "notification",
+        title: "Coach11",
+        body: "",
+        url: "/notifications",
+        badgeCount: null,
+      };
 
-  event.waitUntil(Promise.resolve());
+      try {
+        payload = {
+          ...payload,
+          ...(event.data ? event.data.json() : {}),
+        };
+      } catch {
+        // Ignore malformed payloads and show a safe default notification.
+      }
+
+      const clientList = await self.clients.matchAll({
+        type: "window",
+        includeUncontrolled: true,
+      });
+
+      clientList.forEach((client) => {
+        client.postMessage({
+          type: "COACH11_PUSH_RECEIVED",
+          badgeCount:
+            typeof payload.badgeCount === "number" ? payload.badgeCount : undefined,
+        });
+      });
+
+      if (typeof payload.badgeCount === "number") {
+        const badgeApi =
+          self.registration.setAppBadge ||
+          self.navigator?.setAppBadge ||
+          null;
+        if (badgeApi) {
+          await badgeApi.call(
+            self.registration.setAppBadge ? self.registration : self.navigator,
+            payload.badgeCount,
+          ).catch(() => null);
+        }
+      }
+
+      await self.registration.showNotification(payload.title || "Coach11", {
+        body: payload.body || "",
+        icon: "/icons/icon-192.png",
+        badge: "/icons/icon-192.png",
+        tag: payload.type || "coach11-notification",
+        data: {
+          url: payload.url || "/notifications",
+          badgeCount:
+            typeof payload.badgeCount === "number" ? payload.badgeCount : null,
+        },
+      });
+    })(),
+  );
 });
 
 self.addEventListener("notificationclick", (event) => {
-  if (!PUSH_FEATURE_ENABLED) {
-    return;
-  }
-
   event.notification.close();
-  event.waitUntil(Promise.resolve());
+  event.waitUntil(
+    (async () => {
+      const targetUrl =
+        event.notification?.data?.url && typeof event.notification.data.url === "string"
+          ? event.notification.data.url
+          : "/notifications";
+
+      const clientList = await self.clients.matchAll({
+        type: "window",
+        includeUncontrolled: true,
+      });
+
+      for (const client of clientList) {
+        if ("focus" in client) {
+          if (client.url === new URL(targetUrl, self.location.origin).toString()) {
+            await client.focus();
+            return;
+          }
+        }
+      }
+
+      if (self.clients.openWindow) {
+        await self.clients.openWindow(targetUrl);
+      }
+    })(),
+  );
 });

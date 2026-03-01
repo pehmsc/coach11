@@ -50,3 +50,6 @@ export async function syncAppBadge(count: number) {
 
   await setAppBadge(count);
 }
+
+export const clearBadge = clearAppBadge;
+export const setBadge = setAppBadge;
