@@ -116,12 +116,6 @@ const NAV_ITEMS = {
     label: "Configurações",
     icon: Settings,
   },
-  admin: {
-    id: "admin",
-    href: "/admin",
-    label: "Admin",
-    icon: Shield,
-  },
 } satisfies Record<string, AppNavItem>;
 
 const BASE_APP_NAV_SECTIONS: AppNavSection[] = [
@@ -137,7 +131,6 @@ const BASE_APP_NAV_SECTIONS: AppNavSection[] = [
       NAV_ITEMS.trainings,
       NAV_ITEMS.team,
       NAV_ITEMS.staff,
-      NAV_ITEMS.notifications,
       NAV_ITEMS.statistics,
     ],
   },
@@ -171,7 +164,6 @@ const BASE_MOBILE_APP_NAV_SECTIONS: AppNavSection[] = [
 export const MOBILE_FOOTER_NAV_ITEMS: AppNavItem[] = [
   NAV_ITEMS.dashboard,
   NAV_ITEMS.messages,
-  NAV_ITEMS.notifications,
   NAV_ITEMS.statistics,
 ];
 
@@ -189,32 +181,16 @@ function cloneSections(sections: AppNavSection[]) {
   }));
 }
 
-export function getAppNavSections(profile?: NavProfile) {
-  const sections = cloneSections(BASE_APP_NAV_SECTIONS);
-  if (profile?.is_super_coordinator) {
-    const settingsSection = sections.find((section) => section.id === "settings");
-    if (settingsSection) {
-      settingsSection.items = [NAV_ITEMS.admin, ...settingsSection.items];
-    }
-  }
-
-  return sections;
+export function getAppNavSections() {
+  return cloneSections(BASE_APP_NAV_SECTIONS);
 }
 
-export function getMobileAppNavSections(profile?: NavProfile) {
-  const sections = cloneSections(BASE_MOBILE_APP_NAV_SECTIONS);
-  if (profile?.is_super_coordinator) {
-    const settingsSection = sections.find((section) => section.id === "settings");
-    if (settingsSection) {
-      settingsSection.items = [NAV_ITEMS.admin, ...settingsSection.items];
-    }
-  }
-
-  return sections;
+export function getMobileAppNavSections() {
+  return cloneSections(BASE_MOBILE_APP_NAV_SECTIONS);
 }
 
-export function getNavSection(sectionId: AppNavSection["id"], profile?: NavProfile) {
-  return getAppNavSections(profile).find((section) => section.id === sectionId) || null;
+export function getNavSection(sectionId: AppNavSection["id"]) {
+  return getAppNavSections().find((section) => section.id === sectionId) || null;
 }
 
 export function isNavItemActive(pathname: string, item: AppNavItem) {

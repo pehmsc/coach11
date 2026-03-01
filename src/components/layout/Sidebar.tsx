@@ -22,11 +22,10 @@ interface SidebarProps {
 export function Sidebar({ profile, avatarUrl }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const unreadNotificationsCount = useUnreadNotifications(profile?.id ?? null);
   const unreadMessagesCount = useUnreadNotifications(profile?.id ?? null, {
     type: "message",
   });
-  const navSections = getAppNavSections(profile);
+  const navSections = getAppNavSections();
   const mainSection = navSections.find((section) => section.id === "main");
   const settingsSection = navSections.find((section) => section.id === "settings");
 
@@ -71,9 +70,7 @@ export function Sidebar({ profile, avatarUrl }: SidebarProps) {
             const badgeCount =
               item.badgeKey === "messages"
                 ? unreadMessagesCount
-                : item.badgeKey === "notifications"
-                  ? unreadNotificationsCount
-                  : 0;
+                : 0;
 
             return (
               <Link

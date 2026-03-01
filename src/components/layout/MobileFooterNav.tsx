@@ -21,7 +21,6 @@ export function MobileFooterNav({
   avatarUrl?: string | null;
 }) {
   const pathname = usePathname();
-  const unreadNotificationsCount = useUnreadNotifications(profile?.id ?? null);
   const unreadMessagesCount = useUnreadNotifications(profile?.id ?? null, {
     type: "message",
   });
@@ -40,7 +39,12 @@ export function MobileFooterNav({
         className="fixed inset-x-0 bottom-0 z-50 border-t border-slate-800 bg-slate-900/95 backdrop-blur supports-[backdrop-filter]:bg-slate-900/90"
         aria-label="Navegação principal mobile"
       >
-        <div className="grid min-h-[var(--mobile-footer-height)] grid-cols-5 gap-1 px-2 pt-2 [padding-bottom:calc(env(safe-area-inset-bottom)+0.5rem)]">
+        <div
+          className="grid min-h-[var(--mobile-footer-height)] gap-1 px-2 pt-2 [padding-bottom:calc(env(safe-area-inset-bottom)+0.5rem)]"
+          style={{
+            gridTemplateColumns: `repeat(${MOBILE_FOOTER_NAV_ITEMS.length + 1}, minmax(0, 1fr))`,
+          }}
+        >
           <button
             type="button"
             aria-label="Abrir menu"
@@ -71,9 +75,7 @@ export function MobileFooterNav({
             const badgeCount =
               item.badgeKey === "messages"
                 ? unreadMessagesCount
-                : item.badgeKey === "notifications"
-                  ? unreadNotificationsCount
-                  : 0;
+                : 0;
 
             return (
               <Link

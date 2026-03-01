@@ -40,7 +40,6 @@ export function MobileSideNavDrawer({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const unreadNotificationsCount = useUnreadNotifications(profile?.id ?? null);
   const unreadMessagesCount = useUnreadNotifications(profile?.id ?? null, {
     type: "message",
   });
@@ -130,7 +129,7 @@ export function MobileSideNavDrawer({
     router.refresh();
   }
 
-  const navSections = getMobileAppNavSections(profile);
+  const navSections = getMobileAppNavSections();
   const mainSection = navSections.find(
     (section) => section.id === "main",
   );
@@ -213,9 +212,7 @@ export function MobileSideNavDrawer({
               const badgeCount =
                 item.badgeKey === "messages"
                   ? unreadMessagesCount
-                  : item.badgeKey === "notifications"
-                    ? unreadNotificationsCount
-                    : 0;
+                  : 0;
               return (
                 <Link
                   key={item.id}
