@@ -1,9 +1,10 @@
-import webpush, { type PushSubscription } from "web-push";
+import type { PushSubscription } from "web-push";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   getPushSubscriptionsSchemaHint,
   isPushSubscriptionsSchemaError,
 } from "@/lib/pwa/push-subscriptions-schema";
+import { sendNotification, setVapidDetails } from "@/lib/pwa/web-push-runtime";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -33,7 +34,7 @@ function ensureVapidConfigured() {
   if (vapidConfigured) return true;
   if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) return false;
 
-  webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+  setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
   vapidConfigured = true;
   return true;
 }
@@ -162,7 +163,7 @@ export async function sendWebPushToUsers(
       const badgeCount = unreadCounts.get(subscriptionRow.user_id) ?? 0;
 
       try {
-        await webpush.sendNotification(
+        await sendNotification(
           subscription,
           JSON.stringify({
             ...payload,

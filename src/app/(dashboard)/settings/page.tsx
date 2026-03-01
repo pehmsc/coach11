@@ -475,7 +475,8 @@ export default function SettingsPage() {
               </p>
               <p>
                 No iPhone, o Web Push só fica disponível depois de instalares a PWA no
-                ecrã principal.
+                ecrã principal. No Mac com Safari ou Chrome compatível, podes ativar
+                diretamente no browser.
               </p>
             </CardContent>
           </Card>

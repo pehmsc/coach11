@@ -6,6 +6,7 @@ import { LogOut } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { Profile } from "@/types/database";
 import { useUnreadNotifications } from "@/components/layout/use-unread-notifications";
+import { PushNotificationsControl } from "@/components/pwa/PushNotificationsControl";
 import {
   APP_NAV_SECTIONS,
   getRoleLabel,
@@ -121,6 +122,7 @@ export function Sidebar({ profile, avatarUrl }: SidebarProps) {
             </Link>
           );
         })}
+        <PushNotificationsControl compact className="pt-1" />
         <button
           onClick={handleLogout}
           className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white transition-colors text-sm font-medium w-full"

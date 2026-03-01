@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Bell, BellOff, Loader2, Smartphone } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { usePWA } from "@/components/pwa/PWAProvider";
 import {
+  getWebPushClientSupport,
   getWebPushStatus,
   isWebPushFeatureEnabled,
   isWebPushSupported,
@@ -43,9 +44,10 @@ export function PushNotificationsControl({
   const [activeCount, setActiveCount] = useState(0);
   const [serverEnabled, setServerEnabled] = useState(false);
 
-  const clientSupported = useMemo(() => isWebPushSupported(), []);
-  const featureEnabled = useMemo(() => isWebPushFeatureEnabled(), []);
-  const needsIOSInstall = isIOSInstallFlow && !isInstalled;
+  const support = getWebPushClientSupport();
+  const clientSupported = support.browserSupported && isWebPushSupported();
+  const featureEnabled = support.featureFlagEnabled && support.hasVapidPublicKey && isWebPushFeatureEnabled();
+  const needsIOSInstall = support.requiresIOSInstall || (isIOSInstallFlow && !isInstalled);
   const blockedByPermission = isDeniedPermission();
 
   const loadStatus = useCallback(async () => {
@@ -95,6 +97,9 @@ export function PushNotificationsControl({
     if (!result.ok) {
       if (result.reason === "denied") {
         toast.error("Permissão de notificações recusada.");
+      } else if (result.reason === "ios_install_required") {
+        openIOSInstallModal();
+        toast.message("No iPhone, instala a app no ecrã principal para ativar notificações.");
       } else if (result.reason === "default") {
         toast.message("Permissão de notificações não concedida.");
       } else {
@@ -139,14 +144,37 @@ export function PushNotificationsControl({
   }
 
   const disabledReason = !featureEnabled
-    ? "Web Push ainda não está configurado neste ambiente."
+    ? "Notificações push indisponíveis nesta versão da app."
     : needsIOSInstall
       ? "No iPhone, instala a app no ecrã principal para ativar Web Push."
-      : !clientSupported
-        ? "Este dispositivo/browser não suporta Web Push."
-        : blockedByPermission
-          ? "A permissão foi bloqueada no browser. Reativa-a nas definições do sistema/browser."
-          : "Recebe alertas mesmo com a app fechada.";
+      : !support.secureContext
+        ? "As notificações push exigem HTTPS ou localhost."
+        : !support.hasServiceWorker
+          ? "Este browser não suporta service workers para Web Push."
+          : !support.hasPushManager
+            ? "Este browser não suporta Push API."
+            : !support.hasNotification
+              ? "Este browser não suporta notificações Web."
+              : !clientSupported
+                ? "Este browser não suporta Web Push."
+                : blockedByPermission
+                  ? "A permissão foi bloqueada no browser. Reativa-a nas definições do sistema/browser."
+                  : support.isIOSLike
+                    ? "Recebe alertas mesmo com a app fechada, depois de instalada."
+                    : "Recebe alertas no Mac mesmo fora da app.";
+
+  const debugChecks = process.env.NODE_ENV !== "production"
+    ? [
+        { label: "secureContext", ok: support.secureContext },
+        { label: "serviceWorker", ok: support.hasServiceWorker },
+        { label: "PushManager", ok: support.hasPushManager },
+        { label: "Notification", ok: support.hasNotification },
+        { label: "featureFlag", ok: support.featureFlagEnabled },
+        { label: "vapidKey", ok: support.hasVapidPublicKey },
+        { label: "standalone", ok: support.isStandalone },
+        { label: "requiresIOSInstall", ok: !support.requiresIOSInstall },
+      ]
+    : [];
 
   if (compact) {
     return (
@@ -172,6 +200,11 @@ export function PushNotificationsControl({
         <p className="px-3 text-[11px] text-slate-500">
           {loading ? "A verificar notificações push..." : disabledReason}
         </p>
+        {debugChecks.length > 0 ? (
+          <p className="px-3 text-[10px] text-slate-600">
+            {debugChecks.map((entry) => `${entry.label}:${entry.ok ? "ok" : "fail"}`).join(" · ")}
+          </p>
+        ) : null}
       </div>
     );
   }
@@ -199,6 +232,11 @@ export function PushNotificationsControl({
               {serverEnabled ? "configurado" : "desligado"}
             </span>
           </p>
+          {debugChecks.length > 0 ? (
+            <div className="mt-3 rounded-lg bg-slate-100 px-3 py-2 text-[11px] text-slate-600">
+              {debugChecks.map((entry) => `${entry.label}:${entry.ok ? "ok" : "fail"}`).join(" · ")}
+            </div>
+          ) : null}
         </div>
 
         <div className="flex flex-wrap gap-2">

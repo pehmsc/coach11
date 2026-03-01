@@ -11,6 +11,20 @@ type PushStatusResponse = {
   error?: string;
 };
 
+export type WebPushClientSupport = {
+  featureFlagEnabled: boolean;
+  hasVapidPublicKey: boolean;
+  secureContext: boolean;
+  hasServiceWorker: boolean;
+  hasPushManager: boolean;
+  hasNotification: boolean;
+  isIOSLike: boolean;
+  isStandalone: boolean;
+  requiresIOSInstall: boolean;
+  browserSupported: boolean;
+  canSubscribe: boolean;
+};
+
 function urlBase64ToUint8Array(base64String: string) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding)
@@ -30,6 +44,28 @@ function detectPushPlatform() {
   return "web";
 }
 
+function isStandaloneMode() {
+  if (typeof window === "undefined") return false;
+
+  return (
+    window.matchMedia?.("(display-mode: standalone)").matches === true ||
+    (window.navigator as Navigator & { standalone?: boolean }).standalone === true
+  );
+}
+
+function isIOSLikeDevice() {
+  if (typeof window === "undefined") return false;
+
+  const platform = window.navigator.platform || "";
+  const userAgent = window.navigator.userAgent || "";
+  const touchMac =
+    platform === "MacIntel" &&
+    typeof window.navigator.maxTouchPoints === "number" &&
+    window.navigator.maxTouchPoints > 1;
+
+  return /iPad|iPhone|iPod/i.test(platform) || /iPad|iPhone|iPod/i.test(userAgent) || touchMac;
+}
+
 function serializeSubscription(subscription: PushSubscription) {
   const json = subscription.toJSON();
 
@@ -47,20 +83,74 @@ export function isWebPushFeatureEnabled() {
 }
 
 export function isWebPushSupported() {
-  return (
-    typeof window !== "undefined" &&
-    "Notification" in window &&
-    "serviceWorker" in navigator &&
-    "PushManager" in window
-  );
+  return getWebPushClientSupport().browserSupported;
+}
+
+export function getWebPushClientSupport(): WebPushClientSupport {
+  if (typeof window === "undefined") {
+    return {
+      featureFlagEnabled: WEB_PUSH_FEATURE_ENABLED,
+      hasVapidPublicKey: VAPID_PUBLIC_KEY.length > 0,
+      secureContext: false,
+      hasServiceWorker: false,
+      hasPushManager: false,
+      hasNotification: false,
+      isIOSLike: false,
+      isStandalone: false,
+      requiresIOSInstall: false,
+      browserSupported: false,
+      canSubscribe: false,
+    };
+  }
+
+  const secureContext =
+    window.isSecureContext ||
+    window.location.hostname === "localhost" ||
+    window.location.hostname === "127.0.0.1";
+  const hasServiceWorker = "serviceWorker" in navigator;
+  const hasPushManager = "PushManager" in window;
+  const hasNotification = "Notification" in window;
+  const isIOSLike = isIOSLikeDevice();
+  const isStandalone = isStandaloneMode();
+  const requiresIOSInstall = isIOSLike && !isStandalone;
+  const browserSupported =
+    secureContext &&
+    hasServiceWorker &&
+    hasPushManager &&
+    hasNotification;
+  const canSubscribe =
+    WEB_PUSH_FEATURE_ENABLED &&
+    VAPID_PUBLIC_KEY.length > 0 &&
+    browserSupported &&
+    !requiresIOSInstall;
+
+  return {
+    featureFlagEnabled: WEB_PUSH_FEATURE_ENABLED,
+    hasVapidPublicKey: VAPID_PUBLIC_KEY.length > 0,
+    secureContext,
+    hasServiceWorker,
+    hasPushManager,
+    hasNotification,
+    isIOSLike,
+    isStandalone,
+    requiresIOSInstall,
+    browserSupported,
+    canSubscribe,
+  };
 }
 
 export async function requestWebPushPermissionFromUserAction() {
-  if (!WEB_PUSH_FEATURE_ENABLED) {
+  const support = getWebPushClientSupport();
+
+  if (!support.featureFlagEnabled || !support.hasVapidPublicKey) {
     return { granted: false as const, reason: "disabled" as const };
   }
 
-  if (!isWebPushSupported()) {
+  if (support.requiresIOSInstall) {
+    return { granted: false as const, reason: "ios_install_required" as const };
+  }
+
+  if (!support.browserSupported) {
     return { granted: false as const, reason: "unsupported" as const };
   }
 
@@ -93,11 +183,17 @@ export async function getWebPushStatus() {
 }
 
 export async function registerPushSubscriptionFromUserAction() {
-  if (!isWebPushFeatureEnabled()) {
+  const support = getWebPushClientSupport();
+
+  if (!support.featureFlagEnabled || !support.hasVapidPublicKey) {
     return { ok: false as const, reason: "disabled" as const };
   }
 
-  if (!isWebPushSupported()) {
+  if (support.requiresIOSInstall) {
+    return { ok: false as const, reason: "ios_install_required" as const };
+  }
+
+  if (!support.browserSupported) {
     return { ok: false as const, reason: "unsupported" as const };
   }
 
