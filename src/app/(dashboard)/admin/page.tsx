@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import { notFound } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSuperUserAccess } from "@/lib/auth/super-user.server";
@@ -29,7 +30,14 @@ export default async function AdminPage() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-4 md:p-8">
-      <div>
+      <div className="space-y-3">
+        <Link
+          href="/settings"
+          className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 transition-colors hover:text-slate-900"
+        >
+          <ArrowLeft size={16} />
+          Voltar às Configurações
+        </Link>
         <h1 className="text-2xl font-bold text-slate-900">Admin Beta</h1>
         <p className="mt-1 text-sm text-slate-500">
           Ferramentas internas para convite beta, links públicos e auditoria.

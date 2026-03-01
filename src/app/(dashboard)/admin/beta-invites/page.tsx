@@ -1,3 +1,5 @@
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import { notFound } from "next/navigation";
 import { BetaInvitesManager } from "@/components/admin/BetaInvitesManager";
 import { getSuperUserAccess } from "@/lib/auth/super-user.server";
@@ -9,7 +11,22 @@ export default async function AdminBetaInvitesPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl p-4 md:p-8">
+    <div className="mx-auto max-w-5xl space-y-4 p-4 md:p-8">
+      <div className="flex flex-wrap items-center gap-3">
+        <Link
+          href="/admin"
+          className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 transition-colors hover:text-slate-900"
+        >
+          <ArrowLeft size={16} />
+          Voltar ao Admin
+        </Link>
+        <Link
+          href="/settings"
+          className="text-sm font-medium text-slate-500 transition-colors hover:text-slate-900"
+        >
+          Configurações
+        </Link>
+      </div>
       <BetaInvitesManager />
     </div>
   );

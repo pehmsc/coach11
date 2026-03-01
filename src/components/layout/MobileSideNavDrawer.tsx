@@ -7,7 +7,6 @@ import { LogOut, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useUnreadNotifications } from "@/components/layout/use-unread-notifications";
 import { InstallPWAButton } from "@/components/pwa/InstallPWAButton";
-import { PushNotificationsControl } from "@/components/pwa/PushNotificationsControl";
 import {
   getMobileAppNavSections,
   getRoleLabel,
@@ -239,18 +238,12 @@ export function MobileSideNavDrawer({
         </nav>
 
         <div className="border-t border-slate-800 px-3 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-4">
-          {settingsSection?.title ? (
-            <p className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-              {settingsSection.title}
-            </p>
-          ) : null}
           <div className="space-y-1">
             <InstallPWAButton
               fullWidth
               variant="ghost"
               className="justify-start rounded-xl px-3 py-3 text-left text-sm font-medium text-slate-300 hover:bg-slate-800 hover:text-white"
             />
-            <PushNotificationsControl compact />
             {settingsSection?.items.map((item) => {
               const isActive = isNavItemActive(pathname, item);
               return (

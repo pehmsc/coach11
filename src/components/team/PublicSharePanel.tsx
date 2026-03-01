@@ -6,6 +6,11 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import {
+  forgetPublicShareUrl,
+  getStoredPublicShareUrl,
+  rememberPublicShareUrl,
+} from "@/lib/public-share-client";
 
 type PublicShareSummary = {
   id: string;
@@ -67,14 +72,17 @@ export function PublicSharePanel({ ageGroupId, canManage }: Props) {
             ? payload.error
             : "Não foi possível carregar o link público.";
         setShare(null);
+        setGeneratedUrl(null);
         setError(nextError);
         return;
       }
 
-      setShare(payload?.share ? (payload.share as PublicShareSummary) : null);
-      setGeneratedUrl(null);
+      const nextShare = payload?.share ? (payload.share as PublicShareSummary) : null;
+      setShare(nextShare);
+      setGeneratedUrl(nextShare ? getStoredPublicShareUrl(ageGroupId) : null);
     } catch {
       setShare(null);
+      setGeneratedUrl(null);
       setError("Erro de ligação ao carregar o link público.");
     } finally {
       setLoading(false);
@@ -112,6 +120,7 @@ export function PublicSharePanel({ ageGroupId, canManage }: Props) {
       }
 
       setShare(payload?.share ? (payload.share as PublicShareSummary) : null);
+      rememberPublicShareUrl(ageGroupId, payload.url as string);
       setGeneratedUrl(payload.url as string);
       toast.success("Link público gerado.");
     } catch {
@@ -154,6 +163,7 @@ export function PublicSharePanel({ ageGroupId, canManage }: Props) {
 
       setShare(null);
       setGeneratedUrl(null);
+      forgetPublicShareUrl(ageGroupId);
       setCopiedUrl(false);
       toast.success("Link público revogado.");
     } catch {
@@ -252,7 +262,7 @@ export function PublicSharePanel({ ageGroupId, canManage }: Props) {
             </div>
             {!generatedUrl ? (
               <p className="text-xs text-slate-500">
-                O token em claro não volta a aparecer depois de atualizares a página.
+                O link não está disponível neste navegador. Se precisares de o voltar a copiar aqui, gera um novo link.
               </p>
             ) : null}
             <Button

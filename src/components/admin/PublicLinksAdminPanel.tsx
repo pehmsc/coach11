@@ -1,10 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, Share2, Trash2 } from "lucide-react";
+import { Check, Copy, Loader2, Share2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import {
+  getStoredPublicShareUrl,
+} from "@/lib/public-share-client";
 
 type PublicLinkItem = {
   id: string;
@@ -31,6 +35,7 @@ export function PublicLinksAdminPanel() {
   const [links, setLinks] = useState<PublicLinkItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [revokingAgeGroupId, setRevokingAgeGroupId] = useState<string | null>(null);
+  const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
 
   useEffect(() => {
     void loadLinks();
@@ -78,6 +83,17 @@ export function PublicLinksAdminPanel() {
       toast.error("Erro de ligação ao revogar o link público.");
     } finally {
       setRevokingAgeGroupId(null);
+    }
+  }
+
+  async function handleCopy(url: string) {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedUrl(url);
+      toast.success("URL copiado.");
+      window.setTimeout(() => setCopiedUrl(null), 1600);
+    } catch {
+      toast.error("Não foi possível copiar o URL.");
     }
   }
 
@@ -132,6 +148,26 @@ export function PublicLinksAdminPanel() {
                   <p>Revogado em {link.revoked_at ? new Date(link.revoked_at).toLocaleString("pt-PT") : "Ativo"}</p>
                   <p>Age group ID: {link.age_group_id}</p>
                 </div>
+
+                {(() => {
+                  const storedUrl = getStoredPublicShareUrl(link.age_group_id);
+                  if (!storedUrl) {
+                    return (
+                      <p className="text-xs text-slate-500">
+                        O URL não está disponível neste navegador. Se precisares de o voltar a ver aqui, gera um novo link a partir do escalão.
+                      </p>
+                    );
+                  }
+
+                  return (
+                    <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
+                      <Input value={storedUrl} readOnly className="bg-white text-xs" />
+                      <Button type="button" variant="outline" size="icon" onClick={() => void handleCopy(storedUrl)}>
+                        {copiedUrl === storedUrl ? <Check size={16} className="text-emerald-600" /> : <Copy size={16} />}
+                      </Button>
+                    </div>
+                  );
+                })()}
 
                 {!link.revoked_at ? (
                   <Button

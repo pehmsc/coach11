@@ -136,7 +136,6 @@ const BASE_APP_NAV_SECTIONS: AppNavSection[] = [
   },
   {
     id: "settings",
-    title: "Configurações",
     items: [NAV_ITEMS.settings],
   },
 ];
@@ -156,7 +155,6 @@ const BASE_MOBILE_APP_NAV_SECTIONS: AppNavSection[] = [
   },
   {
     id: "settings",
-    title: "Configurações",
     items: [NAV_ITEMS.settings],
   },
 ];
