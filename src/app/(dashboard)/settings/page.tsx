@@ -7,7 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PushNotificationsControl } from "@/components/pwa/PushNotificationsControl";
-import { Loader2, User, Palette, Bell, Camera, AlertTriangle, Copy } from "lucide-react";
+import { BetaInvitesManager } from "@/components/admin/BetaInvitesManager";
+import { PublicSharePanel } from "@/components/team/PublicSharePanel";
+import { Loader2, User, Palette, Bell, Camera, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
 import { pt } from "date-fns/locale";
@@ -44,14 +46,8 @@ export default function SettingsPage() {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [deletingAccount, setDeletingAccount] = useState(false);
-  const [betaCoordinatorEmail, setBetaCoordinatorEmail] = useState("");
-  const [sendingBetaInvite, setSendingBetaInvite] = useState(false);
-  const [betaInviteResult, setBetaInviteResult] = useState<{
-    email: string;
-    onboardingUrl: string;
-    emailSent: boolean;
-    warning: string | null;
-  } | null>(null);
+  const [activeAgeGroupId, setActiveAgeGroupId] = useState<string | null>(null);
+  const [canManagePublicShare, setCanManagePublicShare] = useState(false);
 
   useEffect(() => {
     void loadProfile();
@@ -95,6 +91,38 @@ export default function SettingsPage() {
       setFullName(data.full_name || "");
       setPhone((data as Profile & { phone?: string }).phone || "");
     }
+
+    try {
+      const contextRes = await fetch("/api/me/context", { cache: "no-store" });
+      const contextPayload = await contextRes.json().catch(() => ({}));
+
+      if (contextRes.ok) {
+        const resolvedAgeGroupId =
+          typeof contextPayload?.ageGroup?.id === "string"
+            ? (contextPayload.ageGroup.id as string)
+            : null;
+        const isSuper =
+          (data as Profile | null)?.is_super_coordinator === true ||
+          contextPayload?.profile?.is_super_coordinator === true;
+
+        setActiveAgeGroupId(resolvedAgeGroupId);
+        setCanManagePublicShare(
+          contextPayload?.canManageStaff === true || isSuper,
+        );
+        if (isSuper) {
+          setProfile((prev) =>
+            prev ? { ...prev, is_super_coordinator: true } : prev,
+          );
+        }
+      } else {
+        setActiveAgeGroupId(null);
+        setCanManagePublicShare(false);
+      }
+    } catch {
+      setActiveAgeGroupId(null);
+      setCanManagePublicShare(false);
+    }
+
     setLoading(false);
   }
 
@@ -235,54 +263,6 @@ export default function SettingsPage() {
     } catch {
       toast.error("Erro de ligação ao apagar conta.");
       setDeletingAccount(false);
-    }
-  }
-
-  async function handleCreateBetaCoordinatorInvite(e: { preventDefault(): void }) {
-    e.preventDefault();
-
-    const normalizedEmail = betaCoordinatorEmail.trim().toLowerCase();
-    if (!normalizedEmail) {
-      toast.error("Indica um email válido.");
-      return;
-    }
-
-    setSendingBetaInvite(true);
-    try {
-      const res = await fetch("/api/admin/beta-invites/create-coordinator", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: normalizedEmail }),
-      });
-      const payload = await res.json().catch(() => ({}));
-
-      if (!res.ok || payload?.success !== true) {
-        toast.error(payload?.error || "Erro ao criar convite beta.");
-        return;
-      }
-
-      setBetaInviteResult({
-        email: payload.email,
-        onboardingUrl: payload.onboardingUrl,
-        emailSent: payload.emailSent === true,
-        warning:
-          typeof payload.warning === "string" ? payload.warning : null,
-      });
-      setBetaCoordinatorEmail("");
-      toast.success("Convite beta criado.");
-    } catch {
-      toast.error("Erro de ligação ao criar convite beta.");
-    } finally {
-      setSendingBetaInvite(false);
-    }
-  }
-
-  async function copyText(value: string) {
-    try {
-      await navigator.clipboard.writeText(value);
-      toast.success("Copiado.");
-    } catch {
-      toast.error("Não foi possível copiar.");
     }
   }
 
@@ -499,63 +479,19 @@ export default function SettingsPage() {
               {profile?.is_super_coordinator && (
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-base">Convites beta</CardTitle>
+                    <CardTitle className="text-base">Beta · Convites de Coordenador</CardTitle>
                   </CardHeader>
-                  <CardContent className="space-y-4">
-                    <p className="text-sm text-slate-500">
-                      Convida coordenadores beta para criarem o seu escalão na primeira entrada.
-                    </p>
-                    <form onSubmit={handleCreateBetaCoordinatorInvite} className="space-y-3">
-                      <div className="space-y-1.5">
-                        <Label>Email do coordenador beta</Label>
-                        <Input
-                          type="email"
-                          value={betaCoordinatorEmail}
-                          onChange={(e) => setBetaCoordinatorEmail(e.target.value)}
-                          placeholder="coordenador@email.com"
-                          required
-                        />
-                      </div>
-                      <Button
-                        type="submit"
-                        className="w-full bg-emerald-600 hover:bg-emerald-700"
-                        disabled={sendingBetaInvite}
-                      >
-                        {sendingBetaInvite ? (
-                          <Loader2 size={16} className="animate-spin mr-2" />
-                        ) : null}
-                        Criar convite beta
-                      </Button>
-                    </form>
-
-                    {betaInviteResult && (
-                      <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 space-y-2">
-                        <p className="text-sm font-semibold text-emerald-900">
-                          Convite preparado para {betaInviteResult.email}
-                        </p>
-                        <p className="text-xs text-emerald-800">
-                          {betaInviteResult.emailSent
-                            ? "Email enviado com sucesso."
-                            : betaInviteResult.warning ||
-                              "Email não enviado. Partilha o link manualmente."}
-                        </p>
-                        <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-white p-2">
-                          <code className="flex-1 truncate text-xs text-slate-700">
-                            {betaInviteResult.onboardingUrl}
-                          </code>
-                          <button
-                            type="button"
-                            onClick={() => void copyText(betaInviteResult.onboardingUrl)}
-                            className="rounded-lg p-1.5 text-emerald-700 hover:bg-emerald-100"
-                            title="Copiar link"
-                          >
-                            <Copy size={14} />
-                          </button>
-                        </div>
-                      </div>
-                    )}
+                  <CardContent>
+                    <BetaInvitesManager embedded />
                   </CardContent>
                 </Card>
+              )}
+
+              {activeAgeGroupId && (
+                <PublicSharePanel
+                  ageGroupId={activeAgeGroupId}
+                  canManage={canManagePublicShare}
+                />
               )}
             </>
           )}

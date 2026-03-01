@@ -37,6 +37,7 @@ import {
   isValidManualShortName,
   normalizeManualShortName,
 } from "@/lib/football/short-name";
+import { PublicSharePanel } from "@/components/team/PublicSharePanel";
 import type { AgeGroup, KitPiece, KitNumber, PlayerType, PieceType } from "@/types/database";
 
 const FOOTBALL_FORMATS = [
@@ -99,16 +100,6 @@ interface StaffInvite {
   invite_sent_at: string;
 }
 
-interface PublicShareTokenSummary {
-  id: string;
-  age_group_id: string;
-  expires_at: string | null;
-  revoked_at: string | null;
-  last_accessed_at: string | null;
-  access_count: number;
-  created_at: string;
-}
-
 const EMPTY_STAFF_FORM = {
   firstName: "",
   lastName: "",
@@ -163,10 +154,7 @@ export default function TeamSetupPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [accountRole, setAccountRole] = useState<string>("coordinator");
-  const [publicShare, setPublicShare] = useState<PublicShareTokenSummary | null>(null);
-  const [publicShareUrl, setPublicShareUrl] = useState<string | null>(null);
-  const [loadingPublicShare, setLoadingPublicShare] = useState(false);
-  const [managingPublicShare, setManagingPublicShare] = useState(false);
+  const [isSuperCoordinator, setIsSuperCoordinator] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -206,7 +194,10 @@ export default function TeamSetupPage() {
         typeof payload?.profile?.role === "string"
           ? (payload.profile.role as string)
           : "coordinator";
+      const incomingIsSuper =
+        payload?.profile?.is_super_coordinator === true;
       setAccountRole(incomingRole);
+      setIsSuperCoordinator(incomingIsSuper);
 
       if (!ag) {
         setExistingAgeGroup(null);
@@ -214,8 +205,6 @@ export default function TeamSetupPage() {
         setKitPieces([]);
         setActiveStaffProfileIds([]);
         setStaffInvites([]);
-        setPublicShare(null);
-        setPublicShareUrl(null);
         setLoading(false);
         return;
       }
@@ -252,36 +241,10 @@ export default function TeamSetupPage() {
       if (nextStaffInvites.length === 0) {
         setStaffInvitesExpanded(false);
       }
-      await loadPublicShare(ag.id);
     } catch {
       setError("Erro de ligação ao carregar a equipa.");
     } finally {
       setLoading(false);
-    }
-  }
-
-  async function loadPublicShare(ageGroupId: string) {
-    setLoadingPublicShare(true);
-
-    try {
-      const res = await fetch(
-        `/api/public-share?ageGroupId=${encodeURIComponent(ageGroupId)}`,
-        { cache: "no-store" },
-      );
-      const payload = await res.json().catch(() => ({}));
-
-      if (!res.ok) {
-        setPublicShare(null);
-        return;
-      }
-
-      setPublicShare(
-        payload?.share ? (payload.share as PublicShareTokenSummary) : null,
-      );
-    } catch {
-      setPublicShare(null);
-    } finally {
-      setLoadingPublicShare(false);
     }
   }
 
@@ -565,71 +528,6 @@ export default function TeamSetupPage() {
     navigator.clipboard.writeText(code);
     setCopiedCode(code);
     setTimeout(() => setCopiedCode(null), 2000);
-  }
-
-  async function handleGeneratePublicShare() {
-    if (!existingAgeGroup || accountRole !== "coordinator") {
-      setError("Apenas o coordenador pode gerar o link público.");
-      return;
-    }
-
-    setManagingPublicShare(true);
-    setError(null);
-    setPublicShareUrl(null);
-
-    try {
-      const res = await fetch("/api/public-share", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ageGroupId: existingAgeGroup.id }),
-      });
-      const payload = await res.json().catch(() => ({}));
-
-      if (!res.ok || payload?.success !== true) {
-        setError(payload?.error || "Erro ao gerar link público.");
-        return;
-      }
-
-      setPublicShare(
-        payload?.share ? (payload.share as PublicShareTokenSummary) : null,
-      );
-      setPublicShareUrl(typeof payload?.url === "string" ? payload.url : null);
-    } catch {
-      setError("Erro de ligação ao gerar link público.");
-    } finally {
-      setManagingPublicShare(false);
-    }
-  }
-
-  async function handleRevokePublicShare() {
-    if (!existingAgeGroup || accountRole !== "coordinator") {
-      setError("Apenas o coordenador pode revogar o link público.");
-      return;
-    }
-
-    setManagingPublicShare(true);
-    setError(null);
-
-    try {
-      const res = await fetch("/api/public-share", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ageGroupId: existingAgeGroup.id }),
-      });
-      const payload = await res.json().catch(() => ({}));
-
-      if (!res.ok || payload?.success !== true) {
-        setError(payload?.error || "Erro ao revogar link público.");
-        return;
-      }
-
-      setPublicShare(null);
-      setPublicShareUrl(null);
-    } catch {
-      setError("Erro de ligação ao revogar link público.");
-    } finally {
-      setManagingPublicShare(false);
-    }
   }
 
   if (loading)
@@ -962,104 +860,10 @@ export default function TeamSetupPage() {
 
       {/* ── SECÇÃO 4: LINK PÚBLICO ── */}
       {existingAgeGroup && (
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <CardTitle className="text-base">Link Público</CardTitle>
-                <CardDescription className="mt-1">
-                  Partilha calendario e jogos em modo so leitura com pais e fas.
-                </CardDescription>
-              </div>
-              {accountRole === "coordinator" && (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => void handleGeneratePublicShare()}
-                  disabled={managingPublicShare}
-                >
-                  {managingPublicShare ? (
-                    <Loader2 size={14} className="mr-2 animate-spin" />
-                  ) : (
-                    <Mail size={14} className="mr-2" />
-                  )}
-                  {publicShare ? "Gerar novo link" : "Gerar link publico"}
-                </Button>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {loadingPublicShare ? (
-              <p className="text-sm text-slate-400">A carregar link publico...</p>
-            ) : publicShare ? (
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
-                    Activo
-                  </span>
-                  <span className="text-xs text-slate-500">
-                    {publicShare.access_count} acesso{publicShare.access_count !== 1 ? "s" : ""}
-                  </span>
-                  {publicShare.last_accessed_at && (
-                    <span className="text-xs text-slate-500">
-                      Ultimo acesso:{" "}
-                      {new Date(publicShare.last_accessed_at).toLocaleString("pt-PT")}
-                    </span>
-                  )}
-                </div>
-                {publicShareUrl ? (
-                  <div className="space-y-2">
-                    <p className="text-xs text-slate-500">
-                      Copia este URL agora. Por seguranca, ele so volta a aparecer no momento da geracao.
-                    </p>
-                    <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white p-2">
-                      <code className="flex-1 truncate text-xs text-slate-700">
-                        {publicShareUrl}
-                      </code>
-                      <button
-                        type="button"
-                        onClick={() => copyCode(publicShareUrl)}
-                        className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-100"
-                        title="Copiar URL"
-                      >
-                        {copiedCode === publicShareUrl ? (
-                          <Check size={14} className="text-emerald-600" />
-                        ) : (
-                          <Copy size={14} />
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-xs text-slate-500">
-                    Existe um link activo. Se precisares do URL outra vez, gera um novo.
-                  </p>
-                )}
-                {accountRole === "coordinator" && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full border-red-200 text-red-600 hover:bg-red-50"
-                    onClick={() => void handleRevokePublicShare()}
-                    disabled={managingPublicShare}
-                  >
-                    Revogar link publico
-                  </Button>
-                )}
-              </div>
-            ) : (
-              <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4">
-                <p className="text-sm text-slate-600">
-                  Ainda nao existe link publico para este escalao.
-                </p>
-                <p className="mt-1 text-xs text-slate-400">
-                  O link mostra apenas jogos, calendario e convocatoria sanitizada, sempre em modo so leitura.
-                </p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <PublicSharePanel
+          ageGroupId={existingAgeGroup.id}
+          canManage={accountRole === "coordinator" || isSuperCoordinator}
+        />
       )}
 
       {/* ── SECÇÃO 5: EQUIPA TÉCNICA ── */}

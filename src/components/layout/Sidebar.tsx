@@ -8,7 +8,7 @@ import type { Profile } from "@/types/database";
 import { useUnreadNotifications } from "@/components/layout/use-unread-notifications";
 import { PushNotificationsControl } from "@/components/pwa/PushNotificationsControl";
 import {
-  APP_NAV_SECTIONS,
+  getAppNavSections,
   getRoleLabel,
   isNavItemActive,
 } from "@/components/layout/nav-config";
@@ -26,8 +26,9 @@ export function Sidebar({ profile, avatarUrl }: SidebarProps) {
   const unreadMessagesCount = useUnreadNotifications(profile?.id ?? null, {
     type: "message",
   });
-  const mainSection = APP_NAV_SECTIONS.find((section) => section.id === "main");
-  const settingsSection = APP_NAV_SECTIONS.find((section) => section.id === "settings");
+  const navSections = getAppNavSections(profile);
+  const mainSection = navSections.find((section) => section.id === "main");
+  const settingsSection = navSections.find((section) => section.id === "settings");
 
   async function handleLogout() {
     const supabase = createClient();

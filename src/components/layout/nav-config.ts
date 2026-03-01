@@ -18,6 +18,7 @@ export type NavProfile = {
   id: string;
   full_name?: string | null;
   role?: string | null;
+  is_super_coordinator?: boolean | null;
 } | null;
 
 export type AppNavBadgeKey = "notifications" | "messages";
@@ -115,9 +116,15 @@ const NAV_ITEMS = {
     label: "Configurações",
     icon: Settings,
   },
+  admin: {
+    id: "admin",
+    href: "/admin",
+    label: "Admin",
+    icon: Shield,
+  },
 } satisfies Record<string, AppNavItem>;
 
-export const APP_NAV_SECTIONS: AppNavSection[] = [
+const BASE_APP_NAV_SECTIONS: AppNavSection[] = [
   {
     id: "main",
     items: [
@@ -141,7 +148,7 @@ export const APP_NAV_SECTIONS: AppNavSection[] = [
   },
 ];
 
-export const MOBILE_APP_NAV_SECTIONS: AppNavSection[] = [
+const BASE_MOBILE_APP_NAV_SECTIONS: AppNavSection[] = [
   {
     id: "main",
     items: [
@@ -175,8 +182,39 @@ export const ROLE_LABELS: Record<string, string> = {
   parent: "Encarregado",
 };
 
-export function getNavSection(sectionId: AppNavSection["id"]) {
-  return APP_NAV_SECTIONS.find((section) => section.id === sectionId) || null;
+function cloneSections(sections: AppNavSection[]) {
+  return sections.map((section) => ({
+    ...section,
+    items: [...section.items],
+  }));
+}
+
+export function getAppNavSections(profile?: NavProfile) {
+  const sections = cloneSections(BASE_APP_NAV_SECTIONS);
+  if (profile?.is_super_coordinator) {
+    const settingsSection = sections.find((section) => section.id === "settings");
+    if (settingsSection) {
+      settingsSection.items = [NAV_ITEMS.admin, ...settingsSection.items];
+    }
+  }
+
+  return sections;
+}
+
+export function getMobileAppNavSections(profile?: NavProfile) {
+  const sections = cloneSections(BASE_MOBILE_APP_NAV_SECTIONS);
+  if (profile?.is_super_coordinator) {
+    const settingsSection = sections.find((section) => section.id === "settings");
+    if (settingsSection) {
+      settingsSection.items = [NAV_ITEMS.admin, ...settingsSection.items];
+    }
+  }
+
+  return sections;
+}
+
+export function getNavSection(sectionId: AppNavSection["id"], profile?: NavProfile) {
+  return getAppNavSections(profile).find((section) => section.id === sectionId) || null;
 }
 
 export function isNavItemActive(pathname: string, item: AppNavItem) {

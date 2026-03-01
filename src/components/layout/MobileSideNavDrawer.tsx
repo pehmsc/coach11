@@ -9,7 +9,7 @@ import { useUnreadNotifications } from "@/components/layout/use-unread-notificat
 import { InstallPWAButton } from "@/components/pwa/InstallPWAButton";
 import { PushNotificationsControl } from "@/components/pwa/PushNotificationsControl";
 import {
-  MOBILE_APP_NAV_SECTIONS,
+  getMobileAppNavSections,
   getRoleLabel,
   isNavItemActive,
   type NavProfile,
@@ -130,10 +130,11 @@ export function MobileSideNavDrawer({
     router.refresh();
   }
 
-  const mainSection = MOBILE_APP_NAV_SECTIONS.find(
+  const navSections = getMobileAppNavSections(profile);
+  const mainSection = navSections.find(
     (section) => section.id === "main",
   );
-  const settingsSection = MOBILE_APP_NAV_SECTIONS.find(
+  const settingsSection = navSections.find(
     (section) => section.id === "settings",
   );
 

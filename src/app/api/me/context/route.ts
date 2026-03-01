@@ -43,7 +43,7 @@ export async function GET() {
 
     const { data: profile } = await db
       .from("profiles")
-      .select("id, full_name, role, email, phone, avatar_url")
+      .select("id, full_name, role, email, phone, avatar_url, is_super_coordinator")
       .eq("id", user.id)
       .maybeSingle();
     const metadataAvatarUrl =

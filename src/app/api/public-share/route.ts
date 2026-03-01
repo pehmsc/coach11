@@ -9,6 +9,8 @@ import {
 } from "@/lib/public-share";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 
+export const runtime = "nodejs";
+
 const AgeGroupSchema = z.object({
   ageGroupId: z.string().uuid(),
 });
@@ -18,13 +20,21 @@ async function assertCanManagePublicShare(
   ageGroupId: string,
 ) {
   const admin = createAdminClient();
-  const { data: ageGroup, error } = await admin
-    .from("age_groups")
-    .select("id, coordinator_id")
-    .eq("id", ageGroupId)
-    .maybeSingle();
+  const [{ data: ageGroup, error: ageGroupError }, { data: profile, error: profileError }] =
+    await Promise.all([
+      admin
+        .from("age_groups")
+        .select("id, coordinator_id")
+        .eq("id", ageGroupId)
+        .maybeSingle(),
+      admin
+        .from("profiles")
+        .select("id, is_super_coordinator")
+        .eq("id", userId)
+        .maybeSingle(),
+    ]);
 
-  if (error) {
+  if (ageGroupError || profileError) {
     return {
       ok: false as const,
       response: NextResponse.json(
@@ -41,11 +51,14 @@ async function assertCanManagePublicShare(
     };
   }
 
-  if (ageGroup.coordinator_id !== userId) {
+  const isSuperCoordinator = profile?.is_super_coordinator === true;
+  const isAgeGroupCoordinator = ageGroup.coordinator_id === userId;
+
+  if (!isSuperCoordinator && !isAgeGroupCoordinator) {
     return {
       ok: false as const,
       response: NextResponse.json(
-        { error: "Apenas o coordenador pode gerir o link público." },
+        { error: "Apenas o coordenador do escalão pode gerir o link público." },
         { status: 403 },
       ),
     };
@@ -54,6 +67,8 @@ async function assertCanManagePublicShare(
   return {
     ok: true as const,
     admin,
+    isSuperCoordinator,
+    isAgeGroupCoordinator,
   };
 }
 
@@ -92,6 +107,13 @@ export async function GET(request: Request) {
 
     const access = await assertCanManagePublicShare(user.id, parsed.ageGroupId);
     if (!access.ok) return access.response;
+
+    console.log("[public-share.get] request", {
+      userId: user.id,
+      ageGroupId: parsed.ageGroupId,
+      isSuperCoordinator: access.isSuperCoordinator,
+      isAgeGroupCoordinator: access.isAgeGroupCoordinator,
+    });
 
     const nowIso = new Date().toISOString();
     const { data, error } = await access.admin
@@ -138,6 +160,13 @@ export async function POST(request: Request) {
     const access = await assertCanManagePublicShare(user.id, parsed.ageGroupId);
     if (!access.ok) return access.response;
 
+    console.log("[public-share.post] start", {
+      userId: user.id,
+      ageGroupId: parsed.ageGroupId,
+      isSuperCoordinator: access.isSuperCoordinator,
+      isAgeGroupCoordinator: access.isAgeGroupCoordinator,
+    });
+
     await access.admin
       .from("public_share_tokens")
       .update({ revoked_at: new Date().toISOString() })
@@ -165,11 +194,17 @@ export async function POST(request: Request) {
       );
     }
 
+    console.log("[public-share.post] success", {
+      userId: user.id,
+      ageGroupId: parsed.ageGroupId,
+      shareId: data.id,
+      createdAt: data.created_at,
+    });
+
     return NextResponse.json({
       success: true,
       share: data,
       url: buildPublicShareUrl(rawToken),
-      rawToken,
     });
   } catch (error) {
     return respondInternalError("api.public-share.post", error);
@@ -194,6 +229,13 @@ export async function DELETE(request: Request) {
     const access = await assertCanManagePublicShare(user.id, parsed.ageGroupId);
     if (!access.ok) return access.response;
 
+    console.log("[public-share.delete] start", {
+      userId: user.id,
+      ageGroupId: parsed.ageGroupId,
+      isSuperCoordinator: access.isSuperCoordinator,
+      isAgeGroupCoordinator: access.isAgeGroupCoordinator,
+    });
+
     const { error } = await access.admin
       .from("public_share_tokens")
       .update({ revoked_at: new Date().toISOString() })
@@ -206,6 +248,11 @@ export async function DELETE(request: Request) {
         { status: 500 },
       );
     }
+
+    console.log("[public-share.delete] success", {
+      userId: user.id,
+      ageGroupId: parsed.ageGroupId,
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {
