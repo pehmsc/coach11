@@ -10,7 +10,6 @@ type RouteContext = {
 const ALLOWED_TEAM_STAFF_ROLES = new Set([
   "head_coach",
   "assistant_coach",
-  "coordinator",
 ]);
 
 type TeamStaffRow = {

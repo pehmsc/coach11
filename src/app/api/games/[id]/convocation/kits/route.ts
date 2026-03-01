@@ -1,13 +1,13 @@
 import { createClient } from "@/lib/supabase/server";
+import {
+  assertConvocationWriteAllowed,
+  insertConvocationAuditLog,
+} from "@/lib/games/convocation-guard";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { NextResponse } from "next/server";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
-};
-
-type GameAccessContext = {
-  exists: boolean;
 };
 
 type KitSelectionPayload = {
@@ -18,14 +18,6 @@ type KitSelectionPayload = {
   gk_shorts_kit_id: string | null;
   gk_socks_kit_id: string | null;
 };
-
-function parseGameAccessContext(value: unknown): GameAccessContext | null {
-  if (!value || typeof value !== "object") return null;
-  const row = value as Record<string, unknown>;
-  return {
-    exists: row.exists === true,
-  };
-}
 
 const KIT_FIELD_RULES: Record<
   keyof KitSelectionPayload,
@@ -101,21 +93,20 @@ export async function POST(request: Request, { params }: RouteContext) {
 
     const body = await request.json().catch(() => null);
     const selection = normalizeKitSelection(body);
+    const correctionReason =
+      typeof body === "object" &&
+      body !== null &&
+      typeof (body as Record<string, unknown>).correctionReason === "string"
+        ? String((body as Record<string, unknown>).correctionReason)
+        : null;
 
-    const { data: accessData, error: accessError } = await supabase.rpc(
-      "rpc_game_access_context",
-      {
-        p_game_id: gameId,
-      },
+    const writeGuard = await assertConvocationWriteAllowed(
+      supabase,
+      gameId,
+      correctionReason,
     );
-
-    if (accessError) {
-      return NextResponse.json({ error: "Erro ao validar o jogo." }, { status: 500 });
-    }
-
-    const access = parseGameAccessContext(accessData);
-    if (!access?.exists) {
-      return NextResponse.json({ error: "Jogo não encontrado." }, { status: 404 });
+    if (!writeGuard.ok) {
+      return writeGuard.response;
     }
 
     const { data: game, error: gameError } = await supabase
@@ -288,6 +279,16 @@ export async function POST(request: Request, { params }: RouteContext) {
           { status: 500 },
         );
       }
+    }
+
+    if (writeGuard.requiresAudit && writeGuard.correctionReason) {
+      await insertConvocationAuditLog({
+        actorId: user.id,
+        gameId,
+        action: "convocation_kits_updated_after_completed",
+        correctionReason: writeGuard.correctionReason,
+        payload: selection,
+      });
     }
 
     return NextResponse.json({ success: true, kitSelection: selection });

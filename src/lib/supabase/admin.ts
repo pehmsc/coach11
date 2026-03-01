@@ -10,9 +10,9 @@ import { createClient, SupabaseClient } from "@supabase/supabase-js";
  * repeated initialization overhead.
  */
 
-let _cached: SupabaseClient<any> | null = null;
+let _cached: SupabaseClient | null = null;
 
-export function createAdminClient(): SupabaseClient<any> {
+export function createAdminClient(): SupabaseClient {
   if (_cached) return _cached;
 
   const url = (

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 
 type RouteContext = {
@@ -11,6 +12,7 @@ export async function DELETE(_request: Request, { params }: RouteContext) {
     const { id: inviteId } = await params;
 
     const supabase = await createClient();
+    const admin = createAdminClient();
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -68,6 +70,22 @@ export async function DELETE(_request: Request, { params }: RouteContext) {
           .in("team_id", teamIds)
           .eq("profile_id", invite.accepted_by);
       }
+    }
+
+    const { data: inviteEmailRow } = await supabase
+      .from("staff_invites")
+      .select("email")
+      .eq("id", invite.id)
+      .maybeSingle();
+
+    if (inviteEmailRow?.email) {
+      await admin
+        .from("beta_invites")
+        .update({
+          status: "revoked",
+          revoked_at: new Date().toISOString(),
+        })
+        .eq("email", inviteEmailRow.email.trim().toLowerCase());
     }
 
     const { error: deleteInviteError } = await supabase

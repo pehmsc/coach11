@@ -4,6 +4,7 @@ import { Resend } from "resend";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { checkInviteSendLimit } from "@/lib/rate-limit";
+import { normalizeEmail } from "@/lib/auth/beta-access";
 import { getCanonicalAppUrl } from "@/lib/config/canonical-app-url";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { resolveUserTeamContext } from "@/lib/auth/team-context";
@@ -22,13 +23,12 @@ const StaffInviteSchema = z.object({
   lastName: z.string().min(1).max(100),
   email: z.string().email().max(254),
   phone: z.string().max(20).nullable().optional(),
-  role: z.enum(["coach", "assistant_coach", "coordinator"]),
+  role: z.enum(["coach", "assistant_coach"]),
 });
 
 const roleLabel: Record<string, string> = {
   coach: "Treinador Principal",
   assistant_coach: "Treinador Adjunto",
-  coordinator: "Coordenador",
 };
 
 export async function POST(request: Request) {
@@ -87,6 +87,7 @@ export async function POST(request: Request) {
       );
     }
     const { firstName, lastName, email, phone, role } = parsed.data;
+    const normalizedEmail = normalizeEmail(email);
 
     // 🔑 Gerar código único
     let inviteCode = generateCode();
@@ -106,22 +107,58 @@ export async function POST(request: Request) {
     }
 
     // 💾 Guardar convite na DB
-    const { data: createdInvite, error: dbError } = await admin.from("staff_invites").insert({
-      club_id: ageGroup.club_id,
-      age_group_id: ageGroup.id,
-      invited_by: user.id,
-      first_name: firstName,
-      last_name: lastName,
-      email,
-      phone: phone || null,
-      role,
-      invite_code: inviteCode,
-    }).select("id").maybeSingle();
+    const { data: createdInvite, error: dbError } = await admin
+      .from("staff_invites")
+      .insert({
+        club_id: ageGroup.club_id,
+        age_group_id: ageGroup.id,
+        invited_by: user.id,
+        first_name: firstName,
+        last_name: lastName,
+        email: normalizedEmail,
+        phone: phone || null,
+        role,
+        invite_code: inviteCode,
+      })
+      .select("id")
+      .maybeSingle();
 
     if (dbError) {
       console.error("Erro ao criar convite:", dbError);
       return NextResponse.json(
         { error: "Erro ao criar convite" },
+        { status: 500 },
+      );
+    }
+
+    const betaInviteExpiresAt = new Date(
+      Date.now() + 30 * 24 * 60 * 60 * 1000,
+    ).toISOString();
+    const { error: betaInviteError } = await admin
+      .from("beta_invites")
+      .upsert({
+        email: normalizedEmail,
+        invite_type: "staff",
+        target_age_group_id: ageGroup.id,
+        created_by_profile_id: user.id,
+        status: "sent",
+        expires_at: betaInviteExpiresAt,
+        accepted_at: null,
+        revoked_at: null,
+        metadata: {
+          role,
+          firstName,
+          lastName,
+        },
+      }, {
+        onConflict: "email",
+      },
+    );
+
+    if (betaInviteError) {
+      await admin.from("staff_invites").delete().eq("id", createdInvite?.id ?? "");
+      return NextResponse.json(
+        { error: "Erro ao preparar o acesso beta do utilizador." },
         { status: 500 },
       );
     }
@@ -143,7 +180,7 @@ export async function POST(request: Request) {
 
     // 🔗 URL registo (base canónica, sem host headers)
     const appUrl = getCanonicalAppUrl();
-    const inviteUrl = `${appUrl}/invite?code=${inviteCode}&email=${encodeURIComponent(email)}`;
+    const inviteUrl = `${appUrl}/invite?code=${inviteCode}&email=${encodeURIComponent(normalizedEmail)}`;
 
     // 📧 Configuração Resend
     if (!process.env.RESEND_API_KEY) {
@@ -165,7 +202,7 @@ export async function POST(request: Request) {
     // ✉️ Enviar email
     const { data: emailData, error: emailError } = await resend.emails.send({
       from: fromEmail,
-      to: [email],
+      to: [normalizedEmail],
       subject: `Convite para juntar ao ${ageGroup.club_name} — ${ageGroup.name}`,
       html: `
         <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f8fafc;padding:20px;">

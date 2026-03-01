@@ -88,6 +88,14 @@ export default function JoinPage() {
       return;
     }
 
+    const urlCode = searchParams.get("code");
+    if (urlCode) {
+      setChecking(false);
+      setCode(urlCode);
+      void handleRedeemWithCode(urlCode);
+      return;
+    }
+
     // É coordinator?
     const { data: ageGroup } = await supabase
       .from("age_groups")
@@ -115,13 +123,6 @@ export default function JoinPage() {
     }
 
     setChecking(false);
-
-    // Auto-redeem se veio com código no URL
-    const urlCode = searchParams.get("code");
-    if (urlCode) {
-      setCode(urlCode);
-      void handleRedeemWithCode(urlCode);
-    }
   }, [handleRedeemWithCode, router, searchParams, supabase]);
 
   // Bootstrap da página de convite após montar.

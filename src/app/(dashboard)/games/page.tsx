@@ -293,7 +293,19 @@ export default function GamesPage() {
             {upcoming
               .slice()
               .sort((a, b) => new Date(a.game_datetime).getTime() - new Date(b.game_datetime).getTime())
-              .map((game) => <GameCard key={game.id} game={game} onClick={() => router.push(`/games/${game.id}`)} />)}
+              .map((game) => (
+                <GameCard
+                  key={game.id}
+                  game={game}
+                  onClick={() =>
+                    router.push(
+                      game.status === "completed"
+                        ? `/games/${game.id}/summary`
+                        : `/games/${game.id}`,
+                    )
+                  }
+                />
+              ))}
           </div>
         </section>
       )}
@@ -306,7 +318,19 @@ export default function GamesPage() {
             {past
               .slice()
               .sort((a, b) => new Date(b.game_datetime).getTime() - new Date(a.game_datetime).getTime())
-              .map((game) => <GameCard key={game.id} game={game} onClick={() => router.push(`/games/${game.id}`)} />)}
+              .map((game) => (
+                <GameCard
+                  key={game.id}
+                  game={game}
+                  onClick={() =>
+                    router.push(
+                      game.status === "completed"
+                        ? `/games/${game.id}/summary`
+                        : `/games/${game.id}`,
+                    )
+                  }
+                />
+              ))}
           </div>
         </section>
       )}

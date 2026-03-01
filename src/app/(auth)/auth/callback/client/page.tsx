@@ -39,6 +39,12 @@ function buildLoginRedirectUrl(next: string, errorCode: string) {
   return loginUrl.toString();
 }
 
+async function redirectToInviteOnly() {
+  const supabase = createClient();
+  await supabase.auth.signOut().catch(() => null);
+  window.location.replace("/invite-only?reason=beta_access_required");
+}
+
 function OAuthCallbackClientContent() {
   const searchParams = useSearchParams();
   const oauthCode = searchParams.get("code");
@@ -132,8 +138,23 @@ function OAuthCallbackClientContent() {
         attempts: 12,
         delayMs: 120,
       });
-      await fetch("/api/auth/ensure-profile", { method: "POST" }).catch(() => null);
-      await fetch("/api/invite/sync", { method: "POST" }).catch(() => null);
+      const ensureProfileRes = await fetch("/api/auth/ensure-profile", {
+        method: "POST",
+      }).catch(() => null);
+
+      if (ensureProfileRes?.status === 403) {
+        await redirectToInviteOnly();
+        return;
+      }
+
+      const inviteSyncRes = await fetch("/api/invite/sync", {
+        method: "POST",
+      }).catch(() => null);
+
+      if (inviteSyncRes?.status === 403) {
+        await redirectToInviteOnly();
+        return;
+      }
 
       if (!cancelled) {
         markIOSInstallPromptAfterLogin();

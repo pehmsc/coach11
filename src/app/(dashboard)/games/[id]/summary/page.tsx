@@ -279,17 +279,27 @@ export default function GameSummaryPage() {
             Modo Coordenador
           </p>
           {!editing ? (
-            <Button
-              onClick={() => {
-                setActionError(null);
-                setEditing(true);
-              }}
-              variant="outline"
-              className="border-amber-300 text-amber-900"
-            >
-              <RotateCcw size={14} className="mr-2" />
-              Refazer Final Stats
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                onClick={() => router.push(`/games/${id}?correction=1`)}
+                variant="outline"
+                className="border-amber-300 text-amber-900"
+              >
+                <RotateCcw size={14} className="mr-2" />
+                Corrigir convocatória
+              </Button>
+              <Button
+                onClick={() => {
+                  setActionError(null);
+                  setEditing(true);
+                }}
+                variant="outline"
+                className="border-amber-300 text-amber-900"
+              >
+                <RotateCcw size={14} className="mr-2" />
+                Refazer Final Stats
+              </Button>
+            </div>
           ) : (
             <div className="space-y-3">
               <div className="flex items-center gap-3">

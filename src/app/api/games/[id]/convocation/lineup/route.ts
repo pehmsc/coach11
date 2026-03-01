@@ -1,24 +1,14 @@
 import { createClient } from "@/lib/supabase/server";
+import {
+  assertConvocationWriteAllowed,
+  insertConvocationAuditLog,
+} from "@/lib/games/convocation-guard";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { NextResponse } from "next/server";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
 };
-
-type GameAccessContext = {
-  exists: boolean;
-  canWrite: boolean;
-};
-
-function parseGameAccessContext(value: unknown): GameAccessContext | null {
-  if (!value || typeof value !== "object") return null;
-  const row = value as Record<string, unknown>;
-  return {
-    exists: row.exists === true,
-    canWrite: row.canWrite === true,
-  };
-}
 
 export async function POST(request: Request, { params }: RouteContext) {
   try {
@@ -40,6 +30,8 @@ export async function POST(request: Request, { params }: RouteContext) {
       body?.lineupStatus === "on_field" || body?.lineupStatus === "substitute"
         ? (body.lineupStatus as "on_field" | "substitute")
         : null;
+    const correctionReason =
+      typeof body?.correctionReason === "string" ? body.correctionReason : null;
 
     if (!playerId || !lineupStatus) {
       return NextResponse.json(
@@ -48,30 +40,13 @@ export async function POST(request: Request, { params }: RouteContext) {
       );
     }
 
-    const { data: accessData, error: accessError } = await supabase.rpc(
-      "rpc_game_access_context",
-      {
-        p_game_id: gameId,
-      },
+    const writeGuard = await assertConvocationWriteAllowed(
+      supabase,
+      gameId,
+      correctionReason,
     );
-
-    if (accessError) {
-      return NextResponse.json(
-        { error: "Erro ao validar o jogo." },
-        { status: 500 },
-      );
-    }
-
-    const access = parseGameAccessContext(accessData);
-    if (!access?.exists) {
-      return NextResponse.json({ error: "Jogo não encontrado." }, { status: 404 });
-    }
-
-    if (!access.canWrite) {
-      return NextResponse.json(
-        { error: "Sem permissões para editar o lineup deste jogo." },
-        { status: 403 },
-      );
+    if (!writeGuard.ok) {
+      return writeGuard.response;
     }
 
     const { data: convocationRows } = await supabase
@@ -132,6 +107,15 @@ export async function POST(request: Request, { params }: RouteContext) {
         .eq("player_id", playerId);
 
       if (!updateError) {
+        if (writeGuard.requiresAudit && writeGuard.correctionReason) {
+          await insertConvocationAuditLog({
+            actorId: user.id,
+            gameId,
+            action: "convocation_lineup_updated_after_completed",
+            correctionReason: writeGuard.correctionReason,
+            payload: { playerId, lineupStatus },
+          });
+        }
         return NextResponse.json({ success: true, playerId, lineupStatus });
       }
 
@@ -154,6 +138,16 @@ export async function POST(request: Request, { params }: RouteContext) {
         { error: "Erro ao guardar lineup." },
         { status: 500 },
       );
+    }
+
+    if (writeGuard.requiresAudit && writeGuard.correctionReason) {
+      await insertConvocationAuditLog({
+        actorId: user.id,
+        gameId,
+        action: "convocation_lineup_created_after_completed",
+        correctionReason: writeGuard.correctionReason,
+        payload: { playerId, lineupStatus },
+      });
     }
 
     return NextResponse.json({ success: true, playerId, lineupStatus });

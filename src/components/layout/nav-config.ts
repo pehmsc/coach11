@@ -84,7 +84,7 @@ const NAV_ITEMS = {
   },
   team: {
     id: "team",
-    href: "/team",
+    href: "/team/setup",
     label: "Equipa",
     icon: Shield,
   },

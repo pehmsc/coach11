@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { differenceInMinutes, format, parseISO, subMinutes } from "date-fns";
 import { pt } from "date-fns/locale";
 import {
@@ -113,6 +113,8 @@ function normalizePieceTypeForKitKey(value: KitPieceRow["piece_type"]) {
 export default function GameDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const correctionMode = searchParams.get("correction") === "1";
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
@@ -154,11 +156,12 @@ export default function GameDetailPage() {
   const [editOpponentShortName, setEditOpponentShortName] = useState("");
   const [editLocation, setEditLocation] = useState("");
   const [savingGameEdit, setSavingGameEdit] = useState(false);
+  const [correctionReason, setCorrectionReason] = useState("");
 
   useEffect(() => {
     if (id) loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [id, correctionMode]);
 
   useEffect(() => {
     const interval = setInterval(() => setNow(new Date()), 30_000);
@@ -191,7 +194,7 @@ export default function GameDetailPage() {
       setCanEditCompleted(coordinatorCanEdit);
 
       const loadedGame = payload.game as Game;
-      if (loadedGame.status === "completed" && !coordinatorCanEdit) {
+      if (loadedGame.status === "completed" && (!coordinatorCanEdit || !correctionMode)) {
         router.replace(`/games/${id}/summary`);
         return;
       }
@@ -276,7 +279,37 @@ export default function GameDetailPage() {
     }
   }
 
+  function getCorrectionReasonForRequest() {
+    if (game?.status !== "completed") return null;
+
+    const normalizedReason = correctionReason.trim();
+    if (!normalizedReason) {
+      setError("Indica o motivo da correção antes de editar a convocatória.");
+      return null;
+    }
+
+    return normalizedReason;
+  }
+
+  function buildConvocationPayload(base: Record<string, unknown>) {
+    const normalizedReason = getCorrectionReasonForRequest();
+    if (game?.status === "completed" && !normalizedReason) {
+      return null;
+    }
+
+    return normalizedReason
+      ? { ...base, correctionReason: normalizedReason }
+      : base;
+  }
+
   async function handleTacticalChange(formation: string) {
+    const previousFormation = tacticalSystem;
+    const payload = buildConvocationPayload({ tacticalSystem: formation });
+    if (!payload) {
+      setTacticalSystem(previousFormation ?? null);
+      return;
+    }
+
     setSavingTactical(true);
     setError(null);
     setTacticalSystem(formation || null);
@@ -285,16 +318,18 @@ export default function GameDetailPage() {
       const res = await fetch(`/api/games/${id}/convocation/tactical`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tacticalSystem: formation }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const payload = await res.json().catch(() => ({}));
+        setTacticalSystem(previousFormation ?? null);
         setError(
           (payload as { error?: string })?.error ||
             "Erro ao guardar sistema táctico.",
         );
       }
     } catch {
+      setTacticalSystem(previousFormation ?? null);
       setError("Erro de ligação ao guardar sistema táctico.");
     } finally {
       setSavingTactical(false);
@@ -322,11 +357,24 @@ export default function GameDetailPage() {
     setError(null);
     setLineupStatuses((prev) => ({ ...prev, [playerId]: newStatus }));
 
+    const payload = buildConvocationPayload({
+      playerId,
+      lineupStatus: newStatus,
+    });
+    if (!payload) {
+      setLineupStatuses((prev) => ({
+        ...prev,
+        [playerId]: current ?? "substitute",
+      }));
+      setSavingLineupPlayer(null);
+      return;
+    }
+
     try {
       const res = await fetch(`/api/games/${id}/convocation/lineup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ playerId, lineupStatus: newStatus }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const payload = await res.json().catch(() => ({}));
@@ -427,23 +475,29 @@ export default function GameDetailPage() {
     setError(null);
 
     try {
+      const requestBody = buildConvocationPayload(nextSelection);
+      if (!requestBody) {
+        setSavingKitSelection(false);
+        return;
+      }
+
       const res = await fetch(`/api/games/${id}/convocation/kits`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(nextSelection),
+        body: JSON.stringify(requestBody),
       });
-      const payload = await res.json().catch(() => ({}));
+      const responseBody = await res.json().catch(() => ({}));
 
       if (!res.ok) {
         setError(
-          payload?.error || "Erro ao guardar equipamentos da convocatória.",
+          responseBody?.error || "Erro ao guardar equipamentos da convocatória.",
         );
         return;
       }
 
       const responseSelection =
-        typeof payload?.kitSelection === "object" && payload.kitSelection
-          ? (payload.kitSelection as Partial<KitSelection>)
+        typeof responseBody?.kitSelection === "object" && responseBody.kitSelection
+          ? (responseBody.kitSelection as Partial<KitSelection>)
           : null;
 
       const savedSelection: KitSelection = {
@@ -467,20 +521,26 @@ export default function GameDetailPage() {
     setSaving(player.id);
     setError(null);
 
+    const payload = buildConvocationPayload({ playerId: player.id });
+    if (!payload) {
+      setSaving(null);
+      return;
+    }
+
     try {
       const res = await fetch(`/api/games/${id}/convocation/toggle`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ playerId: player.id }),
+        body: JSON.stringify(payload),
       });
 
-      const payload = await res.json().catch(() => ({}));
+      const responseBody = await res.json().catch(() => ({}));
 
-      if (!res.ok || typeof payload?.isConvocated !== "boolean") {
-        setError(payload?.error || "Erro ao atualizar convocatória.");
+      if (!res.ok || typeof responseBody?.isConvocated !== "boolean") {
+        setError(responseBody?.error || "Erro ao atualizar convocatória.");
       } else {
         setConvocationStatus("draft");
-        const newIsConvocated = payload.isConvocated as boolean;
+        const newIsConvocated = responseBody.isConvocated as boolean;
         setPlayers((prev) =>
           prev.map((p) =>
             p.id === player.id ? { ...p, isConvocated: newIsConvocated } : p,
@@ -499,14 +559,22 @@ export default function GameDetailPage() {
     setConfirmingConvocation(true);
     setError(null);
 
+    const payload = buildConvocationPayload({});
+    if (!payload) {
+      setConfirmingConvocation(false);
+      return;
+    }
+
     try {
       const res = await fetch(`/api/games/${id}/convocation/confirm`, {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
       });
-      const payload = await res.json().catch(() => ({}));
+      const responseBody = await res.json().catch(() => ({}));
 
-      if (!res.ok || payload?.status !== "confirmed") {
-        setError(payload?.error || "Erro ao guardar convocatória.");
+      if (!res.ok || responseBody?.status !== "confirmed") {
+        setError(responseBody?.error || "Erro ao guardar convocatória.");
         return;
       }
 
@@ -610,11 +678,17 @@ export default function GameDetailPage() {
         delete next[playerId];
         return next;
       });
-      await fetch(`/api/games/${id}/convocation/lineup`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ playerId, lineupStatus: "substitute" }),
-      }).catch(() => null);
+      const payload = buildConvocationPayload({
+        playerId,
+        lineupStatus: "substitute",
+      });
+      if (payload) {
+        await fetch(`/api/games/${id}/convocation/lineup`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        }).catch(() => null);
+      }
       return;
     }
 
@@ -626,11 +700,14 @@ export default function GameDetailPage() {
       currentStarters < format ? "on_field" : "substitute";
 
     setLineupStatuses((prev) => ({ ...prev, [playerId]: newStatus }));
-    await fetch(`/api/games/${id}/convocation/lineup`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ playerId, lineupStatus: newStatus }),
-    }).catch(() => null);
+    const nextPayload = buildConvocationPayload({ playerId, lineupStatus: newStatus });
+    if (nextPayload) {
+      await fetch(`/api/games/${id}/convocation/lineup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(nextPayload),
+      }).catch(() => null);
+    }
   }
 
   const convocatedCount = players.filter((p) => p.isConvocated).length;
@@ -710,6 +787,12 @@ export default function GameDetailPage() {
   const minutesUntilLive = liveUnlockAt
     ? Math.max(0, differenceInMinutes(liveUnlockAt, now))
     : 0;
+  const convocationEditable =
+    game.status === "scheduled" ||
+    (game.status === "completed" &&
+      correctionMode &&
+      canEditCompleted &&
+      correctionReason.trim().length > 0);
 
   return (
     <div className="p-4 md:p-8 max-w-2xl mx-auto">
@@ -724,7 +807,7 @@ export default function GameDetailPage() {
       {/* Game header */}
       <div className="rounded-2xl bg-blue-600 text-white p-5 mb-5 relative">
         <div className="absolute top-3 right-3 flex items-center gap-1.5">
-          {(game.status !== "completed" || canEditCompleted) && (
+          {game.status !== "completed" && (
             <button
               onClick={openEditGame}
               className="p-1.5 rounded-full bg-white/20 hover:bg-white/30 transition-colors"
@@ -733,7 +816,7 @@ export default function GameDetailPage() {
               <Pencil size={14} />
             </button>
           )}
-          {canEditCompleted && (
+          {game.status !== "completed" && canEditCompleted && (
             <button
               onClick={() => setShowDeleteConfirm(true)}
               className="p-1.5 rounded-full bg-red-500/80 hover:bg-red-500 transition-colors"
@@ -783,6 +866,41 @@ export default function GameDetailPage() {
           )}
         </div>
       </div>
+
+      {game.status === "completed" && correctionMode && canEditCompleted && (
+        <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase text-amber-800">
+                Correção controlada
+              </p>
+              <p className="text-sm text-amber-900">
+                Indica o motivo da correção. Todas as alterações ficam auditadas.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => router.replace(`/games/${id}/summary`)}
+            >
+              Voltar ao sumário
+            </Button>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-amber-900">
+              Motivo da correção
+            </label>
+            <input
+              type="text"
+              value={correctionReason}
+              onChange={(event) => setCorrectionReason(event.target.value)}
+              placeholder="Ex: corrigir convocados finais após validação interna"
+              className="w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-400"
+            />
+          </div>
+        </div>
+      )}
 
       {/* Edit game modal */}
       {editingGame && (
@@ -998,6 +1116,7 @@ export default function GameDetailPage() {
                 setKitDraftSelection(kitSelection);
                 setKitEditorOpen(true);
               }}
+              disabled={!convocationEditable}
             >
               Editar kit
             </Button>
@@ -1212,7 +1331,7 @@ export default function GameDetailPage() {
                   onRemove={() => void togglePlayer(player)}
                   savingToggle={saving === player.id}
                   savingLineup={savingLineupPlayer === player.id}
-                  disabled={game.status === "completed"}
+                  disabled={!convocationEditable}
                 />
               ))}
             </div>
@@ -1244,7 +1363,7 @@ export default function GameDetailPage() {
                   onRemove={() => void togglePlayer(player)}
                   savingToggle={saving === player.id}
                   savingLineup={savingLineupPlayer === player.id}
-                  disabled={game.status === "completed"}
+                  disabled={!convocationEditable}
                 />
               ))}
             </div>
@@ -1263,7 +1382,7 @@ export default function GameDetailPage() {
                   onValueChange={(v) =>
                     void handleTacticalChange(v === "__none__" ? "" : v)
                   }
-                  disabled={savingTactical || game.status === "completed"}
+                  disabled={savingTactical || !convocationEditable}
                 >
                   <SelectTrigger className="h-9">
                     <SelectValue placeholder="Seleciona a formação" />
@@ -1295,7 +1414,7 @@ export default function GameDetailPage() {
                   disabled={
                     saving === player.id ||
                     player.isBlocked ||
-                    game.status === "completed"
+                    !convocationEditable
                   }
                   className={`w-full flex items-center gap-3 p-3 rounded-xl mb-1.5 text-left border-2 transition-colors ${
                     player.isBlocked
@@ -1348,7 +1467,8 @@ export default function GameDetailPage() {
         disabled={
           confirmingConvocation ||
           convocatedCount === 0 ||
-          convocationStatus === "closed"
+          convocationStatus === "closed" ||
+          !convocationEditable
         }
         className="w-full mt-5 bg-slate-900 hover:bg-slate-800"
       >
@@ -1357,7 +1477,7 @@ export default function GameDetailPage() {
         ) : (
           <Check size={16} className="mr-2" />
         )}
-        Guardar convocatória
+        {game.status === "completed" ? "Guardar correção" : "Guardar convocatória"}
       </Button>
     </div>
   );

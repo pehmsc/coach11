@@ -25,21 +25,6 @@ export async function POST() {
       return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
     }
 
-    const { data: existingStaff, error: existingStaffError } = await supabase
-      .from("team_staff")
-      .select("id")
-      .eq("profile_id", user.id)
-      .limit(1)
-      .maybeSingle();
-
-    if (existingStaffError) {
-      return respondInternalError("api.invite.sync.post.lookup_team_staff", existingStaffError);
-    }
-
-    if (existingStaff) {
-      return NextResponse.json({ success: true, linked: true, source: "team_staff" });
-    }
-
     let invite: StaffInviteRow | null = null;
 
     if (user.email) {
@@ -76,6 +61,24 @@ export async function POST() {
     }
 
     if (!invite) {
+      const { data: existingStaff, error: existingStaffError } = await supabase
+        .from("team_staff")
+        .select("id")
+        .eq("profile_id", user.id)
+        .limit(1)
+        .maybeSingle();
+
+      if (existingStaffError) {
+        return respondInternalError(
+          "api.invite.sync.post.lookup_team_staff",
+          existingStaffError,
+        );
+      }
+
+      if (existingStaff) {
+        return NextResponse.json({ success: true, linked: true, source: "team_staff" });
+      }
+
       return NextResponse.json({ success: true, linked: false });
     }
 

@@ -30,13 +30,11 @@ import { toast } from "sonner";
 const INVITE_ROLE_OPTIONS = [
   { value: "coach", label: "Treinador Principal" },
   { value: "assistant_coach", label: "Treinador Adjunto" },
-  { value: "coordinator", label: "Coordenador" },
 ];
 
 const STAFF_ROLE_OPTIONS = [
   { value: "head_coach", label: "Treinador Principal" },
   { value: "assistant_coach", label: "Treinador Adjunto" },
-  { value: "coordinator", label: "Coordenador" },
 ];
 
 const ROLE_LABELS: Record<string, string> = {

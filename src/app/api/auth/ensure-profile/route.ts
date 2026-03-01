@@ -1,10 +1,17 @@
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  getActiveBetaInviteForEmail,
+  isSuperCoordinatorEmail,
+  markBetaInviteAccepted,
+} from "@/lib/auth/beta-access";
 import { NextResponse } from "next/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 
 export async function POST() {
   try {
     const supabase = await createClient();
+    const admin = createAdminClient();
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -13,29 +20,35 @@ export async function POST() {
       return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
     }
 
-    const { data: existingProfile } = await supabase
+    const activeBetaInvite = await getActiveBetaInviteForEmail(user.email ?? null, admin);
+    if (!activeBetaInvite) {
+      return NextResponse.json(
+        { error: "Acesso beta por convite obrigatório." },
+        { status: 403 },
+      );
+    }
+
+    const { data: existingProfile, error: existingProfileError } = await admin
       .from("profiles")
-      .select("id, full_name, role, email, avatar_url")
+      .select("id, full_name, role, email, avatar_url, is_super_coordinator")
       .eq("id", user.id)
       .maybeSingle();
 
-    let resolvedRole: "coordinator" | "coach" = "coordinator";
-    if (user.email) {
-      const { data: inviteByEmail } = await supabase
-        .from("staff_invites")
-        .select("role")
-        .ilike("email", user.email)
-        .order("accepted_at", { ascending: false, nullsFirst: false })
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (inviteByEmail?.role && inviteByEmail.role !== "coordinator") {
-        resolvedRole = "coach";
-      } else if (inviteByEmail?.role === "coordinator") {
-        resolvedRole = "coordinator";
-      }
+    if (existingProfileError) {
+      return NextResponse.json(
+        { error: "Não foi possível validar o perfil." },
+        { status: 500 },
+      );
     }
+
+    const shouldBeCoordinator =
+      existingProfile?.role === "coordinator" ||
+      activeBetaInvite.invite_type === "beta_coordinator" ||
+      isSuperCoordinatorEmail(user.email ?? null);
+
+    const resolvedRole: "coordinator" | "coach" = shouldBeCoordinator
+      ? "coordinator"
+      : "coach";
 
     const fullName =
       user.user_metadata?.full_name ||
@@ -48,14 +61,19 @@ export async function POST() {
       user.user_metadata?.picture ||
       existingProfile?.avatar_url ||
       null;
+    const normalizedEmail = typeof user.email === "string"
+      ? user.email.trim().toLowerCase()
+      : null;
+    const isSuperCoordinator = isSuperCoordinatorEmail(normalizedEmail);
 
     if (!existingProfile) {
-      const { error: insertError } = await supabase.from("profiles").insert({
+      const { error: insertError } = await admin.from("profiles").insert({
         id: user.id,
         full_name: fullName,
         role: resolvedRole,
-        email: user.email ?? null,
+        email: normalizedEmail,
         avatar_url: avatarUrl,
+        is_super_coordinator: isSuperCoordinator,
       });
 
       if (insertError) {
@@ -67,16 +85,37 @@ export async function POST() {
     } else {
       const updates: Record<string, unknown> = {};
       if (!existingProfile.full_name && fullName) updates.full_name = fullName;
-      if (!existingProfile.role && resolvedRole) updates.role = resolvedRole;
-      if (user.email && existingProfile.email !== user.email) updates.email = user.email;
+      if (existingProfile.role !== resolvedRole) updates.role = resolvedRole;
+      if (normalizedEmail && existingProfile.email !== normalizedEmail) {
+        updates.email = normalizedEmail;
+      }
       if (!existingProfile.avatar_url && avatarUrl) updates.avatar_url = avatarUrl;
+      if (existingProfile.is_super_coordinator !== isSuperCoordinator) {
+        updates.is_super_coordinator = isSuperCoordinator;
+      }
 
       if (Object.keys(updates).length > 0) {
-        await supabase.from("profiles").update(updates).eq("id", user.id);
+        const { error: updateError } = await admin
+          .from("profiles")
+          .update(updates)
+          .eq("id", user.id);
+
+        if (updateError) {
+          return NextResponse.json(
+            { error: "Não foi possível atualizar o perfil." },
+            { status: 500 },
+          );
+        }
       }
     }
 
-    return NextResponse.json({ success: true });
+    await markBetaInviteAccepted(normalizedEmail, admin);
+
+    return NextResponse.json({
+      success: true,
+      betaAllowed: true,
+      inviteType: activeBetaInvite.invite_type,
+    });
   } catch (error) {
     return respondInternalError("api.auth.ensure-profile.post", error);
   }

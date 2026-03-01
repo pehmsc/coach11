@@ -1,4 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
+import {
+  assertConvocationWriteAllowed,
+  insertConvocationAuditLog,
+} from "@/lib/games/convocation-guard";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { NextResponse } from "next/server";
 
@@ -49,6 +53,17 @@ export async function POST(request: Request, { params }: RouteContext) {
       typeof body?.tacticalSystem === "string"
         ? body.tacticalSystem.trim()
         : null;
+    const correctionReason =
+      typeof body?.correctionReason === "string" ? body.correctionReason : null;
+
+    const writeGuard = await assertConvocationWriteAllowed(
+      supabase,
+      gameId,
+      correctionReason,
+    );
+    if (!writeGuard.ok) {
+      return writeGuard.response;
+    }
 
     const rpcResult = await supabase.rpc("rpc_update_game_tactical_auth", {
       p_game_id: gameId,
@@ -67,6 +82,16 @@ export async function POST(request: Request, { params }: RouteContext) {
     if (!result?.ok) {
       const mapped = mapTacticalError(result?.error_code);
       return NextResponse.json(mapped.body, { status: mapped.status });
+    }
+
+    if (writeGuard.requiresAudit && writeGuard.correctionReason) {
+      await insertConvocationAuditLog({
+        actorId: user.id,
+        gameId,
+        action: "convocation_tactical_updated_after_completed",
+        correctionReason: writeGuard.correctionReason,
+        payload: { tacticalSystem },
+      });
     }
 
     return NextResponse.json({ success: true, tacticalSystem });

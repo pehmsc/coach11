@@ -24,8 +24,10 @@ export interface Profile {
   id: string;
   full_name: string;
   role: UserRole;
+  email?: string | null;
   phone?: string;
   avatar_url?: string;
+  is_super_coordinator?: boolean;
   created_at: string;
 }
 

@@ -4,6 +4,7 @@ import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { waitForSessionPersistence } from "@/lib/supabase/browser-session";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,6 +31,23 @@ function RegisterForm() {
 
   const inviteCode = sp.get("code") ?? sp.get("inviteCode") ?? null;
 
+  async function checkBetaAccess(emailToCheck: string) {
+    const res = await fetch("/api/auth/beta-access/check", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: emailToCheck }),
+    });
+    const payload = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      throw new Error(
+        (payload as { error?: string })?.error || "Erro ao validar acesso beta.",
+      );
+    }
+
+    return (payload as { allowed?: boolean }).allowed === true;
+  }
+
   async function handleRegister(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
@@ -40,13 +58,28 @@ function RegisterForm() {
       setLoading(false);
       return;
     }
+
+    const normalizedEmail = email.trim().toLowerCase();
+
+    try {
+      const allowed = await checkBetaAccess(normalizedEmail);
+      if (!allowed) {
+        router.replace("/invite-only?reason=beta_access_required");
+        return;
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao validar acesso beta.");
+      setLoading(false);
+      return;
+    }
+
     const supabase = createClient();
     const next = inviteCode ? `/dashboard?code=${inviteCode}` : "/dashboard";
     const callbackUrl = new URL("/auth/callback/client", window.location.origin);
     callbackUrl.searchParams.set("next", next);
 
     const { data, error } = await supabase.auth.signUp({
-      email,
+      email: normalizedEmail,
       password,
       options: {
         data: { full_name: fullName, role: "coordinator" },
@@ -61,6 +94,20 @@ function RegisterForm() {
     if (!data.session) {
       setNotice("Conta criada. Confirma o teu email para concluir o registo e entrar.");
       setLoading(false);
+      return;
+    }
+
+    await waitForSessionPersistence(supabase, {
+      attempts: 10,
+      delayMs: 100,
+    });
+    const ensureProfileRes = await fetch("/api/auth/ensure-profile", {
+      method: "POST",
+    }).catch(() => null);
+
+    if (ensureProfileRes?.status === 403) {
+      await supabase.auth.signOut().catch(() => null);
+      router.replace("/invite-only?reason=beta_access_required");
       return;
     }
 
