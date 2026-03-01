@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import { pt } from "date-fns/locale";
-import { CalendarDays, Clock3, MapPin } from "lucide-react";
+import { CalendarDays, Clock3, Dumbbell, MapPin, Swords } from "lucide-react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   buildPublicGameRef,
@@ -28,6 +28,37 @@ type PublicGameRow = {
   score_away: number | null;
 };
 
+type PublicTrainingRow = {
+  id: string;
+  title: string | null;
+  session_date: string;
+  start_time: string | null;
+  end_time: string | null;
+  location: string | null;
+  status: string | null;
+};
+
+type PublicCalendarItem =
+  | {
+      kind: "game";
+      id: string;
+      startsAt: string;
+      location: string | null;
+      status: string | null;
+      href: string;
+      title: string;
+      meta: string;
+    }
+  | {
+      kind: "training";
+      id: string;
+      startsAt: string;
+      location: string | null;
+      status: string | null;
+      title: string;
+      meta: string;
+    };
+
 function formatGameDate(value: string | null | undefined) {
   if (!value) return "Data por definir";
 
@@ -38,6 +69,14 @@ function formatGameDate(value: string | null | undefined) {
   }
 }
 
+function buildTrainingDateTime(
+  sessionDate: string | null | undefined,
+  startTime: string | null | undefined,
+) {
+  if (!sessionDate) return null;
+  return `${sessionDate}T${startTime || "00:00"}:00`;
+}
+
 function gameStatusLabel(status: string | null | undefined) {
   switch (status) {
     case "live":
@@ -46,6 +85,19 @@ function gameStatusLabel(status: string | null | undefined) {
       return "Terminado";
     case "cancelled":
       return "Cancelado";
+    default:
+      return "Agendado";
+  }
+}
+
+function trainingStatusLabel(status: string | null | undefined) {
+  switch (status) {
+    case "completed":
+      return "Concluído";
+    case "cancelled":
+      return "Cancelado";
+    case "live":
+      return "A decorrer";
     default:
       return "Agendado";
   }
@@ -85,7 +137,9 @@ export default async function PublicCalendarPage({ params }: PublicPageParams) {
     notFound();
   }
 
-  const [{ data: ageGroup }, upcomingRes, recentRes] = await Promise.all([
+  const todayIsoDate = new Date().toISOString().slice(0, 10);
+
+  const [{ data: ageGroup }, upcomingGamesRes, upcomingTrainingsRes, recentRes] = await Promise.all([
     admin
       .from("age_groups")
       .select("club_name, name")
@@ -101,6 +155,14 @@ export default async function PublicCalendarPage({ params }: PublicPageParams) {
       .order("game_datetime", { ascending: true })
       .limit(12),
     admin
+      .from("training_sessions")
+      .select("id, title, session_date, start_time, end_time, location, status")
+      .eq("age_group_id", share.age_group_id)
+      .gte("session_date", todayIsoDate)
+      .order("session_date", { ascending: true })
+      .order("start_time", { ascending: true, nullsFirst: false })
+      .limit(12),
+    admin
       .from("games")
       .select(
         "id, game_datetime, opponent_name, opponent_short_name, location, is_home, status, score_home, score_away",
@@ -111,8 +173,35 @@ export default async function PublicCalendarPage({ params }: PublicPageParams) {
       .limit(6),
   ]);
 
-  const upcomingGames = (upcomingRes.data || []) as PublicGameRow[];
+  const upcomingGames = (upcomingGamesRes.data || []) as PublicGameRow[];
+  const upcomingTrainings = (upcomingTrainingsRes.data || []) as PublicTrainingRow[];
   const recentGames = (recentRes.data || []) as PublicGameRow[];
+  const upcomingEvents = [
+    ...upcomingGames.map((game) => ({
+      kind: "game" as const,
+      id: game.id,
+      startsAt: game.game_datetime,
+      location: game.location,
+      status: game.status,
+      href: `/public/${token}/games/${buildPublicGameRef(token, game.id)}`,
+      title: gameTitle(game),
+      meta: formatGameDate(game.game_datetime),
+    })),
+    ...upcomingTrainings.map((training) => {
+      const startsAt = buildTrainingDateTime(training.session_date, training.start_time);
+      return {
+        kind: "training" as const,
+        id: training.id,
+        startsAt: startsAt || training.session_date,
+        location: training.location,
+        status: training.status,
+        title: training.title?.trim() || "Treino",
+        meta: formatGameDate(startsAt),
+      };
+    }),
+  ]
+    .sort((a, b) => a.startsAt.localeCompare(b.startsAt))
+    .slice(0, 16) as PublicCalendarItem[];
 
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-8">
@@ -125,49 +214,74 @@ export default async function PublicCalendarPage({ params }: PublicPageParams) {
             {ageGroup?.club_name || "Coach11"} · {ageGroup?.name || "Calendário"}
           </h1>
           <p className="mt-3 max-w-2xl text-sm text-slate-300">
-            Vista só leitura para pais e fãs. Mostra apenas calendário, jogos e dados públicos do escalão.
+            Vista só leitura para pais e fãs. Mostra apenas calendário, jogos, treinos e dados públicos do escalão.
           </p>
         </section>
 
         <section className="space-y-3">
           <div className="flex items-center gap-2 text-slate-700">
             <CalendarDays size={18} />
-            <h2 className="text-lg font-semibold">Próximos jogos</h2>
+            <h2 className="text-lg font-semibold">Próximos eventos</h2>
           </div>
 
-          {upcomingGames.length === 0 ? (
+          {upcomingEvents.length === 0 ? (
             <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-500">
-              Sem jogos agendados.
+              Sem jogos ou treinos agendados.
             </div>
           ) : (
-            upcomingGames.map((game) => (
-              <Link
-                key={game.id}
-                href={`/public/${token}/games/${buildPublicGameRef(token, game.id)}`}
-                className="block rounded-2xl border border-slate-200 bg-white p-4 transition-colors hover:border-emerald-300"
-              >
+            upcomingEvents.map((event) => {
+              const content = (
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="space-y-2">
-                    <p className="text-lg font-semibold text-slate-900">{gameTitle(game)}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
+                        {event.kind === "game" ? <Swords size={12} /> : <Dumbbell size={12} />}
+                        {event.kind === "game" ? "Jogo" : "Treino"}
+                      </span>
+                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
+                        {event.kind === "game"
+                          ? gameStatusLabel(event.status)
+                          : trainingStatusLabel(event.status)}
+                      </span>
+                    </div>
+                    <p className="text-lg font-semibold text-slate-900">{event.title}</p>
                     <div className="flex flex-wrap gap-3 text-sm text-slate-500">
                       <span className="inline-flex items-center gap-1">
                         <Clock3 size={14} />
-                        {formatGameDate(game.game_datetime)}
+                        {event.meta}
                       </span>
-                      {game.location && (
+                      {event.location && (
                         <span className="inline-flex items-center gap-1">
                           <MapPin size={14} />
-                          {game.location}
+                          {event.location}
                         </span>
                       )}
                     </div>
                   </div>
-                  <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
-                    {gameStatusLabel(game.status)}
-                  </span>
                 </div>
-              </Link>
-            ))
+              );
+
+              if (event.kind === "game") {
+                return (
+                  <Link
+                    key={event.id}
+                    href={event.href}
+                    className="block rounded-2xl border border-slate-200 bg-white p-4 transition-colors hover:border-emerald-300"
+                  >
+                    {content}
+                  </Link>
+                );
+              }
+
+              return (
+                <div
+                  key={event.id}
+                  className="rounded-2xl border border-slate-200 bg-white p-4"
+                >
+                  {content}
+                </div>
+              );
+            })
           )}
         </section>
 
