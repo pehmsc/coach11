@@ -114,16 +114,26 @@ export default async function PublicCalendarPage({ params }: PublicPageParams) {
 
   let share;
   try {
-    const resolved = await resolvePublicShareRequest(admin, token, await headers());
+    const resolved = await resolvePublicShareRequest(
+      admin,
+      token,
+      await headers(),
+    );
     share = resolved?.share ?? null;
   } catch (error) {
-    if (error instanceof Error && error.message === "public_share_rate_limited") {
+    if (
+      error instanceof Error &&
+      error.message === "public_share_rate_limited"
+    ) {
       return (
         <main className="min-h-screen bg-slate-50 px-4 py-8">
           <div className="mx-auto max-w-3xl rounded-3xl border border-amber-200 bg-white p-8 text-center">
-            <h1 className="text-2xl font-bold text-slate-900">Demasiados pedidos</h1>
+            <h1 className="text-2xl font-bold text-slate-900">
+              Demasiados pedidos
+            </h1>
             <p className="mt-3 text-sm text-slate-600">
-              Este link público está temporariamente limitado. Tenta novamente dentro de instantes.
+              Este link público está temporariamente limitado. Tenta novamente
+              dentro de instantes.
             </p>
           </div>
         </main>
@@ -139,7 +149,12 @@ export default async function PublicCalendarPage({ params }: PublicPageParams) {
 
   const todayIsoDate = new Date().toISOString().slice(0, 10);
 
-  const [{ data: ageGroup }, upcomingGamesRes, upcomingTrainingsRes, recentRes] = await Promise.all([
+  const [
+    { data: ageGroup },
+    upcomingGamesRes,
+    upcomingTrainingsRes,
+    recentRes,
+  ] = await Promise.all([
     admin
       .from("age_groups")
       .select("club_name, name")
@@ -174,7 +189,8 @@ export default async function PublicCalendarPage({ params }: PublicPageParams) {
   ]);
 
   const upcomingGames = (upcomingGamesRes.data || []) as PublicGameRow[];
-  const upcomingTrainings = (upcomingTrainingsRes.data || []) as PublicTrainingRow[];
+  const upcomingTrainings = (upcomingTrainingsRes.data ||
+    []) as PublicTrainingRow[];
   const recentGames = (recentRes.data || []) as PublicGameRow[];
   const upcomingEvents = [
     ...upcomingGames.map((game) => ({
@@ -188,7 +204,10 @@ export default async function PublicCalendarPage({ params }: PublicPageParams) {
       meta: formatGameDate(game.game_datetime),
     })),
     ...upcomingTrainings.map((training) => {
-      const startsAt = buildTrainingDateTime(training.session_date, training.start_time);
+      const startsAt = buildTrainingDateTime(
+        training.session_date,
+        training.start_time,
+      );
       return {
         kind: "training" as const,
         id: training.id,
@@ -208,14 +227,12 @@ export default async function PublicCalendarPage({ params }: PublicPageParams) {
       <div className="mx-auto max-w-3xl space-y-6">
         <section className="rounded-3xl bg-slate-900 px-6 py-8 text-white">
           <p className="text-sm uppercase tracking-[0.2em] text-emerald-300">
-            Link público
+            Calendário
           </p>
           <h1 className="mt-3 text-3xl font-black">
-            {ageGroup?.club_name || "Coach11"} · {ageGroup?.name || "Calendário"}
+            {ageGroup?.club_name || "Coach11"} ·{" "}
+            {ageGroup?.name || "Calendário"}
           </h1>
-          <p className="mt-3 max-w-2xl text-sm text-slate-300">
-            Vista só leitura para pais e fãs. Mostra apenas calendário, jogos, treinos e dados públicos do escalão.
-          </p>
         </section>
 
         <section className="space-y-3">
@@ -235,7 +252,11 @@ export default async function PublicCalendarPage({ params }: PublicPageParams) {
                   <div className="space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
-                        {event.kind === "game" ? <Swords size={12} /> : <Dumbbell size={12} />}
+                        {event.kind === "game" ? (
+                          <Swords size={12} />
+                        ) : (
+                          <Dumbbell size={12} />
+                        )}
                         {event.kind === "game" ? "Jogo" : "Treino"}
                       </span>
                       <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
@@ -244,7 +265,9 @@ export default async function PublicCalendarPage({ params }: PublicPageParams) {
                           : trainingStatusLabel(event.status)}
                       </span>
                     </div>
-                    <p className="text-lg font-semibold text-slate-900">{event.title}</p>
+                    <p className="text-lg font-semibold text-slate-900">
+                      {event.title}
+                    </p>
                     <div className="flex flex-wrap gap-3 text-sm text-slate-500">
                       <span className="inline-flex items-center gap-1">
                         <Clock3 size={14} />
@@ -286,7 +309,9 @@ export default async function PublicCalendarPage({ params }: PublicPageParams) {
         </section>
 
         <section className="space-y-3">
-          <h2 className="text-lg font-semibold text-slate-900">Últimos resultados</h2>
+          <h2 className="text-lg font-semibold text-slate-900">
+            Últimos resultados
+          </h2>
           {recentGames.length === 0 ? (
             <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-500">
               Sem resultados recentes.
@@ -300,14 +325,20 @@ export default async function PublicCalendarPage({ params }: PublicPageParams) {
               >
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <p className="font-semibold text-slate-900">{gameTitle(game)}</p>
-                    <p className="mt-1 text-sm text-slate-500">{formatGameDate(game.game_datetime)}</p>
+                    <p className="font-semibold text-slate-900">
+                      {gameTitle(game)}
+                    </p>
+                    <p className="mt-1 text-sm text-slate-500">
+                      {formatGameDate(game.game_datetime)}
+                    </p>
                   </div>
                   <div className="text-right">
                     <p className="text-lg font-bold text-slate-900">
                       {game.score_home ?? "-"} - {game.score_away ?? "-"}
                     </p>
-                    <p className="text-xs text-slate-500">{gameStatusLabel(game.status)}</p>
+                    <p className="text-xs text-slate-500">
+                      {gameStatusLabel(game.status)}
+                    </p>
                   </div>
                 </div>
               </Link>

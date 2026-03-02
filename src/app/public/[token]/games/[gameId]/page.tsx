@@ -48,16 +48,26 @@ export default async function PublicGameDetailPage({
 
   let share;
   try {
-    const resolved = await resolvePublicShareRequest(admin, token, await headers());
+    const resolved = await resolvePublicShareRequest(
+      admin,
+      token,
+      await headers(),
+    );
     share = resolved?.share ?? null;
   } catch (error) {
-    if (error instanceof Error && error.message === "public_share_rate_limited") {
+    if (
+      error instanceof Error &&
+      error.message === "public_share_rate_limited"
+    ) {
       return (
         <main className="min-h-screen bg-slate-50 px-4 py-8">
           <div className="mx-auto max-w-3xl rounded-3xl border border-amber-200 bg-white p-8 text-center">
-            <h1 className="text-2xl font-bold text-slate-900">Demasiados pedidos</h1>
+            <h1 className="text-2xl font-bold text-slate-900">
+              Demasiados pedidos
+            </h1>
             <p className="mt-3 text-sm text-slate-600">
-              Este link público está temporariamente limitado. Tenta novamente dentro de instantes.
+              Este link público está temporariamente limitado. Tenta novamente
+              dentro de instantes.
             </p>
           </div>
         </main>
@@ -201,17 +211,18 @@ export default async function PublicGameDetailPage({
 
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-              Convocatória pública
+              Convocatória
             </p>
             {sanitizedPlayers.length === 0 ? (
               <p className="mt-3 text-sm text-slate-500">
-                Sem convocatória pública disponível.
+                Sem convocatória disponível.
               </p>
             ) : (
               <div className="mt-3">
                 <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
                   <ShieldCheck size={14} />
-                  {sanitizedPlayers.length} convocado{sanitizedPlayers.length !== 1 ? "s" : ""}
+                  {sanitizedPlayers.length} convocado
+                  {sanitizedPlayers.length !== 1 ? "s" : ""}
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {sanitizedPlayers.map((playerName) => (

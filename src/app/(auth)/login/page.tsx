@@ -22,7 +22,12 @@ import { Suspense } from "react";
 function LoginForm() {
   const router = useRouter();
   const sp = useSearchParams();
-  const [email, setEmail] = useState(() => sp.get("email") || "");
+  const inviteEmail = sp.get("email")?.trim() ?? "";
+  const [email, setEmail] = useState(() => {
+    if (inviteEmail) return inviteEmail;
+    if (typeof window === "undefined") return "";
+    return window.localStorage.getItem("inviteEmail")?.trim() ?? "";
+  });
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
@@ -58,6 +63,17 @@ function LoginForm() {
       allowed: result.allowed === true,
       reason: typeof result.reason === "string" ? result.reason : null,
     };
+  }
+
+  function buildAuthHref(pathname: "/login" | "/register") {
+    const params = new URLSearchParams();
+    if (inviteCode) params.set("code", inviteCode);
+
+    const currentEmail = email.trim();
+    if (currentEmail) params.set("email", currentEmail);
+
+    const query = params.toString();
+    return query ? `${pathname}?${query}` : pathname;
   }
 
   async function handleLogin(e: React.FormEvent) {
@@ -137,6 +153,34 @@ function LoginForm() {
 
   async function handleGoogleLogin() {
     setGoogleLoading(true);
+    setError(null);
+
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) {
+      setError("Indica o email do convite antes de continuar com Google.");
+      setGoogleLoading(false);
+      return;
+    }
+
+    try {
+      const access = await checkBetaAccess(normalizedEmail);
+      if (!access.allowed) {
+        if (access.reason === "no_invite") {
+          setGoogleLoading(false);
+          router.replace("/invite-only?reason=beta_access_required");
+          return;
+        }
+
+        setError("Não foi possível validar o acesso beta agora. Tenta novamente.");
+        setGoogleLoading(false);
+        return;
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao validar acesso beta.");
+      setGoogleLoading(false);
+      return;
+    }
+
     const supabase = createClient();
 
     // Preservar o código de convite através do OAuth passando-o no next param
@@ -144,12 +188,17 @@ function LoginForm() {
     const callbackUrl = new URL("/auth/callback/client", window.location.origin);
     callbackUrl.searchParams.set("next", next);
 
-    await supabase.auth.signInWithOAuth({
+    const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
         redirectTo: callbackUrl.toString(),
       },
     });
+
+    if (error) {
+      setError("Não foi possível iniciar o login com Google.");
+      setGoogleLoading(false);
+    }
   }
 
   return (
@@ -262,7 +311,7 @@ function LoginForm() {
           <p className="text-sm text-slate-500 text-center">
             Não tens conta?{" "}
             <Link
-              href={inviteCode ? `/register?code=${inviteCode}` : "/register"}
+              href={buildAuthHref("/register")}
               className="text-emerald-600 font-medium hover:underline"
             >
               Registar
