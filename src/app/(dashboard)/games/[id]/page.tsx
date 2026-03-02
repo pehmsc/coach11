@@ -8,6 +8,7 @@ import {
   ArrowLeft,
   Users,
   MapPin,
+  Navigation,
   Clock,
   Shield,
   AlertCircle,
@@ -33,6 +34,7 @@ import {
   normalizeManualShortName,
 } from "@/lib/football/short-name";
 import { formatFixtureOpponentLabel } from "@/lib/games/display";
+import { buildGoogleMapsUrl, resolveMapsQuery } from "@/lib/maps";
 import type { Game, Player } from "@/types/database";
 
 interface PlayerWithStatus extends Player {
@@ -155,6 +157,7 @@ export default function GameDetailPage() {
   const [editOpponent, setEditOpponent] = useState("");
   const [editOpponentShortName, setEditOpponentShortName] = useState("");
   const [editLocation, setEditLocation] = useState("");
+  const [editLocationAddress, setEditLocationAddress] = useState("");
   const [savingGameEdit, setSavingGameEdit] = useState(false);
   const [correctionReason, setCorrectionReason] = useState("");
 
@@ -608,6 +611,7 @@ export default function GameDetailPage() {
         opponent_name: editOpponent.trim(),
         opponent_short_name: normalizedOpponentShortName || null,
         location: editLocation.trim() || null,
+        location_address: editLocationAddress.trim() || null,
       }),
     });
     const payload = await res.json().catch(() => ({}));
@@ -633,6 +637,7 @@ export default function GameDetailPage() {
       normalizeManualShortName(game.opponent_short_name, 5) || "",
     );
     setEditLocation(game.location ?? "");
+    setEditLocationAddress(game.location_address ?? "");
     setEditingGame(true);
   }
 
@@ -793,6 +798,9 @@ export default function GameDetailPage() {
       correctionMode &&
       canEditCompleted &&
       correctionReason.trim().length > 0);
+  const mapsUrl = buildGoogleMapsUrl(
+    resolveMapsQuery(game.location_address, game.location),
+  );
 
   return (
     <div className="p-4 md:p-8 max-w-2xl mx-auto">
@@ -855,7 +863,7 @@ export default function GameDetailPage() {
               })
             : "Jogo"}
         </h1>
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-blue-100 text-sm">
+        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-blue-100">
           <span className="flex items-center gap-1">
             <Clock size={13} /> <span className="capitalize">{gameDate}</span>
           </span>
@@ -865,6 +873,20 @@ export default function GameDetailPage() {
             </span>
           )}
         </div>
+        {game.location_address && (
+          <p className="mt-2 text-sm text-blue-100/90">{game.location_address}</p>
+        )}
+        {mapsUrl && (
+          <a
+            href={mapsUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-4 inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-50"
+          >
+            <Navigation size={16} />
+            Abrir no GPS
+          </a>
+        )}
       </div>
 
       {game.status === "completed" && correctionMode && canEditCompleted && (
@@ -976,6 +998,35 @@ export default function GameDetailPage() {
                   placeholder="Nome do campo ou local"
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-slate-700">
+                  Morada completa
+                </label>
+                <input
+                  type="text"
+                  value={editLocationAddress}
+                  onChange={(e) => setEditLocationAddress(e.target.value)}
+                  placeholder="Rua, número, cidade"
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                {buildGoogleMapsUrl(
+                  resolveMapsQuery(editLocationAddress, editLocation),
+                ) && (
+                  <a
+                    href={
+                      buildGoogleMapsUrl(
+                        resolveMapsQuery(editLocationAddress, editLocation),
+                      ) || "#"
+                    }
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-emerald-600 hover:underline"
+                  >
+                    <Navigation size={12} />
+                    Ver no Google Maps
+                  </a>
+                )}
               </div>
               {error && <p className="text-sm text-red-600">{error}</p>}
               <div className="flex gap-2 pt-1">

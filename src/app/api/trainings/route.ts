@@ -13,6 +13,8 @@ type TrainingRow = {
   end_time?: string | null;
   title?: string | null;
   location?: string | null;
+  location_address?: string | null;
+  notes?: string | null;
   status: string;
   age_group_id?: string | null;
   team_id?: string | null;
@@ -102,7 +104,9 @@ export async function GET(request: Request) {
     if (sessionId) {
       const { data: session, error: sessionError } = await db
         .from("training_sessions")
-        .select("id, session_date, start_time, end_time, title, location, status, age_group_id, team_id")
+        .select(
+          "id, session_date, start_time, end_time, title, location, location_address, notes, status, age_group_id, team_id",
+        )
         .eq("id", sessionId)
         .eq("age_group_id", context.ageGroup.id)
         .maybeSingle();
@@ -220,7 +224,9 @@ export async function GET(request: Request) {
 
     const { data: sessionsData, error: sessionsError } = await db
       .from("training_sessions")
-      .select("id, session_date, start_time, end_time, title, location, status, age_group_id, team_id")
+      .select(
+        "id, session_date, start_time, end_time, title, location, location_address, notes, status, age_group_id, team_id",
+      )
       .eq("age_group_id", context.ageGroup.id)
       .order("session_date", { ascending: false })
       .order("start_time", { ascending: false });

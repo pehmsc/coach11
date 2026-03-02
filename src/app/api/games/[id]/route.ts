@@ -104,6 +104,9 @@ export async function PATCH(request: Request, { params }: RouteContext) {
         normalizeManualShortName(body.opponent_short_name, 5) || null;
     }
     if (typeof body.location === "string" || body.location === null) updates.location = body.location || null;
+    if (typeof body.location_address === "string" || body.location_address === null) {
+      updates.location_address = body.location_address || null;
+    }
     if (typeof body.game_datetime === "string") updates.game_datetime = body.game_datetime;
     if (typeof body.is_home === "boolean") updates.is_home = body.is_home;
 

@@ -3,6 +3,7 @@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { normalizeManualShortName } from "@/lib/football/short-name";
+import { buildGoogleMapsUrl, resolveMapsQuery } from "@/lib/maps";
 
 export type GameCompetitionOption = {
   id: string;
@@ -18,6 +19,7 @@ export type SharedGameFormValues = {
   date: string;
   start_time: string;
   location: string;
+  location_address: string;
   is_home: boolean;
   competition_id: string;
 };
@@ -49,6 +51,9 @@ export function GameFormFields({
   const inputSizeClass = compact ? "text-sm h-8" : "text-sm";
   const gridClass = compact ? "grid grid-cols-2 gap-2" : "grid grid-cols-2 gap-3";
   const sectionGap = compact ? "space-y-2" : "space-y-3";
+  const mapsUrl = buildGoogleMapsUrl(
+    resolveMapsQuery(values.location_address, values.location),
+  );
 
   return (
     <div className={sectionGap}>
@@ -129,6 +134,26 @@ export function GameFormFields({
           placeholder="Estádio / Campo"
           className={inputSizeClass}
         />
+      </div>
+
+      <div className="space-y-1">
+        <Label className={compact ? "text-xs" : undefined}>Morada completa</Label>
+        <Input
+          value={values.location_address}
+          onChange={(event) => onFieldChange("location_address", event.target.value)}
+          placeholder="Rua, número, cidade"
+          className={inputSizeClass}
+        />
+        {mapsUrl && (
+          <a
+            href={mapsUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-xs text-emerald-600 hover:underline"
+          >
+            Ver no Google Maps
+          </a>
+        )}
       </div>
 
       <div className="space-y-1">

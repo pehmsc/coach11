@@ -86,6 +86,7 @@ const EMPTY_GAME_FORM: GameForm = {
   start_time: "15:00",
   is_home: true,
   location: "",
+  location_address: "",
   competition_id: "",
   round_number: "",
 };
@@ -363,6 +364,7 @@ export default function CompetitionsPage() {
           start_time: gameForm.start_time,
           is_home: gameForm.is_home,
           location: gameForm.location || null,
+          location_address: gameForm.location_address || null,
         },
       }),
     });

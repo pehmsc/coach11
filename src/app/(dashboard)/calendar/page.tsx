@@ -810,8 +810,8 @@ export default function CalendarPage() {
               )}
 
               {/* Local */}
-              <div className="space-y-3">
-                {isTrainingModal && (
+              {isTrainingModal && (
+                <div className="space-y-3">
                   <div className="space-y-1">
                     <Label>
                       <MapPin size={12} className="inline mr-1" />
@@ -825,31 +825,31 @@ export default function CalendarPage() {
                       }
                     />
                   </div>
-                )}
-                <div className="space-y-1">
-                  <Label>Morada completa</Label>
-                  <Input
-                    value={form.location_address}
-                    placeholder="ex: Rua do Campo, 1, Lisboa"
-                    onChange={(e) =>
-                      setForm((f) => ({
-                        ...f,
-                        location_address: e.target.value,
-                      }))
-                    }
-                  />
-                  {form.location_address && (
-                    <a
-                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(form.location_address)}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-emerald-600 hover:underline flex items-center gap-1 mt-1"
-                    >
-                      <MapPin size={10} /> Ver no Google Maps ↗
-                    </a>
-                  )}
+                  <div className="space-y-1">
+                    <Label>Morada completa</Label>
+                    <Input
+                      value={form.location_address}
+                      placeholder="ex: Rua do Campo, 1, Lisboa"
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          location_address: e.target.value,
+                        }))
+                      }
+                    />
+                    {form.location_address && (
+                      <a
+                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(form.location_address)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-emerald-600 hover:underline flex items-center gap-1 mt-1"
+                      >
+                        <MapPin size={10} /> Ver no Google Maps ↗
+                      </a>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Notas */}
               <div className="space-y-1">

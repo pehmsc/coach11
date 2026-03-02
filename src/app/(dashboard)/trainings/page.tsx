@@ -3,8 +3,19 @@
 import { useState, useEffect } from "react";
 import { format, parseISO, isToday, isFuture } from "date-fns";
 import { pt } from "date-fns/locale";
-import { Loader2, Dumbbell, X, Users, Clock, MapPin, Plus, Trash2 } from "lucide-react";
+import {
+  Loader2,
+  Dumbbell,
+  X,
+  Users,
+  Clock,
+  MapPin,
+  Navigation,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { buildGoogleMapsUrl, resolveMapsQuery } from "@/lib/maps";
 import type { Player } from "@/types/database";
 
 interface TrainingRow {
@@ -14,6 +25,8 @@ interface TrainingRow {
   end_time?: string;
   title?: string;
   location?: string;
+  location_address?: string;
+  notes?: string;
   status: string;
   age_group_id?: string;
   team_id?: string;
@@ -61,6 +74,7 @@ export default function TrainingsPage() {
   const [newTrainingStartTime, setNewTrainingStartTime] = useState("18:30");
   const [newTrainingEndTime, setNewTrainingEndTime] = useState("20:00");
   const [newTrainingLocation, setNewTrainingLocation] = useState("");
+  const [newTrainingLocationAddress, setNewTrainingLocationAddress] = useState("");
   const [canDeleteTrainings, setCanDeleteTrainings] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletingTraining, setDeletingTraining] = useState(false);
@@ -209,6 +223,7 @@ export default function TrainingsPage() {
     setNewTrainingStartTime("18:30");
     setNewTrainingEndTime("20:00");
     setNewTrainingLocation("");
+    setNewTrainingLocationAddress("");
     setCreateError(null);
   }
 
@@ -233,6 +248,7 @@ export default function TrainingsPage() {
             start_time: newTrainingStartTime,
             end_time: newTrainingEndTime || null,
             location: newTrainingLocation.trim() || null,
+            location_address: newTrainingLocationAddress.trim() || null,
           },
         }),
       });
@@ -254,6 +270,20 @@ export default function TrainingsPage() {
   }
 
   const grouped = groupByMonth(sessions);
+  const createMapsUrl = buildGoogleMapsUrl(
+    resolveMapsQuery(newTrainingLocationAddress, newTrainingLocation),
+  );
+  const selectedSessionLocationLabel = selectedSession
+    ? selectedSession.session.location || selectedSession.session.location_address
+    : null;
+  const selectedSessionMapsUrl = selectedSession
+    ? buildGoogleMapsUrl(
+        resolveMapsQuery(
+          selectedSession.session.location_address,
+          selectedSession.session.location,
+        ),
+      )
+    : null;
 
   if (loading) {
     return (
@@ -311,6 +341,7 @@ export default function TrainingsPage() {
                   const summary = getSummary(session.id);
                   const dt = parseISO(session.session_date);
                   const upcoming = isToday(dt) || isFuture(dt);
+                  const locationLabel = session.location || session.location_address;
 
                   return (
                     <button
@@ -352,10 +383,10 @@ export default function TrainingsPage() {
                               {session.start_time.substring(0, 5)}
                             </span>
                           )}
-                          {session.location && (
+                          {locationLabel && (
                             <span className="text-xs text-slate-400 flex items-center gap-0.5 truncate">
                               <MapPin size={10} className="flex-shrink-0" />
-                              {session.location}
+                              {locationLabel}
                             </span>
                           )}
                         </div>
@@ -452,6 +483,31 @@ export default function TrainingsPage() {
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
                 />
               </div>
+              <div className="space-y-1">
+                <label className="text-sm font-medium text-slate-700">
+                  Morada completa
+                </label>
+                <input
+                  type="text"
+                  value={newTrainingLocationAddress}
+                  onChange={(event) =>
+                    setNewTrainingLocationAddress(event.target.value)
+                  }
+                  placeholder="Rua, número, cidade"
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                />
+                {createMapsUrl && (
+                  <a
+                    href={createMapsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-emerald-600 hover:underline"
+                  >
+                    <Navigation size={12} />
+                    Ver no Google Maps
+                  </a>
+                )}
+              </div>
               {createError && <p className="text-sm text-red-600">{createError}</p>}
               <div className="flex gap-2 pt-1">
                 <Button
@@ -505,11 +561,28 @@ export default function TrainingsPage() {
                   <p className="text-xs text-slate-500 mt-0.5">
                     {selectedSession.session.start_time.substring(0, 5)}
                     {selectedSession.session.end_time ? ` – ${selectedSession.session.end_time.substring(0, 5)}` : ""}
-                    {selectedSession.session.location ? ` · ${selectedSession.session.location}` : ""}
+                    {selectedSessionLocationLabel ? ` · ${selectedSessionLocationLabel}` : ""}
                   </p>
                 )}
+                {selectedSession.session.location_address &&
+                  selectedSession.session.location_address !== selectedSessionLocationLabel && (
+                    <p className="mt-1 text-xs text-slate-500">
+                      {selectedSession.session.location_address}
+                    </p>
+                  )}
               </div>
               <div className="flex items-center gap-1.5">
+                {selectedSessionMapsUrl && (
+                  <a
+                    href={selectedSessionMapsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-1.5 rounded-full bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors"
+                    title="Abrir no GPS"
+                  >
+                    <Navigation size={16} />
+                  </a>
+                )}
                 {canDeleteTrainings && (
                   <button
                     onClick={() => setShowDeleteConfirm(true)}
@@ -571,26 +644,38 @@ export default function TrainingsPage() {
                 </div>
               </div>
             ) : (
-              <div className="overflow-y-auto flex-1 divide-y">
-                {Object.values(selectedSession.attendance)
-                  .sort((a, b) => a.player.first_name.localeCompare(b.player.first_name))
-                  .map(({ player, status }) => (
-                    <div key={player.id} className="flex items-center gap-3 px-5 py-3">
-                      <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
-                        status === "present" ? "bg-emerald-500" :
-                        status === "absent" ? "bg-red-500" : "bg-orange-400"
-                      }`} />
-                      <p className="text-sm text-slate-800">
-                        {player.first_name} {player.last_name}
-                      </p>
-                      <span className={`ml-auto text-xs font-medium ${
-                        status === "present" ? "text-emerald-600" :
-                        status === "absent" ? "text-red-500" : "text-orange-500"
-                      }`}>
-                        {status === "present" ? "Presente" : status === "absent" ? "Ausente" : "Lesionado"}
-                      </span>
-                    </div>
-                  ))}
+              <div className="overflow-y-auto flex-1">
+                {selectedSession.session.notes?.trim() && (
+                  <div className="border-b px-5 py-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                      Notas
+                    </p>
+                    <p className="mt-1 text-sm text-slate-700">
+                      {selectedSession.session.notes}
+                    </p>
+                  </div>
+                )}
+                <div className="divide-y">
+                  {Object.values(selectedSession.attendance)
+                    .sort((a, b) => a.player.first_name.localeCompare(b.player.first_name))
+                    .map(({ player, status }) => (
+                      <div key={player.id} className="flex items-center gap-3 px-5 py-3">
+                        <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
+                          status === "present" ? "bg-emerald-500" :
+                          status === "absent" ? "bg-red-500" : "bg-orange-400"
+                        }`} />
+                        <p className="text-sm text-slate-800">
+                          {player.first_name} {player.last_name}
+                        </p>
+                        <span className={`ml-auto text-xs font-medium ${
+                          status === "present" ? "text-emerald-600" :
+                          status === "absent" ? "text-red-500" : "text-orange-500"
+                        }`}>
+                          {status === "present" ? "Presente" : status === "absent" ? "Ausente" : "Lesionado"}
+                        </span>
+                      </div>
+                    ))}
+                </div>
               </div>
             )}
           </div>

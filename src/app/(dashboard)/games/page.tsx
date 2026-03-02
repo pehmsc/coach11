@@ -39,6 +39,7 @@ interface GameRow {
   score_home?: number;
   score_away?: number;
   location?: string;
+  location_address?: string;
   title?: string;
   competition_id?: string;
 }
@@ -85,6 +86,7 @@ export default function GamesPage() {
     date: "",
     start_time: "15:00",
     location: "",
+    location_address: "",
     is_home: true,
     competition_id: "",
   });
@@ -149,6 +151,7 @@ export default function GamesPage() {
       date: format(today, "yyyy-MM-dd"),
       start_time: "15:00",
       location: "",
+      location_address: "",
       is_home: true,
       competition_id: "",
     });
@@ -195,6 +198,7 @@ export default function GamesPage() {
             date: gameForm.date,
             start_time: gameForm.start_time,
             location: gameForm.location.trim() || null,
+            location_address: gameForm.location_address.trim() || null,
             is_home: gameForm.is_home,
           },
         }),
@@ -438,8 +442,10 @@ function GameCard({ game, onClick }: { game: GameRow; onClick: () => void }) {
             opponentShortName: game.opponent_short_name,
           })}
         </p>
-        {game.location && (
-          <p className="text-xs text-slate-400 truncate">{game.location}</p>
+        {(game.location || game.location_address) && (
+          <p className="text-xs text-slate-400 truncate">
+            {game.location || game.location_address}
+          </p>
         )}
       </div>
 

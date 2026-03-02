@@ -7,6 +7,7 @@ import { CalendarDays, Clock3, Dumbbell, MapPin, Swords } from "lucide-react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   buildPublicGameRef,
+  buildPublicTrainingRef,
   resolvePublicShareRequest,
 } from "@/lib/public-share";
 
@@ -35,6 +36,8 @@ type PublicTrainingRow = {
   start_time: string | null;
   end_time: string | null;
   location: string | null;
+  location_address: string | null;
+  notes: string | null;
   status: string | null;
 };
 
@@ -55,6 +58,7 @@ type PublicCalendarItem =
       startsAt: string;
       location: string | null;
       status: string | null;
+      href: string;
       title: string;
       meta: string;
     };
@@ -171,7 +175,9 @@ export default async function PublicCalendarPage({ params }: PublicPageParams) {
       .limit(12),
     admin
       .from("training_sessions")
-      .select("id, title, session_date, start_time, end_time, location, status")
+      .select(
+        "id, title, session_date, start_time, end_time, location, location_address, notes, status",
+      )
       .eq("age_group_id", share.age_group_id)
       .gte("session_date", todayIsoDate)
       .order("session_date", { ascending: true })
@@ -212,8 +218,9 @@ export default async function PublicCalendarPage({ params }: PublicPageParams) {
         kind: "training" as const,
         id: training.id,
         startsAt: startsAt || training.session_date,
-        location: training.location,
+        location: training.location || training.location_address,
         status: training.status,
+        href: `/public/${token}/trainings/${buildPublicTrainingRef(token, training.id)}`,
         title: training.title?.trim() || "Treino",
         meta: formatGameDate(startsAt),
       };
@@ -284,25 +291,14 @@ export default async function PublicCalendarPage({ params }: PublicPageParams) {
                 </div>
               );
 
-              if (event.kind === "game") {
-                return (
-                  <Link
-                    key={event.id}
-                    href={event.href}
-                    className="block rounded-2xl border border-slate-200 bg-white p-4 transition-colors hover:border-emerald-300"
-                  >
-                    {content}
-                  </Link>
-                );
-              }
-
               return (
-                <div
+                <Link
                   key={event.id}
-                  className="rounded-2xl border border-slate-200 bg-white p-4"
+                  href={event.href}
+                  className="block rounded-2xl border border-slate-200 bg-white p-4 transition-colors hover:border-emerald-300"
                 >
                   {content}
-                </div>
+                </Link>
               );
             })
           )}

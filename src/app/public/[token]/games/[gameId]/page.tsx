@@ -3,7 +3,15 @@ import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import { pt } from "date-fns/locale";
-import { ArrowLeft, Clock3, MapPin, ShieldCheck } from "lucide-react";
+import {
+  ArrowLeft,
+  Clock3,
+  FileText,
+  MapPin,
+  Navigation,
+  ShieldCheck,
+} from "lucide-react";
+import { buildGoogleMapsUrl, resolveMapsQuery } from "@/lib/maps";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   resolvePublicGameId,
@@ -105,7 +113,7 @@ export default async function PublicGameDetailPage({
     admin
       .from("games")
       .select(
-        "id, game_datetime, opponent_name, opponent_short_name, location, is_home, status, score_home, score_away",
+        "id, game_datetime, opponent_name, opponent_short_name, location, location_address, notes, is_home, status, score_home, score_away",
       )
       .eq("id", resolvedGameId)
       .eq("age_group_id", share.age_group_id)
@@ -120,6 +128,10 @@ export default async function PublicGameDetailPage({
   if (!game) {
     notFound();
   }
+
+  const mapsUrl = buildGoogleMapsUrl(
+    resolveMapsQuery(game.location_address, game.location),
+  );
 
   const { data: convocation } = await admin
     .from("convocations")
@@ -190,6 +202,17 @@ export default async function PublicGameDetailPage({
               {gameStatusLabel(game.status)}
             </span>
           </div>
+          {mapsUrl && (
+            <a
+              href={mapsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-5 inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-900 transition-colors hover:bg-slate-100"
+            >
+              <Navigation size={16} />
+              Abrir no GPS
+            </a>
+          )}
         </section>
 
         <section className="grid gap-4 md:grid-cols-2">
@@ -201,6 +224,7 @@ export default async function PublicGameDetailPage({
               <p>Adversário: {game.opponent_name || "Adversário"}</p>
               <p>Casa/Fora: {game.is_home ? "Casa" : "Fora"}</p>
               <p>Estado: {gameStatusLabel(game.status)}</p>
+              {game.location_address && <p>Morada: {game.location_address}</p>}
               {game.status === "completed" && (
                 <p>
                   Resultado: {game.score_home ?? "-"} - {game.score_away ?? "-"}
@@ -238,6 +262,18 @@ export default async function PublicGameDetailPage({
             )}
           </div>
         </section>
+
+        {game.notes?.trim() && (
+          <section className="rounded-2xl border border-slate-200 bg-white p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+              Notas
+            </p>
+            <div className="mt-3 flex gap-3 text-sm text-slate-700">
+              <FileText size={16} className="mt-0.5 text-slate-400" />
+              <p>{game.notes}</p>
+            </div>
+          </section>
+        )}
       </div>
     </main>
   );

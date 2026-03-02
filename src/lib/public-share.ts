@@ -148,6 +148,24 @@ export function resolvePublicGameId(
   return null;
 }
 
+export function buildPublicTrainingRef(rawToken: string, trainingId: string) {
+  return createHmac("sha256", rawToken).update(trainingId).digest("base64url").slice(0, 24);
+}
+
+export function resolvePublicTrainingId(
+  rawToken: string,
+  publicTrainingRef: string,
+  trainingIds: string[],
+) {
+  for (const trainingId of trainingIds) {
+    if (buildPublicTrainingRef(rawToken, trainingId) === publicTrainingRef) {
+      return trainingId;
+    }
+  }
+
+  return null;
+}
+
 export async function validatePublicShareToken(
   admin: SupabaseClient,
   rawToken: string,
