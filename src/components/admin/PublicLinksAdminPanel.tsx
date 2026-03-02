@@ -6,9 +6,6 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import {
-  getStoredPublicShareUrl,
-} from "@/lib/public-share-client";
 
 type PublicLinkItem = {
   id: string;
@@ -19,6 +16,8 @@ type PublicLinkItem = {
   last_accessed_at: string | null;
   access_count: number;
   created_at: string;
+  url: string | null;
+  requiresRegeneration: boolean;
   ageGroup: {
     id: string;
     club_name: string;
@@ -149,25 +148,20 @@ export function PublicLinksAdminPanel() {
                   <p>Age group ID: {link.age_group_id}</p>
                 </div>
 
-                {(() => {
-                  const storedUrl = getStoredPublicShareUrl(link.age_group_id);
-                  if (!storedUrl) {
-                    return (
-                      <p className="text-xs text-slate-500">
-                        O URL não está disponível neste navegador. Se precisares de o voltar a ver aqui, gera um novo link a partir do escalão.
-                      </p>
-                    );
-                  }
-
-                  return (
-                    <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
-                      <Input value={storedUrl} readOnly className="bg-white text-xs" />
-                      <Button type="button" variant="outline" size="icon" onClick={() => void handleCopy(storedUrl)}>
-                        {copiedUrl === storedUrl ? <Check size={16} className="text-emerald-600" /> : <Copy size={16} />}
-                      </Button>
-                    </div>
-                  );
-                })()}
+                {link.url ? (
+                  <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
+                    <Input value={link.url} readOnly className="bg-white text-xs" />
+                    <Button type="button" variant="outline" size="icon" onClick={() => void handleCopy(link.url!)}>
+                      {copiedUrl === link.url ? <Check size={16} className="text-emerald-600" /> : <Copy size={16} />}
+                    </Button>
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-500">
+                    {link.requiresRegeneration
+                      ? "Este link foi criado numa versão anterior e precisa de ser regenerado para voltar a ficar visível aqui."
+                      : "Não foi possível revelar o URL deste link."}
+                  </p>
+                )}
 
                 {!link.revoked_at ? (
                   <Button

@@ -6,11 +6,6 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import {
-  forgetPublicShareUrl,
-  getStoredPublicShareUrl,
-  rememberPublicShareUrl,
-} from "@/lib/public-share-client";
 
 type PublicShareSummary = {
   id: string;
@@ -30,6 +25,7 @@ type Props = {
 export function PublicSharePanel({ ageGroupId, canManage }: Props) {
   const [share, setShare] = useState<PublicShareSummary | null>(null);
   const [generatedUrl, setGeneratedUrl] = useState<string | null>(null);
+  const [requiresRegeneration, setRequiresRegeneration] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -39,6 +35,7 @@ export function PublicSharePanel({ ageGroupId, canManage }: Props) {
     if (!canManage) {
       setShare(null);
       setGeneratedUrl(null);
+      setRequiresRegeneration(false);
       setError(null);
       setLoading(false);
       return;
@@ -73,16 +70,19 @@ export function PublicSharePanel({ ageGroupId, canManage }: Props) {
             : "Não foi possível carregar o link público.";
         setShare(null);
         setGeneratedUrl(null);
+        setRequiresRegeneration(false);
         setError(nextError);
         return;
       }
 
       const nextShare = payload?.share ? (payload.share as PublicShareSummary) : null;
       setShare(nextShare);
-      setGeneratedUrl(nextShare ? getStoredPublicShareUrl(ageGroupId) : null);
+      setGeneratedUrl(typeof payload?.url === "string" ? payload.url : null);
+      setRequiresRegeneration(payload?.requiresRegeneration === true);
     } catch {
       setShare(null);
       setGeneratedUrl(null);
+      setRequiresRegeneration(false);
       setError("Erro de ligação ao carregar o link público.");
     } finally {
       setLoading(false);
@@ -120,8 +120,8 @@ export function PublicSharePanel({ ageGroupId, canManage }: Props) {
       }
 
       setShare(payload?.share ? (payload.share as PublicShareSummary) : null);
-      rememberPublicShareUrl(ageGroupId, payload.url as string);
       setGeneratedUrl(payload.url as string);
+      setRequiresRegeneration(false);
       toast.success("Link público gerado.");
     } catch {
       const nextError = "Erro de ligação ao gerar o link público.";
@@ -163,7 +163,7 @@ export function PublicSharePanel({ ageGroupId, canManage }: Props) {
 
       setShare(null);
       setGeneratedUrl(null);
-      forgetPublicShareUrl(ageGroupId);
+      setRequiresRegeneration(false);
       setCopiedUrl(false);
       toast.success("Link público revogado.");
     } catch {
@@ -262,7 +262,9 @@ export function PublicSharePanel({ ageGroupId, canManage }: Props) {
             </div>
             {!generatedUrl ? (
               <p className="text-xs text-slate-500">
-                O link não está disponível neste navegador. Se precisares de o voltar a copiar aqui, gera um novo link.
+                {requiresRegeneration
+                  ? "Este link foi criado numa versão anterior e já não pode ser revelado. Gera um novo link para o poderes copiar e gerir aqui."
+                  : "Não foi possível revelar o link atual. Gera um novo link para voltares a copiá-lo aqui."}
               </p>
             ) : null}
             <Button

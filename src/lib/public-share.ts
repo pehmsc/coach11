@@ -1,6 +1,12 @@
 import "server-only";
 
-import { createHash, createHmac, randomBytes } from "crypto";
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHash,
+  createHmac,
+  randomBytes,
+} from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getCanonicalAppUrl } from "@/lib/config/canonical-app-url";
 
@@ -11,6 +17,7 @@ type HeaderBag = {
 export type PublicShareRow = {
   id: string;
   token_hash: string;
+  token_encrypted?: string | null;
   age_group_id: string;
   created_by: string;
   expires_at: string | null;
@@ -24,8 +31,54 @@ export function generatePublicShareToken() {
   return randomBytes(32).toString("base64url");
 }
 
+function getPublicShareEncryptionKey() {
+  const secret = (
+    process.env.PUBLIC_SHARE_TOKEN_ENCRYPTION_KEY ??
+    process.env.APP_SECRET ??
+    process.env.SUPABASE_SERVICE_ROLE_KEY ??
+    process.env.SUPABASE_SERVICE_KEY ??
+    process.env.SUPABASE_SERVICE_ROLE
+  )?.trim();
+
+  if (!secret) {
+    throw new Error("public_share_encryption_secret_missing");
+  }
+
+  return createHash("sha256").update(secret).digest();
+}
+
 export function hashPublicShareToken(rawToken: string) {
   return createHash("sha256").update(rawToken).digest("hex");
+}
+
+export function encryptPublicShareToken(rawToken: string) {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", getPublicShareEncryptionKey(), iv);
+  const encrypted = Buffer.concat([
+    cipher.update(rawToken, "utf8"),
+    cipher.final(),
+  ]);
+  const authTag = cipher.getAuthTag();
+
+  return Buffer.concat([iv, authTag, encrypted]).toString("base64url");
+}
+
+export function decryptPublicShareToken(tokenEncrypted: string) {
+  const payload = Buffer.from(tokenEncrypted, "base64url");
+  if (payload.length <= 28) {
+    throw new Error("public_share_encrypted_token_invalid");
+  }
+
+  const iv = payload.subarray(0, 12);
+  const authTag = payload.subarray(12, 28);
+  const encrypted = payload.subarray(28);
+  const decipher = createDecipheriv("aes-256-gcm", getPublicShareEncryptionKey(), iv);
+  decipher.setAuthTag(authTag);
+
+  return Buffer.concat([
+    decipher.update(encrypted),
+    decipher.final(),
+  ]).toString("utf8");
 }
 
 export function hashPublicIp(ip: string) {
@@ -34,6 +87,18 @@ export function hashPublicIp(ip: string) {
 
 export function buildPublicShareUrl(rawToken: string) {
   return `${getCanonicalAppUrl()}/public/${rawToken}`;
+}
+
+export function getPublicShareUrlFromEncryptedToken(
+  tokenEncrypted: string | null | undefined,
+) {
+  if (!tokenEncrypted) return null;
+
+  try {
+    return buildPublicShareUrl(decryptPublicShareToken(tokenEncrypted));
+  } catch {
+    return null;
+  }
 }
 
 export function sanitizePublicPlayerName(
