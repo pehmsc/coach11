@@ -19,17 +19,18 @@ import {
   MapPin,
   Clock,
   ImageIcon,
-  FileText,
   AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NotesEditor } from "@/components/forms/NotesEditor";
 import {
   GameFormFields,
   type GameCompetitionOption,
   type SharedGameFormValues,
 } from "@/components/games/game-form-fields";
+import { LocationFields } from "@/components/maps/LocationFields";
 import {
   isValidManualShortName,
   normalizeManualShortName,
@@ -44,6 +45,7 @@ interface CalEvent {
   date: string;
   title?: string;
   start_time?: string;
+  end_time?: string;
   notes?: string;
   status?: string;
   opponent_name?: string;
@@ -164,6 +166,7 @@ export default function CalendarPage() {
         date: String(s.session_date || ""),
         title: typeof s.title === "string" ? s.title : "Treino",
         start_time: typeof s.start_time === "string" ? s.start_time : undefined,
+        end_time: typeof s.end_time === "string" ? s.end_time : undefined,
         notes: typeof s.notes === "string" ? s.notes : undefined,
         status: typeof s.status === "string" ? s.status : undefined,
         location: typeof s.location === "string" ? s.location : undefined,
@@ -302,7 +305,7 @@ export default function CalendarPage() {
       title: event.title || "",
       date: event.date,
       start_time: event.start_time || "18:00",
-      end_time: "",
+      end_time: event.end_time || "",
       opponent_name: event.opponent_name || "",
       opponent_short_name: event.opponent_short_name || "",
       competition_id: event.competition_id || "",
@@ -811,62 +814,31 @@ export default function CalendarPage() {
 
               {/* Local */}
               {isTrainingModal && (
-                <div className="space-y-3">
-                  <div className="space-y-1">
-                    <Label>
-                      <MapPin size={12} className="inline mr-1" />
-                      Nome do local
-                    </Label>
-                    <Input
-                      value={form.location}
-                      placeholder="ex: Campo 1, Complexo Desportivo"
-                      onChange={(e) =>
-                        setForm((f) => ({ ...f, location: e.target.value }))
-                      }
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Morada completa</Label>
-                    <Input
-                      value={form.location_address}
-                      placeholder="ex: Rua do Campo, 1, Lisboa"
-                      onChange={(e) =>
-                        setForm((f) => ({
-                          ...f,
-                          location_address: e.target.value,
-                        }))
-                      }
-                    />
-                    {form.location_address && (
-                      <a
-                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(form.location_address)}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-emerald-600 hover:underline flex items-center gap-1 mt-1"
-                      >
-                        <MapPin size={10} /> Ver no Google Maps ↗
-                      </a>
-                    )}
-                  </div>
-                </div>
+                <LocationFields
+                  location={form.location}
+                  locationAddress={form.location_address}
+                  onLocationChange={(value) =>
+                    setForm((current) => ({ ...current, location: value }))
+                  }
+                  onLocationAddressChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      location_address: value,
+                    }))
+                  }
+                  accent="emerald"
+                />
               )}
 
               {/* Notas */}
-              <div className="space-y-1">
-                <Label>
-                  <FileText size={12} className="inline mr-1" />
-                  Notas
-                </Label>
-                <textarea
-                  value={form.notes}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, notes: e.target.value }))
-                  }
-                  placeholder="Informações adicionais, instruções, equipamento..."
-                  rows={4}
-                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                />
-              </div>
+              <NotesEditor
+                value={form.notes}
+                onChange={(value) =>
+                  setForm((current) => ({ ...current, notes: value }))
+                }
+                accent={isTrainingModal ? "emerald" : "blue"}
+                rows={6}
+              />
             </div>
 
             <div className="border-t bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shrink-0">

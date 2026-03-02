@@ -2,8 +2,8 @@
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { LocationFields } from "@/components/maps/LocationFields";
 import { normalizeManualShortName } from "@/lib/football/short-name";
-import { buildGoogleMapsUrl, resolveMapsQuery } from "@/lib/maps";
 
 export type GameCompetitionOption = {
   id: string;
@@ -51,9 +51,6 @@ export function GameFormFields({
   const inputSizeClass = compact ? "text-sm h-8" : "text-sm";
   const gridClass = compact ? "grid grid-cols-2 gap-2" : "grid grid-cols-2 gap-3";
   const sectionGap = compact ? "space-y-2" : "space-y-3";
-  const mapsUrl = buildGoogleMapsUrl(
-    resolveMapsQuery(values.location_address, values.location),
-  );
 
   return (
     <div className={sectionGap}>
@@ -126,35 +123,19 @@ export function GameFormFields({
         </div>
       </div>
 
-      <div className="space-y-1">
-        <Label className={compact ? "text-xs" : undefined}>Local</Label>
-        <Input
-          value={values.location}
-          onChange={(event) => onFieldChange("location", event.target.value)}
-          placeholder="Estádio / Campo"
-          className={inputSizeClass}
-        />
-      </div>
-
-      <div className="space-y-1">
-        <Label className={compact ? "text-xs" : undefined}>Morada completa</Label>
-        <Input
-          value={values.location_address}
-          onChange={(event) => onFieldChange("location_address", event.target.value)}
-          placeholder="Rua, número, cidade"
-          className={inputSizeClass}
-        />
-        {mapsUrl && (
-          <a
-            href={mapsUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-xs text-emerald-600 hover:underline"
-          >
-            Ver no Google Maps
-          </a>
-        )}
-      </div>
+      <LocationFields
+        location={values.location}
+        locationAddress={values.location_address}
+        onLocationChange={(value) => onFieldChange("location", value)}
+        onLocationAddressChange={(value) =>
+          onFieldChange("location_address", value)
+        }
+        locationLabel="Local"
+        locationPlaceholder="Estádio / Campo"
+        accent="blue"
+        compact={compact}
+        showPreview={!compact}
+      />
 
       <div className="space-y-1">
         <Label className={compact ? "text-xs" : undefined}>Casa ou Fora?</Label>

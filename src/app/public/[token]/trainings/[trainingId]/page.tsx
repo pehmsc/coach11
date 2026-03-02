@@ -8,10 +8,11 @@ import {
   Clock3,
   FileText,
   MapPin,
-  Navigation,
 } from "lucide-react";
+import { RichTextContent } from "@/components/content/RichTextContent";
+import { LocationMapPreview } from "@/components/maps/LocationMapPreview";
+import { OpenMapsButton } from "@/components/maps/OpenMapsButton";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { buildGoogleMapsUrl, resolveMapsQuery } from "@/lib/maps";
 import {
   resolvePublicShareRequest,
   resolvePublicTrainingId,
@@ -134,10 +135,6 @@ export default async function PublicTrainingDetailPage({
     notFound();
   }
 
-  const mapsUrl = buildGoogleMapsUrl(
-    resolveMapsQuery(training.location_address, training.location),
-  );
-
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-8">
       <div className="mx-auto max-w-3xl space-y-6">
@@ -171,18 +168,23 @@ export default async function PublicTrainingDetailPage({
               {trainingStatusLabel(training.status)}
             </span>
           </div>
-          {mapsUrl && (
-            <a
-              href={mapsUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-5 inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-900 transition-colors hover:bg-slate-100"
-            >
-              <Navigation size={16} />
-              Abrir no GPS
-            </a>
-          )}
+          <div className="mt-5">
+            <OpenMapsButton
+              location={training.location}
+              locationAddress={training.location_address}
+              accent="slate"
+            />
+          </div>
         </section>
+
+        {(training.location || training.location_address) && (
+          <LocationMapPreview
+            location={training.location}
+            locationAddress={training.location_address}
+            accent="slate"
+            label="Mapa do treino"
+          />
+        )}
 
         <section className="grid gap-4 md:grid-cols-2">
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
@@ -212,7 +214,7 @@ export default async function PublicTrainingDetailPage({
             {training.notes?.trim() ? (
               <div className="mt-3 flex gap-3 text-sm text-slate-700">
                 <FileText size={16} className="mt-0.5 text-slate-400" />
-                <p>{training.notes}</p>
+                <RichTextContent content={training.notes} className="min-w-0 flex-1" />
               </div>
             ) : (
               <p className="mt-3 text-sm text-slate-500">

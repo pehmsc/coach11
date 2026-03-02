@@ -155,37 +155,9 @@ function LoginForm() {
     setGoogleLoading(true);
     setError(null);
 
-    const normalizedEmail = email.trim().toLowerCase();
-    if (!normalizedEmail) {
-      setError("Indica o email do convite antes de continuar com Google.");
-      setGoogleLoading(false);
-      return;
-    }
-
-    try {
-      const access = await checkBetaAccess(normalizedEmail);
-      if (!access.allowed) {
-        if (access.reason === "no_invite") {
-          setGoogleLoading(false);
-          router.replace("/invite-only?reason=beta_access_required");
-          return;
-        }
-
-        setError("Não foi possível validar o acesso beta agora. Tenta novamente.");
-        setGoogleLoading(false);
-        return;
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao validar acesso beta.");
-      setGoogleLoading(false);
-      return;
-    }
-
     const supabase = createClient();
-
-    // Preservar o código de convite através do OAuth passando-o no next param
     const next = inviteCode ? `/dashboard?code=${inviteCode}` : "/dashboard";
-    const callbackUrl = new URL("/auth/callback/client", window.location.origin);
+    const callbackUrl = new URL("/auth/callback", window.location.origin);
     callbackUrl.searchParams.set("next", next);
 
     const { error } = await supabase.auth.signInWithOAuth({
@@ -234,6 +206,11 @@ function LoginForm() {
           {sp.get("error") === "profile_sync_failed" && (
             <div className="bg-amber-50 text-amber-700 text-sm p-3 rounded-md border border-amber-200">
               Não foi possível validar o acesso agora. Tenta novamente.
+            </div>
+          )}
+          {sp.get("error") === "oauth_failed" && (
+            <div className="bg-amber-50 text-amber-700 text-sm p-3 rounded-md border border-amber-200">
+              Não foi possível concluir a autenticação com Google. Tenta novamente com o email convidado.
             </div>
           )}
 

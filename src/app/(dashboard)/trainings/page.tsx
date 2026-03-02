@@ -10,12 +10,16 @@ import {
   Users,
   Clock,
   MapPin,
-  Navigation,
+  Copy,
   Plus,
   Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { buildGoogleMapsUrl, resolveMapsQuery } from "@/lib/maps";
+import { RichTextContent } from "@/components/content/RichTextContent";
+import { NotesEditor } from "@/components/forms/NotesEditor";
+import { LocationFields } from "@/components/maps/LocationFields";
+import { LocationMapPreview } from "@/components/maps/LocationMapPreview";
+import { OpenMapsButton } from "@/components/maps/OpenMapsButton";
 import type { Player } from "@/types/database";
 
 interface TrainingRow {
@@ -69,12 +73,14 @@ export default function TrainingsPage() {
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [creatingTraining, setCreatingTraining] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [createMode, setCreateMode] = useState<"create" | "duplicate">("create");
   const [newTrainingTitle, setNewTrainingTitle] = useState("Treino");
   const [newTrainingDate, setNewTrainingDate] = useState("");
   const [newTrainingStartTime, setNewTrainingStartTime] = useState("18:30");
   const [newTrainingEndTime, setNewTrainingEndTime] = useState("20:00");
   const [newTrainingLocation, setNewTrainingLocation] = useState("");
   const [newTrainingLocationAddress, setNewTrainingLocationAddress] = useState("");
+  const [newTrainingNotes, setNewTrainingNotes] = useState("");
   const [canDeleteTrainings, setCanDeleteTrainings] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletingTraining, setDeletingTraining] = useState(false);
@@ -218,13 +224,36 @@ export default function TrainingsPage() {
 
   function resetCreateForm() {
     const today = new Date();
+    setCreateMode("create");
     setNewTrainingTitle("Treino");
     setNewTrainingDate(format(today, "yyyy-MM-dd"));
     setNewTrainingStartTime("18:30");
     setNewTrainingEndTime("20:00");
     setNewTrainingLocation("");
     setNewTrainingLocationAddress("");
+    setNewTrainingNotes("");
     setCreateError(null);
+  }
+
+  function openCreateTrainingModal() {
+    resetCreateForm();
+    setCreateModalOpen(true);
+  }
+
+  function openDuplicateTraining(source: TrainingRow) {
+    setCreateMode("duplicate");
+    setNewTrainingTitle(`Cópia de ${source.title || "Treino"}`);
+    setNewTrainingDate("");
+    setNewTrainingStartTime(source.start_time?.slice(0, 5) || "18:30");
+    setNewTrainingEndTime(source.end_time?.slice(0, 5) || "20:00");
+    setNewTrainingLocation(source.location || "");
+    setNewTrainingLocationAddress(source.location_address || "");
+    setNewTrainingNotes(source.notes || "");
+    setCreateError(null);
+    setDetailError(null);
+    setShowDeleteConfirm(false);
+    setSelectedSession(null);
+    setCreateModalOpen(true);
   }
 
   async function handleCreateTraining(e: { preventDefault(): void }) {
@@ -249,6 +278,7 @@ export default function TrainingsPage() {
             end_time: newTrainingEndTime || null,
             location: newTrainingLocation.trim() || null,
             location_address: newTrainingLocationAddress.trim() || null,
+            notes: newTrainingNotes.trim() || null,
           },
         }),
       });
@@ -270,19 +300,8 @@ export default function TrainingsPage() {
   }
 
   const grouped = groupByMonth(sessions);
-  const createMapsUrl = buildGoogleMapsUrl(
-    resolveMapsQuery(newTrainingLocationAddress, newTrainingLocation),
-  );
   const selectedSessionLocationLabel = selectedSession
     ? selectedSession.session.location || selectedSession.session.location_address
-    : null;
-  const selectedSessionMapsUrl = selectedSession
-    ? buildGoogleMapsUrl(
-        resolveMapsQuery(
-          selectedSession.session.location_address,
-          selectedSession.session.location,
-        ),
-      )
     : null;
 
   if (loading) {
@@ -301,10 +320,7 @@ export default function TrainingsPage() {
         <p className="text-slate-400 text-xs mt-1">Cria o primeiro treino aqui.</p>
         <Button
           className="mt-4 bg-emerald-600 hover:bg-emerald-700"
-          onClick={() => {
-            resetCreateForm();
-            setCreateModalOpen(true);
-          }}
+          onClick={openCreateTrainingModal}
         >
           <Plus size={16} className="mr-2" />
           Adicionar treino
@@ -322,10 +338,7 @@ export default function TrainingsPage() {
           <h1 className="text-2xl font-bold text-slate-900">Treinos</h1>
           <Button
             className="bg-emerald-600 hover:bg-emerald-700"
-            onClick={() => {
-              resetCreateForm();
-              setCreateModalOpen(true);
-            }}
+            onClick={openCreateTrainingModal}
           >
             <Plus size={16} className="mr-2" />
             Adicionar treino
@@ -422,7 +435,16 @@ export default function TrainingsPage() {
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-center justify-between p-5 border-b">
-              <h3 className="font-bold text-slate-900">Adicionar treino</h3>
+              <div>
+                <h3 className="font-bold text-slate-900">
+                  {createMode === "duplicate" ? "Duplicar treino" : "Adicionar treino"}
+                </h3>
+                {createMode === "duplicate" && (
+                  <p className="mt-1 text-xs text-slate-500">
+                    Revê os dados e escolhe uma nova data antes de guardar.
+                  </p>
+                )}
+              </div>
               <button onClick={() => setCreateModalOpen(false)}>
                 <X size={20} className="text-slate-400" />
               </button>
@@ -473,41 +495,19 @@ export default function TrainingsPage() {
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
                 />
               </div>
-              <div className="space-y-1">
-                <label className="text-sm font-medium text-slate-700">Local</label>
-                <input
-                  type="text"
-                  value={newTrainingLocation}
-                  onChange={(event) => setNewTrainingLocation(event.target.value)}
-                  placeholder="Campo/local"
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-sm font-medium text-slate-700">
-                  Morada completa
-                </label>
-                <input
-                  type="text"
-                  value={newTrainingLocationAddress}
-                  onChange={(event) =>
-                    setNewTrainingLocationAddress(event.target.value)
-                  }
-                  placeholder="Rua, número, cidade"
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
-                />
-                {createMapsUrl && (
-                  <a
-                    href={createMapsUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs text-emerald-600 hover:underline"
-                  >
-                    <Navigation size={12} />
-                    Ver no Google Maps
-                  </a>
-                )}
-              </div>
+              <LocationFields
+                location={newTrainingLocation}
+                locationAddress={newTrainingLocationAddress}
+                onLocationChange={setNewTrainingLocation}
+                onLocationAddressChange={setNewTrainingLocationAddress}
+                accent="emerald"
+              />
+              <NotesEditor
+                value={newTrainingNotes}
+                onChange={setNewTrainingNotes}
+                accent="emerald"
+                rows={7}
+              />
               {createError && <p className="text-sm text-red-600">{createError}</p>}
               <div className="flex gap-2 pt-1">
                 <Button
@@ -518,7 +518,7 @@ export default function TrainingsPage() {
                   {creatingTraining ? (
                     <Loader2 size={16} className="animate-spin" />
                   ) : (
-                    "Criar treino"
+                    createMode === "duplicate" ? "Criar cópia" : "Criar treino"
                   )}
                 </Button>
                 <Button
@@ -572,17 +572,21 @@ export default function TrainingsPage() {
                   )}
               </div>
               <div className="flex items-center gap-1.5">
-                {selectedSessionMapsUrl && (
-                  <a
-                    href={selectedSessionMapsUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="p-1.5 rounded-full bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors"
-                    title="Abrir no GPS"
-                  >
-                    <Navigation size={16} />
-                  </a>
-                )}
+                <button
+                  onClick={() => openDuplicateTraining(selectedSession.session)}
+                  className="p-1.5 rounded-full bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+                  title="Duplicar treino"
+                  disabled={deletingTraining}
+                >
+                  <Copy size={16} />
+                </button>
+                <OpenMapsButton
+                  location={selectedSession.session.location}
+                  locationAddress={selectedSession.session.location_address}
+                  variant="icon"
+                  accent="emerald"
+                  title="Abrir no GPS"
+                />
                 {canDeleteTrainings && (
                   <button
                     onClick={() => setShowDeleteConfirm(true)}
@@ -645,14 +649,26 @@ export default function TrainingsPage() {
               </div>
             ) : (
               <div className="overflow-y-auto flex-1">
+                {(selectedSession.session.location ||
+                  selectedSession.session.location_address) && (
+                  <div className="border-b px-5 py-4">
+                    <LocationMapPreview
+                      location={selectedSession.session.location}
+                      locationAddress={selectedSession.session.location_address}
+                      accent="emerald"
+                      label="Localização"
+                    />
+                  </div>
+                )}
                 {selectedSession.session.notes?.trim() && (
                   <div className="border-b px-5 py-3">
                     <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                       Notas
                     </p>
-                    <p className="mt-1 text-sm text-slate-700">
-                      {selectedSession.session.notes}
-                    </p>
+                    <RichTextContent
+                      content={selectedSession.session.notes}
+                      className="mt-2"
+                    />
                   </div>
                 )}
                 <div className="divide-y">

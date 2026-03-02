@@ -8,7 +8,6 @@ import {
   ArrowLeft,
   Users,
   MapPin,
-  Navigation,
   Clock,
   Shield,
   AlertCircle,
@@ -20,6 +19,9 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { LocationFields } from "@/components/maps/LocationFields";
+import { LocationMapPreview } from "@/components/maps/LocationMapPreview";
+import { OpenMapsButton } from "@/components/maps/OpenMapsButton";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
@@ -34,7 +36,6 @@ import {
   normalizeManualShortName,
 } from "@/lib/football/short-name";
 import { formatFixtureOpponentLabel } from "@/lib/games/display";
-import { buildGoogleMapsUrl, resolveMapsQuery } from "@/lib/maps";
 import type { Game, Player } from "@/types/database";
 
 interface PlayerWithStatus extends Player {
@@ -798,9 +799,6 @@ export default function GameDetailPage() {
       correctionMode &&
       canEditCompleted &&
       correctionReason.trim().length > 0);
-  const mapsUrl = buildGoogleMapsUrl(
-    resolveMapsQuery(game.location_address, game.location),
-  );
 
   return (
     <div className="p-4 md:p-8 max-w-2xl mx-auto">
@@ -876,18 +874,24 @@ export default function GameDetailPage() {
         {game.location_address && (
           <p className="mt-2 text-sm text-blue-100/90">{game.location_address}</p>
         )}
-        {mapsUrl && (
-          <a
-            href={mapsUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-4 inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-50"
-          >
-            <Navigation size={16} />
-            Abrir no GPS
-          </a>
-        )}
+        <div className="mt-4">
+          <OpenMapsButton
+            location={game.location}
+            locationAddress={game.location_address}
+            accent="blue"
+          />
+        </div>
       </div>
+
+      {(game.location || game.location_address) && (
+        <LocationMapPreview
+          location={game.location}
+          locationAddress={game.location_address}
+          accent="blue"
+          label="Localização do jogo"
+          className="mb-5"
+        />
+      )}
 
       {game.status === "completed" && correctionMode && canEditCompleted && (
         <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-3">
@@ -987,47 +991,15 @@ export default function GameDetailPage() {
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm uppercase focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-slate-700">
-                  Local
-                </label>
-                <input
-                  type="text"
-                  value={editLocation}
-                  onChange={(e) => setEditLocation(e.target.value)}
-                  placeholder="Nome do campo ou local"
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-slate-700">
-                  Morada completa
-                </label>
-                <input
-                  type="text"
-                  value={editLocationAddress}
-                  onChange={(e) => setEditLocationAddress(e.target.value)}
-                  placeholder="Rua, número, cidade"
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                {buildGoogleMapsUrl(
-                  resolveMapsQuery(editLocationAddress, editLocation),
-                ) && (
-                  <a
-                    href={
-                      buildGoogleMapsUrl(
-                        resolveMapsQuery(editLocationAddress, editLocation),
-                      ) || "#"
-                    }
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs text-emerald-600 hover:underline"
-                  >
-                    <Navigation size={12} />
-                    Ver no Google Maps
-                  </a>
-                )}
-              </div>
+              <LocationFields
+                location={editLocation}
+                locationAddress={editLocationAddress}
+                onLocationChange={setEditLocation}
+                onLocationAddressChange={setEditLocationAddress}
+                locationLabel="Local"
+                locationPlaceholder="Nome do campo ou local"
+                accent="blue"
+              />
               {error && <p className="text-sm text-red-600">{error}</p>}
               <div className="flex gap-2 pt-1">
                 <button

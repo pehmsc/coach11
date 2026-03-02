@@ -8,10 +8,11 @@ import {
   Clock3,
   FileText,
   MapPin,
-  Navigation,
   ShieldCheck,
 } from "lucide-react";
-import { buildGoogleMapsUrl, resolveMapsQuery } from "@/lib/maps";
+import { RichTextContent } from "@/components/content/RichTextContent";
+import { LocationMapPreview } from "@/components/maps/LocationMapPreview";
+import { OpenMapsButton } from "@/components/maps/OpenMapsButton";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   resolvePublicGameId,
@@ -129,10 +130,6 @@ export default async function PublicGameDetailPage({
     notFound();
   }
 
-  const mapsUrl = buildGoogleMapsUrl(
-    resolveMapsQuery(game.location_address, game.location),
-  );
-
   const { data: convocation } = await admin
     .from("convocations")
     .select("id")
@@ -202,18 +199,23 @@ export default async function PublicGameDetailPage({
               {gameStatusLabel(game.status)}
             </span>
           </div>
-          {mapsUrl && (
-            <a
-              href={mapsUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-5 inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-900 transition-colors hover:bg-slate-100"
-            >
-              <Navigation size={16} />
-              Abrir no GPS
-            </a>
-          )}
+          <div className="mt-5">
+            <OpenMapsButton
+              location={game.location}
+              locationAddress={game.location_address}
+              accent="slate"
+            />
+          </div>
         </section>
+
+        {(game.location || game.location_address) && (
+          <LocationMapPreview
+            location={game.location}
+            locationAddress={game.location_address}
+            accent="slate"
+            label="Mapa do jogo"
+          />
+        )}
 
         <section className="grid gap-4 md:grid-cols-2">
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
@@ -270,7 +272,7 @@ export default async function PublicGameDetailPage({
             </p>
             <div className="mt-3 flex gap-3 text-sm text-slate-700">
               <FileText size={16} className="mt-0.5 text-slate-400" />
-              <p>{game.notes}</p>
+              <RichTextContent content={game.notes} className="min-w-0 flex-1" />
             </div>
           </section>
         )}
