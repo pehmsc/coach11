@@ -732,11 +732,11 @@ export default function CalendarPage() {
       {/* ── MODAL ── */}
       {modalMode && (
         <div
-          className="fixed inset-0 bg-black/50 z-50 flex items-end md:items-center justify-center p-4"
+          className="fixed inset-0 bg-black/50 z-[90] flex items-end md:items-center justify-center p-4"
           onClick={closeModal}
         >
           <div
-            className="bg-white rounded-2xl w-full max-w-md shadow-xl h-[calc(100svh-1rem)] md:h-auto md:max-h-[90vh] overflow-hidden flex flex-col"
+            className="bg-white rounded-2xl w-full max-w-md shadow-xl max-h-[calc(100dvh-1rem)] overflow-hidden flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header do modal */}
@@ -755,7 +755,7 @@ export default function CalendarPage() {
             </div>
 
             <div
-              className="p-5 space-y-5 flex-1 overflow-y-auto pb-[max(6rem,env(safe-area-inset-bottom))]"
+              className="min-h-0 flex-1 overflow-y-auto p-5 pb-[calc(env(safe-area-inset-bottom)+7rem)]"
               style={{ WebkitOverflowScrolling: "touch" }}
             >
               {/* Erro visível */}
@@ -922,7 +922,7 @@ export default function CalendarPage() {
               )}
             </div>
 
-            <div className="border-t bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shrink-0">
+            <div className="sticky bottom-0 z-10 border-t bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shrink-0">
               {showReadOnlyEventSummary && selectedEvent ? (
                 <div className="flex gap-2">
                   {canEditSelectedEvent ? (
@@ -938,28 +938,46 @@ export default function CalendarPage() {
                     onClick={closeModal}
                     className={canEditSelectedEvent ? "flex-1" : "w-full"}
                   >
-                    Fechar
+                    Cancelar
                   </Button>
                 </div>
               ) : (
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <Button
                     onClick={saveEvent}
                     disabled={saving || !form.date}
-                    className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 min-w-[8rem]"
                   >
                     {saving
                       ? "A guardar..."
                       : isEditing
-                        ? "Guardar alterações"
-                        : "Adicionar"}
+                      ? "Guardar alterações"
+                      : "Adicionar"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      if (showReadOnlyEventSummary) {
+                        closeModal();
+                        return;
+                      }
+                      if (selectedEvent) {
+                        setModalScreen("view");
+                        return;
+                      }
+                      closeModal();
+                    }}
+                    disabled={saving}
+                    className="flex-1 min-w-[8rem]"
+                  >
+                    Cancelar
                   </Button>
                   {isEditing && canDeleteEvents && (
                     <Button
                       variant="outline"
                       onClick={deleteEvent}
                       disabled={saving}
-                      className="text-red-500 hover:bg-red-50 border-red-200"
+                      className="w-full text-red-500 hover:bg-red-50 border-red-200 sm:w-auto"
                     >
                       Apagar
                     </Button>

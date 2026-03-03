@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useState, useEffect, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -8,7 +9,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PushNotificationsControl } from "@/components/pwa/PushNotificationsControl";
-import { BetaInvitesManager } from "@/components/admin/BetaInvitesManager";
 import { Loader2, User, Palette, Bell, Camera, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
@@ -302,9 +302,11 @@ export default function SettingsPage() {
                   <div className="flex items-center gap-4">
                     <div className="relative">
                       {profile?.avatar_url ? (
-                        <img
+                        <Image
                           src={profile.avatar_url}
                           alt={profile.full_name}
+                          width={64}
+                          height={64}
                           className="w-16 h-16 rounded-full object-cover border-2 border-slate-200"
                         />
                       ) : (
@@ -461,17 +463,6 @@ export default function SettingsPage() {
                   </div>
                 </CardContent>
               </Card>
-
-              {profile?.is_super_coordinator && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">Beta · Convites de Coordenador</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <BetaInvitesManager embedded />
-                  </CardContent>
-                </Card>
-              )}
 
               {profile?.is_super_coordinator && (
                 <Card>

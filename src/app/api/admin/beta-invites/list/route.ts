@@ -35,6 +35,7 @@ export async function GET(request: Request) {
       .select(
         "id, email, invite_type, target_age_group_id, created_by_profile_id, status, expires_at, accepted_at, revoked_at, metadata, created_at",
       )
+      .is("revoked_at", null)
       .order("created_at", { ascending: false })
       .limit(200);
 
@@ -58,6 +59,7 @@ export async function GET(request: Request) {
         status: resolveInviteStatus(invite),
         onboardingUrl: `${appUrl}/register?email=${encodeURIComponent(invite.email)}`,
       }))
+      .filter((invite) => invite.status !== "revoked")
       .filter((invite) => (status && status !== "all" ? invite.status === status : true));
 
     return NextResponse.json({

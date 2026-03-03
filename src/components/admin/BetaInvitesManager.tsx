@@ -24,7 +24,6 @@ const STATUS_FILTER_OPTIONS = [
   { value: "all", label: "Todos" },
   { value: "sent", label: "Pendente" },
   { value: "accepted", label: "Aceite" },
-  { value: "revoked", label: "Revogado" },
   { value: "expired", label: "Expirado" },
 ];
 
@@ -117,20 +116,12 @@ export function BetaInvitesManager({ embedded = false }: Props) {
       });
       const payload = await res.json().catch(() => ({}));
 
-      if (!res.ok || payload?.success !== true || !payload?.invite) {
+      if (!res.ok || payload?.success !== true) {
         toast.error(payload?.error || "Não foi possível revogar o convite beta.");
         return;
       }
 
-      const revokedInvite = payload.invite as Partial<BetaInviteItem>;
-      setInvites((current) => {
-        const next = current.map((invite) =>
-          invite.id === inviteId ? { ...invite, ...revokedInvite } : invite,
-        );
-        return statusFilter === "all"
-          ? next
-          : next.filter((invite) => invite.status === statusFilter);
-      });
+      setInvites((current) => current.filter((invite) => invite.id !== inviteId));
       toast.success("Convite beta revogado.");
     } catch {
       toast.error("Erro de ligação ao revogar o convite beta.");
@@ -154,8 +145,6 @@ export function BetaInvitesManager({ embedded = false }: Props) {
     switch (status) {
       case "accepted":
         return "Aceite";
-      case "revoked":
-        return "Revogado";
       case "expired":
         return "Expirado";
       case "sent":
@@ -242,11 +231,7 @@ export function BetaInvitesManager({ embedded = false }: Props) {
                 </Button>
               </div>
 
-              {invite.status === "revoked" ? (
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-500">
-                  Convite revogado
-                </div>
-              ) : invite.status === "expired" ? (
+              {invite.status === "expired" ? (
                 <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-700">
                   Convite expirado
                 </div>
