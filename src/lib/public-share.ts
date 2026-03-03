@@ -31,7 +31,36 @@ export type PublicAccessAgeGroupRow = {
   id: string;
   public_slug: string | null;
   public_access_enabled: boolean | null;
+  public_access_count?: number | null;
+  public_last_accessed_at?: string | null;
 };
+
+export type PublicAccessStats = {
+  accessCount: number;
+  lastAccessedAt: string | null;
+};
+
+type PublicAccessStatsAgeGroupRow = {
+  id: string;
+  public_access_count: number | null;
+  public_last_accessed_at: string | null;
+};
+
+type PublicAccessStatsLegacyRow = {
+  age_group_id: string;
+  access_count: number | null;
+  last_accessed_at: string | null;
+};
+
+function isMissingPublicAccessStatsSchemaError(message: string | undefined) {
+  if (!message) return false;
+
+  return (
+    message.includes("public_access_count") ||
+    message.includes("public_last_accessed_at") ||
+    message.includes("register_public_age_group_access")
+  );
+}
 
 export function generatePublicShareToken() {
   return randomBytes(32).toString("base64url");
@@ -246,6 +275,96 @@ export async function registerPublicShareAccess(
   }
 }
 
+export async function registerPublicAgeGroupAccess(
+  admin: SupabaseClient,
+  ageGroupId: string,
+) {
+  const { error } = await admin.rpc("register_public_age_group_access", {
+    p_age_group_id: ageGroupId,
+  });
+
+  if (error) {
+    if (isMissingPublicAccessStatsSchemaError(error.message)) {
+      return;
+    }
+
+    throw new Error(`public_age_group_access_update_failed:${error.message}`);
+  }
+}
+
+function mergeLastAccessedAt(current: string | null, next: string | null) {
+  if (!current) return next;
+  if (!next) return current;
+  return current > next ? current : next;
+}
+
+export async function getPublicAccessStatsForAgeGroups(
+  admin: SupabaseClient,
+  ageGroupIds: string[],
+) {
+  const uniqueAgeGroupIds = Array.from(
+    new Set(
+      ageGroupIds
+        .map((value) => value?.trim())
+        .filter((value): value is string => Boolean(value)),
+    ),
+  );
+
+  const statsByAgeGroup = new Map<string, PublicAccessStats>();
+
+  for (const ageGroupId of uniqueAgeGroupIds) {
+    statsByAgeGroup.set(ageGroupId, {
+      accessCount: 0,
+      lastAccessedAt: null,
+    });
+  }
+
+  if (uniqueAgeGroupIds.length === 0) {
+    return statsByAgeGroup;
+  }
+
+  const { data: ageGroups, error: ageGroupsError } = await admin
+    .from("age_groups")
+    .select("id, public_access_count, public_last_accessed_at")
+    .in("id", uniqueAgeGroupIds);
+  const { data: legacyShares, error: legacyError } = await admin
+    .from("public_share_tokens")
+    .select("age_group_id, access_count, last_accessed_at")
+    .in("age_group_id", uniqueAgeGroupIds);
+
+  if (legacyError) {
+    throw new Error(`public_access_stats_legacy_failed:${legacyError.message}`);
+  }
+
+  if (ageGroupsError && !isMissingPublicAccessStatsSchemaError(ageGroupsError.message)) {
+    throw new Error(`public_access_stats_age_groups_failed:${ageGroupsError.message}`);
+  }
+
+  for (const row of ((ageGroupsError ? [] : ageGroups) || []) as PublicAccessStatsAgeGroupRow[]) {
+    statsByAgeGroup.set(row.id, {
+      accessCount: Math.max(0, row.public_access_count ?? 0),
+      lastAccessedAt: row.public_last_accessed_at ?? null,
+    });
+  }
+
+  for (const row of (legacyShares || []) as PublicAccessStatsLegacyRow[]) {
+    const current = statsByAgeGroup.get(row.age_group_id) ?? {
+      accessCount: 0,
+      lastAccessedAt: null,
+    };
+
+    statsByAgeGroup.set(row.age_group_id, {
+      accessCount: current.accessCount + Math.max(0, row.access_count ?? 0),
+      lastAccessedAt: mergeLastAccessedAt(
+        current.lastAccessedAt,
+        row.last_accessed_at ?? null,
+      ),
+    });
+  }
+
+  return statsByAgeGroup;
+}
+
 export async function resolvePublicShareRequest(
   admin: SupabaseClient,
   rawToken: string,
@@ -299,6 +418,8 @@ export async function resolvePublicAccessRequest(
 
     if (ageGroupBySlug) {
       const ageGroup = ageGroupBySlug as PublicAccessAgeGroupRow;
+      await registerPublicAgeGroupAccess(admin, ageGroup.id);
+
       return {
         source: "slug" as const,
         identifier: ageGroup.public_slug || normalizedSlug,
@@ -322,6 +443,10 @@ export async function resolvePublicAccessRequest(
 
   if (tokenAgeGroupError) {
     throw new Error(`public_share_age_group_lookup_failed:${tokenAgeGroupError.message}`);
+  }
+
+  if (tokenAgeGroup?.public_slug) {
+    return null;
   }
 
   return {

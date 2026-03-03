@@ -12,6 +12,8 @@ type PublicShareSummary = {
   public_slug: string;
   public_access_enabled: boolean;
   url: string;
+  access_count: number;
+  last_accessed_at: string | null;
 };
 
 type Props = {
@@ -117,6 +119,16 @@ export function PublicSharePanel({ ageGroupId, canManage }: Props) {
     }
   }
 
+  function formatLastAccess(value: string | null) {
+    if (!value) return "Sem acessos registados";
+
+    try {
+      return new Date(value).toLocaleString("pt-PT");
+    } catch {
+      return value;
+    }
+  }
+
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -191,6 +203,24 @@ export function PublicSharePanel({ ageGroupId, canManage }: Props) {
                     <Copy size={16} />
                   )}
                 </Button>
+              </div>
+              <div className="grid gap-3 rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-600 md:grid-cols-2">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-slate-400">
+                    Acessos
+                  </p>
+                  <p className="mt-1 font-semibold text-slate-900">
+                    {share.access_count}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-slate-400">
+                    Último acesso
+                  </p>
+                  <p className="mt-1 font-semibold text-slate-900">
+                    {formatLastAccess(share.last_accessed_at)}
+                  </p>
+                </div>
               </div>
             </div>
 

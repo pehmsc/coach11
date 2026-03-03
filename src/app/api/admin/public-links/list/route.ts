@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSuperUserAccess } from "@/lib/auth/super-user.server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
-import { buildPublicAccessUrl } from "@/lib/public-share";
+import { buildPublicAccessUrl, getPublicAccessStatsForAgeGroups } from "@/lib/public-share";
 
 export const runtime = "nodejs";
 
@@ -18,7 +18,7 @@ export async function GET() {
       .not("public_slug", "is", null)
       .order("club_name", { ascending: true })
       .order("name", { ascending: true })
-      .limit(200);
+      .limit(1000);
 
     if (error) {
       return NextResponse.json(
@@ -53,24 +53,32 @@ export async function GET() {
     const coordinatorById = new Map(
       (coordinatorsRes.data || []).map((row) => [row.id, row]),
     );
+    const ageGroupIds = (ageGroups || []).map((row) => row.id);
+    const statsByAgeGroup = await getPublicAccessStatsForAgeGroups(access.admin, ageGroupIds);
 
     return NextResponse.json({
       success: true,
-      links: (ageGroups || []).map((ageGroup) => ({
-        id: ageGroup.id,
-        age_group_id: ageGroup.id,
-        public_slug: ageGroup.public_slug,
-        public_access_enabled: ageGroup.public_access_enabled === true,
-        url: ageGroup.public_slug ? buildPublicAccessUrl(ageGroup.public_slug) : null,
-        ageGroup: {
+      links: (ageGroups || []).map((ageGroup) => {
+        const stats = statsByAgeGroup.get(ageGroup.id);
+
+        return {
           id: ageGroup.id,
-          club_name: ageGroup.club_name,
-          name: ageGroup.name,
-        },
-        coordinator: ageGroup.coordinator_id
-          ? coordinatorById.get(ageGroup.coordinator_id) || null
-          : null,
-      })),
+          age_group_id: ageGroup.id,
+          public_slug: ageGroup.public_slug,
+          public_access_enabled: ageGroup.public_access_enabled === true,
+          url: ageGroup.public_slug ? buildPublicAccessUrl(ageGroup.public_slug) : null,
+          access_count: stats?.accessCount ?? 0,
+          last_accessed_at: stats?.lastAccessedAt ?? null,
+          ageGroup: {
+            id: ageGroup.id,
+            club_name: ageGroup.club_name,
+            name: ageGroup.name,
+          },
+          coordinator: ageGroup.coordinator_id
+            ? coordinatorById.get(ageGroup.coordinator_id) || null
+            : null,
+        };
+      }),
     });
   } catch (error) {
     return respondInternalError("api.admin.public-links.list.get", error);

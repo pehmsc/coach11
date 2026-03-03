@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, Copy, Share2 } from "lucide-react";
+import { Check, Copy, Loader2, Share2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,6 +13,8 @@ type PublicLinkItem = {
   public_slug: string | null;
   public_access_enabled: boolean;
   url: string | null;
+  access_count: number;
+  last_accessed_at: string | null;
   ageGroup: {
     id: string;
     club_name: string;
@@ -29,6 +31,7 @@ export function PublicLinksAdminPanel() {
   const [links, setLinks] = useState<PublicLinkItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     void loadLinks();
@@ -63,6 +66,48 @@ export function PublicLinksAdminPanel() {
       window.setTimeout(() => setCopiedUrl(null), 1600);
     } catch {
       toast.error("Não foi possível copiar o URL.");
+    }
+  }
+
+  function formatLastAccess(value: string | null) {
+    if (!value) return "Sem acessos";
+
+    try {
+      return new Date(value).toLocaleString("pt-PT");
+    } catch {
+      return value;
+    }
+  }
+
+  async function handleDelete(link: PublicLinkItem) {
+    const label = link.ageGroup
+      ? `${link.ageGroup.club_name} · ${link.ageGroup.name}`
+      : link.age_group_id;
+    const confirmed = window.confirm(
+      `Apagar o link público de ${label}? O slug atual deixa de funcionar e os tokens antigos ficam revogados.`,
+    );
+
+    if (!confirmed) return;
+
+    setDeletingId(link.age_group_id);
+
+    try {
+      const res = await fetch(`/api/admin/public-links/${link.age_group_id}`, {
+        method: "DELETE",
+      });
+      const payload = await res.json().catch(() => ({}));
+
+      if (!res.ok || payload?.success !== true) {
+        toast.error(payload?.error || "Não foi possível apagar o link público.");
+        return;
+      }
+
+      setLinks((current) => current.filter((item) => item.age_group_id !== link.age_group_id));
+      toast.success("Link público apagado.");
+    } catch {
+      toast.error("Erro de ligação ao apagar o link público.");
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -101,20 +146,55 @@ export function PublicLinksAdminPanel() {
                       Coordenador: {link.coordinator?.full_name || link.coordinator?.email || "—"}
                     </p>
                   </div>
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                      link.public_access_enabled
-                        ? "bg-emerald-100 text-emerald-700"
-                        : "bg-amber-100 text-amber-700"
-                    }`}
-                  >
-                    {link.public_access_enabled ? "Ativo" : "Pausado"}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                        link.public_access_enabled
+                          ? "bg-emerald-100 text-emerald-700"
+                          : "bg-amber-100 text-amber-700"
+                      }`}
+                    >
+                      {link.public_access_enabled ? "Ativo" : "Pausado"}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void handleDelete(link)}
+                      disabled={deletingId === link.age_group_id}
+                    >
+                      {deletingId === link.age_group_id ? (
+                        <Loader2 size={14} className="mr-2 animate-spin" />
+                      ) : (
+                        <Trash2 size={14} className="mr-2" />
+                      )}
+                      Apagar
+                    </Button>
+                  </div>
                 </div>
 
                 <div className="grid gap-2 text-xs text-slate-500 md:grid-cols-2">
                   <p>Slug: {link.public_slug || "—"}</p>
                   <p>Age group ID: {link.age_group_id}</p>
+                </div>
+
+                <div className="grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600 md:grid-cols-2">
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-slate-400">
+                      Acessos
+                    </p>
+                    <p className="mt-1 font-semibold text-slate-900">
+                      {link.access_count}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-slate-400">
+                      Último acesso
+                    </p>
+                    <p className="mt-1 font-semibold text-slate-900">
+                      {formatLastAccess(link.last_accessed_at)}
+                    </p>
+                  </div>
                 </div>
 
                 {link.url ? (

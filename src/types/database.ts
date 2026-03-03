@@ -41,6 +41,8 @@ export interface AgeGroup {
   name: string;
   public_slug?: string | null;
   public_access_enabled?: boolean;
+  public_access_count?: number;
+  public_last_accessed_at?: string | null;
   football_format: FootballFormat;
   season: string;
   created_at: string;

@@ -2,7 +2,11 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { buildPublicAccessUrl, slugifyPublicAccessSegment } from "@/lib/public-share";
+import {
+  buildPublicAccessUrl,
+  getPublicAccessStatsForAgeGroups,
+  slugifyPublicAccessSegment,
+} from "@/lib/public-share";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 
 export const runtime = "nodejs";
@@ -14,6 +18,16 @@ type AgeGroupAccessRecord = {
   name: string | null;
   public_slug: string | null;
   public_access_enabled: boolean | null;
+  public_access_count: number | null;
+  public_last_accessed_at: string | null;
+};
+
+type PublicShareState = {
+  age_group_id: string;
+  public_slug: string;
+  public_access_enabled: boolean;
+  access_count: number;
+  last_accessed_at: string | null;
 };
 
 const AgeGroupSchema = z.object({
@@ -131,12 +145,14 @@ async function resolveUniquePublicSlug(
 async function ensurePublicShareState(
   admin: ReturnType<typeof createAdminClient>,
   ageGroup: AgeGroupAccessRecord,
-) {
+): Promise<PublicShareState> {
   if (ageGroup.public_slug) {
     return {
       age_group_id: ageGroup.id,
       public_slug: ageGroup.public_slug,
       public_access_enabled: ageGroup.public_access_enabled === true,
+      access_count: Math.max(0, ageGroup.public_access_count ?? 0),
+      last_accessed_at: ageGroup.public_last_accessed_at ?? null,
     };
   }
 
@@ -156,19 +172,50 @@ async function ensurePublicShareState(
     age_group_id: data.id,
     public_slug: data.public_slug as string,
     public_access_enabled: data.public_access_enabled === true,
+    access_count: 0,
+    last_accessed_at: null,
   };
 }
 
-function serializeShareState(record: {
-  age_group_id: string;
-  public_slug: string;
-  public_access_enabled: boolean;
-}) {
+async function revokeLegacyPublicTokens(
+  admin: ReturnType<typeof createAdminClient>,
+  ageGroupId: string,
+) {
+  const { error } = await admin
+    .from("public_share_tokens")
+    .update({ revoked_at: new Date().toISOString() })
+    .eq("age_group_id", ageGroupId)
+    .is("revoked_at", null);
+
+  if (error) {
+    throw error;
+  }
+}
+
+async function loadPublicShareStats(
+  admin: ReturnType<typeof createAdminClient>,
+  ageGroupId: string,
+) {
+  const stats = await getPublicAccessStatsForAgeGroups(admin, [ageGroupId]);
+  return (
+    stats.get(ageGroupId) ?? {
+      accessCount: 0,
+      lastAccessedAt: null,
+    }
+  );
+}
+
+function serializeShareState(
+  record: PublicShareState,
+  stats?: { accessCount: number; lastAccessedAt: string | null },
+) {
   return {
     age_group_id: record.age_group_id,
     public_slug: record.public_slug,
     public_access_enabled: record.public_access_enabled,
     url: buildPublicAccessUrl(record.public_slug),
+    access_count: stats?.accessCount ?? record.access_count,
+    last_accessed_at: stats?.lastAccessedAt ?? record.last_accessed_at,
   };
 }
 
@@ -204,10 +251,12 @@ export async function GET(request: Request) {
     if (!access.ok) return access.response;
 
     const share = await ensurePublicShareState(access.admin, access.ageGroup);
+    await revokeLegacyPublicTokens(access.admin, parsed.ageGroupId);
+    const stats = await loadPublicShareStats(access.admin, parsed.ageGroupId);
 
     return NextResponse.json({
       success: true,
-      share: serializeShareState(share),
+      share: serializeShareState(share, stats),
     });
   } catch (error) {
     return respondInternalError("api.public-share.get", error);
@@ -238,6 +287,7 @@ async function updatePublicShareState(request: Request, enabled: boolean | null)
   if (!access.ok) return access.response;
 
   const share = await ensurePublicShareState(access.admin, access.ageGroup);
+  await revokeLegacyPublicTokens(access.admin, parsed.data.ageGroupId);
   const { data, error } = await access.admin
     .from("age_groups")
     .update({ public_access_enabled: parsed.data.publicAccessEnabled })
@@ -252,13 +302,20 @@ async function updatePublicShareState(request: Request, enabled: boolean | null)
     );
   }
 
+  const stats = await loadPublicShareStats(access.admin, parsed.data.ageGroupId);
+
   return NextResponse.json({
     success: true,
-    share: serializeShareState({
-      age_group_id: data.id,
-      public_slug: data.public_slug,
-      public_access_enabled: data.public_access_enabled === true,
-    }),
+    share: serializeShareState(
+      {
+        age_group_id: data.id,
+        public_slug: data.public_slug,
+        public_access_enabled: data.public_access_enabled === true,
+        access_count: 0,
+        last_accessed_at: null,
+      },
+      stats,
+    ),
     previous: serializeShareState(share),
   });
 }
