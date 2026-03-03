@@ -73,6 +73,18 @@ function prefixSelectedLines(
   };
 }
 
+function getCurrentLineRange(value: string, selectionStart: number, selectionEnd: number) {
+  const blockStart = value.lastIndexOf("\n", Math.max(0, selectionStart - 1)) + 1;
+  const nextLineBreak = value.indexOf("\n", selectionEnd);
+  const blockEnd = nextLineBreak === -1 ? value.length : nextLineBreak;
+
+  return {
+    blockStart,
+    blockEnd,
+    blockValue: value.slice(blockStart, blockEnd),
+  };
+}
+
 export function NotesEditor({
   value,
   onChange,
@@ -161,6 +173,54 @@ export function NotesEditor({
     );
   }
 
+  function handleKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if ((event.metaKey || event.ctrlKey) && !event.shiftKey) {
+      const lowerKey = event.key.toLowerCase();
+      if (lowerKey === "b") {
+        event.preventDefault();
+        handleBoldClick();
+        return;
+      }
+      if (lowerKey === "i") {
+        event.preventDefault();
+        handleItalicClick();
+        return;
+      }
+    }
+
+    if (event.key !== "Enter" || !textareaRef.current) return;
+
+    const textarea = textareaRef.current;
+    const selectionStart = textarea.selectionStart;
+    const selectionEnd = textarea.selectionEnd;
+    if (selectionStart !== selectionEnd) return;
+
+    const { blockValue } = getCurrentLineRange(value, selectionStart, selectionEnd);
+    const bulletMatch = /^\s*-\s+/.exec(blockValue);
+    const numberedMatch = /^\s*(\d+)\.\s+/.exec(blockValue);
+    const letterMatch = /^\s*([a-z])\.\s+/i.exec(blockValue);
+
+    if (!bulletMatch && !numberedMatch && !letterMatch) return;
+
+    event.preventDefault();
+
+    let prefix = "- ";
+    if (numberedMatch) {
+      prefix = `${Number(numberedMatch[1]) + 1}. `;
+    } else if (letterMatch) {
+      const nextChar = String.fromCharCode(letterMatch[1].toLowerCase().charCodeAt(0) + 1);
+      prefix = `${nextChar}. `;
+    }
+
+    const nextValue =
+      value.slice(0, selectionStart) + `\n${prefix}` + value.slice(selectionEnd);
+    pendingSelectionRef.current = {
+      start: selectionStart + prefix.length + 1,
+      end: selectionStart + prefix.length + 1,
+    };
+    onChange(nextValue);
+  }
+
   return (
     <div className={cn("space-y-2", className)}>
       <Label className="flex items-center gap-1">
@@ -230,6 +290,7 @@ export function NotesEditor({
         ref={textareaRef}
         value={value}
         onChange={(event) => onChange(event.target.value)}
+        onKeyDown={handleKeyDown}
         placeholder={placeholder}
         rows={rows}
         className={cn(
@@ -237,14 +298,6 @@ export function NotesEditor({
           focusRingClass,
         )}
       />
-
-      <p className="text-[11px] text-slate-500">
-        Formatação suportada: <span className="font-medium">**negrito**</span>,{" "}
-        <span className="font-medium">*itálico*</span>, listas com{" "}
-        <span className="font-medium">-</span>,{" "}
-        <span className="font-medium">1.</span> ou{" "}
-        <span className="font-medium">a.</span>
-      </p>
     </div>
   );
 }

@@ -14,6 +14,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import RedeemInviteGate from "@/components/invite/RedeemInviteGate";
 import { formatFixtureOpponentLabel } from "@/lib/games/display";
+import { shouldShowPresencePrompt } from "@/lib/events/presence-window";
 import type { TrainingSession, Game } from "@/types/database";
 
 export const dynamic = "force-dynamic";
@@ -280,6 +281,15 @@ export default async function DashboardPage() {
     todayTrainings.find((training) => training.status !== "completed") ||
     todayTrainings[0];
   const todayTrainingDone = todayTraining?.status === "completed";
+  const showTodayTrainingPrompt = todayTraining
+    ? shouldShowPresencePrompt(
+        todayTraining.session_date,
+        todayTraining.start_time,
+        todayTraining.end_time,
+        todayTraining.status,
+        now,
+      )
+    : false;
 
   const upcomingTimeline = [
     ...upcomingTrainings
@@ -392,7 +402,7 @@ export default async function DashboardPage() {
             )}
 
             {/* Presenças de hoje — se houver treino hoje */}
-            {todayTraining && !todayTrainingDone && (
+            {todayTraining && !todayTrainingDone && showTodayTrainingPrompt && (
               <Link href="/attendance">
                 <div className="flex items-center gap-3 p-4 bg-amber-50 border-2 border-amber-200 rounded-xl hover:border-amber-300 transition-colors">
                   <AlertCircle

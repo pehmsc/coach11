@@ -8,6 +8,7 @@ import {
   slugifyPublicAccessSegment,
 } from "@/lib/public-share";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
+import { resolveUserTeamContext } from "@/lib/auth/team-context";
 
 export const runtime = "nodejs";
 
@@ -88,6 +89,53 @@ async function assertCanManagePublicShare(userId: string, ageGroupId: string) {
     ok: true as const,
     admin,
     ageGroup: ageGroup as AgeGroupAccessRecord,
+  };
+}
+
+async function assertCanViewPublicShare(userId: string, ageGroupId: string) {
+  const admin = createAdminClient();
+  const [context, ageGroupResult] = await Promise.all([
+    resolveUserTeamContext(admin, userId),
+    admin
+      .from("age_groups")
+      .select(
+        "id, coordinator_id, club_name, name, public_slug, public_access_enabled, public_access_count, public_last_accessed_at",
+      )
+      .eq("id", ageGroupId)
+      .maybeSingle(),
+  ]);
+
+  if (ageGroupResult.error) {
+    return {
+      ok: false as const,
+      response: NextResponse.json(
+        { error: "Não foi possível validar o escalão." },
+        { status: 500 },
+      ),
+    };
+  }
+
+  if (!ageGroupResult.data) {
+    return {
+      ok: false as const,
+      response: NextResponse.json({ error: "Escalão não encontrado." }, { status: 404 }),
+    };
+  }
+
+  if (!context.accessibleAgeGroupIds.includes(ageGroupId)) {
+    return {
+      ok: false as const,
+      response: NextResponse.json(
+        { error: "Sem permissões para consultar este link público." },
+        { status: 403 },
+      ),
+    };
+  }
+
+  return {
+    ok: true as const,
+    admin,
+    ageGroup: ageGroupResult.data as AgeGroupAccessRecord,
   };
 }
 
@@ -247,7 +295,7 @@ export async function GET(request: Request) {
     const parsed = parseAgeGroupId(ageGroupId);
     if (!parsed.ok) return parsed.response;
 
-    const access = await assertCanManagePublicShare(auth.user.id, parsed.ageGroupId);
+    const access = await assertCanViewPublicShare(auth.user.id, parsed.ageGroupId);
     if (!access.ok) return access.response;
 
     const share = await ensurePublicShareState(access.admin, access.ageGroup);

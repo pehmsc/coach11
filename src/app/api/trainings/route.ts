@@ -235,8 +235,8 @@ export async function GET(request: Request) {
         "id, session_date, start_time, end_time, title, location, location_address, formatted_address, latitude, longitude, osm_place_id, location_source, notes, image_url, status, age_group_id, team_id",
       )
       .eq("age_group_id", context.ageGroup.id)
-      .order("session_date", { ascending: false })
-      .order("start_time", { ascending: false });
+      .order("session_date", { ascending: true })
+      .order("start_time", { ascending: true, nullsFirst: false });
 
     if (sessionsError) {
       throw sessionsError;

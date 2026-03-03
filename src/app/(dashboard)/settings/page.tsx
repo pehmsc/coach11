@@ -9,7 +9,6 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PushNotificationsControl } from "@/components/pwa/PushNotificationsControl";
 import { BetaInvitesManager } from "@/components/admin/BetaInvitesManager";
-import { PublicSharePanel } from "@/components/team/PublicSharePanel";
 import { Loader2, User, Palette, Bell, Camera, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
@@ -47,8 +46,6 @@ export default function SettingsPage() {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [deletingAccount, setDeletingAccount] = useState(false);
-  const [activeAgeGroupId, setActiveAgeGroupId] = useState<string | null>(null);
-  const [canManagePublicShare, setCanManagePublicShare] = useState(false);
 
   useEffect(() => {
     void loadProfile();
@@ -98,30 +95,18 @@ export default function SettingsPage() {
       const contextPayload = await contextRes.json().catch(() => ({}));
 
       if (contextRes.ok) {
-        const resolvedAgeGroupId =
-          typeof contextPayload?.ageGroup?.id === "string"
-            ? (contextPayload.ageGroup.id as string)
-            : null;
         const isSuper =
           (data as Profile | null)?.is_super_coordinator === true ||
           contextPayload?.profile?.is_super_coordinator === true;
 
-        setActiveAgeGroupId(resolvedAgeGroupId);
-        setCanManagePublicShare(
-          contextPayload?.canManageStaff === true || isSuper,
-        );
         if (isSuper) {
           setProfile((prev) =>
             prev ? { ...prev, is_super_coordinator: true } : prev,
           );
         }
       } else {
-        setActiveAgeGroupId(null);
-        setCanManagePublicShare(false);
       }
     } catch {
-      setActiveAgeGroupId(null);
-      setCanManagePublicShare(false);
     }
 
     setLoading(false);
@@ -519,13 +504,6 @@ export default function SettingsPage() {
                     </div>
                   </CardContent>
                 </Card>
-              )}
-
-              {activeAgeGroupId && (
-                <PublicSharePanel
-                  ageGroupId={activeAgeGroupId}
-                  canManage={canManagePublicShare}
-                />
               )}
             </>
           )}

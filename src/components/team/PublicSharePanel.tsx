@@ -29,16 +29,9 @@ export function PublicSharePanel({ ageGroupId, canManage }: Props) {
   const [copiedUrl, setCopiedUrl] = useState(false);
 
   useEffect(() => {
-    if (!canManage) {
-      setShare(null);
-      setError(null);
-      setLoading(false);
-      return;
-    }
-
     void loadShare();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ageGroupId, canManage]);
+  }, [ageGroupId]);
 
   async function loadShare() {
     setLoading(true);
@@ -142,7 +135,7 @@ export function PublicSharePanel({ ageGroupId, canManage }: Props) {
               Link fixo do escalão para pais e fãs, com pausa e retoma sem mudar o URL.
             </CardDescription>
           </div>
-          {share ? (
+          {share && canManage ? (
             <Button
               type="button"
               size="sm"
@@ -165,7 +158,7 @@ export function PublicSharePanel({ ageGroupId, canManage }: Props) {
       <CardContent className="space-y-4">
         {!canManage ? (
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-            Só o coordenador do escalão ou o coordenador principal podem gerir este link.
+            O link pode ser copiado e partilhado, mas só o coordenador do escalão ou o coordenador principal o podem pausar ou retomar.
           </div>
         ) : null}
 

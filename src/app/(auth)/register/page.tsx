@@ -44,28 +44,6 @@ function RegisterForm() {
     return inviteCode ? `/dashboard?code=${inviteCode}` : "/dashboard";
   }
 
-  async function checkBetaAccess(emailToCheck: string) {
-    const res = await fetch("/api/auth/beta-access/check", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: emailToCheck }),
-    });
-    const payload = await res.json().catch(() => ({}));
-
-    if (!res.ok) {
-      throw new Error(
-        (payload as { error?: string })?.error || "Erro ao validar acesso beta.",
-      );
-    }
-
-    const result = payload as { allowed?: boolean; reason?: string };
-
-    return {
-      allowed: result.allowed === true,
-      reason: typeof result.reason === "string" ? result.reason : null,
-    };
-  }
-
   function buildAuthHref(pathname: "/login" | "/register") {
     const params = new URLSearchParams();
     if (inviteCode) params.set("code", inviteCode);
@@ -89,21 +67,26 @@ function RegisterForm() {
     }
 
     const normalizedEmail = email.trim().toLowerCase();
+    const registerRes = await fetch("/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        fullName,
+        email: normalizedEmail,
+        password,
+      }),
+    });
+    const registerPayload = (await registerRes.json().catch(() => null)) as
+      | { success?: boolean; error?: string }
+      | null;
 
-    try {
-      const access = await checkBetaAccess(normalizedEmail);
-      if (!access.allowed) {
-        if (access.reason === "no_invite") {
-          router.replace("/invite-only?reason=beta_access_required");
-          return;
-        }
-
-        setError("Não foi possível validar o acesso beta agora. Tenta novamente.");
-        setLoading(false);
+    if (!registerRes.ok) {
+      if (registerPayload?.error === "no_invite") {
+        router.replace("/invite-only?reason=beta_access_required");
         return;
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao validar acesso beta.");
+
+      setError(registerPayload?.error || "Não foi possível criar conta agora.");
       setLoading(false);
       return;
     }

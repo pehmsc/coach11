@@ -148,6 +148,17 @@
   }
 }
 
+.coach11-map-shell {
+  isolation: isolate;
+  position: relative;
+  z-index: 0;
+}
+
+.coach11-map-canvas,
+.coach11-map-canvas .leaflet-container {
+  z-index: 0;
+}
+
 .leaflet-container {
   font: inherit;
   background: linear-gradient(180deg, #e2e8f0 0%, #f8fafc 100%);

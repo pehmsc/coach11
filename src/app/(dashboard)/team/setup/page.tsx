@@ -692,7 +692,7 @@ export default function TeamSetupPage() {
       </Card>
 
       {/* ── SECÇÃO 2: LOGOTIPO DO CLUBE ── */}
-      {existingAgeGroup && (
+      {false && existingAgeGroup && (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">

@@ -31,6 +31,7 @@ type Props = {
   resolveFallback?: boolean;
   interactive?: boolean;
   draggable?: boolean;
+  showDirectionsButton?: boolean;
   onLocationChange?: (value: MapLocationChange) => void;
   className?: string;
 };
@@ -150,6 +151,7 @@ export function LocationMapPreview({
   resolveFallback = false,
   interactive = true,
   draggable = false,
+  showDirectionsButton = true,
   onLocationChange,
   className,
 }: Props) {
@@ -496,7 +498,7 @@ export function LocationMapPreview({
           </div>
         )}
       </div>
-      <div className="flex items-center justify-between gap-3 border-t border-slate-200 px-4 py-3">
+      <div className="flex flex-col gap-3 border-t border-slate-200 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
             {label}
@@ -519,15 +521,19 @@ export function LocationMapPreview({
             </div>
           )}
         </div>
-        <OpenMapsButton
-          location={locationTitle}
-          locationAddress={resolvedAddress}
-          formattedAddress={resolvedAddress}
-          latitude={resolvedLocation?.latitude ?? latitude}
-          longitude={resolvedLocation?.longitude ?? longitude}
-          accent={accent}
-          label="Obter Direções"
-        />
+        {showDirectionsButton ? (
+          <OpenMapsButton
+            location={locationTitle}
+            locationAddress={resolvedAddress}
+            formattedAddress={resolvedAddress}
+            latitude={resolvedLocation?.latitude ?? latitude}
+            longitude={resolvedLocation?.longitude ?? longitude}
+            accent={accent}
+            label="Obter Direções"
+            size="compact"
+            className="shrink-0 self-start"
+          />
+        ) : null}
       </div>
     </div>
   );

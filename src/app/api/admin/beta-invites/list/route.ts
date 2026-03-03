@@ -13,7 +13,7 @@ export async function GET(request: Request) {
     }
 
     const url = new URL(request.url);
-    const inviteType = url.searchParams.get("inviteType");
+    const inviteType = url.searchParams.get("inviteType") || "beta_coordinator";
     const status = url.searchParams.get("status");
 
     let query = access.admin

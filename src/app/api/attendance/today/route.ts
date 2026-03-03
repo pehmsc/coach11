@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
+import { shouldShowPresencePrompt } from "@/lib/events/presence-window";
 
 type AttendanceStatus = "present" | "absent" | "injured";
 
@@ -16,6 +17,14 @@ type AttendanceGetPayload = {
   attendanceTable?: string | null;
   ok?: boolean;
   error_code?: string;
+};
+
+type AttendanceGetSession = {
+  id: string;
+  status?: string | null;
+  session_date?: string | null;
+  start_time?: string | null;
+  end_time?: string | null;
 };
 
 type AttendanceSavePayload = {
@@ -74,6 +83,27 @@ export async function GET(request: Request) {
     }
 
     if (payload?.success) {
+      const session =
+        payload.session && typeof payload.session === "object"
+          ? (payload.session as AttendanceGetSession)
+          : null;
+
+      if (
+        session &&
+        !shouldShowPresencePrompt(
+          session.session_date,
+          session.start_time,
+          session.end_time,
+          session.status ?? null,
+        )
+      ) {
+        return NextResponse.json({
+          ...payload,
+          noSession: true,
+          session: null,
+        });
+      }
+
       return NextResponse.json(payload);
     }
 

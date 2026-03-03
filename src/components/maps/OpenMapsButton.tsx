@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 
 type Accent = "emerald" | "blue" | "slate";
 type Variant = "solid" | "link" | "icon";
+type Size = "default" | "compact";
 
 type Props = {
   location?: string | null;
@@ -23,11 +24,12 @@ type Props = {
   title?: string;
   accent?: Accent;
   variant?: Variant;
+  size?: Size;
   className?: string;
   children?: ReactNode;
 };
 
-function resolveVariantClasses(variant: Variant, accent: Accent) {
+function resolveVariantClasses(variant: Variant, accent: Accent, size: Size) {
   if (variant === "icon") {
     if (accent === "blue") {
       return "rounded-full bg-blue-50 p-1.5 text-blue-700 hover:bg-blue-100";
@@ -48,13 +50,18 @@ function resolveVariantClasses(variant: Variant, accent: Accent) {
     return "text-emerald-600 hover:text-emerald-700 hover:underline";
   }
 
+  const sizeClasses =
+    size === "compact"
+      ? "px-3 py-1.5 text-xs"
+      : "px-4 py-2 text-sm";
+
   if (accent === "blue") {
-    return "rounded-full bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700";
+    return `rounded-full bg-blue-600 ${sizeClasses} font-semibold text-white hover:bg-blue-700`;
   }
   if (accent === "slate") {
-    return "rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800";
+    return `rounded-full bg-slate-900 ${sizeClasses} font-semibold text-white hover:bg-slate-800`;
   }
-  return "rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700";
+  return `rounded-full bg-emerald-600 ${sizeClasses} font-semibold text-white hover:bg-emerald-700`;
 }
 
 export function OpenMapsButton({
@@ -67,6 +74,7 @@ export function OpenMapsButton({
   title,
   accent = "emerald",
   variant = "solid",
+  size = "default",
   className,
   children,
 }: Props) {
@@ -147,13 +155,13 @@ export function OpenMapsButton({
         title={title || label}
         className={cn(
           "inline-flex items-center justify-center gap-2 transition-colors",
-          resolveVariantClasses(variant, accent),
+          resolveVariantClasses(variant, accent, size),
           className,
         )}
       >
         {children || (
           <>
-            <Navigation size={variant === "icon" ? 16 : 14} />
+            <Navigation size={variant === "icon" ? 16 : size === "compact" ? 13 : 14} />
             {variant !== "icon" && label}
           </>
         )}

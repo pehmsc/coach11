@@ -425,6 +425,7 @@ export function LocationFields({
           label="Mapa"
           resolveFallback
           draggable={!compact}
+          showDirectionsButton={false}
           onLocationChange={(nextValue) => {
             setLookupError(null);
             onChange({

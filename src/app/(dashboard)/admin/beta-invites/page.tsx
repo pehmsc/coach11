@@ -12,10 +12,10 @@ export default async function AdminBetaInvitesPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-4 p-4 md:p-8">
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="sticky top-0 z-10 flex flex-wrap items-center gap-3 bg-white/95 pb-2 backdrop-blur">
         <Link
           href="/settings"
-          className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 transition-colors hover:text-slate-900"
+          className="inline-flex w-fit items-center gap-2 rounded-full bg-white px-3 py-2 text-sm font-medium text-slate-600 shadow-sm ring-1 ring-slate-200 transition-colors hover:text-slate-900"
         >
           <ArrowLeft size={16} />
           Voltar às Configurações

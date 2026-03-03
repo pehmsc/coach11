@@ -97,7 +97,9 @@ export async function GET() {
       .select("coordinator_id")
       .eq("id", context.ageGroup.id)
       .maybeSingle();
-    const canManageStaff = ageGroupMeta?.coordinator_id === user.id;
+    const canManageStaff =
+      ageGroupMeta?.coordinator_id === user.id ||
+      resolvedProfile?.is_super_coordinator === true;
 
     const staffContext = context.teamId
       ? await getTeamMembersDetailed(db, {

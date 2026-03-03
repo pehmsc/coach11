@@ -22,6 +22,8 @@ import { Button } from "@/components/ui/button";
 import { EMPTY_LOCATION_FIELDS, resolveLocationLabel } from "@/lib/location";
 import { LocationFields } from "@/components/maps/LocationFields";
 import { LocationMapPreview } from "@/components/maps/LocationMapPreview";
+import { NotesEditor } from "@/components/forms/NotesEditor";
+import { EventImagePicker } from "@/components/media/EventImagePicker";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
@@ -157,6 +159,9 @@ export default function GameDetailPage() {
   const [editTitle, setEditTitle] = useState("");
   const [editOpponent, setEditOpponent] = useState("");
   const [editOpponentShortName, setEditOpponentShortName] = useState("");
+  const [editDate, setEditDate] = useState("");
+  const [editStartTime, setEditStartTime] = useState("00:00");
+  const [editEndTime, setEditEndTime] = useState("");
   const [editLocation, setEditLocation] = useState("");
   const [editLocationAddress, setEditLocationAddress] = useState("");
   const [editFormattedAddress, setEditFormattedAddress] = useState("");
@@ -166,6 +171,8 @@ export default function GameDetailPage() {
   const [editLocationSource, setEditLocationSource] = useState<
     "google" | "osm" | "manual" | null
   >(null);
+  const [editNotes, setEditNotes] = useState("");
+  const [editImageUrl, setEditImageUrl] = useState("");
   const [savingGameEdit, setSavingGameEdit] = useState(false);
   const [correctionReason, setCorrectionReason] = useState("");
 
@@ -601,6 +608,11 @@ export default function GameDetailPage() {
     e.preventDefault();
     setSavingGameEdit(true);
     setError(null);
+    if (!editDate || !editStartTime) {
+      setError("Preenche data e hora de início.");
+      setSavingGameEdit(false);
+      return;
+    }
     if (!isValidManualShortName(editOpponentShortName, 2, 5)) {
       setError("A sigla do adversário deve ter entre 2 e 5 caracteres.");
       setSavingGameEdit(false);
@@ -611,32 +623,42 @@ export default function GameDetailPage() {
       5,
     );
 
-    const res = await fetch(`/api/games/${id}`, {
+    const res = await fetch("/api/calendar/events", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        title: editTitle.trim() || null,
-        opponent_name: editOpponent.trim(),
-        opponent_short_name: normalizedOpponentShortName || null,
-        location: editLocation.trim() || null,
-        location_address: editLocationAddress.trim() || null,
-        formatted_address: editFormattedAddress.trim() || null,
-        latitude: editLatitude,
-        longitude: editLongitude,
-        osm_place_id: editOsmPlaceId.trim() || null,
-        location_source: editLocationSource,
+        id,
+        type: "game",
+        ageGroupId: game?.age_group_id ?? null,
+        teamId: game?.team_id ?? null,
+        payload: {
+          title: editTitle.trim() || null,
+          date: editDate,
+          start_time: editStartTime,
+          end_time: editEndTime || null,
+          opponent_name: editOpponent.trim(),
+          opponent_short_name: normalizedOpponentShortName || null,
+          location: editLocation.trim() || null,
+          location_address: editLocationAddress.trim() || null,
+          formatted_address: editFormattedAddress.trim() || null,
+          latitude: editLatitude,
+          longitude: editLongitude,
+          osm_place_id: editOsmPlaceId.trim() || null,
+          location_source: editLocationSource,
+          notes: editNotes.trim() || null,
+          image_url: editImageUrl.trim() || null,
+          is_home: game?.is_home ?? true,
+        },
       }),
     });
-    const payload = await res.json().catch(() => ({}));
+    const payload = (await res.json().catch(() => ({}))) as
+      | { event?: Game; error?: string }
+      | Record<string, never>;
 
-    if (!res.ok) {
-      setError(
-        (payload as { error?: string }).error || "Erro ao guardar jogo.",
-      );
+    if (!res.ok || !payload?.event) {
+      setError(payload?.error || "Erro ao guardar jogo.");
     } else {
-      setGame((prev) =>
-        prev ? { ...prev, ...(payload as { game: Game }).game } : prev,
-      );
+      setGame((prev) => (prev ? { ...prev, ...payload.event } : prev));
       setEditingGame(false);
     }
     setSavingGameEdit(false);
@@ -644,11 +666,15 @@ export default function GameDetailPage() {
 
   function openEditGame() {
     if (!game) return;
+    const parsedGameDate = game.game_datetime ? parseISO(game.game_datetime) : null;
     setEditTitle(game.title ?? "");
     setEditOpponent(game.opponent_name ?? "");
     setEditOpponentShortName(
       normalizeManualShortName(game.opponent_short_name, 5) || "",
     );
+    setEditDate(parsedGameDate ? format(parsedGameDate, "yyyy-MM-dd") : "");
+    setEditStartTime(parsedGameDate ? format(parsedGameDate, "HH:mm") : "00:00");
+    setEditEndTime(game.end_time?.slice(0, 5) ?? "");
     setEditLocation(game.location ?? "");
     setEditLocationAddress(game.location_address ?? "");
     setEditFormattedAddress(game.formatted_address ?? "");
@@ -656,6 +682,8 @@ export default function GameDetailPage() {
     setEditLongitude(game.longitude ?? null);
     setEditOsmPlaceId(game.osm_place_id ?? "");
     setEditLocationSource(game.location_source ?? null);
+    setEditNotes(game.notes ?? "");
+    setEditImageUrl(game.image_url ?? "");
     setEditingGame(true);
   }
 
@@ -911,6 +939,7 @@ export default function GameDetailPage() {
           accent="blue"
           label="Localização do jogo"
           resolveFallback
+          showDirectionsButton={false}
           className="mb-5"
         />
       )}
@@ -953,7 +982,7 @@ export default function GameDetailPage() {
       {/* Edit game modal */}
       {editingGame && (
         <div
-          className="fixed inset-0 bg-black/50 z-50 flex items-end md:items-center justify-center p-4"
+          className="fixed inset-0 bg-black/50 z-[70] flex items-end md:items-center justify-center p-4"
           onClick={() => setEditingGame(false)}
         >
           <div
@@ -966,12 +995,12 @@ export default function GameDetailPage() {
                 <X size={20} className="text-slate-400" />
               </button>
             </div>
-            <form
-              onSubmit={handleSaveGameEdit}
-              className="p-5 space-y-4 overflow-y-auto flex-1 pb-[max(1.25rem,env(safe-area-inset-bottom))]"
-              style={{ WebkitOverflowScrolling: "touch" }}
-            >
-              <div className="space-y-1.5">
+            <form onSubmit={handleSaveGameEdit} className="flex flex-1 flex-col min-h-0">
+              <div
+                className="p-5 space-y-4 overflow-y-auto flex-1"
+                style={{ WebkitOverflowScrolling: "touch" }}
+              >
+                <div className="space-y-1.5">
                 <label className="text-sm font-medium text-slate-700">
                   Jornada / Título
                 </label>
@@ -1013,32 +1042,82 @@ export default function GameDetailPage() {
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm uppercase focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
-              <LocationFields
-                value={{
-                  ...EMPTY_LOCATION_FIELDS,
-                  location: editLocation,
-                  location_address: editLocationAddress,
-                  formatted_address: editFormattedAddress,
-                  latitude: editLatitude,
-                  longitude: editLongitude,
-                  osm_place_id: editOsmPlaceId,
-                  location_source: editLocationSource,
-                }}
-                onChange={(nextValue) => {
-                  setEditLocation(nextValue.location);
-                  setEditLocationAddress(nextValue.location_address);
-                  setEditFormattedAddress(nextValue.formatted_address);
-                  setEditLatitude(nextValue.latitude);
-                  setEditLongitude(nextValue.longitude);
-                  setEditOsmPlaceId(nextValue.osm_place_id);
-                  setEditLocationSource(nextValue.location_source);
-                }}
-                locationLabel="Local"
-                locationPlaceholder="Nome do campo ou local"
-                accent="blue"
-              />
-              {error && <p className="text-sm text-red-600">{error}</p>}
-              <div className="flex gap-2 pt-1">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-slate-700">
+                      Data *
+                    </label>
+                    <input
+                      type="date"
+                      value={editDate}
+                      onChange={(event) => setEditDate(event.target.value)}
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-slate-700">
+                      Início *
+                    </label>
+                    <input
+                      type="time"
+                      value={editStartTime}
+                      onChange={(event) => setEditStartTime(event.target.value)}
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      required
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-slate-700">
+                    Fim
+                  </label>
+                  <input
+                    type="time"
+                    value={editEndTime}
+                    onChange={(event) => setEditEndTime(event.target.value)}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <LocationFields
+                  value={{
+                    ...EMPTY_LOCATION_FIELDS,
+                    location: editLocation,
+                    location_address: editLocationAddress,
+                    formatted_address: editFormattedAddress,
+                    latitude: editLatitude,
+                    longitude: editLongitude,
+                    osm_place_id: editOsmPlaceId,
+                    location_source: editLocationSource,
+                  }}
+                  onChange={(nextValue) => {
+                    setEditLocation(nextValue.location);
+                    setEditLocationAddress(nextValue.location_address);
+                    setEditFormattedAddress(nextValue.formatted_address);
+                    setEditLatitude(nextValue.latitude);
+                    setEditLongitude(nextValue.longitude);
+                    setEditOsmPlaceId(nextValue.osm_place_id);
+                    setEditLocationSource(nextValue.location_source);
+                  }}
+                  locationLabel="Local"
+                  locationPlaceholder="Nome do campo ou local"
+                  accent="blue"
+                />
+                <EventImagePicker
+                  ageGroupId={game.age_group_id ?? null}
+                  value={editImageUrl}
+                  onChange={setEditImageUrl}
+                  accent="blue"
+                />
+                <NotesEditor
+                  value={editNotes}
+                  onChange={setEditNotes}
+                  accent="blue"
+                  rows={7}
+                />
+                {error && <p className="text-sm text-red-600">{error}</p>}
+              </div>
+              <div className="flex gap-2 border-t bg-white p-5 pt-3 shrink-0 pb-[max(1rem,env(safe-area-inset-bottom))]">
                 <button
                   type="submit"
                   disabled={savingGameEdit}

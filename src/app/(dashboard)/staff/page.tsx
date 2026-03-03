@@ -317,6 +317,15 @@ export default function StaffPage() {
     setTimeout(() => setCopiedCode(null), 2000);
   }
 
+  async function copyContact(value: string, label: "email" | "telefone") {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success(`${label === "email" ? "Email" : "Telefone"} copiado.`);
+    } catch {
+      toast.error(`Não foi possível copiar o ${label}.`);
+    }
+  }
+
   if (loading) {
     return (
       <div className="p-4 md:p-8 max-w-2xl mx-auto">
@@ -370,10 +379,26 @@ export default function StaffPage() {
                     {member.is_coordinator ? " · Coordenador do escalão" : ""}
                   </p>
                   {(member.email || member.phone) && (
-                    <p className="text-xs text-slate-400 truncate">
-                      {member.email || "Sem email"}
-                      {member.phone ? ` · ${member.phone}` : ""}
-                    </p>
+                    <div className="mt-1 flex flex-wrap gap-2 text-xs">
+                      {member.email ? (
+                        <button
+                          type="button"
+                          onClick={() => void copyContact(member.email!, "email")}
+                          className="rounded-full bg-white px-2 py-0.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                        >
+                          {member.email}
+                        </button>
+                      ) : null}
+                      {member.phone ? (
+                        <button
+                          type="button"
+                          onClick={() => void copyContact(member.phone!, "telefone")}
+                          className="rounded-full bg-white px-2 py-0.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                        >
+                          {member.phone}
+                        </button>
+                      ) : null}
+                    </div>
                   )}
                 </div>
                 {canManageStaff && !member.is_coordinator && (

@@ -30,10 +30,10 @@ export default async function AdminPage() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-4 md:p-8">
-      <div className="space-y-3">
+      <div className="sticky top-0 z-10 space-y-3 bg-white/95 pb-2 backdrop-blur">
         <Link
           href="/settings"
-          className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 transition-colors hover:text-slate-900"
+          className="inline-flex w-fit items-center gap-2 rounded-full bg-white px-3 py-2 text-sm font-medium text-slate-600 shadow-sm ring-1 ring-slate-200 transition-colors hover:text-slate-900"
         >
           <ArrowLeft size={16} />
           Voltar às Configurações

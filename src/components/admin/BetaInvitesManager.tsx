@@ -26,7 +26,6 @@ type Props = {
 
 export function BetaInvitesManager({ embedded = false }: Props) {
   const [email, setEmail] = useState("");
-  const [inviteTypeFilter, setInviteTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [invites, setInvites] = useState<BetaInviteItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,14 +36,14 @@ export function BetaInvitesManager({ embedded = false }: Props) {
   useEffect(() => {
     void loadInvites();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inviteTypeFilter, statusFilter]);
+  }, [statusFilter]);
 
   async function loadInvites() {
     setLoading(true);
 
     try {
       const params = new URLSearchParams();
-      params.set("inviteType", inviteTypeFilter);
+      params.set("inviteType", "beta_coordinator");
       params.set("status", statusFilter);
 
       const res = await fetch(`/api/admin/beta-invites/list?${params.toString()}`, {
@@ -171,19 +170,7 @@ export function BetaInvitesManager({ embedded = false }: Props) {
         </Button>
       </form>
 
-      <div className="grid gap-3 md:grid-cols-2">
-        <label className="space-y-1.5">
-          <span className="text-sm font-medium text-slate-700">Tipo</span>
-          <select
-            value={inviteTypeFilter}
-            onChange={(event) => setInviteTypeFilter(event.target.value)}
-            className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
-          >
-            <option value="all">Todos</option>
-            <option value="beta_coordinator">Beta coordinator</option>
-            <option value="staff">Staff</option>
-          </select>
-        </label>
+      <div className="grid gap-3">
         <label className="space-y-1.5">
           <span className="text-sm font-medium text-slate-700">Estado</span>
           <select

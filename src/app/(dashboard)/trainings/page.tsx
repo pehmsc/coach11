@@ -12,6 +12,7 @@ import {
   MapPin,
   Copy,
   Plus,
+  Pencil,
   Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,7 @@ import {
   type LocationSource,
   resolveLocationLabel,
 } from "@/lib/location";
+import { portugalDateTimeToUtc } from "@/lib/events/presence-window";
 import type { Player } from "@/types/database";
 
 interface TrainingRow {
@@ -104,6 +106,23 @@ export default function TrainingsPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletingTraining, setDeletingTraining] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
+  const [editingSelectedSession, setEditingSelectedSession] = useState(false);
+  const [savingSelectedSession, setSavingSelectedSession] = useState(false);
+  const [editTrainingTitle, setEditTrainingTitle] = useState("Treino");
+  const [editTrainingDate, setEditTrainingDate] = useState("");
+  const [editTrainingStartTime, setEditTrainingStartTime] = useState("18:30");
+  const [editTrainingEndTime, setEditTrainingEndTime] = useState("20:00");
+  const [editTrainingLocation, setEditTrainingLocation] = useState("");
+  const [editTrainingLocationAddress, setEditTrainingLocationAddress] = useState("");
+  const [editTrainingFormattedAddress, setEditTrainingFormattedAddress] = useState("");
+  const [editTrainingLatitude, setEditTrainingLatitude] = useState<number | null>(null);
+  const [editTrainingLongitude, setEditTrainingLongitude] = useState<number | null>(null);
+  const [editTrainingOsmPlaceId, setEditTrainingOsmPlaceId] = useState("");
+  const [editTrainingLocationSource, setEditTrainingLocationSource] = useState<
+    "google" | "osm" | "manual" | null
+  >(null);
+  const [editTrainingNotes, setEditTrainingNotes] = useState("");
+  const [editTrainingImageUrl, setEditTrainingImageUrl] = useState("");
 
   useEffect(() => {
     void loadData();
@@ -155,6 +174,7 @@ export default function TrainingsPage() {
     setLoadingDetail(true);
     setDetailError(null);
     setShowDeleteConfirm(false);
+    setEditingSelectedSession(false);
 
     try {
       const detailRes = await fetch(`/api/trainings?sessionId=${session.id}`, {
@@ -262,6 +282,7 @@ export default function TrainingsPage() {
 
   function openCreateTrainingModal() {
     resetCreateForm();
+    setEditingSelectedSession(false);
     setCreateModalOpen(true);
   }
 
@@ -285,6 +306,102 @@ export default function TrainingsPage() {
     setShowDeleteConfirm(false);
     setSelectedSession(null);
     setCreateModalOpen(true);
+  }
+
+  function openEditSelectedSession() {
+    if (!selectedSession) return;
+    const source = selectedSession.session;
+
+    setEditTrainingTitle(source.title || "Treino");
+    setEditTrainingDate(source.session_date);
+    setEditTrainingStartTime(source.start_time?.slice(0, 5) || "18:30");
+    setEditTrainingEndTime(source.end_time?.slice(0, 5) || "20:00");
+    setEditTrainingLocation(source.location || "");
+    setEditTrainingLocationAddress(source.location_address || "");
+    setEditTrainingFormattedAddress(source.formatted_address || "");
+    setEditTrainingLatitude(source.latitude ?? null);
+    setEditTrainingLongitude(source.longitude ?? null);
+    setEditTrainingOsmPlaceId(source.osm_place_id || "");
+    setEditTrainingLocationSource(source.location_source ?? null);
+    setEditTrainingNotes(source.notes || "");
+    setEditTrainingImageUrl(source.image_url || "");
+    setDetailError(null);
+    setEditingSelectedSession(true);
+  }
+
+  function closeEditSelectedSession() {
+    setEditingSelectedSession(false);
+    setSavingSelectedSession(false);
+  }
+
+  async function handleSaveSelectedSession(e: { preventDefault(): void }) {
+    e.preventDefault();
+    if (!selectedSession) return;
+    if (!editTrainingDate || !editTrainingStartTime) {
+      setDetailError("Preenche data e hora de início.");
+      return;
+    }
+
+    setSavingSelectedSession(true);
+    setDetailError(null);
+
+    try {
+      const res = await fetch("/api/calendar/events", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: selectedSession.session.id,
+          type: "training",
+          ageGroupId,
+          payload: {
+            title: editTrainingTitle.trim() || "Treino",
+            date: editTrainingDate,
+            start_time: editTrainingStartTime,
+            end_time: editTrainingEndTime || null,
+            location: editTrainingLocation.trim() || null,
+            location_address: editTrainingLocationAddress.trim() || null,
+            formatted_address: editTrainingFormattedAddress.trim() || null,
+            latitude: editTrainingLatitude,
+            longitude: editTrainingLongitude,
+            osm_place_id: editTrainingOsmPlaceId.trim() || null,
+            location_source: editTrainingLocationSource,
+            notes: editTrainingNotes.trim() || null,
+            image_url: editTrainingImageUrl.trim() || null,
+          },
+        }),
+      });
+      const payload = (await res.json().catch(() => null)) as
+        | { success?: boolean; event?: TrainingRow; error?: string }
+        | null;
+
+      if (!res.ok || !payload?.success || !payload.event) {
+        setDetailError(payload?.error || "Erro ao guardar treino.");
+        return;
+      }
+
+      setSessions((prev) =>
+        prev.map((session) =>
+          session.id === payload.event?.id ? { ...session, ...payload.event } : session,
+        ),
+      );
+      setSelectedSession((prev) =>
+        prev
+          ? {
+              ...prev,
+              session: {
+                ...prev.session,
+                ...payload.event,
+              },
+            }
+          : prev,
+      );
+      closeEditSelectedSession();
+      await loadData();
+    } catch {
+      setDetailError("Erro de ligação ao guardar treino.");
+    } finally {
+      setSavingSelectedSession(false);
+    }
   }
 
   async function handleCreateTraining(e: { preventDefault(): void }) {
@@ -344,6 +461,14 @@ export default function TrainingsPage() {
         selectedSession.session.location_address,
       )
     : null;
+  const selectedSessionStartsAt = selectedSession
+    ? portugalDateTimeToUtc(
+        selectedSession.session.session_date,
+        selectedSession.session.start_time,
+      )
+    : null;
+  const canEditSelectedSession =
+    !!selectedSessionStartsAt && selectedSessionStartsAt.getTime() > Date.now();
 
   if (loading) {
     return (
@@ -507,12 +632,12 @@ export default function TrainingsPage() {
                 <X size={20} className="text-slate-400" />
               </button>
             </div>
-            <form
-              onSubmit={handleCreateTraining}
-              className="p-5 space-y-3 overflow-y-auto flex-1 pb-[max(1.25rem,env(safe-area-inset-bottom))]"
-              style={{ WebkitOverflowScrolling: "touch" }}
-            >
-              <div className="space-y-1">
+            <form onSubmit={handleCreateTraining} className="flex flex-1 flex-col min-h-0">
+              <div
+                className="p-5 space-y-3 overflow-y-auto flex-1"
+                style={{ WebkitOverflowScrolling: "touch" }}
+              >
+                <div className="space-y-1">
                 <label className="text-sm font-medium text-slate-700">Título</label>
                 <input
                   type="text"
@@ -553,42 +678,43 @@ export default function TrainingsPage() {
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
                 />
               </div>
-              <LocationFields
-                value={{
-                  ...EMPTY_LOCATION_FIELDS,
-                  location: newTrainingLocation,
-                  location_address: newTrainingLocationAddress,
-                  formatted_address: newTrainingFormattedAddress,
-                  latitude: newTrainingLatitude,
-                  longitude: newTrainingLongitude,
-                  osm_place_id: newTrainingOsmPlaceId,
-                  location_source: newTrainingLocationSource,
-                }}
-                onChange={(nextValue) => {
-                  setNewTrainingLocation(nextValue.location);
-                  setNewTrainingLocationAddress(nextValue.location_address);
-                  setNewTrainingFormattedAddress(nextValue.formatted_address);
-                  setNewTrainingLatitude(nextValue.latitude);
-                  setNewTrainingLongitude(nextValue.longitude);
-                  setNewTrainingOsmPlaceId(nextValue.osm_place_id);
-                  setNewTrainingLocationSource(nextValue.location_source);
-                }}
-                accent="emerald"
-              />
-              <EventImagePicker
-                ageGroupId={ageGroupId}
-                value={newTrainingImageUrl}
-                onChange={setNewTrainingImageUrl}
-                accent="emerald"
-              />
-              <NotesEditor
-                value={newTrainingNotes}
-                onChange={setNewTrainingNotes}
-                accent="emerald"
-                rows={7}
-              />
-              {createError && <p className="text-sm text-red-600">{createError}</p>}
-              <div className="flex gap-2 pt-1">
+                <LocationFields
+                  value={{
+                    ...EMPTY_LOCATION_FIELDS,
+                    location: newTrainingLocation,
+                    location_address: newTrainingLocationAddress,
+                    formatted_address: newTrainingFormattedAddress,
+                    latitude: newTrainingLatitude,
+                    longitude: newTrainingLongitude,
+                    osm_place_id: newTrainingOsmPlaceId,
+                    location_source: newTrainingLocationSource,
+                  }}
+                  onChange={(nextValue) => {
+                    setNewTrainingLocation(nextValue.location);
+                    setNewTrainingLocationAddress(nextValue.location_address);
+                    setNewTrainingFormattedAddress(nextValue.formatted_address);
+                    setNewTrainingLatitude(nextValue.latitude);
+                    setNewTrainingLongitude(nextValue.longitude);
+                    setNewTrainingOsmPlaceId(nextValue.osm_place_id);
+                    setNewTrainingLocationSource(nextValue.location_source);
+                  }}
+                  accent="emerald"
+                />
+                <EventImagePicker
+                  ageGroupId={ageGroupId}
+                  value={newTrainingImageUrl}
+                  onChange={setNewTrainingImageUrl}
+                  accent="emerald"
+                />
+                <NotesEditor
+                  value={newTrainingNotes}
+                  onChange={setNewTrainingNotes}
+                  accent="emerald"
+                  rows={7}
+                />
+                {createError && <p className="text-sm text-red-600">{createError}</p>}
+              </div>
+              <div className="flex gap-2 border-t bg-white p-5 pt-3 shrink-0 pb-[max(1rem,env(safe-area-inset-bottom))]">
                 <Button
                   type="submit"
                   disabled={creatingTraining}
@@ -617,12 +743,13 @@ export default function TrainingsPage() {
       {/* Detail Modal */}
       {selectedSession && (
         <div
-          className="fixed inset-0 bg-black/50 z-50 flex items-end md:items-center justify-center p-4"
+          className="fixed inset-0 bg-black/50 z-[70] flex items-end md:items-center justify-center p-4"
           onClick={() => {
             if (deletingTraining) return;
             setSelectedSession(null);
             setShowDeleteConfirm(false);
             setDetailError(null);
+            setEditingSelectedSession(false);
           }}
         >
           <div
@@ -651,6 +778,16 @@ export default function TrainingsPage() {
                   )}
               </div>
               <div className="flex items-center gap-1.5">
+                {canEditSelectedSession && !editingSelectedSession && (
+                  <button
+                    onClick={openEditSelectedSession}
+                    className="p-1.5 rounded-full bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
+                    title="Editar treino"
+                    disabled={deletingTraining}
+                  >
+                    <Pencil size={16} />
+                  </button>
+                )}
                 <button
                   onClick={() => openDuplicateTraining(selectedSession.session)}
                   className="p-1.5 rounded-full bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
@@ -674,6 +811,7 @@ export default function TrainingsPage() {
                     setSelectedSession(null);
                     setShowDeleteConfirm(false);
                     setDetailError(null);
+                    setEditingSelectedSession(false);
                   }}
                   disabled={deletingTraining}
                 >
@@ -688,22 +826,111 @@ export default function TrainingsPage() {
               </div>
             )}
 
-            {/* Summary row */}
-            <div className="flex divide-x border-b">
-              {[
-                { label: "Presentes", value: selectedSession.summary.present, color: "text-emerald-600" },
-                { label: "Ausentes", value: selectedSession.summary.absent, color: "text-red-500" },
-                { label: "Lesionados", value: selectedSession.summary.injured, color: "text-orange-500" },
-              ].map(({ label, value, color }) => (
-                <div key={label} className="flex-1 text-center py-3">
-                  <p className={`text-xl font-bold ${color}`}>{value}</p>
-                  <p className="text-xs text-slate-500">{label}</p>
+            {editingSelectedSession ? (
+              <form onSubmit={handleSaveSelectedSession} className="flex flex-1 flex-col min-h-0">
+                <div
+                  className="space-y-3 overflow-y-auto p-5 flex-1"
+                  style={{ WebkitOverflowScrolling: "touch" }}
+                >
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium text-slate-700">Título</label>
+                    <input
+                      type="text"
+                      value={editTrainingTitle}
+                      onChange={(event) => setEditTrainingTitle(event.target.value)}
+                      placeholder="Treino"
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <label className="text-sm font-medium text-slate-700">Data *</label>
+                      <input
+                        type="date"
+                        value={editTrainingDate}
+                        onChange={(event) => setEditTrainingDate(event.target.value)}
+                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-sm font-medium text-slate-700">Início *</label>
+                      <input
+                        type="time"
+                        value={editTrainingStartTime}
+                        onChange={(event) => setEditTrainingStartTime(event.target.value)}
+                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium text-slate-700">Fim</label>
+                    <input
+                      type="time"
+                      value={editTrainingEndTime}
+                      onChange={(event) => setEditTrainingEndTime(event.target.value)}
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <LocationFields
+                    value={{
+                      ...EMPTY_LOCATION_FIELDS,
+                      location: editTrainingLocation,
+                      location_address: editTrainingLocationAddress,
+                      formatted_address: editTrainingFormattedAddress,
+                      latitude: editTrainingLatitude,
+                      longitude: editTrainingLongitude,
+                      osm_place_id: editTrainingOsmPlaceId,
+                      location_source: editTrainingLocationSource,
+                    }}
+                    onChange={(nextValue) => {
+                      setEditTrainingLocation(nextValue.location);
+                      setEditTrainingLocationAddress(nextValue.location_address);
+                      setEditTrainingFormattedAddress(nextValue.formatted_address);
+                      setEditTrainingLatitude(nextValue.latitude);
+                      setEditTrainingLongitude(nextValue.longitude);
+                      setEditTrainingOsmPlaceId(nextValue.osm_place_id);
+                      setEditTrainingLocationSource(nextValue.location_source);
+                    }}
+                    accent="emerald"
+                  />
+                  <EventImagePicker
+                    ageGroupId={ageGroupId}
+                    value={editTrainingImageUrl}
+                    onChange={setEditTrainingImageUrl}
+                    accent="emerald"
+                  />
+                  <NotesEditor
+                    value={editTrainingNotes}
+                    onChange={setEditTrainingNotes}
+                    accent="emerald"
+                    rows={7}
+                  />
                 </div>
-              ))}
-            </div>
-
-            {/* Player list */}
-            {loadingDetail ? (
+                <div className="flex gap-2 border-t bg-white p-5 pt-3 shrink-0 pb-[max(1rem,env(safe-area-inset-bottom))]">
+                  <Button
+                    type="submit"
+                    disabled={savingSelectedSession}
+                    className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                  >
+                    {savingSelectedSession ? (
+                      <Loader2 size={16} className="animate-spin" />
+                    ) : (
+                      "Guardar treino"
+                    )}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={closeEditSelectedSession}
+                    disabled={savingSelectedSession}
+                  >
+                    Cancelar
+                  </Button>
+                </div>
+              </form>
+            ) : loadingDetail ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 size={20} className="animate-spin text-slate-400" />
               </div>
@@ -733,6 +960,7 @@ export default function TrainingsPage() {
                       longitude={selectedSession.session.longitude}
                       accent="emerald"
                       label="Localização"
+                      showDirectionsButton={false}
                     />
                   </div>
                 )}

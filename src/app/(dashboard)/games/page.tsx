@@ -445,12 +445,12 @@ export default function GamesPage() {
                 <X size={20} className="text-slate-400" />
               </button>
             </div>
-            <form
-              onSubmit={handleCreateGame}
-              className="p-5 space-y-3 overflow-y-auto flex-1 pb-[max(1.25rem,env(safe-area-inset-bottom))]"
-              style={{ WebkitOverflowScrolling: "touch" }}
-            >
-              <div className="space-y-1">
+            <form onSubmit={handleCreateGame} className="flex flex-1 flex-col min-h-0">
+              <div
+                className="p-5 space-y-3 overflow-y-auto flex-1"
+                style={{ WebkitOverflowScrolling: "touch" }}
+              >
+                <div className="space-y-1">
                 <label className="text-sm font-medium text-slate-700">
                   Título
                 </label>
@@ -464,30 +464,31 @@ export default function GamesPage() {
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                 />
               </div>
-              <GameFormFields
-                values={gameForm}
-                onFieldChange={handleGameFormFieldChange}
-                competitionOptions={competitionOptions}
-                showCompetitionSelect
-              />
-              <EventImagePicker
-                ageGroupId={ageGroupId}
-                value={gameForm.image_url}
-                onChange={(value) =>
-                  setGameForm((prev) => ({ ...prev, image_url: value }))
-                }
-                accent="blue"
-              />
-              <NotesEditor
-                value={gameForm.notes}
-                onChange={(value) =>
-                  setGameForm((prev) => ({ ...prev, notes: value }))
-                }
-                accent="blue"
-                rows={6}
-              />
-              {createError && <p className="text-sm text-red-600">{createError}</p>}
-              <div className="flex gap-2 pt-1">
+                <GameFormFields
+                  values={gameForm}
+                  onFieldChange={handleGameFormFieldChange}
+                  competitionOptions={competitionOptions}
+                  showCompetitionSelect
+                />
+                <EventImagePicker
+                  ageGroupId={ageGroupId}
+                  value={gameForm.image_url}
+                  onChange={(value) =>
+                    setGameForm((prev) => ({ ...prev, image_url: value }))
+                  }
+                  accent="blue"
+                />
+                <NotesEditor
+                  value={gameForm.notes}
+                  onChange={(value) =>
+                    setGameForm((prev) => ({ ...prev, notes: value }))
+                  }
+                  accent="blue"
+                  rows={6}
+                />
+                {createError && <p className="text-sm text-red-600">{createError}</p>}
+              </div>
+              <div className="flex gap-2 border-t bg-white p-5 pt-3 shrink-0 pb-[max(1rem,env(safe-area-inset-bottom))]">
                 <Button
                   type="submit"
                   disabled={creatingGame}
