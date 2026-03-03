@@ -867,7 +867,7 @@ export default function TeamSetupPage() {
       )}
 
       {/* ── SECÇÃO 5: EQUIPA TÉCNICA ── */}
-      {existingAgeGroup && (
+      {false && existingAgeGroup && (
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
@@ -914,27 +914,27 @@ export default function TeamSetupPage() {
                   </button>
                 </div>
 
-                {inviteResult && (
+                {inviteResult ? (
                   <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mb-4">
                     <p className="text-emerald-800 font-semibold text-sm mb-1">
-                      {inviteResult.emailSent
-                        ? `✓ Email enviado para ${inviteResult.name}!`
-                        : `✓ Código gerado para ${inviteResult.name}`}
+                      {inviteResult!.emailSent
+                        ? `✓ Email enviado para ${inviteResult!.name}!`
+                        : `✓ Código gerado para ${inviteResult!.name}`}
                     </p>
-                    {!inviteResult.emailSent && (
+                    {!inviteResult!.emailSent && (
                       <p className="text-emerald-700 text-xs mb-3">
                         O email não foi enviado. Partilha o código manualmente:
                       </p>
                     )}
                     <div className="flex items-center gap-2">
                       <code className="flex-1 bg-white border border-emerald-200 rounded-lg px-3 py-2 font-mono text-lg font-bold text-slate-800 text-center tracking-widest">
-                        {inviteResult.code}
+                        {inviteResult!.code}
                       </code>
                       <button
-                        onClick={() => copyCode(inviteResult.code)}
+                        onClick={() => copyCode(inviteResult!.code)}
                         className="p-2 bg-emerald-100 hover:bg-emerald-200 rounded-lg transition-colors"
                       >
-                        {copiedCode === inviteResult.code ? (
+                        {copiedCode === inviteResult!.code ? (
                           <Check size={16} className="text-emerald-600" />
                         ) : (
                           <Copy size={16} className="text-emerald-600" />
@@ -953,9 +953,7 @@ export default function TeamSetupPage() {
                       Convidar outro treinador
                     </Button>
                   </div>
-                )}
-
-                {!inviteResult && (
+                ) : (
                   <form onSubmit={handleSendStaffInvite} className="space-y-3">
                     <div className="grid grid-cols-2 gap-2">
                       <div className="space-y-1">

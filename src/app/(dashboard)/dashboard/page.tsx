@@ -7,11 +7,11 @@ import { format, addDays, addHours, parseISO, isToday, isTomorrow } from "date-f
 import { pt } from "date-fns/locale";
 import {
   Calendar,
-  AlertCircle,
   Play,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { DashboardEventsWindow } from "@/components/dashboard/DashboardEventsWindow";
 import RedeemInviteGate from "@/components/invite/RedeemInviteGate";
 import { formatFixtureOpponentLabel } from "@/lib/games/display";
 import { shouldShowPresencePrompt } from "@/lib/events/presence-window";
@@ -133,37 +133,38 @@ export default async function DashboardPage() {
 
   const now = new Date();
   const todayDate = format(now, "yyyy-MM-dd");
-  const in7days = format(addDays(now, 7), "yyyy-MM-dd");
+  const pastWindowStart = format(addDays(now, -30), "yyyy-MM-dd");
+  const futureWindowEnd = format(addDays(now, 30), "yyyy-MM-dd");
   const in48h = addHours(now, 48);
 
-  // Próximos treinos + jogos (7 dias) — em paralelo
-  let upcomingTrainings: TrainingSession[] = [];
-  let upcomingGames: Game[] = [];
+  // Treinos + jogos numa janela útil para paginação local do dashboard.
+  let timelineTrainings: TrainingSession[] = [];
+  let timelineGames: Game[] = [];
   if (accessibleTeamIds.length > 0) {
     const [{ data: trainingsData }, { data: gamesData }] = await Promise.all([
       (admin ?? supabase)
         .from("training_sessions")
         .select("*")
         .in("team_id", accessibleTeamIds)
-        .gte("session_date", todayDate)
-        .lte("session_date", in7days)
-        .neq("status", "completed")
+        .gte("session_date", pastWindowStart)
+        .lte("session_date", futureWindowEnd)
+        .neq("status", "cancelled")
         .order("session_date", { ascending: true })
         .order("start_time", { ascending: true, nullsFirst: false })
         .order("created_at", { ascending: true })
-        .limit(10),
+        .limit(80),
       (admin ?? supabase)
         .from("games")
         .select("*")
         .in("team_id", accessibleTeamIds)
-        .gte("game_datetime", `${todayDate}T00:00:00`)
-        .lte("game_datetime", `${in7days}T23:59:59`)
-        .neq("status", "completed")
+        .gte("game_datetime", `${pastWindowStart}T00:00:00`)
+        .lte("game_datetime", `${futureWindowEnd}T23:59:59`)
+        .neq("status", "cancelled")
         .order("game_datetime", { ascending: true })
-        .limit(10),
+        .limit(80),
     ]);
-    upcomingTrainings = trainingsData || [];
-    upcomingGames = gamesData || [];
+    timelineTrainings = trainingsData || [];
+    timelineGames = gamesData || [];
   }
 
   // Jogo live ativo:
@@ -262,8 +263,8 @@ export default async function DashboardPage() {
 
   // Jogos com convocatória já confirmada (para não mostrar alerta)
   const confirmedGameIds = new Set<string>();
-  if (upcomingGames.length > 0) {
-    const upcomingGameIds = upcomingGames.map((g) => g.id);
+  if (timelineGames.length > 0) {
+    const upcomingGameIds = timelineGames.map((g) => g.id);
     const { data: existingConvocations } = await (admin ?? supabase)
       .from("convocations")
       .select("game_id, status")
@@ -276,7 +277,7 @@ export default async function DashboardPage() {
   }
 
   // Treino de hoje especificamente (para presenças)
-  const todayTrainings = upcomingTrainings.filter((t) => t.session_date === todayDate);
+  const todayTrainings = timelineTrainings.filter((t) => t.session_date === todayDate);
   const todayTraining =
     todayTrainings.find((training) => training.status !== "completed") ||
     todayTrainings[0];
@@ -291,34 +292,60 @@ export default async function DashboardPage() {
       )
     : false;
 
-  const upcomingTimeline = [
-    ...upcomingTrainings
-      .filter((training) => training.id !== todayTraining?.id)
-      .map((training) => ({
-        type: "training" as const,
-        sortTs: toTimestampFromDateAndTime(
-          training.session_date,
-          training.start_time,
-        ),
-        training,
-      })),
-    ...upcomingGames.map((game) => ({
-      type: "game" as const,
-      sortTs: toTimestampFromDateTime(game.game_datetime),
-      game,
+  const dashboardEvents = [
+    ...timelineTrainings.map((training) => ({
+      id: `training-${training.id}`,
+      type: "training" as const,
+      href: "/trainings",
+      title: training.title?.trim() || "Treino",
+      subtitle: `${relativeDay(training.session_date)}${
+        training.start_time ? ` · ${training.start_time.substring(0, 5)}` : ""
+      }${training.location ? ` · ${training.location}` : ""}`,
+      sortTs: toTimestampFromDateAndTime(
+        training.session_date,
+        training.start_time,
+      ),
+      showPresenceCta:
+        todayTraining?.id === training.id &&
+        !todayTrainingDone &&
+        showTodayTrainingPrompt,
     })),
-  ]
-    .sort((a, b) => a.sortTs - b.sortTs)
-    .slice(0, 8);
+    ...timelineGames
+      .filter((game) => game.id !== activeLiveGame?.id)
+      .map((game) => {
+        const gameDate = game.game_datetime ? parseISO(game.game_datetime) : null;
+        return {
+          id: `game-${game.id}`,
+          type: "game" as const,
+          href: `/games/${game.id}`,
+          title: game.opponent_name
+            ? formatFixtureOpponentLabel({
+                isHome: game.is_home,
+                opponentName: game.opponent_name,
+                opponentShortName: game.opponent_short_name,
+              })
+            : "Jogo",
+          subtitle: `${relativeDay(game.game_datetime?.split("T")[0])}${
+            game.game_datetime
+              ? ` · ${game.game_datetime.split("T")[1]?.substring(0, 5)}`
+              : ""
+          }${game.location ? ` · ${game.location}` : ""}`,
+          sortTs: toTimestampFromDateTime(game.game_datetime),
+          needsConvocation:
+            !!gameDate &&
+            gameDate <= in48h &&
+            gameDate >= now &&
+            !confirmedGameIds.has(game.id),
+        };
+      }),
+  ].sort((a, b) => a.sortTs - b.sortTs);
 
   const today = format(new Date(), "EEEE, d 'de' MMMM", { locale: pt });
   const firstName = profile?.full_name?.split(" ")[0] || "Treinador";
 
   const hasPending =
     !!activeLiveGame ||
-    !!todayTraining ||
-    upcomingTimeline.length > 0 ||
-    upcomingGames.length > 0;
+    dashboardEvents.length > 0;
 
   return (
     <>
@@ -401,28 +428,6 @@ export default async function DashboardPage() {
               </Link>
             )}
 
-            {/* Presenças de hoje — se houver treino hoje */}
-            {todayTraining && !todayTrainingDone && showTodayTrainingPrompt && (
-              <Link href="/attendance">
-                <div className="flex items-center gap-3 p-4 bg-amber-50 border-2 border-amber-200 rounded-xl hover:border-amber-300 transition-colors">
-                  <AlertCircle
-                    size={20}
-                    className="text-amber-500 flex-shrink-0"
-                  />
-                  <div className="flex-1">
-                    <p className="font-semibold text-amber-900 text-sm">
-                      Presenças por confirmar
-                    </p>
-                    <p className="text-amber-700 text-xs">
-                      Treino de hoje ·{" "}
-                      {todayTraining.start_time?.substring(0, 5) || "—"}
-                    </p>
-                  </div>
-                  <span className="text-amber-600 text-xs font-medium">→</span>
-                </div>
-              </Link>
-            )}
-
             {todayTraining && todayTrainingDone && (
               <div className="flex items-center gap-3 p-4 bg-emerald-50 border-2 border-emerald-200 rounded-xl">
                 <Calendar
@@ -440,85 +445,14 @@ export default async function DashboardPage() {
               </div>
             )}
 
-            {upcomingTimeline.map((eventItem) => {
-              if (eventItem.type === "training") {
-                const training = eventItem.training;
-                return (
-                  <Link key={training.id} href="/calendar">
-                    <div className="flex items-center gap-3 p-4 bg-emerald-50 border border-emerald-200 rounded-xl hover:border-emerald-300 transition-colors">
-                      <div className="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center flex-shrink-0">
-                        <span className="text-white text-xs font-bold">T</span>
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-semibold text-emerald-900 text-sm">Treino</p>
-                        <p className="text-emerald-700 text-xs capitalize">
-                          {relativeDay(training.session_date)}
-                          {training.start_time ? ` · ${training.start_time.substring(0, 5)}` : ""}
-                        </p>
-                      </div>
-                      <span className="text-emerald-600 text-xs font-medium">→</span>
-                    </div>
-                  </Link>
-                );
-              }
-
-              const game = eventItem.game;
-              const gameDate = game.game_datetime ? parseISO(game.game_datetime) : null;
-              const needsConvocation =
-                gameDate && gameDate <= in48h && gameDate >= now && !confirmedGameIds.has(game.id);
-
-              return (
-                <div key={game.id} className="space-y-1">
-                  <Link href={`/games/${game.id}`}>
-                    <div className="flex items-center gap-3 p-4 bg-blue-50 border border-blue-200 rounded-xl hover:border-blue-300 transition-colors">
-                      <div className="w-8 h-8 rounded-lg bg-blue-500 flex items-center justify-center flex-shrink-0">
-                        <span className="text-white text-xs font-bold">J</span>
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-semibold text-blue-900 text-sm">
-                          {game.opponent_name
-                            ? formatFixtureOpponentLabel({
-                                isHome: game.is_home,
-                                opponentName: game.opponent_name,
-                                opponentShortName: game.opponent_short_name,
-                              })
-                            : "Jogo"}
-                        </p>
-                        <p className="text-blue-700 text-xs capitalize">
-                          {relativeDay(game.game_datetime?.split("T")[0])}
-                          {game.game_datetime
-                            ? ` · ${game.game_datetime.split("T")[1]?.substring(0, 5)}`
-                            : ""}
-                          {game.location ? ` · ${game.location}` : ""}
-                        </p>
-                      </div>
-                      <span className="text-blue-600 text-xs font-medium">→</span>
-                    </div>
-                  </Link>
-                  {needsConvocation && (
-                    <Link href={`/games/${game.id}`}>
-                      <div className="flex items-center gap-3 p-3 bg-amber-50 border-2 border-amber-300 rounded-xl hover:border-amber-400 transition-colors ml-2">
-                        <AlertCircle size={16} className="text-amber-500 flex-shrink-0" />
-                        <div className="flex-1">
-                          <p className="font-semibold text-amber-900 text-xs">
-                            Convocatória por criar
-                          </p>
-                          <p className="text-amber-700 text-xs">
-                            Jogo em menos de 48h — seleciona os convocados
-                          </p>
-                        </div>
-                        <span className="text-amber-600 text-xs font-medium">→</span>
-                      </div>
-                    </Link>
-                  )}
-                </div>
-              );
-            })}
+            {dashboardEvents.length > 0 && (
+              <DashboardEventsWindow events={dashboardEvents} anchorTs={now.getTime()} />
+            )}
 
             {!hasPending && (
               <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-center">
                 <p className="text-slate-400 text-sm">
-                  Sem eventos nos próximos 7 dias ✓
+                  Sem eventos recentes para mostrar ✓
                 </p>
               </div>
             )}

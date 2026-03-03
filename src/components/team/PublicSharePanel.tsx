@@ -197,24 +197,26 @@ export function PublicSharePanel({ ageGroupId, canManage }: Props) {
                   )}
                 </Button>
               </div>
-              <div className="grid gap-3 rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-600 md:grid-cols-2">
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-slate-400">
-                    Acessos
-                  </p>
-                  <p className="mt-1 font-semibold text-slate-900">
-                    {share.access_count}
-                  </p>
+              {canManage ? (
+                <div className="grid gap-3 rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-600 md:grid-cols-2">
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-slate-400">
+                      Acessos
+                    </p>
+                    <p className="mt-1 font-semibold text-slate-900">
+                      {share.access_count}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-slate-400">
+                      Último acesso
+                    </p>
+                    <p className="mt-1 font-semibold text-slate-900">
+                      {formatLastAccess(share.last_accessed_at)}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-slate-400">
-                    Último acesso
-                  </p>
-                  <p className="mt-1 font-semibold text-slate-900">
-                    {formatLastAccess(share.last_accessed_at)}
-                  </p>
-                </div>
-              </div>
+              ) : null}
             </div>
 
             <p className="text-xs leading-5 text-slate-500">

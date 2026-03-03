@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { checkInviteSendLimit } from "@/lib/rate-limit";
 import { normalizeEmail } from "@/lib/auth/beta-access";
+import { ensureInviteAuthUser } from "@/lib/auth/invite-auth-user";
 import { getCanonicalAppUrl } from "@/lib/config/canonical-app-url";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { resolveUserTeamContext } from "@/lib/auth/team-context";
@@ -229,6 +230,24 @@ export async function POST(request: Request) {
         { error: "Erro ao preparar o acesso beta do utilizador." },
         { status: 500 },
       );
+    }
+
+    try {
+      await ensureInviteAuthUser(admin, {
+        email: normalizedEmail,
+        fullName: `${firstName} ${lastName}`.trim(),
+        role: "coach",
+      });
+    } catch (error) {
+      await admin.from("staff_invites").delete().eq("id", createdInvite?.id ?? "");
+      await admin
+        .from("beta_invites")
+        .update({
+          status: "revoked",
+          revoked_at: new Date().toISOString(),
+        })
+        .eq("email", normalizedEmail);
+      return respondInternalError("api.invite.staff.post.ensure-auth-user", error);
     }
 
     // 👤 Nome do coordenador

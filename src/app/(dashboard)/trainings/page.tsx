@@ -75,6 +75,16 @@ function groupByMonth(sessions: TrainingRow[]): { label: string; sessions: Train
   return Array.from(map.entries()).map(([label, sessions]) => ({ label, sessions }));
 }
 
+function isTrainingClosed(session: TrainingRow, now = new Date()) {
+  if (session.status === "completed") return true;
+
+  const endAt =
+    portugalDateTimeToUtc(session.session_date, session.end_time) ||
+    portugalDateTimeToUtc(session.session_date, session.start_time);
+
+  return !!endAt && endAt.getTime() < now.getTime();
+}
+
 export default function TrainingsPage() {
   const [loading, setLoading] = useState(true);
   const [sessions, setSessions] = useState<TrainingRow[]>([]);
@@ -106,6 +116,7 @@ export default function TrainingsPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletingTraining, setDeletingTraining] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
+  const [closedSessionsExpanded, setClosedSessionsExpanded] = useState(false);
   const [editingSelectedSession, setEditingSelectedSession] = useState(false);
   const [savingSelectedSession, setSavingSelectedSession] = useState(false);
   const [editTrainingTitle, setEditTrainingTitle] = useState("Treino");
@@ -453,7 +464,10 @@ export default function TrainingsPage() {
     }
   }
 
-  const grouped = groupByMonth(sessions);
+  const openSessions = sessions.filter((session) => !isTrainingClosed(session));
+  const closedSessions = sessions.filter((session) => isTrainingClosed(session));
+  const groupedOpenSessions = groupByMonth(openSessions);
+  const groupedClosedSessions = groupByMonth(closedSessions);
   const selectedSessionLocationLabel = selectedSession
     ? resolveLocationLabel(
         selectedSession.session.location,
@@ -512,7 +526,7 @@ export default function TrainingsPage() {
         </div>
 
         <div className="space-y-6">
-          {grouped.map(({ label, sessions: monthSessions }) => (
+          {groupedOpenSessions.map(({ label, sessions: monthSessions }) => (
             <section key={label}>
               <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3 capitalize">{label}</h2>
               <div className="space-y-2">
@@ -605,6 +619,98 @@ export default function TrainingsPage() {
               </div>
             </section>
           ))}
+
+          <section className="rounded-2xl border border-slate-200 bg-white">
+            <button
+              type="button"
+              onClick={() => setClosedSessionsExpanded((current) => !current)}
+              className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left"
+            >
+              <div>
+                <p className="text-sm font-semibold text-slate-900">
+                  Treinos Fechados
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  {closedSessions.length} treino{closedSessions.length !== 1 ? "s" : ""} fechado{closedSessions.length !== 1 ? "s" : ""}
+                </p>
+              </div>
+              <span className="text-xs font-medium text-slate-500">
+                {closedSessionsExpanded ? "Fechar" : "Expandir"}
+              </span>
+            </button>
+
+            {closedSessionsExpanded && (
+              <div className="space-y-6 border-t border-slate-100 px-4 py-4">
+                {groupedClosedSessions.length === 0 ? (
+                  <p className="text-sm text-slate-500">Ainda não existem treinos fechados.</p>
+                ) : (
+                  groupedClosedSessions.map(({ label, sessions: monthSessions }) => (
+                    <section key={`closed-${label}`}>
+                      <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500 capitalize">
+                        {label}
+                      </h2>
+                      <div className="space-y-2">
+                        {monthSessions.map((session) => {
+                          const summary = getSummary(session.id);
+                          const dt = parseISO(session.session_date);
+                          const locationLabel = resolveLocationLabel(
+                            session.location,
+                            session.formatted_address,
+                            session.location_address,
+                          );
+
+                          return (
+                            <button
+                              key={session.id}
+                              onClick={() => void handleSessionClick(session)}
+                              className="w-full flex items-center gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-4 text-left transition-all hover:border-slate-200 hover:shadow-sm"
+                            >
+                              <div className="w-10 flex-shrink-0 text-center">
+                                <p className="text-base font-bold leading-none text-slate-900">{format(dt, "d")}</p>
+                                <p className="text-[10px] capitalize text-slate-400">{format(dt, "EEE", { locale: pt })}</p>
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-sm font-semibold text-slate-800">
+                                  {session.title || "Treino"}
+                                  <span className="ml-2 rounded px-1.5 py-0.5 text-[10px] font-bold bg-slate-100 text-slate-500">
+                                    Fechado
+                                  </span>
+                                </p>
+                                <div className="mt-0.5 flex flex-wrap items-center gap-2">
+                                  {session.start_time && (
+                                    <span className="flex items-center gap-0.5 text-xs text-slate-400">
+                                      <Clock size={10} className="flex-shrink-0" />
+                                      {session.start_time.substring(0, 5)}
+                                    </span>
+                                  )}
+                                  {locationLabel && (
+                                    <span className="flex items-center gap-0.5 truncate text-xs text-slate-400">
+                                      <MapPin size={10} className="flex-shrink-0" />
+                                      {locationLabel}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex flex-shrink-0 items-center gap-2">
+                                {summary ? (
+                                  <div className="text-right">
+                                    <p className="text-sm font-bold text-slate-700">{summary.present}</p>
+                                    <p className="text-[10px] text-slate-400">presentes</p>
+                                  </div>
+                                ) : (
+                                  <Users size={16} className="text-slate-300" />
+                                )}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  ))
+                )}
+              </div>
+            )}
+          </section>
         </div>
       </div>
 
@@ -614,7 +720,7 @@ export default function TrainingsPage() {
           onClick={() => setCreateModalOpen(false)}
         >
           <div
-            className="bg-white rounded-2xl w-full max-w-md shadow-xl max-h-[calc(100dvh-1rem)] md:max-h-[90vh] overflow-hidden flex flex-col"
+            className="bg-white rounded-2xl w-full max-w-md shadow-xl h-[calc(100svh-1rem)] md:h-auto md:max-h-[90vh] overflow-hidden flex flex-col"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-center justify-between p-5 border-b">
@@ -753,7 +859,7 @@ export default function TrainingsPage() {
           }}
         >
           <div
-            className="bg-white rounded-2xl w-full max-w-md shadow-xl max-h-[calc(100dvh-1rem)] md:max-h-[85vh] overflow-hidden flex flex-col"
+            className="bg-white rounded-2xl w-full max-w-md shadow-xl h-[calc(100svh-1rem)] md:h-auto md:max-h-[85vh] overflow-hidden flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}

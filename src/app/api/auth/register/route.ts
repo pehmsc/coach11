@@ -6,6 +6,7 @@ import {
   isSuperCoordinatorEmail,
   normalizeEmail,
 } from "@/lib/auth/beta-access";
+import { upsertInviteAuthCredentials } from "@/lib/auth/invite-auth-user";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 
 export const runtime = "nodejs";
@@ -72,18 +73,17 @@ export async function POST(request: Request) {
         ? "coordinator"
         : "coach";
 
-    const { error } = await admin.auth.admin.createUser({
-      email,
-      password: parsed.data.password,
-      email_confirm: true,
-      user_metadata: {
-        full_name: fullName,
+    try {
+      await upsertInviteAuthCredentials(admin, {
+        email,
+        password: parsed.data.password,
+        fullName,
         role: resolvedRole,
-      },
-    });
-
-    if (error) {
-      const mapped = mapRegisterError(error.message || "");
+      });
+    } catch (error) {
+      const mapped = mapRegisterError(
+        error instanceof Error ? error.message : String(error),
+      );
       return NextResponse.json({ error: mapped.error }, { status: mapped.status });
     }
 

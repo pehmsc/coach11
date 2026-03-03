@@ -92,25 +92,12 @@ function RegisterForm() {
     }
 
     const supabase = createClient();
-    const next = inviteCode ? `/dashboard?code=${inviteCode}` : "/dashboard";
-    const callbackUrl = new URL("/auth/callback", window.location.origin);
-    callbackUrl.searchParams.set("next", next);
-
-    const { data, error } = await supabase.auth.signUp({
+    const { error } = await supabase.auth.signInWithPassword({
       email: normalizedEmail,
       password,
-      options: {
-        data: { full_name: fullName, role: "coordinator" },
-        emailRedirectTo: callbackUrl.toString(),
-      },
     });
     if (error) {
-      setError("Erro ao criar conta. Verifica os dados.");
-      setLoading(false);
-      return;
-    }
-    if (!data.session) {
-      setNotice("Conta criada. Confirma o teu email para concluir o registo e entrar.");
+      setError(error.message || "Não foi possível concluir o registo agora.");
       setLoading(false);
       return;
     }

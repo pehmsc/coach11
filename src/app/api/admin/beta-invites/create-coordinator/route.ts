@@ -7,6 +7,7 @@ import {
   countActiveBetaCoordinatorInvites,
 } from "@/lib/auth/beta-access.server";
 import { normalizeEmail } from "@/lib/auth/beta-access";
+import { ensureInviteAuthUser } from "@/lib/auth/invite-auth-user";
 import { getCanonicalAppUrl } from "@/lib/config/canonical-app-url";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 
@@ -98,6 +99,19 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: "Não foi possível criar o convite beta." },
         { status: 500 },
+      );
+    }
+
+    try {
+      await ensureInviteAuthUser(admin, {
+        email,
+        fullName: email.split("@")[0] || "Coordenador",
+        role: "coordinator",
+      });
+    } catch (error) {
+      return respondInternalError(
+        "api.admin.beta-invites.create-coordinator.ensure-auth-user",
+        error,
       );
     }
 
