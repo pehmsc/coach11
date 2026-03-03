@@ -61,7 +61,9 @@ function normalizeDate(value: unknown) {
 function normalizeTime(value: unknown) {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
-  return /^\d{2}:\d{2}$/.test(trimmed) ? trimmed : null;
+  const match = /^(\d{2}):(\d{2})(?::\d{2})?$/.exec(trimmed);
+  if (!match) return null;
+  return `${match[1]}:${match[2]}`;
 }
 
 function normalizeOptionalId(value: unknown) {

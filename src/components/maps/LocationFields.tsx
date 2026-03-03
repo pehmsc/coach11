@@ -107,6 +107,7 @@ export function LocationFields({
   const [searching, setSearching] = useState(false);
   const [resolvingPlaceId, setResolvingPlaceId] = useState<string | null>(null);
   const [lookupError, setLookupError] = useState<string | null>(null);
+  const [searchVersion, setSearchVersion] = useState(0);
   const [latitudeInput, setLatitudeInput] = useState(
     value.latitude != null ? String(value.latitude) : "",
   );
@@ -148,8 +149,10 @@ export function LocationFields({
     if (trimmedAddress.length < 3) {
       setSuggestions([]);
       setDropdownOpen(false);
+      setSearchVersion(0);
     } else {
       setDropdownOpen(true);
+      setSearchVersion((current) => current + 1);
     }
   }
 
@@ -186,6 +189,7 @@ export function LocationFields({
     setDropdownOpen(false);
     setLookupError(null);
     setResolvingPlaceId(null);
+    setSearchVersion(0);
     setLatitudeInput("");
     setLongitudeInput("");
     onChange({
@@ -201,7 +205,7 @@ export function LocationFields({
 
   useEffect(() => {
     const query = deferredAddress.trim();
-    if (query.length < 3) return;
+    if (query.length < 3 || searchVersion === 0) return;
 
     const timeoutId = window.setTimeout(async () => {
       const requestId = latestRequestIdRef.current + 1;
@@ -228,7 +232,7 @@ export function LocationFields({
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [deferredAddress]);
+  }, [deferredAddress, searchVersion]);
 
   async function handleSuggestionSelect(suggestion: Suggestion) {
     setResolvingPlaceId(suggestion.placeId);
@@ -258,6 +262,7 @@ export function LocationFields({
         location_source:
           resolvedLocation.location_source || suggestion.location_source,
       });
+      setSearchVersion(0);
       setSuggestions([]);
       setDropdownOpen(false);
     } catch {

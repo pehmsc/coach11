@@ -24,6 +24,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NotesEditor } from "@/components/forms/NotesEditor";
 import { EventImagePicker } from "@/components/media/EventImagePicker";
+import { normalizeTimeValue } from "@/lib/events/time";
 import {
   GameFormFields,
   type GameCompetitionOption,
@@ -169,8 +170,14 @@ export default function CalendarPage() {
         type: "training" as const,
         date: String(s.session_date || ""),
         title: typeof s.title === "string" ? s.title : "Treino",
-        start_time: typeof s.start_time === "string" ? s.start_time : undefined,
-        end_time: typeof s.end_time === "string" ? s.end_time : undefined,
+        start_time:
+          typeof s.start_time === "string"
+            ? normalizeTimeValue(s.start_time) || undefined
+            : undefined,
+        end_time:
+          typeof s.end_time === "string"
+            ? normalizeTimeValue(s.end_time) || undefined
+            : undefined,
         notes: typeof s.notes === "string" ? s.notes : undefined,
         status: typeof s.status === "string" ? s.status : undefined,
         location: typeof s.location === "string" ? s.location : undefined,
@@ -215,7 +222,10 @@ export default function CalendarPage() {
           typeof g.game_datetime === "string"
             ? g.game_datetime.split("T")[1]?.substring(0, 5)
             : undefined,
-        end_time: typeof g.end_time === "string" ? g.end_time : undefined,
+        end_time:
+          typeof g.end_time === "string"
+            ? normalizeTimeValue(g.end_time) || undefined
+            : undefined,
         opponent_name:
           typeof g.opponent_name === "string" ? g.opponent_name : undefined,
         opponent_short_name:
