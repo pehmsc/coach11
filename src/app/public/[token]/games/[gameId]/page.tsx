@@ -3,13 +3,7 @@ import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import { pt } from "date-fns/locale";
-import {
-  ArrowLeft,
-  Clock3,
-  FileText,
-  MapPin,
-  ShieldCheck,
-} from "lucide-react";
+import { ArrowLeft, Clock3, FileText, MapPin, ShieldCheck } from "lucide-react";
 import { RichTextContent } from "@/components/content/RichTextContent";
 import { LocationMapPreview } from "@/components/maps/LocationMapPreview";
 import { OpenMapsButton } from "@/components/maps/OpenMapsButton";
@@ -244,13 +238,25 @@ export default async function PublicGameDetailPage({
               Jogo
             </p>
             <div className="mt-3 space-y-2 text-sm text-slate-700">
-              <p>Adversário: {game.opponent_name || "Adversário"}</p>
-              <p>Casa/Fora: {game.is_home ? "Casa" : "Fora"}</p>
-              <p>Estado: {gameStatusLabel(game.status)}</p>
-              {gameAddress && <p>Morada: {gameAddress}</p>}
+              <p>
+                <strong>Adversário:</strong>{" "}
+                {game.opponent_name || "Adversário"}
+              </p>
+              <p>
+                <strong>Casa/Fora:</strong> {game.is_home ? "Casa" : "Fora"}
+              </p>
+              <p>
+                <strong>Estado:</strong> {gameStatusLabel(game.status)}
+              </p>
+              {gameAddress && (
+                <p>
+                  <strong>Morada:</strong> {gameAddress}
+                </p>
+              )}
               {game.status === "completed" && (
                 <p>
-                  Resultado: {game.score_home ?? "-"} - {game.score_away ?? "-"}
+                  <strong>Resultado:</strong> {game.score_home ?? "-"} -{" "}
+                  {game.score_away ?? "-"}
                 </p>
               )}
             </div>
@@ -293,7 +299,10 @@ export default async function PublicGameDetailPage({
             </p>
             <div className="mt-3 flex gap-3 text-sm text-slate-700">
               <FileText size={16} className="mt-0.5 text-slate-400" />
-              <RichTextContent content={game.notes} className="min-w-0 flex-1" />
+              <RichTextContent
+                content={game.notes}
+                className="min-w-0 flex-1"
+              />
             </div>
           </section>
         )}
