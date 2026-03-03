@@ -35,7 +35,7 @@ describe("osm provider normalization", () => {
         placeId: "ALIAS:CAMPO_MAJOR_BATISTA_DA_SILVA",
         title: "Campo Major Batista da Silva",
         subtitle: "Restelo, Lisboa, Portugal",
-        formatted_address: "Rua de Alcolena 3A, Lisboa, Portugal",
+        formatted_address: "Campo Major Batista da Silva, Lisboa, Portugal",
         latitude: 38.7024591,
         longitude: -9.2078559,
         osm_place_id: "",

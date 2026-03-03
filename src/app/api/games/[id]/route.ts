@@ -114,6 +114,12 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     ) {
       updates.formatted_address = body.formatted_address || null;
     }
+    if (typeof body.notes === "string" || body.notes === null) {
+      updates.notes = body.notes || null;
+    }
+    if (typeof body.image_url === "string" || body.image_url === null) {
+      updates.image_url = body.image_url || null;
+    }
     if (body.latitude !== undefined || body.latitude === null) {
       updates.latitude = normalizeNullableNumber(body.latitude);
     }
@@ -127,6 +133,9 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       updates.location_source = normalizeLocationSource(body.location_source);
     }
     if (typeof body.game_datetime === "string") updates.game_datetime = body.game_datetime;
+    if (typeof body.end_time === "string" || body.end_time === null) {
+      updates.end_time = body.end_time || null;
+    }
     if (typeof body.is_home === "boolean") updates.is_home = body.is_home;
 
     if (Object.keys(updates).length === 0) {

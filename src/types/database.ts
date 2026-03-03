@@ -39,6 +39,8 @@ export interface AgeGroup {
   club_short_name?: string;
   club_logo_url?: string;
   name: string;
+  public_slug?: string | null;
+  public_access_enabled?: boolean;
   football_format: FootballFormat;
   season: string;
   created_at: string;
@@ -103,6 +105,7 @@ export interface Game {
   competition_id?: string;
   title?: string;
   game_datetime: string;
+  end_time?: string | null;
   opponent_name?: string;
   opponent_short_name?: string;
   opponent_id?: string;

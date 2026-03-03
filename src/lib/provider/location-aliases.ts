@@ -28,7 +28,7 @@ const LOCATION_ALIASES: LocationAliasEntry[] = [
     placeId: "ALIAS:CAMPO_MAJOR_BATISTA_DA_SILVA",
     title: "Campo Major Batista da Silva",
     subtitle: "Restelo, Lisboa, Portugal",
-    formatted_address: "Rua de Alcolena 3A, Lisboa, Portugal",
+    formatted_address: "Campo Major Batista da Silva, Lisboa, Portugal",
     latitude: 38.7024591,
     longitude: -9.2078559,
     osm_place_id: "",
@@ -38,9 +38,6 @@ const LOCATION_ALIASES: LocationAliasEntry[] = [
       "Campo Major Batista da Silva",
       "Campo Major Batista",
       "Major Batista Silva",
-      "Rua de Alcolena 3A",
-      "R de Alcolena 3A",
-      "Alcolena 3A Lisboa",
     ],
   },
 ];

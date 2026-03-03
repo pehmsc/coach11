@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { useState, useEffect, useCallback } from "react";
 import {
   format,
   startOfWeek,
@@ -18,13 +17,13 @@ import {
   Plus,
   MapPin,
   Clock,
-  ImageIcon,
   AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NotesEditor } from "@/components/forms/NotesEditor";
+import { EventImagePicker } from "@/components/media/EventImagePicker";
 import {
   GameFormFields,
   type GameCompetitionOption,
@@ -106,9 +105,6 @@ function compareEventsByDateTime(a: CalEvent, b: CalEvent) {
 }
 
 export default function CalendarPage() {
-  const supabase = useMemo(() => createClient(), []);
-  const fileRef = useRef<HTMLInputElement>(null);
-
   const [weekStart, setWeekStart] = useState(
     startOfWeek(new Date(), { weekStartsOn: 1 }),
   );
@@ -125,7 +121,6 @@ export default function CalendarPage() {
   const [form, setForm] = useState<EventForm>(EMPTY_FORM);
   const [competitionOptions, setCompetitionOptions] = useState<GameCompetitionOption[]>([]);
   const [saving, setSaving] = useState(false);
-  const [uploading, setUploading] = useState(false);
   const [opError, setOpError] = useState<string | null>(null);
 
   const loadEvents = useCallback(async () => {
@@ -220,6 +215,7 @@ export default function CalendarPage() {
           typeof g.game_datetime === "string"
             ? g.game_datetime.split("T")[1]?.substring(0, 5)
             : undefined,
+        end_time: typeof g.end_time === "string" ? g.end_time : undefined,
         opponent_name:
           typeof g.opponent_name === "string" ? g.opponent_name : undefined,
         opponent_short_name:
@@ -371,32 +367,6 @@ export default function CalendarPage() {
       ...prev,
       [field]: value,
     }));
-  }
-
-  async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file || !ageGroupId) return;
-    setUploading(true);
-
-    const ext = file.name.split(".").pop();
-    const fileName = `${ageGroupId}/${Date.now()}.${ext}`;
-
-    const { data, error } = await supabase.storage
-      .from("event-images")
-      .upload(fileName, file, { upsert: true });
-
-    if (!error && data) {
-      const { data: urlData } = supabase.storage
-        .from("event-images")
-        .getPublicUrl(data.path);
-      setForm((f) => ({ ...f, image_url: urlData.publicUrl }));
-    } else {
-      console.error("Erro upload imagem:", error);
-      setOpError(
-        "Erro ao carregar imagem. Verifica se o bucket 'event-images' existe no Supabase Storage.",
-      );
-    }
-    setUploading(false);
   }
 
   async function saveEvent() {
@@ -768,47 +738,14 @@ export default function CalendarPage() {
               )}
 
               {/* Imagem */}
-              <div>
-                <Label className="mb-2 block">
-                  <ImageIcon size={14} className="inline mr-1" />
-                  Imagem do evento
-                </Label>
-                {form.image_url ? (
-                  <div className="relative">
-                    <img
-                      src={form.image_url}
-                      alt="thumbnail"
-                      className="w-full h-36 object-cover rounded-xl"
-                    />
-                    <button
-                      onClick={() => setForm((f) => ({ ...f, image_url: "" }))}
-                      className="absolute top-2 right-2 bg-black/50 text-white rounded-full p-1"
-                    >
-                      <X size={14} />
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => fileRef.current?.click()}
-                    disabled={uploading}
-                    className="w-full h-24 border-2 border-dashed border-slate-200 rounded-xl flex flex-col items-center justify-center gap-1 text-slate-400 hover:border-emerald-300 hover:text-emerald-500 transition-colors"
-                  >
-                    <ImageIcon size={24} />
-                    <span className="text-xs">
-                      {uploading
-                        ? "A carregar..."
-                        : "Toca para adicionar imagem"}
-                    </span>
-                  </button>
-                )}
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleImageUpload}
-                />
-              </div>
+              <EventImagePicker
+                ageGroupId={ageGroupId}
+                value={form.image_url}
+                onChange={(value) =>
+                  setForm((current) => ({ ...current, image_url: value }))
+                }
+                accent={isTrainingModal ? "emerald" : "blue"}
+              />
 
               {/* Título */}
               <div className="space-y-1">
@@ -892,7 +829,7 @@ export default function CalendarPage() {
               <div className="flex gap-2">
                 <Button
                   onClick={saveEvent}
-                  disabled={saving || uploading || !form.date}
+                  disabled={saving || !form.date}
                   className="flex-1 bg-emerald-600 hover:bg-emerald-700"
                 >
                   {saving

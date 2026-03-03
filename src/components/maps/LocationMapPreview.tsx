@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Expand, Loader2, MapPin } from "lucide-react";
+import { Loader2, MapPin } from "lucide-react";
 import { OpenMapsButton } from "@/components/maps/OpenMapsButton";
 import {
   hasCoordinates,
@@ -161,11 +161,9 @@ export function LocationMapPreview({
   const [resolvingFallback, setResolvingFallback] = useState(false);
   const [syncingManualPoint, setSyncingManualPoint] = useState(false);
   const [mapReady, setMapReady] = useState(false);
-  const rootRef = useRef<HTMLDivElement | null>(null);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<unknown>(null);
   const markerRef = useRef<unknown>(null);
-  const fullscreenControlRef = useRef<unknown>(null);
   const leafletRef = useRef<typeof import("leaflet") | null>(null);
   const manualSyncRequestIdRef = useRef(0);
 
@@ -262,7 +260,7 @@ export function LocationMapPreview({
         attributionControl: true,
         dragging: interactive,
         doubleClickZoom: interactive,
-        scrollWheelZoom: false,
+        scrollWheelZoom: interactive,
         boxZoom: interactive,
         keyboard: interactive,
         touchZoom: interactive,
@@ -278,48 +276,6 @@ export function LocationMapPreview({
             '&copy; <a href="https://osm.org/copyright">OpenStreetMap</a> contributors',
         })
         .addTo(mapInstance);
-
-      if (!fullscreenControlRef.current) {
-        const FullscreenControl = leaflet.Control.extend({
-          options: { position: "topleft" },
-          onAdd() {
-            const container = leaflet.DomUtil.create(
-              "div",
-              "leaflet-bar coach11-map-fullscreen-control",
-            );
-            const button = leaflet.DomUtil.create("a", "", container);
-            button.href = "#";
-            button.title = "Full screen";
-            button.setAttribute("aria-label", "Abrir mapa em ecrã inteiro");
-            button.innerHTML = `<span class="coach11-map-fullscreen-icon">⤢</span>`;
-
-            leaflet.DomEvent.disableClickPropagation(container);
-            leaflet.DomEvent.on(button, "click", (event: Event) => {
-              leaflet.DomEvent.stop(event);
-
-              const element = rootRef.current;
-              if (!element) return;
-
-              if (document.fullscreenElement === element) {
-                void document.exitFullscreen().catch(() => null);
-              } else {
-                void element.requestFullscreen().catch(() => null);
-              }
-
-              window.setTimeout(() => {
-                mapInstance.invalidateSize(false);
-              }, 200);
-            });
-
-            return container;
-          },
-        });
-
-        fullscreenControlRef.current = new FullscreenControl();
-        mapInstance.addControl(
-          fullscreenControlRef.current as import("leaflet").Control,
-        );
-      }
 
       mapRef.current = mapInstance;
       setMapReady(true);
@@ -496,27 +452,11 @@ export function LocationMapPreview({
   ]);
 
   useEffect(() => {
-    if (!mapRef.current) return;
-
-    const handleFullscreenChange = () => {
-      window.setTimeout(() => {
-        (mapRef.current as import("leaflet").Map | null)?.invalidateSize(false);
-      }, 150);
-    };
-
-    document.addEventListener("fullscreenchange", handleFullscreenChange);
-    return () => {
-      document.removeEventListener("fullscreenchange", handleFullscreenChange);
-    };
-  }, []);
-
-  useEffect(() => {
     return () => {
       if (mapRef.current) {
         (mapRef.current as import("leaflet").Map).remove();
         mapRef.current = null;
         markerRef.current = null;
-        fullscreenControlRef.current = null;
         leafletRef.current = null;
       }
     };
@@ -524,7 +464,6 @@ export function LocationMapPreview({
 
   return (
     <div
-      ref={rootRef}
       className={cn(
         "coach11-map-shell overflow-hidden rounded-2xl border border-slate-200 bg-white",
         className,
@@ -571,17 +510,11 @@ export function LocationMapPreview({
             <MapPin size={14} className="shrink-0 text-slate-400" />
             {resolvedAddress || "Localização por confirmar"}
           </p>
-          {(draggable || syncingManualPoint) && (
+          {syncingManualPoint && (
             <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
               <span className="inline-flex items-center gap-1">
-                {syncingManualPoint ? (
-                  <Loader2 size={11} className="animate-spin" />
-                ) : (
-                  <Expand size={11} />
-                )}
-                {syncingManualPoint
-                  ? "A atualizar morada..."
-                  : "Arrasta o marcador para afinar o ponto"}
+                <Loader2 size={11} className="animate-spin" />
+                A atualizar morada...
               </span>
             </div>
           )}
@@ -593,7 +526,7 @@ export function LocationMapPreview({
           latitude={resolvedLocation?.latitude ?? latitude}
           longitude={resolvedLocation?.longitude ?? longitude}
           accent={accent}
-          label="Abrir"
+          label="Obter Direções"
         />
       </div>
     </div>

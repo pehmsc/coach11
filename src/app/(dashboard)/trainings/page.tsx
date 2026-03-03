@@ -17,9 +17,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { RichTextContent } from "@/components/content/RichTextContent";
 import { NotesEditor } from "@/components/forms/NotesEditor";
+import { EventImagePicker } from "@/components/media/EventImagePicker";
 import { LocationFields } from "@/components/maps/LocationFields";
 import { LocationMapPreview } from "@/components/maps/LocationMapPreview";
-import { OpenMapsButton } from "@/components/maps/OpenMapsButton";
 import {
   EMPTY_LOCATION_FIELDS,
   type LocationSource,
@@ -41,6 +41,7 @@ interface TrainingRow {
   osm_place_id?: string;
   location_source?: LocationSource | null;
   notes?: string;
+  image_url?: string | null;
   status: string;
   age_group_id?: string;
   team_id?: string;
@@ -98,6 +99,7 @@ export default function TrainingsPage() {
     "google" | "osm" | "manual" | null
   >(null);
   const [newTrainingNotes, setNewTrainingNotes] = useState("");
+  const [newTrainingImageUrl, setNewTrainingImageUrl] = useState("");
   const [canDeleteTrainings, setCanDeleteTrainings] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletingTraining, setDeletingTraining] = useState(false);
@@ -254,6 +256,7 @@ export default function TrainingsPage() {
     setNewTrainingOsmPlaceId("");
     setNewTrainingLocationSource(null);
     setNewTrainingNotes("");
+    setNewTrainingImageUrl("");
     setCreateError(null);
   }
 
@@ -276,6 +279,7 @@ export default function TrainingsPage() {
     setNewTrainingOsmPlaceId(source.osm_place_id || "");
     setNewTrainingLocationSource(source.location_source ?? null);
     setNewTrainingNotes(source.notes || "");
+    setNewTrainingImageUrl(source.image_url || "");
     setCreateError(null);
     setDetailError(null);
     setShowDeleteConfirm(false);
@@ -311,6 +315,7 @@ export default function TrainingsPage() {
             osm_place_id: newTrainingOsmPlaceId.trim() || null,
             location_source: newTrainingLocationSource,
             notes: newTrainingNotes.trim() || null,
+            image_url: newTrainingImageUrl.trim() || null,
           },
         }),
       });
@@ -446,16 +451,29 @@ export default function TrainingsPage() {
                       </div>
 
                       {/* Attendance badge */}
-                      {summary ? (
-                        <div className="flex-shrink-0 text-right">
-                          <p className="text-sm font-bold text-emerald-700">{summary.present}</p>
-                          <p className="text-[10px] text-slate-400">presentes</p>
-                        </div>
-                      ) : (
-                        <div className="flex-shrink-0">
-                          <Users size={16} className="text-slate-300" />
-                        </div>
-                      )}
+                      <div className="flex flex-shrink-0 items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            openDuplicateTraining(session);
+                          }}
+                          className="rounded-full bg-white/80 p-1.5 text-slate-600 transition-colors hover:bg-white hover:text-slate-900"
+                          title="Duplicar treino"
+                        >
+                          <Copy size={14} />
+                        </button>
+                        {summary ? (
+                          <div className="text-right">
+                            <p className="text-sm font-bold text-emerald-700">{summary.present}</p>
+                            <p className="text-[10px] text-slate-400">presentes</p>
+                          </div>
+                        ) : (
+                          <div>
+                            <Users size={16} className="text-slate-300" />
+                          </div>
+                        )}
+                      </div>
                     </button>
                   );
                 })}
@@ -557,6 +575,12 @@ export default function TrainingsPage() {
                 }}
                 accent="emerald"
               />
+              <EventImagePicker
+                ageGroupId={ageGroupId}
+                value={newTrainingImageUrl}
+                onChange={setNewTrainingImageUrl}
+                accent="emerald"
+              />
               <NotesEditor
                 value={newTrainingNotes}
                 onChange={setNewTrainingNotes}
@@ -635,16 +659,6 @@ export default function TrainingsPage() {
                 >
                   <Copy size={16} />
                 </button>
-                <OpenMapsButton
-                  location={selectedSession.session.location}
-                  locationAddress={selectedSession.session.location_address}
-                  formattedAddress={selectedSession.session.formatted_address}
-                  latitude={selectedSession.session.latitude}
-                  longitude={selectedSession.session.longitude}
-                  variant="icon"
-                  accent="emerald"
-                  title="Abrir no GPS"
-                />
                 {canDeleteTrainings && (
                   <button
                     onClick={() => setShowDeleteConfirm(true)}

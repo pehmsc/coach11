@@ -23,6 +23,7 @@ export async function GET() {
           success: true,
           linked: false,
           games: [],
+          ageGroupId: null,
         },
         {
           headers: {
@@ -35,7 +36,7 @@ export async function GET() {
     const { data: games, error: gamesError } = await supabase
       .from("games")
       .select(
-        "id, game_datetime, opponent_name, opponent_short_name, is_home, status, score_home, score_away, location, location_address, formatted_address, latitude, longitude, osm_place_id, location_source, title, competition_id, team_id, age_group_id",
+        "id, game_datetime, end_time, opponent_name, opponent_short_name, is_home, status, score_home, score_away, location, location_address, formatted_address, latitude, longitude, osm_place_id, location_source, title, competition_id, team_id, age_group_id, notes, image_url",
       )
       .in("team_id", context.accessibleTeamIds)
       .order("game_datetime", { ascending: false });
@@ -49,6 +50,7 @@ export async function GET() {
         success: true,
         linked: true,
         games: games || [],
+        ageGroupId: context.ageGroup?.id ?? null,
       },
       {
         headers: {

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { format, parseISO } from "date-fns";
@@ -6,11 +7,14 @@ import { pt } from "date-fns/locale";
 import { ArrowLeft, Clock3, MapPin } from "lucide-react";
 import { RichTextContent } from "@/components/content/RichTextContent";
 import { LocationMapPreview } from "@/components/maps/LocationMapPreview";
-import { OpenMapsButton } from "@/components/maps/OpenMapsButton";
+import {
+  buildDateTimeFromDateAndTime,
+  formatTimeRange,
+} from "@/lib/events/time";
 import { resolveFormattedAddress, resolveLocationLabel } from "@/lib/location";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
-  resolvePublicShareRequest,
+  resolvePublicAccessRequest,
   resolvePublicTrainingId,
 } from "@/lib/public-share";
 
@@ -26,7 +30,8 @@ function formatTrainingDate(
 ) {
   if (!sessionDate) return "Data por definir";
 
-  const isoValue = `${sessionDate}T${startTime || "00:00"}:00`;
+  const isoValue = buildDateTimeFromDateAndTime(sessionDate, startTime);
+  if (!isoValue) return sessionDate;
 
   try {
     return format(parseISO(isoValue), "EEEE, d MMMM yyyy · HH:mm", {
@@ -53,17 +58,17 @@ function trainingStatusLabel(status: string | null | undefined) {
 export default async function PublicTrainingDetailPage({
   params,
 }: PublicTrainingDetailParams) {
-  const { token, trainingId: publicTrainingRef } = await params;
+  const { token: publicIdentifier, trainingId: publicTrainingRef } = await params;
   const admin = createAdminClient();
 
-  let share;
+  let access;
   try {
-    const resolved = await resolvePublicShareRequest(
+    const resolved = await resolvePublicAccessRequest(
       admin,
-      token,
+      publicIdentifier,
       await headers(),
     );
-    share = resolved?.share ?? null;
+    access = resolved ?? null;
   } catch (error) {
     if (
       error instanceof Error &&
@@ -87,14 +92,29 @@ export default async function PublicTrainingDetailPage({
     notFound();
   }
 
-  if (!share) {
+  if (!access) {
     notFound();
+  }
+
+  if (access.paused) {
+    return (
+      <main className="min-h-screen bg-slate-50 px-4 py-8">
+        <div className="mx-auto max-w-3xl rounded-3xl border border-slate-200 bg-white p-8 text-center">
+          <h1 className="text-2xl font-bold text-slate-900">
+            Acesso temporariamente pausado
+          </h1>
+          <p className="mt-3 text-sm text-slate-600">
+            Acesso temporariamente pausado pelo coordenador.
+          </p>
+        </div>
+      </main>
+    );
   }
 
   const { data: allTrainingRows, error: allTrainingsError } = await admin
     .from("training_sessions")
     .select("id")
-    .eq("age_group_id", share.age_group_id)
+    .eq("age_group_id", access.ageGroupId)
     .limit(1000);
 
   if (allTrainingsError) {
@@ -102,7 +122,7 @@ export default async function PublicTrainingDetailPage({
   }
 
   const resolvedTrainingId = resolvePublicTrainingId(
-    token,
+    access.identifier,
     publicTrainingRef,
     (allTrainingRows || []).map((row) => row.id),
   );
@@ -115,15 +135,15 @@ export default async function PublicTrainingDetailPage({
     admin
       .from("training_sessions")
       .select(
-        "id, title, session_date, start_time, end_time, location, location_address, formatted_address, latitude, longitude, osm_place_id, location_source, notes, status",
+        "id, title, session_date, start_time, end_time, location, location_address, formatted_address, latitude, longitude, osm_place_id, location_source, notes, status, image_url",
       )
       .eq("id", resolvedTrainingId)
-      .eq("age_group_id", share.age_group_id)
+      .eq("age_group_id", access.ageGroupId)
       .maybeSingle(),
     admin
       .from("age_groups")
       .select("club_name, name")
-      .eq("id", share.age_group_id)
+      .eq("id", access.ageGroupId)
       .maybeSingle(),
   ]);
 
@@ -145,7 +165,7 @@ export default async function PublicTrainingDetailPage({
     <main className="min-h-screen bg-slate-50 px-4 py-8">
       <div className="mx-auto max-w-3xl space-y-6">
         <Link
-          href={`/public/${token}`}
+          href={`/public/${access.identifier}`}
           className="inline-flex items-center gap-2 text-sm text-slate-500 hover:text-slate-700"
         >
           <ArrowLeft size={16} />
@@ -174,32 +194,20 @@ export default async function PublicTrainingDetailPage({
               {trainingStatusLabel(training.status)}
             </span>
           </div>
-          <div className="mt-5">
-            <OpenMapsButton
-              location={training.location}
-              locationAddress={training.location_address}
-              formattedAddress={training.formatted_address}
-              latitude={training.latitude}
-              longitude={training.longitude}
-              accent="slate"
-            />
-          </div>
         </section>
 
-        {(training.location ||
-          training.location_address ||
-          training.formatted_address ||
-          (training.latitude != null && training.longitude != null)) && (
-          <LocationMapPreview
-            location={training.location}
-            locationAddress={training.location_address}
-            formattedAddress={training.formatted_address}
-            latitude={training.latitude}
-            longitude={training.longitude}
-            accent="slate"
-            label="Mapa do treino"
-            resolveFallback
-          />
+        {training.image_url && (
+          <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white">
+            <div className="relative h-56 w-full sm:h-72">
+              <Image
+                src={training.image_url}
+                alt={training.title?.trim() || "Imagem do treino"}
+                fill
+                className="object-cover"
+                sizes="(max-width: 768px) 100vw, 768px"
+              />
+            </div>
+          </section>
         )}
 
         <section className="grid gap-4 md:grid-cols-2">
@@ -214,8 +222,7 @@ export default async function PublicTrainingDetailPage({
               </p>
               <p>
                 <strong>Horário:</strong>{" "}
-                {training.start_time?.slice(0, 5) || "--:--"}
-                {training.end_time ? ` - ${training.end_time.slice(0, 5)}` : ""}
+                {formatTimeRange(training.start_time, training.end_time)}
               </p>
               <p>
                 <strong>Estado:</strong> {trainingStatusLabel(training.status)}
@@ -247,6 +254,22 @@ export default async function PublicTrainingDetailPage({
             )}
           </div>
         </section>
+
+        {(training.location ||
+          training.location_address ||
+          training.formatted_address ||
+          (training.latitude != null && training.longitude != null)) && (
+          <LocationMapPreview
+            location={training.location}
+            locationAddress={training.location_address}
+            formattedAddress={training.formatted_address}
+            latitude={training.latitude}
+            longitude={training.longitude}
+            accent="slate"
+            label="Mapa do treino"
+            resolveFallback
+          />
+        )}
       </div>
     </main>
   );

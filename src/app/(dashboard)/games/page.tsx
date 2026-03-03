@@ -13,8 +13,11 @@ import {
   AlertCircle,
   Plus,
   X,
+  Copy,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { NotesEditor } from "@/components/forms/NotesEditor";
+import { EventImagePicker } from "@/components/media/EventImagePicker";
 import {
   GameFormFields,
   type GameCompetitionOption,
@@ -52,6 +55,11 @@ interface GameRow {
   location_source?: LocationSource | null;
   title?: string;
   competition_id?: string;
+  team_id?: string;
+  age_group_id?: string;
+  end_time?: string | null;
+  notes?: string | null;
+  image_url?: string | null;
 }
 
 type CompetitionsResponse = {
@@ -88,16 +96,24 @@ export default function GamesPage() {
   const [hasContext, setHasContext] = useState(true);
   const [creatingGame, setCreatingGame] = useState(false);
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [createMode, setCreateMode] = useState<"create" | "duplicate">("create");
   const [createError, setCreateError] = useState<string | null>(null);
   const [competitionOptions, setCompetitionOptions] = useState<GameCompetitionOption[]>([]);
-  const [gameForm, setGameForm] = useState<SharedGameFormValues>({
+  const [ageGroupId, setAgeGroupId] = useState<string | null>(null);
+  const [gameForm, setGameForm] = useState<
+    SharedGameFormValues & { title: string; notes: string; image_url: string }
+  >({
+    title: "",
     opponent_name: "",
     opponent_short_name: "",
     date: "",
     start_time: "15:00",
+    end_time: "",
     ...EMPTY_LOCATION_FIELDS,
     is_home: true,
     competition_id: "",
+    notes: "",
+    image_url: "",
   });
 
   useEffect(() => {
@@ -111,11 +127,18 @@ export default function GamesPage() {
 
     const res = await fetch("/api/games");
     const payload = (await res.json().catch(() => null)) as
-      | { success?: boolean; linked?: boolean; games?: GameRow[]; error?: string }
+      | {
+          success?: boolean;
+          linked?: boolean;
+          games?: GameRow[];
+          ageGroupId?: string | null;
+          error?: string;
+        }
       | null;
 
     if (!res.ok || !payload) {
       setLoadError(payload?.error || "Erro ao carregar jogos.");
+      setAgeGroupId(null);
       setLoading(false);
       return;
     }
@@ -123,11 +146,19 @@ export default function GamesPage() {
     if (payload.linked === false) {
       setHasContext(false);
       setGames([]);
+      setAgeGroupId(null);
       setLoading(false);
       return;
     }
 
     setGames(Array.isArray(payload.games) ? payload.games : []);
+    setAgeGroupId(
+      typeof payload.ageGroupId === "string"
+        ? payload.ageGroupId
+        : Array.isArray(payload.games) && payload.games.length > 0
+          ? payload.games[0]?.age_group_id ?? null
+          : null,
+    );
     setLoading(false);
   }
 
@@ -154,16 +185,55 @@ export default function GamesPage() {
 
   function resetCreateForm() {
     const today = new Date();
+    setCreateMode("create");
     setGameForm({
+      title: "",
       opponent_name: "",
       opponent_short_name: "",
       date: format(today, "yyyy-MM-dd"),
       start_time: "15:00",
+      end_time: "",
       ...EMPTY_LOCATION_FIELDS,
       is_home: true,
       competition_id: "",
+      notes: "",
+      image_url: "",
     });
     setCreateError(null);
+  }
+
+  function openDuplicateGame(source: GameRow) {
+    setCreateMode("duplicate");
+    setCreateError(null);
+    setGameForm({
+      title: `Cópia ${source.title?.trim() || formatFixtureOpponentLabel({
+        isHome: source.is_home,
+        opponentName: source.opponent_name,
+        opponentShortName: source.opponent_short_name,
+      })}`,
+      opponent_name: source.opponent_name || "",
+      opponent_short_name: normalizeManualShortName(
+        source.opponent_short_name,
+        5,
+      ) || "",
+      date: "",
+      start_time: source.game_datetime
+        ? source.game_datetime.split("T")[1]?.substring(0, 5) || "15:00"
+        : "15:00",
+      end_time: source.end_time?.slice(0, 5) || "",
+      location: source.location || "",
+      location_address: source.location_address || "",
+      formatted_address: source.formatted_address || "",
+      latitude: source.latitude ?? null,
+      longitude: source.longitude ?? null,
+      osm_place_id: source.osm_place_id || "",
+      location_source: source.location_source ?? null,
+      is_home: source.is_home,
+      competition_id: source.competition_id || "",
+      notes: source.notes || "",
+      image_url: source.image_url || "",
+    });
+    setCreateModalOpen(true);
   }
 
   function handleGameFormFieldChange(
@@ -200,11 +270,13 @@ export default function GamesPage() {
         body: JSON.stringify({
           type: "game",
           payload: {
+            title: gameForm.title.trim() || null,
             opponent_name: gameForm.opponent_name.trim(),
             opponent_short_name: normalizedOpponentShortName || null,
             competition_id: gameForm.competition_id || null,
             date: gameForm.date,
             start_time: gameForm.start_time,
+            end_time: gameForm.end_time || null,
             location: gameForm.location.trim() || null,
             location_address: gameForm.location_address.trim() || null,
             formatted_address: gameForm.formatted_address.trim() || null,
@@ -213,6 +285,8 @@ export default function GamesPage() {
             osm_place_id: gameForm.osm_place_id.trim() || null,
             location_source: gameForm.location_source,
             is_home: gameForm.is_home,
+            notes: gameForm.notes.trim() || null,
+            image_url: gameForm.image_url.trim() || null,
           },
         }),
       });
@@ -314,6 +388,7 @@ export default function GamesPage() {
                 <GameCard
                   key={game.id}
                   game={game}
+                  onDuplicate={() => openDuplicateGame(game)}
                   onClick={() =>
                     router.push(
                       game.status === "completed"
@@ -339,6 +414,7 @@ export default function GamesPage() {
                 <GameCard
                   key={game.id}
                   game={game}
+                  onDuplicate={() => openDuplicateGame(game)}
                   onClick={() =>
                     router.push(
                       game.status === "completed"
@@ -362,7 +438,9 @@ export default function GamesPage() {
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-center justify-between p-5 border-b">
-              <h3 className="font-bold text-slate-900">Adicionar jogo</h3>
+              <h3 className="font-bold text-slate-900">
+                {createMode === "duplicate" ? "Duplicar jogo" : "Adicionar jogo"}
+              </h3>
               <button onClick={() => setCreateModalOpen(false)}>
                 <X size={20} className="text-slate-400" />
               </button>
@@ -372,11 +450,41 @@ export default function GamesPage() {
               className="p-5 space-y-3 overflow-y-auto flex-1 pb-[max(1.25rem,env(safe-area-inset-bottom))]"
               style={{ WebkitOverflowScrolling: "touch" }}
             >
+              <div className="space-y-1">
+                <label className="text-sm font-medium text-slate-700">
+                  Título
+                </label>
+                <input
+                  type="text"
+                  value={gameForm.title}
+                  onChange={(event) =>
+                    setGameForm((prev) => ({ ...prev, title: event.target.value }))
+                  }
+                  placeholder="ex: Jornada 5, Cópia Jogo, Torneio"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                />
+              </div>
               <GameFormFields
                 values={gameForm}
                 onFieldChange={handleGameFormFieldChange}
                 competitionOptions={competitionOptions}
                 showCompetitionSelect
+              />
+              <EventImagePicker
+                ageGroupId={ageGroupId}
+                value={gameForm.image_url}
+                onChange={(value) =>
+                  setGameForm((prev) => ({ ...prev, image_url: value }))
+                }
+                accent="blue"
+              />
+              <NotesEditor
+                value={gameForm.notes}
+                onChange={(value) =>
+                  setGameForm((prev) => ({ ...prev, notes: value }))
+                }
+                accent="blue"
+                rows={6}
               />
               {createError && <p className="text-sm text-red-600">{createError}</p>}
               <div className="flex gap-2 pt-1">
@@ -388,7 +496,7 @@ export default function GamesPage() {
                   {creatingGame ? (
                     <Loader2 size={16} className="animate-spin" />
                   ) : (
-                    "Criar jogo"
+                    createMode === "duplicate" ? "Criar cópia" : "Criar jogo"
                   )}
                 </Button>
                 <Button
@@ -408,7 +516,15 @@ export default function GamesPage() {
   );
 }
 
-function GameCard({ game, onClick }: { game: GameRow; onClick: () => void }) {
+function GameCard({
+  game,
+  onClick,
+  onDuplicate,
+}: {
+  game: GameRow;
+  onClick: () => void;
+  onDuplicate: () => void;
+}) {
   const dt = parseISO(game.game_datetime);
   const hasResult =
     isClosedGameStatus(game.status) && game.score_home != null && game.score_away != null;
@@ -472,13 +588,39 @@ function GameCard({ game, onClick }: { game: GameRow; onClick: () => void }) {
 
       {/* Score */}
       {hasResult ? (
-        <div className="flex-shrink-0 text-right">
-          <p className="text-lg font-bold text-slate-900 leading-none">
-            {game.score_home}–{game.score_away}
-          </p>
+        <div className="flex flex-shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onDuplicate();
+            }}
+            className="rounded-full bg-slate-100 p-1.5 text-slate-600 transition-colors hover:bg-slate-200"
+            title="Duplicar jogo"
+          >
+            <Copy size={14} />
+          </button>
+          <div className="text-right">
+            <p className="text-lg font-bold text-slate-900 leading-none">
+              {game.score_home}–{game.score_away}
+            </p>
+          </div>
         </div>
       ) : (
-        <ChevronRight size={16} className="text-slate-300 flex-shrink-0" />
+        <div className="flex flex-shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onDuplicate();
+            }}
+            className="rounded-full bg-slate-100 p-1.5 text-slate-600 transition-colors hover:bg-slate-200"
+            title="Duplicar jogo"
+          >
+            <Copy size={14} />
+          </button>
+          <ChevronRight size={16} className="text-slate-300" />
+        </div>
       )}
     </button>
   );

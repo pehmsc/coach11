@@ -63,7 +63,7 @@ export function OpenMapsButton({
   formattedAddress,
   latitude,
   longitude,
-  label = "Abrir no GPS",
+  label = "Obter Direções",
   title,
   accent = "emerald",
   variant = "solid",

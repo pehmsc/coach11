@@ -22,7 +22,6 @@ import { Button } from "@/components/ui/button";
 import { EMPTY_LOCATION_FIELDS, resolveLocationLabel } from "@/lib/location";
 import { LocationFields } from "@/components/maps/LocationFields";
 import { LocationMapPreview } from "@/components/maps/LocationMapPreview";
-import { OpenMapsButton } from "@/components/maps/OpenMapsButton";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
@@ -897,16 +896,6 @@ export default function GameDetailPage() {
         {game.location_address && game.location_address !== gameLocationLabel && (
           <p className="mt-2 text-sm text-blue-100/90">{game.location_address}</p>
         )}
-        <div className="mt-4">
-          <OpenMapsButton
-            location={game.location}
-            locationAddress={game.location_address}
-            formattedAddress={game.formatted_address}
-            latitude={game.latitude}
-            longitude={game.longitude}
-            accent="blue"
-          />
-        </div>
       </div>
 
       {(game.location ||

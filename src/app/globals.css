@@ -169,25 +169,16 @@
   color: #0f172a;
 }
 
-.coach11-map-fullscreen-control a {
-  font-size: 16px;
-  text-align: center;
-}
-
-.coach11-map-fullscreen-icon {
-  display: inline-block;
-  transform: translateY(-1px);
-}
-
 .leaflet-container .leaflet-control-attribution {
   border-radius: 0.75rem 0 0 0;
-  padding: 1px 6px;
-  background: rgb(255 255 255 / 0.78);
+  padding: 1px 5px;
+  background: rgb(255 255 255 / 0.68);
   color: #94a3b8;
-  font-size: 9px;
-  line-height: 1.25;
-  box-shadow: 0 6px 18px rgb(15 23 42 / 0.08);
+  font-size: 8px;
+  line-height: 1.15;
+  box-shadow: 0 6px 16px rgb(15 23 42 / 0.06);
   backdrop-filter: blur(6px);
+  opacity: 0.8;
 }
 
 .leaflet-container .leaflet-control-attribution a {
@@ -242,18 +233,4 @@
 
 .coach11-map-popup-shell-slate .leaflet-popup-content-wrapper {
   border-top: 3px solid #0f172a;
-}
-
-.coach11-map-shell:fullscreen {
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
-  width: 100vw;
-  height: 100vh;
-  border-radius: 0;
-  background: #fff;
-}
-
-.coach11-map-shell:fullscreen .coach11-map-canvas {
-  aspect-ratio: auto;
-  min-height: 0;
 }

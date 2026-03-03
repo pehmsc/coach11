@@ -4,12 +4,13 @@ import { notFound } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import { pt } from "date-fns/locale";
 import { CalendarDays, Clock3, Dumbbell, MapPin, Swords } from "lucide-react";
+import { buildDateTimeFromDateAndTime } from "@/lib/events/time";
 import { resolveLocationLabel } from "@/lib/location";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   buildPublicGameRef,
   buildPublicTrainingRef,
-  resolvePublicShareRequest,
+  resolvePublicAccessRequest,
 } from "@/lib/public-share";
 
 export const dynamic = "force-dynamic";
@@ -81,8 +82,7 @@ function buildTrainingDateTime(
   sessionDate: string | null | undefined,
   startTime: string | null | undefined,
 ) {
-  if (!sessionDate) return null;
-  return `${sessionDate}T${startTime || "00:00"}:00`;
+  return buildDateTimeFromDateAndTime(sessionDate, startTime);
 }
 
 function gameStatusLabel(status: string | null | undefined) {
@@ -117,17 +117,17 @@ function gameTitle(game: PublicGameRow) {
 }
 
 export default async function PublicCalendarPage({ params }: PublicPageParams) {
-  const { token } = await params;
+  const { token: publicIdentifier } = await params;
   const admin = createAdminClient();
 
-  let share;
+  let access;
   try {
-    const resolved = await resolvePublicShareRequest(
+    const resolved = await resolvePublicAccessRequest(
       admin,
-      token,
+      publicIdentifier,
       await headers(),
     );
-    share = resolved?.share ?? null;
+    access = resolved ?? null;
   } catch (error) {
     if (
       error instanceof Error &&
@@ -151,8 +151,23 @@ export default async function PublicCalendarPage({ params }: PublicPageParams) {
     notFound();
   }
 
-  if (!share) {
+  if (!access) {
     notFound();
+  }
+
+  if (access.paused) {
+    return (
+      <main className="min-h-screen bg-slate-50 px-4 py-8">
+        <div className="mx-auto max-w-3xl rounded-3xl border border-slate-200 bg-white p-8 text-center">
+          <h1 className="text-2xl font-bold text-slate-900">
+            Acesso temporariamente pausado
+          </h1>
+          <p className="mt-3 text-sm text-slate-600">
+            Acesso temporariamente pausado pelo coordenador.
+          </p>
+        </div>
+      </main>
+    );
   }
 
   const todayIsoDate = new Date().toISOString().slice(0, 10);
@@ -166,14 +181,14 @@ export default async function PublicCalendarPage({ params }: PublicPageParams) {
     admin
       .from("age_groups")
       .select("club_name, name")
-      .eq("id", share.age_group_id)
+      .eq("id", access.ageGroupId)
       .maybeSingle(),
     admin
       .from("games")
       .select(
         "id, game_datetime, opponent_name, opponent_short_name, location, location_address, formatted_address, is_home, status, score_home, score_away",
       )
-      .eq("age_group_id", share.age_group_id)
+      .eq("age_group_id", access.ageGroupId)
       .gte("game_datetime", new Date().toISOString())
       .order("game_datetime", { ascending: true })
       .limit(12),
@@ -182,7 +197,7 @@ export default async function PublicCalendarPage({ params }: PublicPageParams) {
       .select(
         "id, title, session_date, start_time, end_time, location, location_address, formatted_address, notes, status",
       )
-      .eq("age_group_id", share.age_group_id)
+      .eq("age_group_id", access.ageGroupId)
       .gte("session_date", todayIsoDate)
       .order("session_date", { ascending: true })
       .order("start_time", { ascending: true, nullsFirst: false })
@@ -192,7 +207,7 @@ export default async function PublicCalendarPage({ params }: PublicPageParams) {
       .select(
         "id, game_datetime, opponent_name, opponent_short_name, location, location_address, formatted_address, is_home, status, score_home, score_away",
       )
-      .eq("age_group_id", share.age_group_id)
+      .eq("age_group_id", access.ageGroupId)
       .lt("game_datetime", new Date().toISOString())
       .order("game_datetime", { ascending: false })
       .limit(6),
@@ -213,7 +228,7 @@ export default async function PublicCalendarPage({ params }: PublicPageParams) {
         game.location_address,
       ),
       status: game.status,
-      href: `/public/${token}/games/${buildPublicGameRef(token, game.id)}`,
+      href: `/public/${access.identifier}/games/${buildPublicGameRef(access.identifier, game.id)}`,
       title: gameTitle(game),
       meta: formatGameDate(game.game_datetime),
     })),
@@ -232,7 +247,7 @@ export default async function PublicCalendarPage({ params }: PublicPageParams) {
           training.location_address,
         ),
         status: training.status,
-        href: `/public/${token}/trainings/${buildPublicTrainingRef(token, training.id)}`,
+        href: `/public/${access.identifier}/trainings/${buildPublicTrainingRef(access.identifier, training.id)}`,
         title: training.title?.trim() || "Treino",
         meta: formatGameDate(startsAt),
       };
@@ -328,7 +343,7 @@ export default async function PublicCalendarPage({ params }: PublicPageParams) {
             recentGames.map((game) => (
               <Link
                 key={game.id}
-                href={`/public/${token}/games/${buildPublicGameRef(token, game.id)}`}
+                href={`/public/${access.identifier}/games/${buildPublicGameRef(access.identifier, game.id)}`}
                 className="block rounded-2xl border border-slate-200 bg-white p-4 transition-colors hover:border-emerald-300"
               >
                 <div className="flex flex-wrap items-center justify-between gap-3">

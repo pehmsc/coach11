@@ -19,6 +19,7 @@ export type SharedGameFormValues = {
   opponent_short_name: string;
   date: string;
   start_time: string;
+  end_time: string;
   location: string;
   location_address: string;
   formatted_address: string;
@@ -121,7 +122,7 @@ export function GameFormFields({
           />
         </div>
         <div className="space-y-1">
-          <Label className={compact ? "text-xs" : undefined}>Hora *</Label>
+          <Label className={compact ? "text-xs" : undefined}>Início *</Label>
           <Input
             type="time"
             value={values.start_time}
@@ -130,6 +131,16 @@ export function GameFormFields({
             className={inputSizeClass}
           />
         </div>
+      </div>
+
+      <div className="space-y-1">
+        <Label className={compact ? "text-xs" : undefined}>Fim</Label>
+        <Input
+          type="time"
+          value={values.end_time}
+          onChange={(event) => onFieldChange("end_time", event.target.value)}
+          className={inputSizeClass}
+        />
       </div>
 
       <LocationFields

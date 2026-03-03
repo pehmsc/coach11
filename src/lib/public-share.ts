@@ -27,6 +27,12 @@ export type PublicShareRow = {
   created_at: string;
 };
 
+export type PublicAccessAgeGroupRow = {
+  id: string;
+  public_slug: string | null;
+  public_access_enabled: boolean | null;
+};
+
 export function generatePublicShareToken() {
   return randomBytes(32).toString("base64url");
 }
@@ -86,7 +92,11 @@ export function hashPublicIp(ip: string) {
 }
 
 export function buildPublicShareUrl(rawToken: string) {
-  return `${getCanonicalAppUrl()}/public/${rawToken}`;
+  return buildPublicAccessUrl(rawToken);
+}
+
+export function buildPublicAccessUrl(identifier: string) {
+  return `${getCanonicalAppUrl()}/public/${identifier}`;
 }
 
 export function getPublicShareUrlFromEncryptedToken(
@@ -254,5 +264,71 @@ export async function resolvePublicShareRequest(
     share,
     tokenHash,
     ip,
+  };
+}
+
+export function slugifyPublicAccessSegment(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .replace(/-{2,}/g, "-")
+    .trim();
+}
+
+export async function resolvePublicAccessRequest(
+  admin: SupabaseClient,
+  identifier: string,
+  headers: HeaderBag,
+) {
+  const normalizedIdentifier = identifier.trim();
+  const normalizedSlug = slugifyPublicAccessSegment(normalizedIdentifier);
+
+  if (normalizedSlug) {
+    const { data: ageGroupBySlug, error: ageGroupError } = await admin
+      .from("age_groups")
+      .select("id, public_slug, public_access_enabled")
+      .eq("public_slug", normalizedSlug)
+      .maybeSingle();
+
+    if (ageGroupError) {
+      throw new Error(`public_share_slug_lookup_failed:${ageGroupError.message}`);
+    }
+
+    if (ageGroupBySlug) {
+      const ageGroup = ageGroupBySlug as PublicAccessAgeGroupRow;
+      return {
+        source: "slug" as const,
+        identifier: ageGroup.public_slug || normalizedSlug,
+        ageGroupId: ageGroup.id,
+        paused: ageGroup.public_access_enabled === false,
+        share: null,
+      };
+    }
+  }
+
+  const tokenAccess = await resolvePublicShareRequest(admin, normalizedIdentifier, headers);
+  if (!tokenAccess?.share) {
+    return null;
+  }
+
+  const { data: tokenAgeGroup, error: tokenAgeGroupError } = await admin
+    .from("age_groups")
+    .select("id, public_slug, public_access_enabled")
+    .eq("id", tokenAccess.share.age_group_id)
+    .maybeSingle();
+
+  if (tokenAgeGroupError) {
+    throw new Error(`public_share_age_group_lookup_failed:${tokenAgeGroupError.message}`);
+  }
+
+  return {
+    source: "token" as const,
+    identifier: normalizedIdentifier,
+    ageGroupId: tokenAccess.share.age_group_id,
+    paused: tokenAgeGroup?.public_access_enabled === false,
+    share: tokenAccess.share,
   };
 }

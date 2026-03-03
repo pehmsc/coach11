@@ -21,6 +21,7 @@ type TrainingRow = {
   osm_place_id?: string | null;
   location_source?: LocationSource | null;
   notes?: string | null;
+  image_url?: string | null;
   status: string;
   age_group_id?: string | null;
   team_id?: string | null;
@@ -111,7 +112,7 @@ export async function GET(request: Request) {
       const { data: session, error: sessionError } = await db
         .from("training_sessions")
         .select(
-          "id, session_date, start_time, end_time, title, location, location_address, formatted_address, latitude, longitude, osm_place_id, location_source, notes, status, age_group_id, team_id",
+          "id, session_date, start_time, end_time, title, location, location_address, formatted_address, latitude, longitude, osm_place_id, location_source, notes, image_url, status, age_group_id, team_id",
         )
         .eq("id", sessionId)
         .eq("age_group_id", context.ageGroup.id)
@@ -231,7 +232,7 @@ export async function GET(request: Request) {
     const { data: sessionsData, error: sessionsError } = await db
       .from("training_sessions")
       .select(
-        "id, session_date, start_time, end_time, title, location, location_address, formatted_address, latitude, longitude, osm_place_id, location_source, notes, status, age_group_id, team_id",
+        "id, session_date, start_time, end_time, title, location, location_address, formatted_address, latitude, longitude, osm_place_id, location_source, notes, image_url, status, age_group_id, team_id",
       )
       .eq("age_group_id", context.ageGroup.id)
       .order("session_date", { ascending: false })

@@ -2,42 +2,35 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import {
-  buildPublicShareUrl,
-  encryptPublicShareToken,
-  generatePublicShareToken,
-  getPublicShareUrlFromEncryptedToken,
-  hashPublicShareToken,
-} from "@/lib/public-share";
+import { buildPublicAccessUrl, slugifyPublicAccessSegment } from "@/lib/public-share";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 
 export const runtime = "nodejs";
 
-type PublicShareRecord = {
+type AgeGroupAccessRecord = {
   id: string;
-  age_group_id: string;
-  expires_at: string | null;
-  revoked_at: string | null;
-  last_accessed_at: string | null;
-  access_count: number;
-  created_at: string;
-  token_encrypted?: string | null;
+  coordinator_id: string | null;
+  club_name: string | null;
+  name: string | null;
+  public_slug: string | null;
+  public_access_enabled: boolean | null;
 };
 
 const AgeGroupSchema = z.object({
   ageGroupId: z.string().uuid(),
 });
 
-async function assertCanManagePublicShare(
-  userId: string,
-  ageGroupId: string,
-) {
+const PatchSchema = AgeGroupSchema.extend({
+  publicAccessEnabled: z.boolean(),
+});
+
+async function assertCanManagePublicShare(userId: string, ageGroupId: string) {
   const admin = createAdminClient();
   const [{ data: ageGroup, error: ageGroupError }, { data: profile, error: profileError }] =
     await Promise.all([
       admin
         .from("age_groups")
-        .select("id, coordinator_id")
+        .select("id, coordinator_id, club_name, name, public_slug, public_access_enabled")
         .eq("id", ageGroupId)
         .maybeSingle(),
       admin
@@ -80,13 +73,12 @@ async function assertCanManagePublicShare(
   return {
     ok: true as const,
     admin,
-    isSuperCoordinator,
-    isAgeGroupCoordinator,
+    ageGroup: ageGroup as AgeGroupAccessRecord,
   };
 }
 
-function parseBodySchema(body: unknown) {
-  const parsed = AgeGroupSchema.safeParse(body);
+function parseAgeGroupId(value: unknown) {
+  const parsed = AgeGroupSchema.safeParse({ ageGroupId: value });
   if (!parsed.success) {
     return {
       ok: false as const,
@@ -103,192 +95,185 @@ function parseBodySchema(body: unknown) {
   };
 }
 
-function serializeShare(record: PublicShareRecord | null) {
-  if (!record) {
+async function resolveUniquePublicSlug(
+  admin: ReturnType<typeof createAdminClient>,
+  ageGroup: AgeGroupAccessRecord,
+) {
+  const baseSlug =
+    slugifyPublicAccessSegment(
+      `${ageGroup.club_name || "coach11"} ${ageGroup.name || "escalao"}`,
+    ) || `escalao-${ageGroup.id.slice(0, 8)}`;
+
+  let candidate = baseSlug;
+  let suffix = 2;
+
+  while (true) {
+    const { data, error } = await admin
+      .from("age_groups")
+      .select("id")
+      .eq("public_slug", candidate)
+      .neq("id", ageGroup.id)
+      .maybeSingle();
+
+    if (error) {
+      throw error;
+    }
+
+    if (!data) {
+      return candidate;
+    }
+
+    candidate = `${baseSlug}-${suffix}`;
+    suffix += 1;
+  }
+}
+
+async function ensurePublicShareState(
+  admin: ReturnType<typeof createAdminClient>,
+  ageGroup: AgeGroupAccessRecord,
+) {
+  if (ageGroup.public_slug) {
     return {
-      share: null,
-      url: null,
-      requiresRegeneration: false,
+      age_group_id: ageGroup.id,
+      public_slug: ageGroup.public_slug,
+      public_access_enabled: ageGroup.public_access_enabled === true,
     };
   }
 
-  const { token_encrypted, ...share } = record;
-  const url = getPublicShareUrlFromEncryptedToken(token_encrypted);
+  const publicSlug = await resolveUniquePublicSlug(admin, ageGroup);
+  const { data, error } = await admin
+    .from("age_groups")
+    .update({ public_slug: publicSlug })
+    .eq("id", ageGroup.id)
+    .select("id, public_slug, public_access_enabled")
+    .single();
+
+  if (error || !data) {
+    throw error || new Error("public_slug_update_failed");
+  }
 
   return {
-    share,
-    url,
-    requiresRegeneration: !url,
+    age_group_id: data.id,
+    public_slug: data.public_slug as string,
+    public_access_enabled: data.public_access_enabled === true,
+  };
+}
+
+function serializeShareState(record: {
+  age_group_id: string;
+  public_slug: string;
+  public_access_enabled: boolean;
+}) {
+  return {
+    age_group_id: record.age_group_id,
+    public_slug: record.public_slug,
+    public_access_enabled: record.public_access_enabled,
+    url: buildPublicAccessUrl(record.public_slug),
+  };
+}
+
+async function authenticateUser() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return {
+      ok: false as const,
+      response: NextResponse.json({ error: "Não autenticado." }, { status: 401 }),
+    };
+  }
+
+  return {
+    ok: true as const,
+    user,
   };
 }
 
 export async function GET(request: Request) {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
-    }
+    const auth = await authenticateUser();
+    if (!auth.ok) return auth.response;
 
     const ageGroupId = new URL(request.url).searchParams.get("ageGroupId");
-    const parsed = parseBodySchema({ ageGroupId });
+    const parsed = parseAgeGroupId(ageGroupId);
     if (!parsed.ok) return parsed.response;
 
-    const access = await assertCanManagePublicShare(user.id, parsed.ageGroupId);
+    const access = await assertCanManagePublicShare(auth.user.id, parsed.ageGroupId);
     if (!access.ok) return access.response;
 
-    console.log("[public-share.get] request", {
-      userId: user.id,
-      ageGroupId: parsed.ageGroupId,
-      isSuperCoordinator: access.isSuperCoordinator,
-      isAgeGroupCoordinator: access.isAgeGroupCoordinator,
-    });
-
-    const nowIso = new Date().toISOString();
-    let data: PublicShareRecord | null = null;
-    const modernRes = await access.admin
-      .from("public_share_tokens")
-      .select("id, age_group_id, expires_at, revoked_at, last_accessed_at, access_count, created_at, token_encrypted")
-      .eq("age_group_id", parsed.ageGroupId)
-      .is("revoked_at", null)
-      .or(`expires_at.is.null,expires_at.gt.${nowIso}`)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (modernRes.error && modernRes.error.message.toLowerCase().includes("token_encrypted")) {
-      const legacyRes = await access.admin
-        .from("public_share_tokens")
-        .select("id, age_group_id, expires_at, revoked_at, last_accessed_at, access_count, created_at")
-        .eq("age_group_id", parsed.ageGroupId)
-        .is("revoked_at", null)
-        .or(`expires_at.is.null,expires_at.gt.${nowIso}`)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (legacyRes.error) {
-        return NextResponse.json(
-          { error: "Não foi possível carregar o link público." },
-          { status: 500 },
-        );
-      }
-
-      data = (legacyRes.data as PublicShareRecord | null) ?? null;
-    } else if (modernRes.error) {
-      return NextResponse.json(
-        { error: "Não foi possível carregar o link público." },
-        { status: 500 },
-      );
-    } else {
-      data = (modernRes.data as PublicShareRecord | null) ?? null;
-    }
-    const serialized = serializeShare(data);
+    const share = await ensurePublicShareState(access.admin, access.ageGroup);
 
     return NextResponse.json({
       success: true,
-      share: serialized.share,
-      url: serialized.url,
-      requiresRegeneration: serialized.requiresRegeneration,
+      share: serializeShareState(share),
     });
   } catch (error) {
     return respondInternalError("api.public-share.get", error);
   }
 }
 
+async function updatePublicShareState(request: Request, enabled: boolean | null) {
+  const auth = await authenticateUser();
+  if (!auth.ok) return auth.response;
+
+  const body = await request.json().catch(() => null);
+  const parsed =
+    enabled == null
+      ? PatchSchema.safeParse(body)
+      : PatchSchema.safeParse({
+          ...(body && typeof body === "object" ? body : {}),
+          publicAccessEnabled: enabled,
+        });
+
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: "Dados inválidos.", details: parsed.error.flatten().fieldErrors },
+      { status: 400 },
+    );
+  }
+
+  const access = await assertCanManagePublicShare(auth.user.id, parsed.data.ageGroupId);
+  if (!access.ok) return access.response;
+
+  const share = await ensurePublicShareState(access.admin, access.ageGroup);
+  const { data, error } = await access.admin
+    .from("age_groups")
+    .update({ public_access_enabled: parsed.data.publicAccessEnabled })
+    .eq("id", parsed.data.ageGroupId)
+    .select("id, public_slug, public_access_enabled")
+    .single();
+
+  if (error || !data?.public_slug) {
+    return NextResponse.json(
+      { error: "Não foi possível atualizar o acesso público." },
+      { status: 500 },
+    );
+  }
+
+  return NextResponse.json({
+    success: true,
+    share: serializeShareState({
+      age_group_id: data.id,
+      public_slug: data.public_slug,
+      public_access_enabled: data.public_access_enabled === true,
+    }),
+    previous: serializeShareState(share),
+  });
+}
+
+export async function PATCH(request: Request) {
+  try {
+    return await updatePublicShareState(request, null);
+  } catch (error) {
+    return respondInternalError("api.public-share.patch", error);
+  }
+}
+
 export async function POST(request: Request) {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
-    }
-
-    const body = await request.json().catch(() => null);
-    const parsed = parseBodySchema(body);
-    if (!parsed.ok) return parsed.response;
-
-    const access = await assertCanManagePublicShare(user.id, parsed.ageGroupId);
-    if (!access.ok) return access.response;
-
-    console.log("[public-share.post] start", {
-      userId: user.id,
-      ageGroupId: parsed.ageGroupId,
-      isSuperCoordinator: access.isSuperCoordinator,
-      isAgeGroupCoordinator: access.isAgeGroupCoordinator,
-    });
-
-    await access.admin
-      .from("public_share_tokens")
-      .update({ revoked_at: new Date().toISOString() })
-      .eq("age_group_id", parsed.ageGroupId)
-      .is("revoked_at", null);
-
-    const rawToken = generatePublicShareToken();
-    const tokenHash = hashPublicShareToken(rawToken);
-    const tokenEncrypted = encryptPublicShareToken(rawToken);
-
-    let data: PublicShareRecord | null = null;
-    const modernInsert = await access.admin
-      .from("public_share_tokens")
-      .insert({
-        token_hash: tokenHash,
-        token_encrypted: tokenEncrypted,
-        age_group_id: parsed.ageGroupId,
-        created_by: user.id,
-        expires_at: null,
-      })
-      .select("id, age_group_id, expires_at, revoked_at, last_accessed_at, access_count, created_at, token_encrypted")
-      .single();
-
-    if (modernInsert.error && modernInsert.error.message.toLowerCase().includes("token_encrypted")) {
-      const legacyInsert = await access.admin
-        .from("public_share_tokens")
-        .insert({
-          token_hash: tokenHash,
-          age_group_id: parsed.ageGroupId,
-          created_by: user.id,
-          expires_at: null,
-        })
-        .select("id, age_group_id, expires_at, revoked_at, last_accessed_at, access_count, created_at")
-        .single();
-
-      if (legacyInsert.error || !legacyInsert.data) {
-        return NextResponse.json(
-          { error: "Não foi possível gerar o link público." },
-          { status: 500 },
-        );
-      }
-
-      data = legacyInsert.data as PublicShareRecord;
-    } else if (modernInsert.error || !modernInsert.data) {
-      return NextResponse.json(
-        { error: "Não foi possível gerar o link público." },
-        { status: 500 },
-      );
-    } else {
-      data = modernInsert.data as PublicShareRecord;
-    }
-
-    console.log("[public-share.post] success", {
-      userId: user.id,
-      ageGroupId: parsed.ageGroupId,
-      shareId: data.id,
-      createdAt: data.created_at,
-    });
-
-    return NextResponse.json({
-      success: true,
-      share: serializeShare(data).share,
-      url: buildPublicShareUrl(rawToken),
-      requiresRegeneration: false,
-    });
+    return await updatePublicShareState(request, true);
   } catch (error) {
     return respondInternalError("api.public-share.post", error);
   }
@@ -296,48 +281,7 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
-    }
-
-    const body = await request.json().catch(() => null);
-    const parsed = parseBodySchema(body);
-    if (!parsed.ok) return parsed.response;
-
-    const access = await assertCanManagePublicShare(user.id, parsed.ageGroupId);
-    if (!access.ok) return access.response;
-
-    console.log("[public-share.delete] start", {
-      userId: user.id,
-      ageGroupId: parsed.ageGroupId,
-      isSuperCoordinator: access.isSuperCoordinator,
-      isAgeGroupCoordinator: access.isAgeGroupCoordinator,
-    });
-
-    const { error } = await access.admin
-      .from("public_share_tokens")
-      .update({ revoked_at: new Date().toISOString() })
-      .eq("age_group_id", parsed.ageGroupId)
-      .is("revoked_at", null);
-
-    if (error) {
-      return NextResponse.json(
-        { error: "Não foi possível revogar o link público." },
-        { status: 500 },
-      );
-    }
-
-    console.log("[public-share.delete] success", {
-      userId: user.id,
-      ageGroupId: parsed.ageGroupId,
-    });
-
-    return NextResponse.json({ success: true });
+    return await updatePublicShareState(request, false);
   } catch (error) {
     return respondInternalError("api.public-share.delete", error);
   }

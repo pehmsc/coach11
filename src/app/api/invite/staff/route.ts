@@ -200,7 +200,7 @@ export async function POST(request: Request) {
       process.env.RESEND_FROM_EMAIL || "Coach11 <noreply@coach11.app>";
 
     // ✉️ Enviar email
-    const { data: emailData, error: emailError } = await resend.emails.send({
+    const { error: emailError } = await resend.emails.send({
       from: fromEmail,
       to: [normalizedEmail],
       subject: `Convite para juntar ao ${ageGroup.club_name} — ${ageGroup.name}`,
@@ -242,9 +242,6 @@ export async function POST(request: Request) {
         warning: "Convite criado mas email não enviado.",
       });
     }
-
-    console.log("Email enviado:", emailData?.id);
-
     return NextResponse.json({
       success: true,
       inviteId: createdInvite?.id ?? null,
