@@ -2,9 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Expand, Loader2, MapPin } from "lucide-react";
-import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
-import markerIcon from "leaflet/dist/images/marker-icon.png";
-import markerShadow from "leaflet/dist/images/marker-shadow.png";
 import { OpenMapsButton } from "@/components/maps/OpenMapsButton";
 import {
   hasCoordinates,
@@ -41,6 +38,9 @@ type Props = {
 const DEFAULT_MAP_CENTER: [number, number] = [39.557191, -8.011003];
 const DEFAULT_MAP_ZOOM = 6.5;
 const DETAIL_MAP_ZOOM = 15.5;
+const LEAFLET_MARKER_ICON_URL = "/leaflet/marker-icon.png";
+const LEAFLET_MARKER_ICON_RETINA_URL = "/leaflet/marker-icon-2x.png";
+const LEAFLET_MARKER_SHADOW_URL = "/leaflet/marker-shadow.png";
 
 async function resolveFallbackFromApi(addressQuery: string) {
   const autocompleteRes = await fetch(
@@ -344,9 +344,9 @@ export function LocationMapPreview({
     if (!currentMap || !leaflet) return;
 
     const markerIconInstance = leaflet.icon({
-      iconRetinaUrl: markerIcon2x.src,
-      iconUrl: markerIcon.src,
-      shadowUrl: markerShadow.src,
+      iconRetinaUrl: LEAFLET_MARKER_ICON_RETINA_URL,
+      iconUrl: LEAFLET_MARKER_ICON_URL,
+      shadowUrl: LEAFLET_MARKER_SHADOW_URL,
       iconSize: [25, 41],
       iconAnchor: [12, 41],
       popupAnchor: [1, -34],
