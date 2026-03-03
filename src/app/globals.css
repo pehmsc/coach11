@@ -148,32 +148,71 @@
   }
 }
 
-.coach11-map-pin-wrapper {
-  background: transparent;
-  border: 0;
+.leaflet-container {
+  font: inherit;
+  background: linear-gradient(180deg, #e2e8f0 0%, #f8fafc 100%);
 }
 
-.coach11-map-pin {
-  position: relative;
-  display: inline-block;
-  width: 18px;
-  height: 18px;
-  border-radius: 9999px;
-  background: var(--coach11-pin, #059669);
-  border: 3px solid #fff;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.2);
+.leaflet-container .leaflet-control-zoom {
+  border: 1px solid rgb(226 232 240 / 0.95);
+  box-shadow: 0 14px 32px rgb(15 23 42 / 0.12);
 }
 
-.coach11-map-pin::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  bottom: -6px;
-  width: 8px;
-  height: 8px;
-  background: var(--coach11-pin, #059669);
-  border-right: 3px solid #fff;
-  border-bottom: 3px solid #fff;
-  transform: translateX(-50%) rotate(45deg);
-  border-bottom-right-radius: 3px;
+.leaflet-container .leaflet-control-zoom a {
+  color: #0f172a;
+}
+
+.leaflet-container .leaflet-control-attribution {
+  border-radius: 0.75rem 0 0 0;
+  background: rgb(255 255 255 / 0.92);
+  color: #64748b;
+}
+
+.leaflet-container .leaflet-control-attribution a {
+  color: #334155;
+}
+
+.coach11-map-popup-shell .leaflet-popup-content-wrapper {
+  border-radius: 1rem;
+  box-shadow: 0 18px 40px rgb(15 23 42 / 0.18);
+}
+
+.coach11-map-popup-shell .leaflet-popup-content {
+  margin: 0;
+  min-width: 190px;
+}
+
+.coach11-map-popup-shell .leaflet-popup-tip {
+  box-shadow: none;
+}
+
+.coach11-map-popup {
+  padding: 0.85rem 1rem;
+}
+
+.coach11-map-popup h4 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1.25rem;
+  color: #0f172a;
+}
+
+.coach11-map-popup p {
+  margin: 0.35rem 0 0;
+  font-size: 0.78rem;
+  line-height: 1.2rem;
+  color: #475569;
+}
+
+.coach11-map-popup-shell-emerald .leaflet-popup-content-wrapper {
+  border-top: 3px solid #059669;
+}
+
+.coach11-map-popup-shell-blue .leaflet-popup-content-wrapper {
+  border-top: 3px solid #2563eb;
+}
+
+.coach11-map-popup-shell-slate .leaflet-popup-content-wrapper {
+  border-top: 3px solid #0f172a;
 }

@@ -2,9 +2,15 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, MapPin } from "lucide-react";
+import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
+import markerIcon from "leaflet/dist/images/marker-icon.png";
+import markerShadow from "leaflet/dist/images/marker-shadow.png";
 import { OpenMapsButton } from "@/components/maps/OpenMapsButton";
-import { hasCoordinates } from "@/lib/location";
-import { resolveMapsQuery } from "@/lib/maps";
+import {
+  hasCoordinates,
+  resolveFormattedAddress,
+  resolveLocationLabel,
+} from "@/lib/location";
 import { cn } from "@/lib/utils";
 
 type Accent = "emerald" | "blue" | "slate";
@@ -20,6 +26,25 @@ type Props = {
   resolveFallback?: boolean;
   className?: string;
 };
+
+function buildPopupContent(title: string | null, address: string | null) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "coach11-map-popup";
+
+  if (title) {
+    const heading = document.createElement("h4");
+    heading.textContent = title;
+    wrapper.appendChild(heading);
+  }
+
+  if (address && address !== title) {
+    const description = document.createElement("p");
+    description.textContent = address;
+    wrapper.appendChild(description);
+  }
+
+  return wrapper;
+}
 
 export function LocationMapPreview({
   location,
@@ -41,7 +66,10 @@ export function LocationMapPreview({
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<unknown>(null);
   const markerRef = useRef<unknown>(null);
-  const query = resolveMapsQuery(formattedAddress, locationAddress, location);
+  const locationTitle = useMemo(() => {
+    const normalized = typeof location === "string" ? location.trim() : "";
+    return normalized || null;
+  }, [location]);
 
   const resolvedLocation = useMemo(() => {
     if (hasCoordinates({ latitude, longitude })) {
@@ -58,6 +86,17 @@ export function LocationMapPreview({
 
     return null;
   }, [fallbackCoords, formattedAddress, latitude, longitude]);
+  const resolvedAddress = resolveFormattedAddress(
+    resolvedLocation?.formattedAddress ?? formattedAddress,
+    locationAddress,
+  );
+  const locationLabel = resolveLocationLabel(
+    location,
+    resolvedLocation?.formattedAddress ?? formattedAddress,
+    locationAddress,
+  );
+  const popupTitle = locationTitle;
+  const query = locationLabel;
 
   useEffect(() => {
     if (
@@ -159,50 +198,65 @@ export function LocationMapPreview({
 
       if (!mapRef.current) {
         const mapInstance = leaflet.map(mapContainerRef.current, {
-          zoomControl: false,
-          attributionControl: false,
-          dragging: false,
-          doubleClickZoom: false,
+          zoomControl: true,
+          attributionControl: true,
+          dragging: true,
+          doubleClickZoom: true,
           scrollWheelZoom: false,
-          boxZoom: false,
-          keyboard: false,
-          touchZoom: false,
-          tapHold: false,
+          boxZoom: true,
+          keyboard: true,
+          touchZoom: true,
+          tapHold: true,
+          zoomSnap: 0.5,
         });
 
         leaflet
           .tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
             maxZoom: 19,
             crossOrigin: true,
+            attribution: '&copy; <a href="https://osm.org/copyright">OpenStreetMap</a> contributors',
           })
           .addTo(mapInstance);
 
         mapRef.current = mapInstance;
       }
 
-      const color =
-        accent === "blue"
-          ? "#2563eb"
-          : accent === "slate"
-            ? "#0f172a"
-            : "#059669";
-
-      const markerIcon = leaflet.divIcon({
-        className: "coach11-map-pin-wrapper",
-        html: `<span class="coach11-map-pin" style="--coach11-pin:${color}"></span>`,
-        iconSize: [22, 30],
-        iconAnchor: [11, 30],
+      const markerIconInstance = leaflet.icon({
+        iconRetinaUrl: markerIcon2x.src,
+        iconUrl: markerIcon.src,
+        shadowUrl: markerShadow.src,
+        iconSize: [25, 41],
+        iconAnchor: [12, 41],
+        popupAnchor: [1, -34],
+        shadowSize: [41, 41],
       });
 
       const currentMap = mapRef.current as import("leaflet").Map;
-      currentMap.setView(point, 15, { animate: false });
+      currentMap.setView(point, 15.5, { animate: false });
 
       if (!markerRef.current) {
-        markerRef.current = leaflet.marker(point, { icon: markerIcon }).addTo(currentMap);
+        markerRef.current = leaflet
+          .marker(point, {
+            icon: markerIconInstance,
+            riseOnHover: true,
+          })
+          .addTo(currentMap);
       } else {
         (markerRef.current as import("leaflet").Marker).setLatLng(point);
-        (markerRef.current as import("leaflet").Marker).setIcon(markerIcon);
+        (markerRef.current as import("leaflet").Marker).setIcon(markerIconInstance);
       }
+
+      (markerRef.current as import("leaflet").Marker)
+        .bindPopup(buildPopupContent(popupTitle, resolvedAddress), {
+          autoPan: false,
+          closeButton: false,
+          className: accent === "blue"
+            ? "coach11-map-popup-shell coach11-map-popup-shell-blue"
+            : accent === "slate"
+              ? "coach11-map-popup-shell coach11-map-popup-shell-slate"
+              : "coach11-map-popup-shell coach11-map-popup-shell-emerald",
+        })
+        .openPopup();
 
       window.requestAnimationFrame(() => {
         currentMap.invalidateSize(false);
@@ -214,7 +268,7 @@ export function LocationMapPreview({
     return () => {
       cancelled = true;
     };
-  }, [accent, resolvedLocation]);
+  }, [accent, popupTitle, resolvedAddress, resolvedLocation]);
 
   useEffect(() => {
     return () => {
@@ -264,7 +318,7 @@ export function LocationMapPreview({
             {query || "Localização por confirmar"}
           </p>
           <p className="mt-1 text-[11px] text-slate-400">
-            Map data © OpenStreetMap contributors
+            Leaflet + OpenStreetMap contributors
           </p>
         </div>
         <OpenMapsButton
