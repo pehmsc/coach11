@@ -5,6 +5,20 @@ import { respondInternalError } from "@/lib/http/respond-internal-error";
 
 export const runtime = "nodejs";
 
+function resolveInviteStatus(invite: {
+  status: string;
+  revoked_at: string | null;
+  accepted_at: string | null;
+  expires_at: string | null;
+}) {
+  if (invite.revoked_at || invite.status === "revoked") return "revoked";
+  if (invite.expires_at && new Date(invite.expires_at).getTime() < Date.now()) {
+    return "expired";
+  }
+  if (invite.accepted_at || invite.status === "accepted") return "accepted";
+  return "sent";
+}
+
 const RevokeInviteSchema = z.object({
   inviteId: z.string().uuid().optional(),
   email: z.string().email().max(254).optional(),
@@ -36,7 +50,8 @@ export async function PATCH(request: Request) {
       .update({
         status: "revoked",
         revoked_at: nowIso,
-      });
+      })
+      .is("revoked_at", null);
 
     if (parsed.data.inviteId) {
       query = query.eq("id", parsed.data.inviteId);
@@ -44,7 +59,11 @@ export async function PATCH(request: Request) {
       query = query.eq("email", parsed.data.email.trim().toLowerCase());
     }
 
-    const { error } = await query;
+    const { data, error } = await query
+      .select(
+        "id, email, invite_type, target_age_group_id, created_by_profile_id, status, expires_at, accepted_at, revoked_at, metadata, created_at",
+      )
+      .maybeSingle();
 
     if (error) {
       return NextResponse.json(
@@ -53,7 +72,20 @@ export async function PATCH(request: Request) {
       );
     }
 
-    return NextResponse.json({ success: true });
+    if (!data) {
+      return NextResponse.json(
+        { error: "Convite já revogado ou não encontrado." },
+        { status: 404 },
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      invite: {
+        ...data,
+        status: resolveInviteStatus(data),
+      },
+    });
   } catch (error) {
     return respondInternalError("api.admin.beta-invites.revoke.patch", error);
   }

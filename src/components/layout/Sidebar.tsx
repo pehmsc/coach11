@@ -36,7 +36,10 @@ export function Sidebar({ profile, avatarUrl }: SidebarProps) {
   }
 
   return (
-    <aside className="hidden md:flex fixed left-0 top-0 bottom-0 w-64 bg-slate-900 flex-col z-40">
+    <aside
+      className="fixed bottom-0 left-0 z-40 hidden w-64 flex-col bg-slate-900 md:flex"
+      style={{ top: "var(--coach11-top-inset, 0px)" }}
+    >
       {/* Logo */}
       <div className="p-6 border-b border-slate-800">
         <h1 className="text-2xl font-bold">

@@ -1,6 +1,6 @@
 export const SUPER_COORDINATOR_EMAIL = "pedrohmscampos@gmail.com";
 
-export type BetaInviteType = "staff" | "beta_coordinator";
+export type BetaInviteType = "beta_coordinator";
 export type BetaInviteStatus = "sent" | "accepted" | "revoked" | "expired";
 
 export type BetaInviteRow = {
@@ -21,6 +21,7 @@ export type BetaAccessReason =
   | "super_email"
   | "legacy_access"
   | "invite_ok"
+  | "staff_invite"
   | "no_invite"
   | "no_email"
   | "lookup_error";

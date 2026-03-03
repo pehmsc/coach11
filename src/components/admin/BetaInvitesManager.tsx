@@ -20,6 +20,14 @@ type BetaInviteItem = {
   onboardingUrl: string;
 };
 
+const STATUS_FILTER_OPTIONS = [
+  { value: "all", label: "Todos" },
+  { value: "sent", label: "Pendente" },
+  { value: "accepted", label: "Aceite" },
+  { value: "revoked", label: "Revogado" },
+  { value: "expired", label: "Expirado" },
+];
+
 type Props = {
   embedded?: boolean;
 };
@@ -109,13 +117,21 @@ export function BetaInvitesManager({ embedded = false }: Props) {
       });
       const payload = await res.json().catch(() => ({}));
 
-      if (!res.ok || payload?.success !== true) {
+      if (!res.ok || payload?.success !== true || !payload?.invite) {
         toast.error(payload?.error || "Não foi possível revogar o convite beta.");
         return;
       }
 
+      const revokedInvite = payload.invite as Partial<BetaInviteItem>;
+      setInvites((current) => {
+        const next = current.map((invite) =>
+          invite.id === inviteId ? { ...invite, ...revokedInvite } : invite,
+        );
+        return statusFilter === "all"
+          ? next
+          : next.filter((invite) => invite.status === statusFilter);
+      });
       toast.success("Convite beta revogado.");
-      await loadInvites();
     } catch {
       toast.error("Erro de ligação ao revogar o convite beta.");
     } finally {
@@ -142,8 +158,10 @@ export function BetaInvitesManager({ embedded = false }: Props) {
         return "Revogado";
       case "expired":
         return "Expirado";
+      case "sent":
+        return "Pendente";
       default:
-        return "Enviado";
+        return "Pendente";
     }
   }
 
@@ -178,11 +196,11 @@ export function BetaInvitesManager({ embedded = false }: Props) {
             onChange={(event) => setStatusFilter(event.target.value)}
             className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
           >
-            <option value="all">Todos</option>
-            <option value="sent">Sent</option>
-            <option value="accepted">Accepted</option>
-            <option value="revoked">Revoked</option>
-            <option value="expired">Expired</option>
+            {STATUS_FILTER_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
           </select>
         </label>
       </div>
@@ -203,7 +221,7 @@ export function BetaInvitesManager({ embedded = false }: Props) {
                 <div>
                   <p className="font-semibold text-slate-900">{invite.email}</p>
                   <p className="mt-1 text-xs text-slate-500">
-                    {invite.invite_type === "beta_coordinator" ? "Coordenador beta" : "Staff"} · {statusLabel(invite.status)}
+                    Coordenador beta · {statusLabel(invite.status)}
                   </p>
                 </div>
                 <div className="text-right text-xs text-slate-500">
@@ -224,6 +242,15 @@ export function BetaInvitesManager({ embedded = false }: Props) {
                 </Button>
               </div>
 
+              {invite.status === "revoked" ? (
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-500">
+                  Convite revogado
+                </div>
+              ) : invite.status === "expired" ? (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-700">
+                  Convite expirado
+                </div>
+              ) : (
               <div className="flex flex-wrap gap-2">
                 <Button
                   type="button"
@@ -240,6 +267,7 @@ export function BetaInvitesManager({ embedded = false }: Props) {
                   Revogar convite
                 </Button>
               </div>
+              )}
             </div>
           ))}
         </div>

@@ -5,6 +5,20 @@ import { respondInternalError } from "@/lib/http/respond-internal-error";
 
 export const runtime = "nodejs";
 
+function resolveInviteStatus(invite: {
+  status: string;
+  revoked_at: string | null;
+  accepted_at: string | null;
+  expires_at: string | null;
+}) {
+  if (invite.revoked_at || invite.status === "revoked") return "revoked";
+  if (invite.expires_at && new Date(invite.expires_at).getTime() < Date.now()) {
+    return "expired";
+  }
+  if (invite.accepted_at || invite.status === "accepted") return "accepted";
+  return "sent";
+}
+
 export async function GET(request: Request) {
   try {
     const access = await getSuperUserAccess();
@@ -28,10 +42,6 @@ export async function GET(request: Request) {
       query = query.eq("invite_type", inviteType);
     }
 
-    if (status && status !== "all") {
-      query = query.eq("status", status);
-    }
-
     const { data, error } = await query;
 
     if (error) {
@@ -42,10 +52,13 @@ export async function GET(request: Request) {
     }
 
     const appUrl = getCanonicalAppUrl();
-    const invites = (data || []).map((invite) => ({
-      ...invite,
-      onboardingUrl: `${appUrl}/register?email=${encodeURIComponent(invite.email)}`,
-    }));
+    const invites = (data || [])
+      .map((invite) => ({
+        ...invite,
+        status: resolveInviteStatus(invite),
+        onboardingUrl: `${appUrl}/register?email=${encodeURIComponent(invite.email)}`,
+      }))
+      .filter((invite) => (status && status !== "all" ? invite.status === status : true));
 
     return NextResponse.json({
       success: true,

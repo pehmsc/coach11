@@ -40,14 +40,21 @@ export default async function DashboardLayout({
     (profile && "avatar_url" in profile && typeof profile.avatar_url === "string"
       ? profile.avatar_url
       : null) || metadataAvatar;
+  const topInset = "max(env(safe-area-inset-top, 0px), env(titlebar-area-height, 0px))";
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div
+      className="min-h-screen bg-slate-50"
+      style={{ ["--coach11-top-inset" as string]: topInset }}
+    >
       {/* Sidebar — visível apenas em desktop */}
       <Sidebar profile={profile} avatarUrl={avatarUrl} />
 
       {/* Conteúdo principal */}
-      <main className="pb-[calc(var(--mobile-footer-height)+env(safe-area-inset-bottom)+1rem)] md:pb-0 md:ml-64">
+      <main
+        className="min-w-0 pb-[calc(var(--mobile-footer-height)+env(safe-area-inset-bottom)+1rem)] md:ml-64 md:pb-0"
+        style={{ paddingTop: "var(--coach11-top-inset, 0px)" }}
+      >
         {children}
       </main>
 

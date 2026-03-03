@@ -85,7 +85,7 @@ const NAV_ITEMS = {
   },
   team: {
     id: "team",
-    href: "/team/setup",
+    href: "/team",
     label: "Equipa",
     icon: Shield,
   },
@@ -144,7 +144,6 @@ const BASE_MOBILE_APP_NAV_SECTIONS: AppNavSection[] = [
   {
     id: "main",
     items: [
-      NAV_ITEMS.calendar,
       NAV_ITEMS.players,
       NAV_ITEMS.competitions,
       NAV_ITEMS.games,
@@ -161,6 +160,7 @@ const BASE_MOBILE_APP_NAV_SECTIONS: AppNavSection[] = [
 
 export const MOBILE_FOOTER_NAV_ITEMS: AppNavItem[] = [
   NAV_ITEMS.dashboard,
+  NAV_ITEMS.calendar,
   NAV_ITEMS.messages,
   NAV_ITEMS.statistics,
 ];

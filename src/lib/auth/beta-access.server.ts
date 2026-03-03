@@ -67,6 +67,30 @@ export async function getActiveBetaInviteForEmail(
   return (data as BetaInviteRow | null) ?? null;
 }
 
+async function hasActiveStaffInviteForEmail(
+  email: string | null | undefined,
+  admin?: SupabaseClient,
+) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return false;
+
+  const db = getAdminClient(admin);
+  const { data, error } = await db
+    .from("staff_invites")
+    .select("id")
+    .eq("email", normalizedEmail)
+    .order("accepted_at", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`staff_invite_lookup_failed:${error.message}`);
+  }
+
+  return !!data?.id;
+}
+
 export async function isLegacyUser(
   profileId: string | null | undefined,
   admin?: SupabaseClient,
@@ -158,6 +182,15 @@ export async function isBetaAllowed(
         allowed: true,
         reason: "invite_ok",
         invite,
+      };
+    }
+
+    const hasStaffInvite = await hasActiveStaffInviteForEmail(normalizedEmail, admin);
+    if (hasStaffInvite) {
+      return {
+        allowed: true,
+        reason: "staff_invite",
+        invite: null,
       };
     }
 

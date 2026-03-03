@@ -200,38 +200,6 @@ export async function POST(request: Request) {
       );
     }
 
-    const betaInviteExpiresAt = new Date(
-      Date.now() + 30 * 24 * 60 * 60 * 1000,
-    ).toISOString();
-    const { error: betaInviteError } = await admin
-      .from("beta_invites")
-      .upsert({
-        email: normalizedEmail,
-        invite_type: "staff",
-        target_age_group_id: ageGroup.id,
-        created_by_profile_id: user.id,
-        status: "sent",
-        expires_at: betaInviteExpiresAt,
-        accepted_at: null,
-        revoked_at: null,
-        metadata: {
-          role,
-          firstName,
-          lastName,
-        },
-      }, {
-        onConflict: "email",
-      },
-    );
-
-    if (betaInviteError) {
-      await admin.from("staff_invites").delete().eq("id", createdInvite?.id ?? "");
-      return NextResponse.json(
-        { error: "Erro ao preparar o acesso beta do utilizador." },
-        { status: 500 },
-      );
-    }
-
     try {
       await ensureInviteAuthUser(admin, {
         email: normalizedEmail,
@@ -240,13 +208,6 @@ export async function POST(request: Request) {
       });
     } catch (error) {
       await admin.from("staff_invites").delete().eq("id", createdInvite?.id ?? "");
-      await admin
-        .from("beta_invites")
-        .update({
-          status: "revoked",
-          revoked_at: new Date().toISOString(),
-        })
-        .eq("email", normalizedEmail);
       return respondInternalError("api.invite.staff.post.ensure-auth-user", error);
     }
 

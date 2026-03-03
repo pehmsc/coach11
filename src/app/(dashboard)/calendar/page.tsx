@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useState, useEffect, useCallback } from "react";
 import {
   format,
@@ -22,6 +23,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RichTextContent } from "@/components/content/RichTextContent";
 import { NotesEditor } from "@/components/forms/NotesEditor";
 import { EventImagePicker } from "@/components/media/EventImagePicker";
 import { normalizeTimeValue } from "@/lib/events/time";
@@ -68,6 +70,7 @@ interface CalEvent {
 }
 
 type ModalMode = "add_training" | "add_game" | "edit_training" | "edit_game";
+type ModalScreen = "view" | "edit";
 
 type EventForm = SharedGameFormValues & {
   title: string;
@@ -105,6 +108,14 @@ function compareEventsByDateTime(a: CalEvent, b: CalEvent) {
   return a.type.localeCompare(b.type);
 }
 
+function isEventEditable(event: CalEvent | null, canDeleteEvents: boolean) {
+  if (!event) return false;
+  if (event.type === "game" && event.status === "completed") {
+    return canDeleteEvents;
+  }
+  return event.status !== "completed" && event.status !== "cancelled";
+}
+
 export default function CalendarPage() {
   const [weekStart, setWeekStart] = useState(
     startOfWeek(new Date(), { weekStartsOn: 1 }),
@@ -118,6 +129,7 @@ export default function CalendarPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const [modalMode, setModalMode] = useState<ModalMode | null>(null);
+  const [modalScreen, setModalScreen] = useState<ModalScreen>("edit");
   const [selectedEvent, setSelectedEvent] = useState<CalEvent | null>(null);
   const [form, setForm] = useState<EventForm>(EMPTY_FORM);
   const [competitionOptions, setCompetitionOptions] = useState<GameCompetitionOption[]>([]);
@@ -329,6 +341,7 @@ export default function CalendarPage() {
   function openAdd(type: "training" | "game", date: string) {
     setSelectedEvent(null);
     setOpError(null);
+    setModalScreen("edit");
     setForm({
       ...EMPTY_FORM,
       date,
@@ -340,6 +353,7 @@ export default function CalendarPage() {
   function openEdit(event: CalEvent) {
     setSelectedEvent(event);
     setOpError(null);
+    setModalScreen("view");
     setForm({
       title: event.title || "",
       date: event.date,
@@ -364,6 +378,7 @@ export default function CalendarPage() {
 
   function closeModal() {
     setModalMode(null);
+    setModalScreen("edit");
     setSelectedEvent(null);
     setForm(EMPTY_FORM);
     setOpError(null);
@@ -505,6 +520,9 @@ export default function CalendarPage() {
   const isEditing = modalMode === "edit_training" || modalMode === "edit_game";
   const isTrainingModal =
     modalMode === "add_training" || modalMode === "edit_training";
+  const canEditSelectedEvent = isEventEditable(selectedEvent, canDeleteEvents);
+  const showReadOnlyEventSummary =
+    !!selectedEvent && isEditing && modalScreen === "view";
 
   if (loading) {
     return (
@@ -647,10 +665,12 @@ export default function CalendarPage() {
                         className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors text-left"
                       >
                         {event.image_url ? (
-                          <img
+                          <Image
                             src={event.image_url}
                             alt=""
-                            className="w-10 h-10 rounded-lg object-cover flex-shrink-0"
+                            width={40}
+                            height={40}
+                            className="h-10 w-10 rounded-lg object-cover flex-shrink-0"
                           />
                         ) : (
                           <div
@@ -716,7 +736,7 @@ export default function CalendarPage() {
           onClick={closeModal}
         >
           <div
-            className="bg-white rounded-2xl w-full max-w-md shadow-xl max-h-[calc(100dvh-1rem)] md:max-h-[90vh] overflow-hidden flex flex-col"
+            className="bg-white rounded-2xl w-full max-w-md shadow-xl h-[calc(100svh-1rem)] md:h-auto md:max-h-[90vh] overflow-hidden flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header do modal */}
@@ -724,8 +744,10 @@ export default function CalendarPage() {
               <h3 className="font-bold text-slate-900">
                 {modalMode === "add_training" && "🏃 Novo Treino"}
                 {modalMode === "add_game" && "⚽ Novo Jogo"}
-                {modalMode === "edit_training" && "✏️ Editar Treino"}
-                {modalMode === "edit_game" && "✏️ Editar Jogo"}
+                {modalMode === "edit_training" &&
+                  (showReadOnlyEventSummary ? "🏃 Detalhes do Treino" : "✏️ Editar Treino")}
+                {modalMode === "edit_game" &&
+                  (showReadOnlyEventSummary ? "⚽ Detalhes do Jogo" : "✏️ Editar Jogo")}
               </h3>
               <button onClick={closeModal}>
                 <X size={20} className="text-slate-400" />
@@ -747,118 +769,203 @@ export default function CalendarPage() {
                 </div>
               )}
 
-              {/* Imagem */}
-              <EventImagePicker
-                ageGroupId={ageGroupId}
-                value={form.image_url}
-                onChange={(value) =>
-                  setForm((current) => ({ ...current, image_url: value }))
-                }
-                accent={isTrainingModal ? "emerald" : "blue"}
-              />
-
-              {/* Título */}
-              <div className="space-y-1">
-                <Label>Título</Label>
-                <Input
-                  value={form.title}
-                  placeholder={
-                    isTrainingModal ? "ex: Treino físico" : "ex: Jornada 5"
-                  }
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, title: e.target.value }))
-                  }
-                />
-              </div>
-
-              {/* Só jogos: adversário + casa/fora */}
-              {!isTrainingModal && (
-                <GameFormFields
-                  values={form}
-                  onFieldChange={handleGameFieldChange}
-                  competitionOptions={competitionOptions}
-                  showCompetitionSelect
-                />
-              )}
-
-              {/* Data e hora */}
-              {isTrainingModal && (
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <Label>
-                      <Clock size={12} className="inline mr-1" />
-                      Data *
-                    </Label>
-                    <Input
-                      type="date"
-                      value={form.date}
-                      onChange={(e) =>
-                        setForm((f) => ({ ...f, date: e.target.value }))
-                      }
+              {showReadOnlyEventSummary && selectedEvent ? (
+                <div className="space-y-4">
+                  {selectedEvent.image_url ? (
+                    <Image
+                      src={selectedEvent.image_url}
+                      alt={selectedEvent.title || "Evento"}
+                      width={640}
+                      height={352}
+                      className="h-44 w-full rounded-2xl object-cover"
                     />
+                  ) : null}
+
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-lg font-semibold text-slate-900">
+                      {selectedEvent.title || (selectedEvent.type === "training" ? "Treino" : "Jogo")}
+                    </p>
+                    <div className="mt-3 space-y-2 text-sm text-slate-600">
+                      <div className="flex items-center gap-2">
+                        <Clock size={14} className="text-slate-400" />
+                        <span>
+                          {format(new Date(`${selectedEvent.date}T00:00:00`), "EEEE, d 'de' MMMM", {
+                            locale: pt,
+                          })}
+                          {selectedEvent.start_time ? ` · ${selectedEvent.start_time.substring(0, 5)}` : ""}
+                          {selectedEvent.end_time ? ` - ${selectedEvent.end_time.substring(0, 5)}` : ""}
+                        </span>
+                      </div>
+                      {resolveLocationLabel(
+                        selectedEvent.location,
+                        selectedEvent.formatted_address,
+                        selectedEvent.location_address,
+                      ) ? (
+                        <div className="flex items-start gap-2">
+                          <MapPin size={14} className="mt-0.5 text-slate-400" />
+                          <span>
+                            {resolveLocationLabel(
+                              selectedEvent.location,
+                              selectedEvent.formatted_address,
+                              selectedEvent.location_address,
+                            )}
+                          </span>
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
-                  <div className="space-y-1">
-                    <Label>Hora</Label>
-                    <Input
-                      type="time"
-                      value={form.start_time}
-                      onChange={(e) =>
-                        setForm((f) => ({ ...f, start_time: e.target.value }))
-                      }
-                    />
-                  </div>
+
+                  {selectedEvent.notes ? (
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                      <p className="mb-3 text-sm font-semibold text-slate-900">Notas</p>
+                      <RichTextContent
+                        content={selectedEvent.notes}
+                        className="text-sm text-slate-700"
+                      />
+                    </div>
+                  ) : null}
                 </div>
-              )}
+              ) : (
+                <>
+                  <EventImagePicker
+                    ageGroupId={ageGroupId}
+                    value={form.image_url}
+                    onChange={(value) =>
+                      setForm((current) => ({ ...current, image_url: value }))
+                    }
+                    accent={isTrainingModal ? "emerald" : "blue"}
+                  />
 
-              {/* Local */}
-              {isTrainingModal && (
-                <LocationFields
-                  value={form}
-                  onChange={(value) =>
-                    setForm((current) => ({
-                      ...current,
-                      ...value,
-                    }))
-                  }
-                  accent="emerald"
-                />
-              )}
+                  <div className="space-y-1">
+                    <Label>Título</Label>
+                    <Input
+                      value={form.title}
+                      placeholder={
+                        isTrainingModal ? "ex: Treino físico" : "ex: Jornada 5"
+                      }
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, title: e.target.value }))
+                      }
+                    />
+                  </div>
 
-              {/* Notas */}
-              <NotesEditor
-                value={form.notes}
-                onChange={(value) =>
-                  setForm((current) => ({ ...current, notes: value }))
-                }
-                accent={isTrainingModal ? "emerald" : "blue"}
-                rows={6}
-              />
+                  {!isTrainingModal && (
+                    <GameFormFields
+                      values={form}
+                      onFieldChange={handleGameFieldChange}
+                      competitionOptions={competitionOptions}
+                      showCompetitionSelect
+                    />
+                  )}
+
+                  {isTrainingModal && (
+                    <>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <Label>
+                            <Clock size={12} className="inline mr-1" />
+                            Data *
+                          </Label>
+                          <Input
+                            type="date"
+                            value={form.date}
+                            onChange={(e) =>
+                              setForm((f) => ({ ...f, date: e.target.value }))
+                            }
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label>Início</Label>
+                          <Input
+                            type="time"
+                            value={form.start_time}
+                            onChange={(e) =>
+                              setForm((f) => ({ ...f, start_time: e.target.value }))
+                            }
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <Label>Fim</Label>
+                        <Input
+                          type="time"
+                          value={form.end_time}
+                          onChange={(e) =>
+                            setForm((f) => ({ ...f, end_time: e.target.value }))
+                          }
+                        />
+                      </div>
+
+                      <LocationFields
+                        value={form}
+                        onChange={(value) =>
+                          setForm((current) => ({
+                            ...current,
+                            ...value,
+                          }))
+                        }
+                        accent="emerald"
+                      />
+                    </>
+                  )}
+
+                  <NotesEditor
+                    value={form.notes}
+                    onChange={(value) =>
+                      setForm((current) => ({ ...current, notes: value }))
+                    }
+                    accent={isTrainingModal ? "emerald" : "blue"}
+                    rows={6}
+                  />
+                </>
+              )}
             </div>
 
             <div className="border-t bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shrink-0">
-              <div className="flex gap-2">
-                <Button
-                  onClick={saveEvent}
-                  disabled={saving || !form.date}
-                  className="flex-1 bg-emerald-600 hover:bg-emerald-700"
-                >
-                  {saving
-                    ? "A guardar..."
-                    : isEditing
-                      ? "Guardar alterações"
-                      : "Adicionar"}
-                </Button>
-                {isEditing && canDeleteEvents && (
+              {showReadOnlyEventSummary && selectedEvent ? (
+                <div className="flex gap-2">
+                  {canEditSelectedEvent ? (
+                    <Button
+                      onClick={() => setModalScreen("edit")}
+                      className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                    >
+                      Editar
+                    </Button>
+                  ) : null}
                   <Button
                     variant="outline"
-                    onClick={deleteEvent}
-                    disabled={saving}
-                    className="text-red-500 hover:bg-red-50 border-red-200"
+                    onClick={closeModal}
+                    className={canEditSelectedEvent ? "flex-1" : "w-full"}
                   >
-                    Apagar
+                    Fechar
                   </Button>
-                )}
-              </div>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <Button
+                    onClick={saveEvent}
+                    disabled={saving || !form.date}
+                    className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                  >
+                    {saving
+                      ? "A guardar..."
+                      : isEditing
+                        ? "Guardar alterações"
+                        : "Adicionar"}
+                  </Button>
+                  {isEditing && canDeleteEvents && (
+                    <Button
+                      variant="outline"
+                      onClick={deleteEvent}
+                      disabled={saving}
+                      className="text-red-500 hover:bg-red-50 border-red-200"
+                    >
+                      Apagar
+                    </Button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,7 @@ import {
 } from "@/components/ui/select";
 import { Loader2, ImageIcon, ChevronDown, ChevronUp } from "lucide-react";
 import { toast } from "sonner";
+import { PublicSharePanel } from "@/components/team/PublicSharePanel";
 import {
   isValidManualShortName,
   normalizeManualShortName,
@@ -124,6 +126,7 @@ export default function TeamPage() {
   );
   const [teamId, setTeamId] = useState<string | null>(null);
   const [accountRole, setAccountRole] = useState<string>("coordinator");
+  const [isSuperCoordinator, setIsSuperCoordinator] = useState(false);
 
   // Escalão fields
   const [clubName, setClubName] = useState("");
@@ -177,7 +180,9 @@ export default function TeamPage() {
       typeof payload?.profile?.role === "string"
         ? payload.profile.role
         : "coordinator";
+    const incomingIsSuper = payload?.profile?.is_super_coordinator === true;
     setAccountRole(incomingRole);
+    setIsSuperCoordinator(incomingIsSuper);
 
     if (!ag) {
       setLoading(false);
@@ -258,7 +263,7 @@ export default function TeamPage() {
   }
 
   async function handleTacticalSave(system: string) {
-    if (!teamId) return;
+    if (!teamId || (!isSuperCoordinator && accountRole !== "coordinator")) return;
     setSavingTactical(true);
     const { error } = await supabase
       .from("teams")
@@ -276,6 +281,11 @@ export default function TeamPage() {
   async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file || !existingAgeGroup) return;
+    if (!isSuperCoordinator && accountRole !== "coordinator") {
+      toast.error("Só o coordenador pode editar o logótipo.");
+      if (logoRef.current) logoRef.current.value = "";
+      return;
+    }
     setUploadingLogo(true);
 
     const formData = new FormData();
@@ -389,6 +399,9 @@ export default function TeamPage() {
     );
   }
 
+  const canManageTeamSettings =
+    accountRole === "coordinator" || isSuperCoordinator;
+
   return (
     <div className="p-4 md:p-8 max-w-2xl mx-auto space-y-6">
       <h1 className="text-2xl font-bold text-slate-900">Equipa</h1>
@@ -413,7 +426,7 @@ export default function TeamPage() {
             </div>
             {existingAgeGroup &&
               !isEditing &&
-              accountRole === "coordinator" && (
+              canManageTeamSettings && (
                 <Button
                   variant="outline"
                   size="sm"
@@ -529,10 +542,12 @@ export default function TeamPage() {
           <CardContent>
             <div className="flex items-center gap-4">
               {logoUrl ? (
-                <img
+                <Image
                   src={logoUrl}
                   alt="Logo"
-                  className="w-20 h-20 object-contain border border-slate-200 rounded-xl p-2 bg-white"
+                  width={80}
+                  height={80}
+                  className="h-20 w-20 object-contain border border-slate-200 rounded-xl p-2 bg-white"
                 />
               ) : (
                 <div className="w-20 h-20 border-2 border-dashed border-slate-200 rounded-xl flex items-center justify-center">
@@ -547,18 +562,22 @@ export default function TeamPage() {
                   className="hidden"
                   onChange={handleLogoUpload}
                 />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => logoRef.current?.click()}
-                  disabled={uploadingLogo}
-                >
-                  {uploadingLogo ? (
-                    <Loader2 size={14} className="animate-spin mr-1" />
-                  ) : null}
-                  {logoUrl ? "Substituir logo" : "Carregar logo"}
-                </Button>
-                <p className="text-xs text-slate-400 mt-1">PNG, JPG, SVG</p>
+                {canManageTeamSettings ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => logoRef.current?.click()}
+                    disabled={uploadingLogo}
+                  >
+                    {uploadingLogo ? (
+                      <Loader2 size={14} className="animate-spin mr-1" />
+                    ) : null}
+                    {logoUrl ? "Substituir logo" : "Carregar logo"}
+                  </Button>
+                ) : null}
+                <p className="text-xs text-slate-400 mt-1">
+                  {canManageTeamSettings ? "PNG, JPG, SVG" : "Visível para toda a equipa. Só o coordenador pode alterar."}
+                </p>
               </div>
             </div>
           </CardContent>
@@ -579,6 +598,7 @@ export default function TeamPage() {
                   setTacticalSystem(val);
                   void handleTacticalSave(val);
                 }}
+                disabled={!canManageTeamSettings}
               >
                 <SelectTrigger className="flex-1">
                   <SelectValue placeholder="Selecciona sistema..." />
@@ -595,9 +615,21 @@ export default function TeamPage() {
                 <Loader2 size={16} className="animate-spin text-slate-400" />
               )}
             </div>
+            {!canManageTeamSettings ? (
+              <p className="mt-2 text-xs text-slate-400">
+                Só o coordenador pode alterar o sistema táctico.
+              </p>
+            ) : null}
           </CardContent>
         </Card>
       )}
+
+      {existingAgeGroup ? (
+        <PublicSharePanel
+          ageGroupId={existingAgeGroup.id}
+          canManage={canManageTeamSettings}
+        />
+      ) : null}
 
       {/* Kits */}
       {existingAgeGroup && teamId && (
