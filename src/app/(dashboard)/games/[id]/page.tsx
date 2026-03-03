@@ -986,7 +986,7 @@ export default function GameDetailPage() {
           onClick={() => setEditingGame(false)}
         >
           <div
-            className="bg-white rounded-2xl w-full max-w-md shadow-xl h-[calc(100svh-1rem)] md:h-auto md:max-h-[90vh] overflow-hidden flex flex-col"
+            className="min-w-0 overflow-x-hidden bg-white rounded-2xl w-full max-w-md shadow-xl h-[calc(100svh-1rem)] md:h-auto md:max-h-[90vh] overflow-hidden flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between p-5 border-b">
@@ -995,9 +995,9 @@ export default function GameDetailPage() {
                 <X size={20} className="text-slate-400" />
               </button>
             </div>
-            <form onSubmit={handleSaveGameEdit} className="flex flex-1 flex-col min-h-0">
+            <form onSubmit={handleSaveGameEdit} className="flex min-h-0 min-w-0 flex-1 flex-col">
               <div
-                className="p-5 space-y-4 overflow-y-auto flex-1"
+                className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-5 space-y-4 [overflow-wrap:anywhere]"
                 style={{ WebkitOverflowScrolling: "touch" }}
               >
                 <div className="space-y-1.5">

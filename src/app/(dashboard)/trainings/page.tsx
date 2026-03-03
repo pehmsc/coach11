@@ -720,7 +720,7 @@ export default function TrainingsPage() {
           onClick={() => setCreateModalOpen(false)}
         >
           <div
-            className="bg-white rounded-2xl w-full max-w-md shadow-xl h-[calc(100svh-1rem)] md:h-auto md:max-h-[90vh] overflow-hidden flex flex-col"
+            className="min-w-0 overflow-x-hidden bg-white rounded-2xl w-full max-w-md shadow-xl h-[calc(100svh-1rem)] md:h-auto md:max-h-[90vh] overflow-hidden flex flex-col"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-center justify-between p-5 border-b">
@@ -738,9 +738,9 @@ export default function TrainingsPage() {
                 <X size={20} className="text-slate-400" />
               </button>
             </div>
-            <form onSubmit={handleCreateTraining} className="flex flex-1 flex-col min-h-0">
+            <form onSubmit={handleCreateTraining} className="flex min-h-0 min-w-0 flex-1 flex-col">
               <div
-                className="p-5 space-y-3 overflow-y-auto flex-1"
+                className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-5 space-y-3 [overflow-wrap:anywhere]"
                 style={{ WebkitOverflowScrolling: "touch" }}
               >
                 <div className="space-y-1">
@@ -859,7 +859,7 @@ export default function TrainingsPage() {
           }}
         >
           <div
-            className="bg-white rounded-2xl w-full max-w-md shadow-xl h-[calc(100svh-1rem)] md:h-auto md:max-h-[85vh] overflow-hidden flex flex-col"
+            className="min-w-0 overflow-x-hidden bg-white rounded-2xl w-full max-w-md shadow-xl h-[calc(100svh-1rem)] md:h-auto md:max-h-[85vh] overflow-hidden flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
@@ -933,9 +933,9 @@ export default function TrainingsPage() {
             )}
 
             {editingSelectedSession ? (
-              <form onSubmit={handleSaveSelectedSession} className="flex flex-1 flex-col min-h-0">
+              <form onSubmit={handleSaveSelectedSession} className="flex min-h-0 min-w-0 flex-1 flex-col">
                 <div
-                  className="space-y-3 overflow-y-auto p-5 flex-1"
+                  className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-5 space-y-3 [overflow-wrap:anywhere]"
                   style={{ WebkitOverflowScrolling: "touch" }}
                 >
                   <div className="space-y-1">
@@ -1053,7 +1053,7 @@ export default function TrainingsPage() {
                 </div>
               </div>
             ) : (
-              <div className="overflow-y-auto flex-1">
+              <div className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden [overflow-wrap:anywhere]">
                 {(selectedSession.session.location ||
                   selectedSession.session.location_address ||
                   selectedSession.session.formatted_address) && (

@@ -736,7 +736,7 @@ export default function CalendarPage() {
           onClick={closeModal}
         >
           <div
-            className="bg-white rounded-2xl w-full max-w-md shadow-xl max-h-[calc(100dvh-1rem)] overflow-hidden flex flex-col"
+            className="min-w-0 overflow-x-hidden bg-white rounded-2xl w-full max-w-md shadow-xl max-h-[calc(100dvh-1rem)] overflow-hidden flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header do modal */}
@@ -755,7 +755,7 @@ export default function CalendarPage() {
             </div>
 
             <div
-              className="min-h-0 flex-1 overflow-y-auto p-5 pb-[calc(env(safe-area-inset-bottom)+7rem)]"
+              className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-5 pb-[calc(env(safe-area-inset-bottom)+7rem)] [overflow-wrap:anywhere]"
               style={{ WebkitOverflowScrolling: "touch" }}
             >
               {/* Erro visível */}
