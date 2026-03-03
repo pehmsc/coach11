@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildAutocompleteQueries,
   normalizeOsmLookupResult,
   normalizeOsmSuggestion,
   sanitizeAutocompleteQuery,
@@ -11,6 +12,19 @@ describe("osm provider normalization", () => {
       "Rua da Junqueira",
     );
     expect(sanitizeAutocompleteQuery("ab")).toBeNull();
+  });
+
+  it("builds fallback autocomplete variants for portuguese place names", () => {
+    expect(buildAutocompleteQueries("Campo Major Batista Silva")).toEqual([
+      "Campo Major Batista Silva",
+      "Campo Major Batista Silva, Portugal",
+      "Campo Major Batista da Silva",
+      "Campo Major Batista da Silva, Portugal",
+      "Campo Major Batista de Silva",
+      "Campo Major Batista de Silva, Portugal",
+      "Campo Major Batista do Silva",
+      "Campo Major Batista do Silva, Portugal",
+    ]);
   });
 
   it("normalizes search results into suggestions", () => {

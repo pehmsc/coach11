@@ -3,6 +3,7 @@ const AUTOCOMPLETE_CACHE_TTL_MS = 15 * 60 * 1000;
 const RESOLVE_CACHE_TTL_MS = 30 * 60 * 1000;
 const MIN_QUERY_LENGTH = 3;
 const MAX_QUERY_LENGTH = 160;
+const PORTUGUESE_CONNECTORS = ["da", "de", "do"] as const;
 
 type CacheEntry<T> = {
   expiresAt: number;
@@ -73,6 +74,39 @@ export function sanitizeAutocompleteQuery(input: string) {
 
 export function isValidOsmPlaceId(value: string) {
   return /^[NWR]\d+$/.test(value);
+}
+
+export function buildAutocompleteQueries(query: string) {
+  const normalizedQuery = sanitizeAutocompleteQuery(query);
+  if (!normalizedQuery) return [];
+
+  const variants = new Set<string>([normalizedQuery]);
+  const words = normalizedQuery.split(" ").filter(Boolean);
+  const hasPortugalSuffix = /,\s*portugal$/i.test(normalizedQuery);
+
+  if (!hasPortugalSuffix) {
+    variants.add(`${normalizedQuery}, Portugal`);
+  }
+
+  if (words.length >= 3) {
+    const penultimateWord = words[words.length - 2]?.toLowerCase();
+    if (!PORTUGUESE_CONNECTORS.includes(penultimateWord as (typeof PORTUGUESE_CONNECTORS)[number])) {
+      for (const connector of PORTUGUESE_CONNECTORS) {
+        const connectorVariant = [
+          ...words.slice(0, -1),
+          connector,
+          words[words.length - 1],
+        ].join(" ");
+
+        variants.add(connectorVariant);
+        if (!hasPortugalSuffix) {
+          variants.add(`${connectorVariant}, Portugal`);
+        }
+      }
+    }
+  }
+
+  return Array.from(variants);
 }
 
 function buildRequestHeaders() {
@@ -240,17 +274,35 @@ export async function autocomplete(query: string, limit = 5): Promise<OsmSuggest
   const cached = getCachedValue(store.autocomplete, cacheKey);
   if (cached) return cached;
 
-  const url = new URL("/search", getBaseUrl());
-  url.searchParams.set("q", sanitizedQuery);
-  url.searchParams.set("format", "jsonv2");
-  url.searchParams.set("addressdetails", "1");
-  url.searchParams.set("limit", String(normalizedLimit));
-  url.searchParams.set("dedupe", "1");
+  const queryVariants = buildAutocompleteQueries(sanitizedQuery);
+  const results: OsmSuggestion[] = [];
+  const seenKeys = new Set<string>();
 
-  const payload = await fetchJson<OsmSearchItem[]>(url);
-  const results = payload
-    .map(normalizeOsmSuggestion)
-    .filter((entry): entry is OsmSuggestion => !!entry);
+  for (const queryVariant of queryVariants) {
+    const url = new URL("/search", getBaseUrl());
+    url.searchParams.set("q", queryVariant);
+    url.searchParams.set("format", "jsonv2");
+    url.searchParams.set("addressdetails", "1");
+    url.searchParams.set("countrycodes", "pt");
+    url.searchParams.set("limit", String(normalizedLimit));
+    url.searchParams.set("dedupe", "1");
+
+    const payload = await fetchJson<OsmSearchItem[]>(url);
+    const normalizedResults = payload
+      .map(normalizeOsmSuggestion)
+      .filter((entry): entry is OsmSuggestion => !!entry);
+
+    for (const entry of normalizedResults) {
+      const key = `${entry.osm_place_id}:${entry.formatted_address}`;
+      if (seenKeys.has(key)) continue;
+      seenKeys.add(key);
+      results.push(entry);
+      if (results.length >= normalizedLimit) break;
+    }
+
+    if (results.length >= normalizedLimit) break;
+    if (results.length > 0) break;
+  }
 
   setCachedValue(store.autocomplete, cacheKey, results, AUTOCOMPLETE_CACHE_TTL_MS);
   results.forEach((entry) => {

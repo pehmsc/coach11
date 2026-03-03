@@ -270,154 +270,136 @@ export function LocationFields({
         : null;
 
   return (
-    <div
-      className={cn(
-        compact || !showPreview
-          ? compact
-            ? "space-y-2"
-            : "space-y-4"
-          : "grid gap-4 md:grid-cols-[minmax(0,1fr)_20rem] md:items-start",
-        className,
-      )}
-    >
-      <div className={cn(compact ? "space-y-2" : "space-y-4")}>
-        <div className="space-y-1.5">
-          <Label className={isCompact}>
-            <MapPin size={12} className="mr-1 inline" />
-            {locationLabel}
-          </Label>
-          <Input
-            value={value.location}
-            onChange={(event) => handleLocationInputChange(event.target.value)}
-            placeholder={locationPlaceholder}
-            autoComplete="off"
-            className={compact ? "h-8 text-sm" : "text-sm"}
-          />
-          {!compact && (
-            <p className="text-[11px] text-slate-500">
-              Usado como título do local e no popup do mapa. Não influencia a
-              pesquisa.
-            </p>
-          )}
-        </div>
+    <div className={cn(compact ? "space-y-2" : "space-y-4", className)}>
+      <div className="space-y-1.5">
+        <Label className={isCompact}>
+          <MapPin size={12} className="mr-1 inline" />
+          {locationLabel}
+        </Label>
+        <Input
+          value={value.location}
+          onChange={(event) => handleLocationInputChange(event.target.value)}
+          placeholder={locationPlaceholder}
+          autoComplete="off"
+          className={compact ? "h-8 text-sm" : "text-sm"}
+        />
+      </div>
 
-        <div className="relative space-y-1.5">
-          <Label className={isCompact}>{addressLabel}</Label>
-          <Input
-            value={value.location_address}
-            onFocus={() => {
-              if (suggestions.length > 0) setDropdownOpen(true);
-            }}
-            onChange={(event) => handleAddressInputChange(event.target.value)}
-            placeholder={addressPlaceholder}
-            autoComplete="off"
-            className={compact ? "h-8 text-sm" : "text-sm"}
-          />
-          <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
-            <span className="inline-flex items-center gap-1">
-              <Search size={12} />
-              Este campo controla a pesquisa e a posição do mapa
-            </span>
-            {sourceBadge && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-slate-600">
-                {value.location_source === "osm" ? (
-                  <CheckCircle2 size={11} />
-                ) : (
-                  <Target size={11} />
-                )}
-                {sourceBadge}
-              </span>
-            )}
-          </div>
-          {lookupError && (
-            <p className="text-[11px] text-amber-700">{lookupError}</p>
-          )}
-
-          {dropdownOpen && (suggestions.length > 0 || searching) && (
-            <div className="absolute left-0 right-0 top-full z-20 mt-1 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
-              {searching && (
-                <div className="flex items-center gap-2 px-3 py-3 text-sm text-slate-500">
-                  <Loader2 size={14} className="animate-spin" />
-                  A procurar moradas...
-                </div>
+      <div className="relative space-y-1.5">
+        <Label className={isCompact}>{addressLabel}</Label>
+        <Input
+          value={value.location_address}
+          onFocus={() => {
+            if (suggestions.length > 0) setDropdownOpen(true);
+          }}
+          onChange={(event) => handleAddressInputChange(event.target.value)}
+          placeholder={addressPlaceholder}
+          autoComplete="off"
+          className={compact ? "h-8 text-sm" : "text-sm"}
+        />
+        <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+          <span className="inline-flex items-center gap-1">
+            <Search size={12} />
+            Pesquisa o mapa por morada ou nome do campo
+          </span>
+          {sourceBadge && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-slate-600">
+              {value.location_source === "osm" ? (
+                <CheckCircle2 size={11} />
+              ) : (
+                <Target size={11} />
               )}
-              {!searching &&
-                suggestions.map((suggestion) => (
-                  <button
-                    key={suggestion.placeId}
-                    type="button"
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => void handleSuggestionSelect(suggestion)}
-                    className="flex w-full items-start gap-3 border-t border-slate-100 px-3 py-3 text-left transition-colors first:border-t-0 hover:bg-slate-50"
-                    disabled={resolvingPlaceId === suggestion.placeId}
-                  >
-                    {resolvingPlaceId === suggestion.placeId ? (
-                      <Loader2 size={15} className="mt-0.5 animate-spin text-slate-400" />
-                    ) : (
-                      <MapPin size={15} className="mt-0.5 text-slate-400" />
-                    )}
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-slate-800">
-                        {suggestion.title}
-                      </p>
-                      <p className="mt-0.5 line-clamp-2 text-xs text-slate-500">
-                        {suggestion.formatted_address}
-                      </p>
-                    </div>
-                  </button>
-                ))}
-            </div>
+              {sourceBadge}
+            </span>
           )}
         </div>
+        {lookupError && (
+          <p className="text-[11px] text-amber-700">{lookupError}</p>
+        )}
 
-        <div className={cn(compact ? "grid grid-cols-2 gap-2" : "grid grid-cols-2 gap-3")}>
-          <div className="space-y-1.5">
-            <Label className={isCompact}>Latitude</Label>
-            <Input
-              value={latitudeInput}
-              onChange={(event) =>
-                handleCoordinateInputChange("latitude", event.target.value)
-              }
-              placeholder="ex: 39.2400001"
-              inputMode="decimal"
-              autoComplete="off"
-              className={compact ? "h-8 text-sm" : "text-sm"}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label className={isCompact}>Longitude</Label>
-            <Input
-              value={longitudeInput}
-              onChange={(event) =>
-                handleCoordinateInputChange("longitude", event.target.value)
-              }
-              placeholder="ex: -9.3088819"
-              inputMode="decimal"
-              autoComplete="off"
-              className={compact ? "h-8 text-sm" : "text-sm"}
-            />
-          </div>
-        </div>
-
-        {!compact && (
-          <div className="flex items-center justify-between gap-3 text-[11px] text-slate-500">
-            <p>
-              Podes ajustar o marcador diretamente no mapa ou editar latitude e
-              longitude manualmente.
-            </p>
-            {hasAnyLocationData(value) && (
-              <button
-                type="button"
-                onClick={handleClearLocation}
-                className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
-              >
-                <XCircle size={12} />
-                Limpar mapa
-              </button>
+        {dropdownOpen && (suggestions.length > 0 || searching) && (
+          <div className="absolute left-0 right-0 top-full z-20 mt-1 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
+            {searching && (
+              <div className="flex items-center gap-2 px-3 py-3 text-sm text-slate-500">
+                <Loader2 size={14} className="animate-spin" />
+                A procurar moradas...
+              </div>
             )}
+            {!searching &&
+              suggestions.map((suggestion) => (
+                <button
+                  key={suggestion.placeId}
+                  type="button"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => void handleSuggestionSelect(suggestion)}
+                  className="flex w-full items-start gap-3 border-t border-slate-100 px-3 py-3 text-left transition-colors first:border-t-0 hover:bg-slate-50"
+                  disabled={resolvingPlaceId === suggestion.placeId}
+                >
+                  {resolvingPlaceId === suggestion.placeId ? (
+                    <Loader2 size={15} className="mt-0.5 animate-spin text-slate-400" />
+                  ) : (
+                    <MapPin size={15} className="mt-0.5 text-slate-400" />
+                  )}
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-slate-800">
+                      {suggestion.title}
+                    </p>
+                    <p className="mt-0.5 line-clamp-2 text-xs text-slate-500">
+                      {suggestion.formatted_address}
+                    </p>
+                  </div>
+                </button>
+              ))}
           </div>
         )}
       </div>
+
+      <div className={cn(compact ? "grid grid-cols-2 gap-2" : "grid grid-cols-2 gap-3")}>
+        <div className="space-y-1.5">
+          <Label className={isCompact}>Latitude</Label>
+          <Input
+            value={latitudeInput}
+            onChange={(event) =>
+              handleCoordinateInputChange("latitude", event.target.value)
+            }
+            placeholder="ex: 39.2400001"
+            inputMode="decimal"
+            autoComplete="off"
+            className={compact ? "h-8 text-sm" : "text-sm"}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label className={isCompact}>Longitude</Label>
+          <Input
+            value={longitudeInput}
+            onChange={(event) =>
+              handleCoordinateInputChange("longitude", event.target.value)
+            }
+            placeholder="ex: -9.3088819"
+            inputMode="decimal"
+            autoComplete="off"
+            className={compact ? "h-8 text-sm" : "text-sm"}
+          />
+        </div>
+      </div>
+
+      {!compact && (
+        <div className="flex items-center justify-between gap-3 text-[11px] text-slate-500">
+          <p>
+            Arrasta o marcador ou clica no mapa para afinar a localização.
+          </p>
+          {hasAnyLocationData(value) && (
+            <button
+              type="button"
+              onClick={handleClearLocation}
+              className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
+            >
+              <XCircle size={12} />
+              Limpar mapa
+            </button>
+          )}
+        </div>
+      )}
 
       {showPreview && (
         <LocationMapPreview
