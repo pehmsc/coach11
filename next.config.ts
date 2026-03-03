@@ -34,10 +34,10 @@ function toSocketOrigin(origin: string) {
 
 const csp = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://maps.googleapis.com https://maps.gstatic.com",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
-  `img-src 'self' data: blob: https://${supabaseHost} https://lh3.googleusercontent.com https://tile.openstreetmap.org https://maps.googleapis.com https://maps.gstatic.com`,
-  `connect-src 'self' https://${supabaseHost} wss://${supabaseHost} https://maps.googleapis.com https://maps.gstatic.com`,
+  `img-src 'self' data: blob: https://${supabaseHost} https://lh3.googleusercontent.com https://tile.openstreetmap.org`,
+  `connect-src 'self' https://${supabaseHost} wss://${supabaseHost}`,
   "worker-src 'self'",
   "manifest-src 'self'",
   "font-src 'self'",
@@ -52,8 +52,6 @@ const reportOnlySupabaseOrigin = normalizeOrigin(
 const reportOnlyImgOrigins = [
   "https://lh3.googleusercontent.com",
   "https://tile.openstreetmap.org",
-  "https://maps.googleapis.com",
-  "https://maps.gstatic.com",
   ...parseOriginList(process.env.CSP_REPORT_ONLY_IMG_ORIGINS),
 ];
 
@@ -74,8 +72,6 @@ const reportOnlyConnectSources = [
     [
       reportOnlySupabaseOrigin,
       reportOnlySupabaseOrigin ? toSocketOrigin(reportOnlySupabaseOrigin) : null,
-      "https://maps.googleapis.com",
-      "https://maps.gstatic.com",
       ...parseOriginList(process.env.CSP_REPORT_ONLY_CONNECT_ORIGINS),
     ].filter((value): value is string => !!value),
   ),
@@ -83,7 +79,7 @@ const reportOnlyConnectSources = [
 
 const reportOnlyDirectives = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://maps.googleapis.com https://maps.gstatic.com",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
   `img-src ${reportOnlyImgSources.join(" ")}`,
   `connect-src ${reportOnlyConnectSources.join(" ")}`,

@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { normalizeNullableNumber } from "@/lib/location";
 import { extractRequestIp } from "@/lib/http/request-ip";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
+import {
+  hasGoogleMapsApiKey,
+  reverse as reverseGoogle,
+} from "@/lib/provider/google";
 import { reverse } from "@/lib/provider/osm";
 import { checkLocationResolveLimit } from "@/lib/rate-limit";
 
@@ -40,7 +44,19 @@ export async function GET(request: Request) {
       );
     }
 
-    const location = await reverse(normalizedLatitude, normalizedLongitude);
+    let location = null;
+
+    if (hasGoogleMapsApiKey()) {
+      try {
+        location = await reverseGoogle(normalizedLatitude, normalizedLongitude);
+      } catch {
+        location = null;
+      }
+    }
+
+    if (!location) {
+      location = await reverse(normalizedLatitude, normalizedLongitude);
+    }
     if (!location) {
       return NextResponse.json(
         { error: "Localização não encontrada." },

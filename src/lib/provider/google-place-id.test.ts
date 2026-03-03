@@ -3,9 +3,9 @@ import {
   decodeGooglePlaceId,
   encodeGooglePlaceId,
   isGooglePlaceId,
-} from "./google-places.client";
+} from "./google-place-id";
 
-describe("google places client helpers", () => {
+describe("google place id helpers", () => {
   it("encodes and decodes google place ids", () => {
     expect(encodeGooglePlaceId("ChIJX08Wnl7LHg0RcmDstdWuk4Q")).toBe(
       "GOOGLE:ChIJX08Wnl7LHg0RcmDstdWuk4Q",

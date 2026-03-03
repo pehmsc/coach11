@@ -7,12 +7,6 @@ import markerIcon from "leaflet/dist/images/marker-icon.png";
 import markerShadow from "leaflet/dist/images/marker-shadow.png";
 import { OpenMapsButton } from "@/components/maps/OpenMapsButton";
 import {
-  autocompleteGooglePlaces,
-  hasGooglePlacesApiKey,
-  reverseGeocodeGoogle,
-  resolveGooglePlace,
-} from "@/lib/provider/google-places.client";
-import {
   hasCoordinates,
   resolveFormattedAddress,
 } from "@/lib/location";
@@ -174,7 +168,6 @@ export function LocationMapPreview({
   const fullscreenControlRef = useRef<unknown>(null);
   const leafletRef = useRef<typeof import("leaflet") | null>(null);
   const manualSyncRequestIdRef = useRef(0);
-  const googlePlacesEnabled = hasGooglePlacesApiKey();
 
   const locationTitle = useMemo(() => {
     const normalized = typeof location === "string" ? location.trim() : "";
@@ -218,34 +211,7 @@ export function LocationMapPreview({
       setResolvingFallback(true);
 
       try {
-        let resolvedFromSearch: {
-          latitude: number;
-          longitude: number;
-          formattedAddress: string | null;
-        } | null = null;
-
-        if (googlePlacesEnabled) {
-          try {
-            const googleSuggestions = await autocompleteGooglePlaces(addressQuery, 1);
-            const googlePlaceId = googleSuggestions[0]?.placeId;
-            if (googlePlaceId) {
-              const googleResolved = await resolveGooglePlace(googlePlaceId);
-              if (googleResolved) {
-                resolvedFromSearch = {
-                  latitude: googleResolved.latitude,
-                  longitude: googleResolved.longitude,
-                  formattedAddress: googleResolved.formatted_address,
-                };
-              }
-            }
-          } catch {
-            resolvedFromSearch = null;
-          }
-        }
-
-        if (!resolvedFromSearch) {
-          resolvedFromSearch = await resolveFallbackFromApi(addressQuery);
-        }
+        const resolvedFromSearch = await resolveFallbackFromApi(addressQuery);
 
         if (!resolvedFromSearch) {
           if (!cancelled) setFallbackCoords(null);
@@ -273,7 +239,6 @@ export function LocationMapPreview({
   }, [
     addressQuery,
     formattedAddress,
-    googlePlacesEnabled,
     latitude,
     longitude,
     resolveFallback,
@@ -435,17 +400,10 @@ export function LocationMapPreview({
 
         setSyncingManualPoint(true);
         try {
-          const nextAddress = googlePlacesEnabled
-            ? (await reverseGeocodeGoogle(
-                normalizedLatitude,
-                normalizedLongitude,
-              ).catch(() => null))?.formatted_address ??
-              (await reverseFromApi(normalizedLatitude, normalizedLongitude).catch(
-                () => null,
-              ))
-            : await reverseFromApi(normalizedLatitude, normalizedLongitude).catch(
-                () => null,
-              );
+          const nextAddress = await reverseFromApi(
+            normalizedLatitude,
+            normalizedLongitude,
+          ).catch(() => null);
 
           if (manualSyncRequestIdRef.current !== requestId) {
             return;
@@ -530,7 +488,6 @@ export function LocationMapPreview({
   }, [
     accent,
     draggable,
-    googlePlacesEnabled,
     mapReady,
     locationTitle,
     onLocationChange,

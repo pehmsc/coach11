@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { extractRequestIp } from "@/lib/http/request-ip";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
+import {
+  hasGoogleMapsApiKey,
+  resolve as resolveGoogle,
+} from "@/lib/provider/google";
+import { isGooglePlaceId } from "@/lib/provider/google-place-id";
 import { isValidLocationPlaceId, resolve } from "@/lib/provider/osm";
 import { checkLocationResolveLimit } from "@/lib/rate-limit";
 
@@ -27,7 +32,10 @@ export async function GET(request: Request) {
       );
     }
 
-    const location = await resolve(placeId);
+    const location =
+      hasGoogleMapsApiKey() && isGooglePlaceId(placeId)
+        ? await resolveGoogle(placeId)
+        : await resolve(placeId);
     if (!location) {
       return NextResponse.json(
         { error: "Localização não encontrada." },

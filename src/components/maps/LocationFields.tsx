@@ -13,13 +13,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LocationMapPreview } from "@/components/maps/LocationMapPreview";
 import {
-  autocompleteGooglePlaces,
-  hasGooglePlacesApiKey,
-  isGooglePlaceId,
-  resolveGooglePlace,
-  type GoogleClientSuggestion,
-} from "@/lib/provider/google-places.client";
-import {
   type LocationSource,
   type LocationFieldsValue,
   normalizeNullableNumber,
@@ -60,7 +53,7 @@ function hasAnyLocationData(value: LocationFieldsValue) {
   );
 }
 
-async function fetchFallbackSuggestions(query: string) {
+async function fetchSuggestions(query: string) {
   const response = await fetch(`/api/location/autocomplete?q=${encodeURIComponent(query)}`, {
     cache: "no-store",
   });
@@ -74,7 +67,7 @@ async function fetchFallbackSuggestions(query: string) {
   return Array.isArray(payload?.suggestions) ? payload.suggestions : [];
 }
 
-async function resolveFallbackSuggestion(placeId: string) {
+async function resolveSuggestion(placeId: string) {
   const response = await fetch(
     `/api/location/resolve?placeId=${encodeURIComponent(placeId)}`,
     {
@@ -95,32 +88,6 @@ async function resolveFallbackSuggestion(placeId: string) {
 
   if (!response.ok) return null;
   return payload?.location ?? null;
-}
-
-function mergeSuggestions(
-  primary: Suggestion[],
-  fallback: Suggestion[],
-  limit = 5,
-) {
-  const merged: Suggestion[] = [];
-  const seenPlaceIds = new Set<string>();
-  const seenAddresses = new Set<string>();
-
-  for (const entry of [...primary, ...fallback]) {
-    const normalizedAddress = entry.formatted_address.trim().toLowerCase();
-    if (seenPlaceIds.has(entry.placeId) || seenAddresses.has(normalizedAddress)) {
-      continue;
-    }
-
-    seenPlaceIds.add(entry.placeId);
-    if (normalizedAddress) {
-      seenAddresses.add(normalizedAddress);
-    }
-    merged.push(entry);
-    if (merged.length >= limit) break;
-  }
-
-  return merged;
 }
 
 export function LocationFields({
@@ -148,7 +115,6 @@ export function LocationFields({
   );
   const latestRequestIdRef = useRef(0);
   const deferredAddress = useDeferredValue(value.location_address);
-  const googlePlacesEnabled = hasGooglePlacesApiKey();
 
   useEffect(() => {
     setLatitudeInput(value.latitude != null ? String(value.latitude) : "");
@@ -243,24 +209,7 @@ export function LocationFields({
       setSearching(true);
 
       try {
-        let nextSuggestions: Suggestion[] = [];
-
-        if (googlePlacesEnabled) {
-          try {
-            const googleSuggestions = (await autocompleteGooglePlaces(
-              query,
-              5,
-            )) as GoogleClientSuggestion[];
-            nextSuggestions = googleSuggestions;
-          } catch {
-            nextSuggestions = [];
-          }
-        }
-
-        if (nextSuggestions.length < 5) {
-          const fallbackSuggestions = await fetchFallbackSuggestions(query);
-          nextSuggestions = mergeSuggestions(nextSuggestions, fallbackSuggestions, 5);
-        }
+        const nextSuggestions = await fetchSuggestions(query);
 
         if (latestRequestIdRef.current !== requestId) return;
 
@@ -279,17 +228,14 @@ export function LocationFields({
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [deferredAddress, googlePlacesEnabled]);
+  }, [deferredAddress]);
 
   async function handleSuggestionSelect(suggestion: Suggestion) {
     setResolvingPlaceId(suggestion.placeId);
     setLookupError(null);
 
     try {
-      const resolvedLocation =
-        googlePlacesEnabled && isGooglePlaceId(suggestion.placeId)
-          ? await resolveGooglePlace(suggestion.placeId)
-          : await resolveFallbackSuggestion(suggestion.placeId);
+      const resolvedLocation = await resolveSuggestion(suggestion.placeId);
 
       if (
         !resolvedLocation ||
@@ -412,11 +358,6 @@ export function LocationFields({
                   </div>
                 </button>
               ))}
-            {!searching && googlePlacesEnabled && suggestions.length > 0 && (
-              <div className="border-t border-slate-100 px-3 py-2 text-[10px] uppercase tracking-[0.12em] text-slate-400">
-                Sugestões Google Places + fallback interno
-              </div>
-            )}
           </div>
         )}
       </div>
