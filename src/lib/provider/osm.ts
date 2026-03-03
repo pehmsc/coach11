@@ -23,6 +23,7 @@ type OsmSearchItem = {
 type OSMCacheStore = {
   autocomplete: Map<string, CacheEntry<OsmSuggestion[]>>;
   resolve: Map<string, CacheEntry<OsmResolvedLocation | null>>;
+  reverse: Map<string, CacheEntry<OsmResolvedLocation | null>>;
   queue: Promise<void>;
   nextRequestAt: number;
 };
@@ -36,6 +37,7 @@ function getCacheStore() {
     globalThis.__coach11OsmCache = {
       autocomplete: new Map(),
       resolve: new Map(),
+      reverse: new Map(),
       queue: Promise.resolve(),
       nextRequestAt: 0,
     };
@@ -106,6 +108,10 @@ function normalizeText(value: unknown) {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed || null;
+}
+
+function normalizeCoordinateKey(latitude: number, longitude: number) {
+  return `${latitude.toFixed(6)},${longitude.toFixed(6)}`;
 }
 
 function splitDisplayName(displayName: string) {
@@ -282,5 +288,41 @@ export async function resolve(placeId: string): Promise<OsmResolvedLocation | nu
   const normalized = normalizeOsmLookupResult(payload[0] || null);
 
   setCachedValue(store.resolve, normalizedPlaceId, normalized, RESOLVE_CACHE_TTL_MS);
+  return normalized;
+}
+
+export async function reverse(
+  latitude: number,
+  longitude: number,
+): Promise<OsmResolvedLocation | null> {
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+
+  const normalizedLatitude = Number(latitude.toFixed(7));
+  const normalizedLongitude = Number(longitude.toFixed(7));
+  const cacheKey = normalizeCoordinateKey(normalizedLatitude, normalizedLongitude);
+  const store = getCacheStore();
+  const cached = getCachedValue(store.reverse, cacheKey);
+  if (cached !== null) return cached;
+
+  const url = new URL("/reverse", getBaseUrl());
+  url.searchParams.set("lat", String(normalizedLatitude));
+  url.searchParams.set("lon", String(normalizedLongitude));
+  url.searchParams.set("format", "jsonv2");
+  url.searchParams.set("addressdetails", "1");
+  url.searchParams.set("zoom", "18");
+
+  const payload = await fetchJson<OsmSearchItem>(url);
+  const normalized = normalizeOsmLookupResult(payload);
+
+  setCachedValue(store.reverse, cacheKey, normalized, RESOLVE_CACHE_TTL_MS);
+  if (normalized?.osm_place_id) {
+    setCachedValue(
+      store.resolve,
+      normalized.osm_place_id,
+      normalized,
+      RESOLVE_CACHE_TTL_MS,
+    );
+  }
+
   return normalized;
 }
