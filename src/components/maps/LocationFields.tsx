@@ -13,6 +13,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LocationMapPreview } from "@/components/maps/LocationMapPreview";
 import {
+  autocompleteGooglePlaces,
+  hasGooglePlacesApiKey,
+  isGooglePlaceId,
+  resolveGooglePlace,
+  type GoogleClientSuggestion,
+} from "@/lib/provider/google-places.client";
+import {
+  type LocationSource,
   type LocationFieldsValue,
   normalizeNullableNumber,
 } from "@/lib/location";
@@ -24,10 +32,10 @@ type Suggestion = {
   title: string;
   subtitle: string | null;
   formatted_address: string;
-  latitude: number;
-  longitude: number;
+  latitude: number | null;
+  longitude: number | null;
   osm_place_id: string;
-  location_source: "osm";
+  location_source: LocationSource;
 };
 
 type Props = {
@@ -50,6 +58,69 @@ function hasAnyLocationData(value: LocationFieldsValue) {
       value.latitude != null ||
       value.longitude != null,
   );
+}
+
+async function fetchFallbackSuggestions(query: string) {
+  const response = await fetch(`/api/location/autocomplete?q=${encodeURIComponent(query)}`, {
+    cache: "no-store",
+  });
+  const payload = (await response.json().catch(() => null)) as
+    | {
+        suggestions?: Suggestion[];
+      }
+    | null;
+
+  if (!response.ok) return [];
+  return Array.isArray(payload?.suggestions) ? payload.suggestions : [];
+}
+
+async function resolveFallbackSuggestion(placeId: string) {
+  const response = await fetch(
+    `/api/location/resolve?placeId=${encodeURIComponent(placeId)}`,
+    {
+      cache: "no-store",
+    },
+  );
+  const payload = (await response.json().catch(() => null)) as
+    | {
+        location?: {
+          latitude?: number;
+          longitude?: number;
+          formatted_address?: string;
+          osm_place_id?: string;
+          location_source?: LocationSource;
+        };
+      }
+    | null;
+
+  if (!response.ok) return null;
+  return payload?.location ?? null;
+}
+
+function mergeSuggestions(
+  primary: Suggestion[],
+  fallback: Suggestion[],
+  limit = 5,
+) {
+  const merged: Suggestion[] = [];
+  const seenPlaceIds = new Set<string>();
+  const seenAddresses = new Set<string>();
+
+  for (const entry of [...primary, ...fallback]) {
+    const normalizedAddress = entry.formatted_address.trim().toLowerCase();
+    if (seenPlaceIds.has(entry.placeId) || seenAddresses.has(normalizedAddress)) {
+      continue;
+    }
+
+    seenPlaceIds.add(entry.placeId);
+    if (normalizedAddress) {
+      seenAddresses.add(normalizedAddress);
+    }
+    merged.push(entry);
+    if (merged.length >= limit) break;
+  }
+
+  return merged;
 }
 
 export function LocationFields({
@@ -77,6 +148,7 @@ export function LocationFields({
   );
   const latestRequestIdRef = useRef(0);
   const deferredAddress = useDeferredValue(value.location_address);
+  const googlePlacesEnabled = hasGooglePlacesApiKey();
 
   useEffect(() => {
     setLatitudeInput(value.latitude != null ? String(value.latitude) : "");
@@ -171,26 +243,28 @@ export function LocationFields({
       setSearching(true);
 
       try {
-        const response = await fetch(
-          `/api/location/autocomplete?q=${encodeURIComponent(query)}`,
-          {
-            cache: "no-store",
-          },
-        );
-        const payload = (await response.json().catch(() => null)) as
-          | {
-              suggestions?: Suggestion[];
-            }
-          | null;
+        let nextSuggestions: Suggestion[] = [];
+
+        if (googlePlacesEnabled) {
+          try {
+            const googleSuggestions = (await autocompleteGooglePlaces(
+              query,
+              5,
+            )) as GoogleClientSuggestion[];
+            nextSuggestions = googleSuggestions;
+          } catch {
+            nextSuggestions = [];
+          }
+        }
+
+        if (nextSuggestions.length < 5) {
+          const fallbackSuggestions = await fetchFallbackSuggestions(query);
+          nextSuggestions = mergeSuggestions(nextSuggestions, fallbackSuggestions, 5);
+        }
 
         if (latestRequestIdRef.current !== requestId) return;
 
-        if (!response.ok) {
-          setSuggestions([]);
-          return;
-        }
-
-        setSuggestions(Array.isArray(payload?.suggestions) ? payload.suggestions : []);
+        setSuggestions(nextSuggestions);
         setDropdownOpen(true);
       } catch {
         if (latestRequestIdRef.current !== requestId) return;
@@ -205,34 +279,19 @@ export function LocationFields({
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [deferredAddress]);
+  }, [deferredAddress, googlePlacesEnabled]);
 
   async function handleSuggestionSelect(suggestion: Suggestion) {
     setResolvingPlaceId(suggestion.placeId);
     setLookupError(null);
 
     try {
-      const response = await fetch(
-        `/api/location/resolve?placeId=${encodeURIComponent(suggestion.placeId)}`,
-        {
-          cache: "no-store",
-        },
-      );
-      const payload = (await response.json().catch(() => null)) as
-        | {
-            location?: {
-              latitude?: number;
-              longitude?: number;
-              formatted_address?: string;
-              osm_place_id?: string;
-              location_source?: "osm";
-            };
-          }
-        | null;
+      const resolvedLocation =
+        googlePlacesEnabled && isGooglePlaceId(suggestion.placeId)
+          ? await resolveGooglePlace(suggestion.placeId)
+          : await resolveFallbackSuggestion(suggestion.placeId);
 
-      const resolvedLocation = payload?.location;
       if (
-        !response.ok ||
         !resolvedLocation ||
         !Number.isFinite(resolvedLocation.latitude) ||
         !Number.isFinite(resolvedLocation.longitude)
@@ -247,10 +306,11 @@ export function LocationFields({
           resolvedLocation.formatted_address || suggestion.formatted_address,
         formatted_address:
           resolvedLocation.formatted_address || suggestion.formatted_address,
-        latitude: resolvedLocation.latitude ?? suggestion.latitude,
-        longitude: resolvedLocation.longitude ?? suggestion.longitude,
+        latitude: resolvedLocation.latitude ?? suggestion.latitude ?? null,
+        longitude: resolvedLocation.longitude ?? suggestion.longitude ?? null,
         osm_place_id: resolvedLocation.osm_place_id || suggestion.osm_place_id,
-        location_source: "osm",
+        location_source:
+          resolvedLocation.location_source || suggestion.location_source,
       });
       setSuggestions([]);
       setDropdownOpen(false);
@@ -263,7 +323,9 @@ export function LocationFields({
 
   const isCompact = compact ? "text-xs" : undefined;
   const sourceBadge =
-    value.location_source === "osm"
+    value.location_source === "google"
+      ? "Google Places confirmado"
+      : value.location_source === "osm"
       ? "OSM confirmado"
       : value.location_source === "manual"
         ? "Mapa ajustado manualmente"
@@ -300,11 +362,11 @@ export function LocationFields({
         <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
           <span className="inline-flex items-center gap-1">
             <Search size={12} />
-            Pesquisa o mapa por morada ou nome do campo
+            Usa este campo para procurar a morada ou o nome do recinto
           </span>
-          {sourceBadge && (
+              {sourceBadge && (
             <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-slate-600">
-              {value.location_source === "osm" ? (
+              {value.location_source === "google" || value.location_source === "osm" ? (
                 <CheckCircle2 size={11} />
               ) : (
                 <Target size={11} />
@@ -350,6 +412,11 @@ export function LocationFields({
                   </div>
                 </button>
               ))}
+            {!searching && googlePlacesEnabled && suggestions.length > 0 && (
+              <div className="border-t border-slate-100 px-3 py-2 text-[10px] uppercase tracking-[0.12em] text-slate-400">
+                Sugestões Google Places + fallback interno
+              </div>
+            )}
           </div>
         )}
       </div>

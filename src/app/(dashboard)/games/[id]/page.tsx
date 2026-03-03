@@ -165,7 +165,7 @@ export default function GameDetailPage() {
   const [editLongitude, setEditLongitude] = useState<number | null>(null);
   const [editOsmPlaceId, setEditOsmPlaceId] = useState("");
   const [editLocationSource, setEditLocationSource] = useState<
-    "osm" | "manual" | null
+    "google" | "osm" | "manual" | null
   >(null);
   const [savingGameEdit, setSavingGameEdit] = useState(false);
   const [correctionReason, setCorrectionReason] = useState("");

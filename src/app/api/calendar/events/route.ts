@@ -11,6 +11,7 @@ import { NextResponse } from "next/server";
 import { SHORT_PRIVATE_CACHE_CONTROL } from "@/lib/http/cache";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 import {
+  type LocationSource,
   normalizeLocationSource,
   normalizeNullableNumber,
   resolveFormattedAddress,
@@ -33,7 +34,7 @@ type CalendarPayload = {
   latitude?: number | null;
   longitude?: number | null;
   osm_place_id?: string | null;
-  location_source?: "osm" | "manual" | null;
+  location_source?: LocationSource | null;
   is_home?: boolean;
   notes?: string | null;
   image_url?: string | null;
@@ -71,6 +72,21 @@ function normalizeOptionalId(value: unknown) {
 
 function normalizeOptionalLocationSource(value: unknown) {
   return normalizeLocationSource(value);
+}
+
+function inferLocationSource(
+  explicitSource: LocationSource | null | undefined,
+  placeId: string | null | undefined,
+  hasCoordinates: boolean,
+  hasSignal: boolean,
+): LocationSource | null {
+  if (explicitSource) return explicitSource;
+  if (!hasSignal) return null;
+  if (!hasCoordinates) return "manual";
+  if (typeof placeId === "string" && placeId.trim().startsWith("GOOGLE:")) {
+    return "google";
+  }
+  return "osm";
 }
 
 function normalizeEventType(value: unknown): CalendarEventType | null {
@@ -118,13 +134,12 @@ function normalizeLocationPayload(payload: CalendarPayload): CalendarPayload {
     latitude: hasCoordinates ? payload.latitude ?? null : null,
     longitude: hasCoordinates ? payload.longitude ?? null : null,
     osm_place_id: hasCoordinates ? payload.osm_place_id ?? null : null,
-    location_source:
-      payload.location_source ??
-      (payload.location || payload.location_address || formattedAddress
-        ? hasCoordinates
-          ? "osm"
-          : "manual"
-        : null),
+    location_source: inferLocationSource(
+      payload.location_source,
+      payload.osm_place_id ?? null,
+      hasCoordinates,
+      Boolean(payload.location || payload.location_address || formattedAddress),
+    ),
   };
 }
 

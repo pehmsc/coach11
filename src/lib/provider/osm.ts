@@ -1,3 +1,9 @@
+import {
+  findLocationAliasSuggestions,
+  isLocationAliasPlaceId,
+  resolveLocationAlias,
+} from "./location-aliases";
+
 const DEFAULT_NOMINATIM_BASE_URL = "https://nominatim.openstreetmap.org";
 const AUTOCOMPLETE_CACHE_TTL_MS = 15 * 60 * 1000;
 const RESOLVE_CACHE_TTL_MS = 30 * 60 * 1000;
@@ -55,7 +61,7 @@ export type OsmSuggestion = {
   latitude: number;
   longitude: number;
   osm_place_id: string;
-  location_source: "osm";
+  location_source: "osm" | "manual";
 };
 
 export type OsmResolvedLocation = {
@@ -63,7 +69,7 @@ export type OsmResolvedLocation = {
   longitude: number;
   formatted_address: string;
   osm_place_id: string;
-  location_source: "osm";
+  location_source: "osm" | "manual";
 };
 
 export function sanitizeAutocompleteQuery(input: string) {
@@ -74,6 +80,10 @@ export function sanitizeAutocompleteQuery(input: string) {
 
 export function isValidOsmPlaceId(value: string) {
   return /^[NWR]\d+$/.test(value);
+}
+
+export function isValidLocationPlaceId(value: string) {
+  return isValidOsmPlaceId(value) || isLocationAliasPlaceId(value);
 }
 
 export function buildAutocompleteQueries(query: string) {
@@ -277,8 +287,31 @@ export async function autocomplete(query: string, limit = 5): Promise<OsmSuggest
   const queryVariants = buildAutocompleteQueries(sanitizedQuery);
   const results: OsmSuggestion[] = [];
   const seenKeys = new Set<string>();
+  const aliasResults = findLocationAliasSuggestions(sanitizedQuery, normalizedLimit);
+
+  for (const entry of aliasResults) {
+    const key = `${entry.placeId}:${entry.formatted_address}`;
+    if (seenKeys.has(key)) continue;
+    seenKeys.add(key);
+    results.push(entry);
+    setCachedValue(
+      store.resolve,
+      entry.placeId,
+      {
+        latitude: entry.latitude,
+        longitude: entry.longitude,
+        formatted_address: entry.formatted_address,
+        osm_place_id: entry.osm_place_id,
+        location_source: entry.location_source,
+      },
+      RESOLVE_CACHE_TTL_MS,
+    );
+    if (results.length >= normalizedLimit) break;
+  }
 
   for (const queryVariant of queryVariants) {
+    if (results.length >= normalizedLimit) break;
+
     const url = new URL("/search", getBaseUrl());
     url.searchParams.set("q", queryVariant);
     url.searchParams.set("format", "jsonv2");
@@ -306,25 +339,46 @@ export async function autocomplete(query: string, limit = 5): Promise<OsmSuggest
 
   setCachedValue(store.autocomplete, cacheKey, results, AUTOCOMPLETE_CACHE_TTL_MS);
   results.forEach((entry) => {
-    setCachedValue(
-      store.resolve,
-      entry.osm_place_id,
-      {
-        latitude: entry.latitude,
-        longitude: entry.longitude,
-        formatted_address: entry.formatted_address,
-        osm_place_id: entry.osm_place_id,
-        location_source: "osm",
-      },
-      RESOLVE_CACHE_TTL_MS,
-    );
+    const normalized = {
+      latitude: entry.latitude,
+      longitude: entry.longitude,
+      formatted_address: entry.formatted_address,
+      osm_place_id: entry.osm_place_id,
+      location_source: entry.location_source,
+    } satisfies OsmResolvedLocation;
+
+    setCachedValue(store.resolve, entry.placeId, normalized, RESOLVE_CACHE_TTL_MS);
+    if (entry.osm_place_id) {
+      setCachedValue(
+        store.resolve,
+        entry.osm_place_id,
+        normalized,
+        RESOLVE_CACHE_TTL_MS,
+      );
+    }
   });
 
   return results;
 }
 
 export async function resolve(placeId: string): Promise<OsmResolvedLocation | null> {
-  const normalizedPlaceId = placeId.trim().toUpperCase();
+  const rawPlaceId = placeId.trim();
+  if (!rawPlaceId) return null;
+
+  if (isLocationAliasPlaceId(rawPlaceId)) {
+    const alias = resolveLocationAlias(rawPlaceId);
+    if (!alias) return null;
+
+    return {
+      latitude: alias.latitude,
+      longitude: alias.longitude,
+      formatted_address: alias.formatted_address,
+      osm_place_id: alias.osm_place_id,
+      location_source: alias.location_source,
+    };
+  }
+
+  const normalizedPlaceId = rawPlaceId.toUpperCase();
   if (!isValidOsmPlaceId(normalizedPlaceId)) return null;
 
   const store = getCacheStore();

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { findLocationAliasSuggestions } from "./location-aliases";
 import {
   buildAutocompleteQueries,
+  isValidLocationPlaceId,
   normalizeOsmLookupResult,
   normalizeOsmSuggestion,
   sanitizeAutocompleteQuery,
@@ -25,6 +27,29 @@ describe("osm provider normalization", () => {
       "Campo Major Batista do Silva",
       "Campo Major Batista do Silva, Portugal",
     ]);
+  });
+
+  it("matches curated venue aliases before hitting external geocoding", () => {
+    expect(findLocationAliasSuggestions("Campo Major Batista Silva", 5)).toEqual([
+      {
+        placeId: "ALIAS:CAMPO_MAJOR_BATISTA_DA_SILVA",
+        title: "Campo Major Batista da Silva",
+        subtitle: "Restelo, Lisboa, Portugal",
+        formatted_address: "Rua de Alcolena 3A, Lisboa, Portugal",
+        latitude: 38.7024591,
+        longitude: -9.2078559,
+        osm_place_id: "",
+        location_source: "manual",
+      },
+    ]);
+  });
+
+  it("accepts both OSM and internal location identifiers", () => {
+    expect(isValidLocationPlaceId("W123")).toBe(true);
+    expect(isValidLocationPlaceId("ALIAS:CAMPO_MAJOR_BATISTA_DA_SILVA")).toBe(
+      true,
+    );
+    expect(isValidLocationPlaceId("123")).toBe(false);
   });
 
   it("normalizes search results into suggestions", () => {

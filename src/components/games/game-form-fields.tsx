@@ -3,7 +3,7 @@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LocationFields } from "@/components/maps/LocationFields";
-import { EMPTY_LOCATION_FIELDS } from "@/lib/location";
+import { EMPTY_LOCATION_FIELDS, type LocationSource } from "@/lib/location";
 import { normalizeManualShortName } from "@/lib/football/short-name";
 
 export type GameCompetitionOption = {
@@ -25,7 +25,7 @@ export type SharedGameFormValues = {
   latitude: number | null;
   longitude: number | null;
   osm_place_id: string;
-  location_source: "osm" | "manual" | null;
+  location_source: LocationSource | null;
   is_home: boolean;
   competition_id: string;
 };

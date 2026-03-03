@@ -19,7 +19,7 @@ export type TeamLabel = "A" | "B" | "C";
 export type KitNumber = 1 | 2 | 3;
 export type PlayerType = "field" | "goalkeeper";
 export type PieceType = "shirt" | "shorts" | "socks";
-export type LocationSource = "osm" | "manual";
+export type LocationSource = "google" | "osm" | "manual";
 
 export interface Profile {
   id: string;

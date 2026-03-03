@@ -31,7 +31,11 @@ import {
   type SharedGameFormValues,
 } from "@/components/games/game-form-fields";
 import { LocationFields } from "@/components/maps/LocationFields";
-import { EMPTY_LOCATION_FIELDS, resolveLocationLabel } from "@/lib/location";
+import {
+  EMPTY_LOCATION_FIELDS,
+  type LocationSource,
+  resolveLocationLabel,
+} from "@/lib/location";
 import {
   isValidManualShortName,
   normalizeManualShortName,
@@ -58,7 +62,7 @@ interface CalEvent {
   latitude?: number | null;
   longitude?: number | null;
   osm_place_id?: string;
-  location_source?: "osm" | "manual" | null;
+  location_source?: LocationSource | null;
   is_home?: boolean;
   image_url?: string;
 }
@@ -184,7 +188,9 @@ export default function CalendarPage() {
         osm_place_id:
           typeof s.osm_place_id === "string" ? s.osm_place_id : undefined,
         location_source:
-          s.location_source === "osm" || s.location_source === "manual"
+          s.location_source === "google" ||
+          s.location_source === "osm" ||
+          s.location_source === "manual"
             ? s.location_source
             : undefined,
         image_url: typeof s.image_url === "string" ? s.image_url : undefined,
@@ -232,7 +238,9 @@ export default function CalendarPage() {
         osm_place_id:
           typeof g.osm_place_id === "string" ? g.osm_place_id : undefined,
         location_source:
-          g.location_source === "osm" || g.location_source === "manual"
+          g.location_source === "google" ||
+          g.location_source === "osm" ||
+          g.location_source === "manual"
             ? g.location_source
             : undefined,
         is_home: typeof g.is_home === "boolean" ? g.is_home : undefined,

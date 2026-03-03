@@ -20,7 +20,11 @@ import {
   type GameCompetitionOption,
   type SharedGameFormValues,
 } from "@/components/games/game-form-fields";
-import { EMPTY_LOCATION_FIELDS, resolveLocationLabel } from "@/lib/location";
+import {
+  EMPTY_LOCATION_FIELDS,
+  type LocationSource,
+  resolveLocationLabel,
+} from "@/lib/location";
 import {
   isValidManualShortName,
   normalizeManualShortName,
@@ -45,7 +49,7 @@ interface GameRow {
   latitude?: number | null;
   longitude?: number | null;
   osm_place_id?: string;
-  location_source?: "osm" | "manual" | null;
+  location_source?: LocationSource | null;
   title?: string;
   competition_id?: string;
 }

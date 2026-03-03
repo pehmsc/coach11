@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { extractRequestIp } from "@/lib/http/request-ip";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
-import { resolve, isValidOsmPlaceId } from "@/lib/provider/osm";
+import { isValidLocationPlaceId, resolve } from "@/lib/provider/osm";
 import { checkLocationResolveLimit } from "@/lib/rate-limit";
 
 const LOCATION_RESOLVE_CACHE_CONTROL =
@@ -10,9 +10,9 @@ const LOCATION_RESOLVE_CACHE_CONTROL =
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
-    const placeId = (url.searchParams.get("placeId") || "").trim().toUpperCase();
+    const placeId = (url.searchParams.get("placeId") || "").trim();
 
-    if (!isValidOsmPlaceId(placeId)) {
+    if (!isValidLocationPlaceId(placeId)) {
       return NextResponse.json(
         { error: "Identificador de localização inválido." },
         { status: 400 },

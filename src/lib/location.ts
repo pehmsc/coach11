@@ -1,4 +1,4 @@
-export type LocationSource = "osm" | "manual";
+export type LocationSource = "google" | "osm" | "manual";
 
 export type LocationFieldsValue = {
   location: string;
@@ -47,7 +47,7 @@ export function normalizeNullableNumber(value: unknown) {
 }
 
 export function normalizeLocationSource(value: unknown): LocationSource | null {
-  return value === "osm" || value === "manual" ? value : null;
+  return value === "google" || value === "osm" || value === "manual" ? value : null;
 }
 
 export function hasCoordinates(value: {

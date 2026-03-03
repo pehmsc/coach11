@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveUserTeamContext } from "@/lib/auth/team-context";
 import { SHORT_PRIVATE_CACHE_CONTROL } from "@/lib/http/cache";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
+import type { LocationSource } from "@/lib/location";
 
 type TrainingRow = {
   id: string;
@@ -18,7 +19,7 @@ type TrainingRow = {
   latitude?: number | null;
   longitude?: number | null;
   osm_place_id?: string | null;
-  location_source?: "osm" | "manual" | null;
+  location_source?: LocationSource | null;
   notes?: string | null;
   status: string;
   age_group_id?: string | null;

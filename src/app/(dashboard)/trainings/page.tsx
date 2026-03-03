@@ -20,7 +20,11 @@ import { NotesEditor } from "@/components/forms/NotesEditor";
 import { LocationFields } from "@/components/maps/LocationFields";
 import { LocationMapPreview } from "@/components/maps/LocationMapPreview";
 import { OpenMapsButton } from "@/components/maps/OpenMapsButton";
-import { EMPTY_LOCATION_FIELDS, resolveLocationLabel } from "@/lib/location";
+import {
+  EMPTY_LOCATION_FIELDS,
+  type LocationSource,
+  resolveLocationLabel,
+} from "@/lib/location";
 import type { Player } from "@/types/database";
 
 interface TrainingRow {
@@ -35,7 +39,7 @@ interface TrainingRow {
   latitude?: number | null;
   longitude?: number | null;
   osm_place_id?: string;
-  location_source?: "osm" | "manual" | null;
+  location_source?: LocationSource | null;
   notes?: string;
   status: string;
   age_group_id?: string;
@@ -91,7 +95,7 @@ export default function TrainingsPage() {
   const [newTrainingLongitude, setNewTrainingLongitude] = useState<number | null>(null);
   const [newTrainingOsmPlaceId, setNewTrainingOsmPlaceId] = useState("");
   const [newTrainingLocationSource, setNewTrainingLocationSource] = useState<
-    "osm" | "manual" | null
+    "google" | "osm" | "manual" | null
   >(null);
   const [newTrainingNotes, setNewTrainingNotes] = useState("");
   const [canDeleteTrainings, setCanDeleteTrainings] = useState(false);
