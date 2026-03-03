@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
+import { unstable_cache } from "next/cache";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { format, parseISO } from "date-fns";
@@ -7,6 +8,7 @@ import { pt } from "date-fns/locale";
 import { ArrowLeft, Clock3, FileText, MapPin, ShieldCheck } from "lucide-react";
 import { RichTextContent } from "@/components/content/RichTextContent";
 import { LocationMapPreview } from "@/components/maps/LocationMapPreview";
+import { PublicRateLimitedState } from "@/components/public/PublicRateLimitedState";
 import {
   addMinutesToTime,
   extractTimeFromDateTime,
@@ -15,12 +17,14 @@ import {
 import { resolveFormattedAddress, resolveLocationLabel } from "@/lib/location";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
+  isPublicShareRateLimitedError,
   resolvePublicGameId,
   resolvePublicAccessRequest,
   sanitizePublicPlayerName,
 } from "@/lib/public-share";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 30;
 
 type PublicGameDetailParams = {
   params: Promise<{ token: string; gameId: string }>;
@@ -49,6 +53,55 @@ function gameStatusLabel(status: string | null | undefined) {
   }
 }
 
+const getPublicGameDetailPayload = unstable_cache(
+  async (ageGroupId: string, accessIdentifier: string, publicGameRef: string) => {
+    const admin = createAdminClient();
+
+    const { data: allGameRows, error: allGamesError } = await admin
+      .from("games")
+      .select("id")
+      .eq("age_group_id", ageGroupId)
+      .limit(200);
+
+    if (allGamesError) {
+      return { game: null, ageGroup: null };
+    }
+
+    const resolvedGameId = resolvePublicGameId(
+      accessIdentifier,
+      publicGameRef,
+      (allGameRows || []).map((row) => row.id),
+    );
+
+    if (!resolvedGameId) {
+      return { game: null, ageGroup: null };
+    }
+
+    const [{ data: game }, { data: ageGroup }] = await Promise.all([
+      admin
+        .from("games")
+        .select(
+          "id, game_datetime, end_time, opponent_name, opponent_short_name, location, location_address, formatted_address, latitude, longitude, osm_place_id, location_source, notes, is_home, status, score_home, score_away, image_url, title",
+        )
+        .eq("id", resolvedGameId)
+        .eq("age_group_id", ageGroupId)
+        .maybeSingle(),
+      admin
+        .from("age_groups")
+        .select("club_name, name")
+        .eq("id", ageGroupId)
+        .maybeSingle(),
+    ]);
+
+    return {
+      game,
+      ageGroup,
+    };
+  },
+  ["public-game-detail-v1"],
+  { revalidate: 30 },
+);
+
 export default async function PublicGameDetailPage({
   params,
 }: PublicGameDetailParams) {
@@ -64,23 +117,8 @@ export default async function PublicGameDetailPage({
     );
     access = resolved ?? null;
   } catch (error) {
-    if (
-      error instanceof Error &&
-      error.message === "public_share_rate_limited"
-    ) {
-      return (
-        <main className="min-h-screen bg-slate-50 px-4 py-8">
-          <div className="mx-auto max-w-3xl rounded-3xl border border-amber-200 bg-white p-8 text-center">
-            <h1 className="text-2xl font-bold text-slate-900">
-              Demasiados pedidos
-            </h1>
-            <p className="mt-3 text-sm text-slate-600">
-              Este link público está temporariamente limitado. Tenta novamente
-              dentro de instantes.
-            </p>
-          </div>
-        </main>
-      );
+    if (isPublicShareRateLimitedError(error)) {
+      return <PublicRateLimitedState />;
     }
 
     notFound();
@@ -89,57 +127,11 @@ export default async function PublicGameDetailPage({
   if (!access) {
     notFound();
   }
-
-  if (access.paused) {
-    return (
-      <main className="min-h-screen bg-slate-50 px-4 py-8">
-        <div className="mx-auto max-w-3xl rounded-3xl border border-slate-200 bg-white p-8 text-center">
-          <h1 className="text-2xl font-bold text-slate-900">
-            Acesso temporariamente pausado
-          </h1>
-          <p className="mt-3 text-sm text-slate-600">
-            Acesso temporariamente pausado pelo coordenador.
-          </p>
-        </div>
-      </main>
-    );
-  }
-
-  const { data: allGameRows, error: allGamesError } = await admin
-    .from("games")
-    .select("id")
-    .eq("age_group_id", access.ageGroupId)
-    .limit(200);
-
-  if (allGamesError) {
-    notFound();
-  }
-
-  const resolvedGameId = resolvePublicGameId(
+  const { game, ageGroup } = await getPublicGameDetailPayload(
+    access.ageGroupId,
     access.identifier,
     publicGameRef,
-    (allGameRows || []).map((row) => row.id),
   );
-
-  if (!resolvedGameId) {
-    notFound();
-  }
-
-  const [{ data: game }, { data: ageGroup }] = await Promise.all([
-    admin
-      .from("games")
-      .select(
-        "id, game_datetime, end_time, opponent_name, opponent_short_name, location, location_address, formatted_address, latitude, longitude, osm_place_id, location_source, notes, is_home, status, score_home, score_away, image_url, title",
-      )
-      .eq("id", resolvedGameId)
-      .eq("age_group_id", access.ageGroupId)
-      .maybeSingle(),
-    admin
-      .from("age_groups")
-      .select("club_name, name")
-      .eq("id", access.ageGroupId)
-      .maybeSingle(),
-  ]);
 
   if (!game) {
     notFound();
@@ -160,7 +152,7 @@ export default async function PublicGameDetailPage({
   const { data: convocation } = await admin
     .from("convocations")
     .select("id")
-    .eq("game_id", resolvedGameId)
+    .eq("game_id", game.id)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { unstable_cache } from "next/cache";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { format, parseISO } from "date-fns";
@@ -6,14 +7,17 @@ import { pt } from "date-fns/locale";
 import { CalendarDays, Clock3, Dumbbell, MapPin, Swords } from "lucide-react";
 import { buildDateTimeFromDateAndTime } from "@/lib/events/time";
 import { resolveLocationLabel } from "@/lib/location";
+import { PublicRateLimitedState } from "@/components/public/PublicRateLimitedState";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   buildPublicGameRef,
   buildPublicTrainingRef,
+  isPublicShareRateLimitedError,
   resolvePublicAccessRequest,
 } from "@/lib/public-share";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 30;
 
 type PublicPageParams = {
   params: Promise<{ token: string }>;
@@ -116,6 +120,63 @@ function gameTitle(game: PublicGameRow) {
   return game.is_home ? `vs ${opponent}` : `@ ${opponent}`;
 }
 
+const getPublicCalendarPayload = unstable_cache(
+  async (ageGroupId: string) => {
+    const admin = createAdminClient();
+    const todayIsoDate = new Date().toISOString().slice(0, 10);
+
+    const [
+      { data: ageGroup },
+      upcomingGamesRes,
+      upcomingTrainingsRes,
+      recentRes,
+    ] = await Promise.all([
+      admin
+        .from("age_groups")
+        .select("club_name, name")
+        .eq("id", ageGroupId)
+        .maybeSingle(),
+      admin
+        .from("games")
+        .select(
+          "id, game_datetime, opponent_name, opponent_short_name, location, location_address, formatted_address, is_home, status, score_home, score_away",
+        )
+        .eq("age_group_id", ageGroupId)
+        .gte("game_datetime", new Date().toISOString())
+        .order("game_datetime", { ascending: true })
+        .limit(12),
+      admin
+        .from("training_sessions")
+        .select(
+          "id, title, session_date, start_time, end_time, location, location_address, formatted_address, notes, status",
+        )
+        .eq("age_group_id", ageGroupId)
+        .gte("session_date", todayIsoDate)
+        .order("session_date", { ascending: true })
+        .order("start_time", { ascending: true, nullsFirst: false })
+        .limit(12),
+      admin
+        .from("games")
+        .select(
+          "id, game_datetime, opponent_name, opponent_short_name, location, location_address, formatted_address, is_home, status, score_home, score_away",
+        )
+        .eq("age_group_id", ageGroupId)
+        .lt("game_datetime", new Date().toISOString())
+        .order("game_datetime", { ascending: false })
+        .limit(6),
+    ]);
+
+    return {
+      ageGroup,
+      upcomingGames: (upcomingGamesRes.data || []) as PublicGameRow[],
+      upcomingTrainings: (upcomingTrainingsRes.data || []) as PublicTrainingRow[],
+      recentGames: (recentRes.data || []) as PublicGameRow[],
+    };
+  },
+  ["public-calendar-page-v1"],
+  { revalidate: 30 },
+);
+
 export default async function PublicCalendarPage({ params }: PublicPageParams) {
   const { token: publicIdentifier } = await params;
   const admin = createAdminClient();
@@ -129,23 +190,8 @@ export default async function PublicCalendarPage({ params }: PublicPageParams) {
     );
     access = resolved ?? null;
   } catch (error) {
-    if (
-      error instanceof Error &&
-      error.message === "public_share_rate_limited"
-    ) {
-      return (
-        <main className="min-h-screen bg-slate-50 px-4 py-8">
-          <div className="mx-auto max-w-3xl rounded-3xl border border-amber-200 bg-white p-8 text-center">
-            <h1 className="text-2xl font-bold text-slate-900">
-              Demasiados pedidos
-            </h1>
-            <p className="mt-3 text-sm text-slate-600">
-              Este link público está temporariamente limitado. Tenta novamente
-              dentro de instantes.
-            </p>
-          </div>
-        </main>
-      );
+    if (isPublicShareRateLimitedError(error)) {
+      return <PublicRateLimitedState />;
     }
 
     notFound();
@@ -154,69 +200,8 @@ export default async function PublicCalendarPage({ params }: PublicPageParams) {
   if (!access) {
     notFound();
   }
-
-  if (access.paused) {
-    return (
-      <main className="min-h-screen bg-slate-50 px-4 py-8">
-        <div className="mx-auto max-w-3xl rounded-3xl border border-slate-200 bg-white p-8 text-center">
-          <h1 className="text-2xl font-bold text-slate-900">
-            Acesso temporariamente pausado
-          </h1>
-          <p className="mt-3 text-sm text-slate-600">
-            Acesso temporariamente pausado pelo coordenador.
-          </p>
-        </div>
-      </main>
-    );
-  }
-
-  const todayIsoDate = new Date().toISOString().slice(0, 10);
-
-  const [
-    { data: ageGroup },
-    upcomingGamesRes,
-    upcomingTrainingsRes,
-    recentRes,
-  ] = await Promise.all([
-    admin
-      .from("age_groups")
-      .select("club_name, name")
-      .eq("id", access.ageGroupId)
-      .maybeSingle(),
-    admin
-      .from("games")
-      .select(
-        "id, game_datetime, opponent_name, opponent_short_name, location, location_address, formatted_address, is_home, status, score_home, score_away",
-      )
-      .eq("age_group_id", access.ageGroupId)
-      .gte("game_datetime", new Date().toISOString())
-      .order("game_datetime", { ascending: true })
-      .limit(12),
-    admin
-      .from("training_sessions")
-      .select(
-        "id, title, session_date, start_time, end_time, location, location_address, formatted_address, notes, status",
-      )
-      .eq("age_group_id", access.ageGroupId)
-      .gte("session_date", todayIsoDate)
-      .order("session_date", { ascending: true })
-      .order("start_time", { ascending: true, nullsFirst: false })
-      .limit(12),
-    admin
-      .from("games")
-      .select(
-        "id, game_datetime, opponent_name, opponent_short_name, location, location_address, formatted_address, is_home, status, score_home, score_away",
-      )
-      .eq("age_group_id", access.ageGroupId)
-      .lt("game_datetime", new Date().toISOString())
-      .order("game_datetime", { ascending: false })
-      .limit(6),
-  ]);
-
-  const upcomingGames = (upcomingGamesRes.data || []) as PublicGameRow[];
-  const upcomingTrainings = (upcomingTrainingsRes.data ||
-    []) as PublicTrainingRow[];
-  const recentGames = (recentRes.data || []) as PublicGameRow[];
+  const { ageGroup, upcomingGames, upcomingTrainings, recentGames } =
+    await getPublicCalendarPayload(access.ageGroupId);
   const upcomingEvents = [
     ...upcomingGames.map((game) => ({
       kind: "game" as const,

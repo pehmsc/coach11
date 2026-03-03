@@ -8,7 +8,7 @@ import {
   randomBytes,
 } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getCanonicalAppUrl } from "@/lib/config/canonical-app-url";
+import { getCanonicalAppUrl } from "./config/canonical-app-url";
 
 type HeaderBag = {
   get(name: string): string | null;
@@ -376,14 +376,31 @@ export async function resolvePublicShareRequest(
     return null;
   }
 
-  const ip = extractRequestIp(headers);
-  await registerPublicShareAccess(admin, share);
-
   return {
     share,
     tokenHash,
-    ip,
+    ip: extractRequestIp(headers),
   };
+}
+
+function buildSlugRateLimitHash(ageGroupId: string, slug: string) {
+  return hashPublicShareToken(`public-slug:${ageGroupId}:${slug}`);
+}
+
+async function enforcePublicShareRateLimit(
+  admin: SupabaseClient,
+  rateLimitHash: string,
+  ip: string,
+) {
+  const rateLimit = await consumePublicShareRateLimit(admin, rateLimitHash, ip);
+
+  if (!rateLimit.ok) {
+    throw new Error("public_share_rate_limited");
+  }
+}
+
+export function isPublicShareRateLimitedError(error: unknown) {
+  return error instanceof Error && error.message === "public_share_rate_limited";
 }
 
 export function slugifyPublicAccessSegment(value: string) {
@@ -404,6 +421,7 @@ export async function resolvePublicAccessRequest(
 ) {
   const normalizedIdentifier = identifier.trim();
   const normalizedSlug = slugifyPublicAccessSegment(normalizedIdentifier);
+  const ip = extractRequestIp(headers);
 
   if (normalizedSlug) {
     const { data: ageGroupBySlug, error: ageGroupError } = await admin
@@ -418,13 +436,24 @@ export async function resolvePublicAccessRequest(
 
     if (ageGroupBySlug) {
       const ageGroup = ageGroupBySlug as PublicAccessAgeGroupRow;
+      const effectiveSlug = ageGroup.public_slug || normalizedSlug;
+      await enforcePublicShareRateLimit(
+        admin,
+        buildSlugRateLimitHash(ageGroup.id, effectiveSlug),
+        ip,
+      );
+
+      if (ageGroup.public_access_enabled === false) {
+        return null;
+      }
+
       await registerPublicAgeGroupAccess(admin, ageGroup.id);
 
       return {
         source: "slug" as const,
-        identifier: ageGroup.public_slug || normalizedSlug,
+        identifier: effectiveSlug,
         ageGroupId: ageGroup.id,
-        paused: ageGroup.public_access_enabled === false,
+        paused: false,
         share: null,
       };
     }
@@ -434,6 +463,8 @@ export async function resolvePublicAccessRequest(
   if (!tokenAccess?.share) {
     return null;
   }
+
+  await enforcePublicShareRateLimit(admin, tokenAccess.tokenHash, tokenAccess.ip);
 
   const { data: tokenAgeGroup, error: tokenAgeGroupError } = await admin
     .from("age_groups")
@@ -445,15 +476,21 @@ export async function resolvePublicAccessRequest(
     throw new Error(`public_share_age_group_lookup_failed:${tokenAgeGroupError.message}`);
   }
 
+  if (tokenAgeGroup?.public_access_enabled === false) {
+    return null;
+  }
+
   if (tokenAgeGroup?.public_slug) {
     return null;
   }
+
+  await registerPublicShareAccess(admin, tokenAccess.share);
 
   return {
     source: "token" as const,
     identifier: normalizedIdentifier,
     ageGroupId: tokenAccess.share.age_group_id,
-    paused: tokenAgeGroup?.public_access_enabled === false,
+    paused: false,
     share: tokenAccess.share,
   };
 }

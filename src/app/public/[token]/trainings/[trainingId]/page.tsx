@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
+import { unstable_cache } from "next/cache";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { format, parseISO } from "date-fns";
@@ -7,6 +8,7 @@ import { pt } from "date-fns/locale";
 import { ArrowLeft, Clock3, MapPin } from "lucide-react";
 import { RichTextContent } from "@/components/content/RichTextContent";
 import { LocationMapPreview } from "@/components/maps/LocationMapPreview";
+import { PublicRateLimitedState } from "@/components/public/PublicRateLimitedState";
 import {
   buildDateTimeFromDateAndTime,
   formatTimeRange,
@@ -14,11 +16,13 @@ import {
 import { resolveFormattedAddress, resolveLocationLabel } from "@/lib/location";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
+  isPublicShareRateLimitedError,
   resolvePublicAccessRequest,
   resolvePublicTrainingId,
 } from "@/lib/public-share";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 30;
 
 type PublicTrainingDetailParams = {
   params: Promise<{ token: string; trainingId: string }>;
@@ -55,6 +59,59 @@ function trainingStatusLabel(status: string | null | undefined) {
   }
 }
 
+const getPublicTrainingDetailPayload = unstable_cache(
+  async (
+    ageGroupId: string,
+    accessIdentifier: string,
+    publicTrainingRef: string,
+  ) => {
+    const admin = createAdminClient();
+
+    const { data: allTrainingRows, error: allTrainingsError } = await admin
+      .from("training_sessions")
+      .select("id")
+      .eq("age_group_id", ageGroupId)
+      .limit(1000);
+
+    if (allTrainingsError) {
+      return { training: null, ageGroup: null };
+    }
+
+    const resolvedTrainingId = resolvePublicTrainingId(
+      accessIdentifier,
+      publicTrainingRef,
+      (allTrainingRows || []).map((row) => row.id),
+    );
+
+    if (!resolvedTrainingId) {
+      return { training: null, ageGroup: null };
+    }
+
+    const [{ data: training }, { data: ageGroup }] = await Promise.all([
+      admin
+        .from("training_sessions")
+        .select(
+          "id, title, session_date, start_time, end_time, location, location_address, formatted_address, latitude, longitude, osm_place_id, location_source, notes, status, image_url",
+        )
+        .eq("id", resolvedTrainingId)
+        .eq("age_group_id", ageGroupId)
+        .maybeSingle(),
+      admin
+        .from("age_groups")
+        .select("club_name, name")
+        .eq("id", ageGroupId)
+        .maybeSingle(),
+    ]);
+
+    return {
+      training,
+      ageGroup,
+    };
+  },
+  ["public-training-detail-v1"],
+  { revalidate: 30 },
+);
+
 export default async function PublicTrainingDetailPage({
   params,
 }: PublicTrainingDetailParams) {
@@ -70,23 +127,8 @@ export default async function PublicTrainingDetailPage({
     );
     access = resolved ?? null;
   } catch (error) {
-    if (
-      error instanceof Error &&
-      error.message === "public_share_rate_limited"
-    ) {
-      return (
-        <main className="min-h-screen bg-slate-50 px-4 py-8">
-          <div className="mx-auto max-w-3xl rounded-3xl border border-amber-200 bg-white p-8 text-center">
-            <h1 className="text-2xl font-bold text-slate-900">
-              Demasiados pedidos
-            </h1>
-            <p className="mt-3 text-sm text-slate-600">
-              Este link público está temporariamente limitado. Tenta novamente
-              dentro de instantes.
-            </p>
-          </div>
-        </main>
-      );
+    if (isPublicShareRateLimitedError(error)) {
+      return <PublicRateLimitedState />;
     }
 
     notFound();
@@ -95,57 +137,11 @@ export default async function PublicTrainingDetailPage({
   if (!access) {
     notFound();
   }
-
-  if (access.paused) {
-    return (
-      <main className="min-h-screen bg-slate-50 px-4 py-8">
-        <div className="mx-auto max-w-3xl rounded-3xl border border-slate-200 bg-white p-8 text-center">
-          <h1 className="text-2xl font-bold text-slate-900">
-            Acesso temporariamente pausado
-          </h1>
-          <p className="mt-3 text-sm text-slate-600">
-            Acesso temporariamente pausado pelo coordenador.
-          </p>
-        </div>
-      </main>
-    );
-  }
-
-  const { data: allTrainingRows, error: allTrainingsError } = await admin
-    .from("training_sessions")
-    .select("id")
-    .eq("age_group_id", access.ageGroupId)
-    .limit(1000);
-
-  if (allTrainingsError) {
-    notFound();
-  }
-
-  const resolvedTrainingId = resolvePublicTrainingId(
+  const { training, ageGroup } = await getPublicTrainingDetailPayload(
+    access.ageGroupId,
     access.identifier,
     publicTrainingRef,
-    (allTrainingRows || []).map((row) => row.id),
   );
-
-  if (!resolvedTrainingId) {
-    notFound();
-  }
-
-  const [{ data: training }, { data: ageGroup }] = await Promise.all([
-    admin
-      .from("training_sessions")
-      .select(
-        "id, title, session_date, start_time, end_time, location, location_address, formatted_address, latitude, longitude, osm_place_id, location_source, notes, status, image_url",
-      )
-      .eq("id", resolvedTrainingId)
-      .eq("age_group_id", access.ageGroupId)
-      .maybeSingle(),
-    admin
-      .from("age_groups")
-      .select("club_name, name")
-      .eq("id", access.ageGroupId)
-      .maybeSingle(),
-  ]);
 
   if (!training) {
     notFound();
