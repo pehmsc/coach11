@@ -19,6 +19,7 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { EMPTY_LOCATION_FIELDS, resolveLocationLabel } from "@/lib/location";
 import { LocationFields } from "@/components/maps/LocationFields";
 import { LocationMapPreview } from "@/components/maps/LocationMapPreview";
 import { OpenMapsButton } from "@/components/maps/OpenMapsButton";
@@ -159,6 +160,13 @@ export default function GameDetailPage() {
   const [editOpponentShortName, setEditOpponentShortName] = useState("");
   const [editLocation, setEditLocation] = useState("");
   const [editLocationAddress, setEditLocationAddress] = useState("");
+  const [editFormattedAddress, setEditFormattedAddress] = useState("");
+  const [editLatitude, setEditLatitude] = useState<number | null>(null);
+  const [editLongitude, setEditLongitude] = useState<number | null>(null);
+  const [editOsmPlaceId, setEditOsmPlaceId] = useState("");
+  const [editLocationSource, setEditLocationSource] = useState<
+    "osm" | "manual" | null
+  >(null);
   const [savingGameEdit, setSavingGameEdit] = useState(false);
   const [correctionReason, setCorrectionReason] = useState("");
 
@@ -613,6 +621,11 @@ export default function GameDetailPage() {
         opponent_short_name: normalizedOpponentShortName || null,
         location: editLocation.trim() || null,
         location_address: editLocationAddress.trim() || null,
+        formatted_address: editFormattedAddress.trim() || null,
+        latitude: editLatitude,
+        longitude: editLongitude,
+        osm_place_id: editOsmPlaceId.trim() || null,
+        location_source: editLocationSource,
       }),
     });
     const payload = await res.json().catch(() => ({}));
@@ -639,6 +652,11 @@ export default function GameDetailPage() {
     );
     setEditLocation(game.location ?? "");
     setEditLocationAddress(game.location_address ?? "");
+    setEditFormattedAddress(game.formatted_address ?? "");
+    setEditLatitude(game.latitude ?? null);
+    setEditLongitude(game.longitude ?? null);
+    setEditOsmPlaceId(game.osm_place_id ?? "");
+    setEditLocationSource(game.location_source ?? null);
     setEditingGame(true);
   }
 
@@ -799,6 +817,11 @@ export default function GameDetailPage() {
       correctionMode &&
       canEditCompleted &&
       correctionReason.trim().length > 0);
+  const gameLocationLabel = resolveLocationLabel(
+    game.location,
+    game.formatted_address,
+    game.location_address,
+  );
 
   return (
     <div className="p-4 md:p-8 max-w-2xl mx-auto">
@@ -865,30 +888,40 @@ export default function GameDetailPage() {
           <span className="flex items-center gap-1">
             <Clock size={13} /> <span className="capitalize">{gameDate}</span>
           </span>
-          {game.location && (
+          {gameLocationLabel && (
             <span className="flex items-center gap-1">
-              <MapPin size={13} /> {game.location}
+              <MapPin size={13} /> {gameLocationLabel}
             </span>
           )}
         </div>
-        {game.location_address && (
+        {game.location_address && game.location_address !== gameLocationLabel && (
           <p className="mt-2 text-sm text-blue-100/90">{game.location_address}</p>
         )}
         <div className="mt-4">
           <OpenMapsButton
             location={game.location}
             locationAddress={game.location_address}
+            formattedAddress={game.formatted_address}
+            latitude={game.latitude}
+            longitude={game.longitude}
             accent="blue"
           />
         </div>
       </div>
 
-      {(game.location || game.location_address) && (
+      {(game.location ||
+        game.location_address ||
+        game.formatted_address ||
+        (game.latitude != null && game.longitude != null)) && (
         <LocationMapPreview
           location={game.location}
           locationAddress={game.location_address}
+          formattedAddress={game.formatted_address}
+          latitude={game.latitude}
+          longitude={game.longitude}
           accent="blue"
           label="Localização do jogo"
+          resolveFallback
           className="mb-5"
         />
       )}
@@ -992,10 +1025,25 @@ export default function GameDetailPage() {
                 />
               </div>
               <LocationFields
-                location={editLocation}
-                locationAddress={editLocationAddress}
-                onLocationChange={setEditLocation}
-                onLocationAddressChange={setEditLocationAddress}
+                value={{
+                  ...EMPTY_LOCATION_FIELDS,
+                  location: editLocation,
+                  location_address: editLocationAddress,
+                  formatted_address: editFormattedAddress,
+                  latitude: editLatitude,
+                  longitude: editLongitude,
+                  osm_place_id: editOsmPlaceId,
+                  location_source: editLocationSource,
+                }}
+                onChange={(nextValue) => {
+                  setEditLocation(nextValue.location);
+                  setEditLocationAddress(nextValue.location_address);
+                  setEditFormattedAddress(nextValue.formatted_address);
+                  setEditLatitude(nextValue.latitude);
+                  setEditLongitude(nextValue.longitude);
+                  setEditOsmPlaceId(nextValue.osm_place_id);
+                  setEditLocationSource(nextValue.location_source);
+                }}
                 locationLabel="Local"
                 locationPlaceholder="Nome do campo ou local"
                 accent="blue"

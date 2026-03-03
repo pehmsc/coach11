@@ -19,6 +19,7 @@ export type TeamLabel = "A" | "B" | "C";
 export type KitNumber = 1 | 2 | 3;
 export type PlayerType = "field" | "goalkeeper";
 export type PieceType = "shirt" | "shorts" | "socks";
+export type LocationSource = "osm" | "manual";
 
 export interface Profile {
   id: string;
@@ -84,6 +85,11 @@ export interface TrainingSession {
   end_time?: string;
   location?: string;
   location_address?: string;
+  formatted_address?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  osm_place_id?: string;
+  location_source?: LocationSource | null;
   notes?: string;
   image_url?: string;
   status: EventStatus;
@@ -102,6 +108,11 @@ export interface Game {
   opponent_id?: string;
   location?: string;
   location_address?: string;
+  formatted_address?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  osm_place_id?: string;
+  location_source?: LocationSource | null;
   is_home: boolean;
   notes?: string;
   image_url?: string;

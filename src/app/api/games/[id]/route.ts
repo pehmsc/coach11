@@ -4,6 +4,7 @@ import {
 } from "@/lib/football/short-name";
 import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
+import { normalizeLocationSource, normalizeNullableNumber } from "@/lib/location";
 import { NextResponse } from "next/server";
 
 type RouteContext = {
@@ -106,6 +107,24 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     if (typeof body.location === "string" || body.location === null) updates.location = body.location || null;
     if (typeof body.location_address === "string" || body.location_address === null) {
       updates.location_address = body.location_address || null;
+    }
+    if (
+      typeof body.formatted_address === "string" ||
+      body.formatted_address === null
+    ) {
+      updates.formatted_address = body.formatted_address || null;
+    }
+    if (body.latitude !== undefined || body.latitude === null) {
+      updates.latitude = normalizeNullableNumber(body.latitude);
+    }
+    if (body.longitude !== undefined || body.longitude === null) {
+      updates.longitude = normalizeNullableNumber(body.longitude);
+    }
+    if (typeof body.osm_place_id === "string" || body.osm_place_id === null) {
+      updates.osm_place_id = body.osm_place_id || null;
+    }
+    if (body.location_source !== undefined || body.location_source === null) {
+      updates.location_source = normalizeLocationSource(body.location_source);
     }
     if (typeof body.game_datetime === "string") updates.game_datetime = body.game_datetime;
     if (typeof body.is_home === "boolean") updates.is_home = body.is_home;

@@ -36,7 +36,7 @@ const csp = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
-  `img-src 'self' data: blob: https://${supabaseHost} https://lh3.googleusercontent.com`,
+  `img-src 'self' data: blob: https://${supabaseHost} https://lh3.googleusercontent.com https://tile.openstreetmap.org`,
   `connect-src 'self' https://${supabaseHost} wss://${supabaseHost}`,
   "worker-src 'self'",
   "manifest-src 'self'",
@@ -49,18 +49,18 @@ const csp = [
 const reportOnlySupabaseOrigin = normalizeOrigin(
   process.env.CSP_REPORT_ONLY_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL,
 );
-const reportOnlyGoogleOriginsRaw = parseOriginList(process.env.CSP_REPORT_ONLY_GOOGLE_ORIGINS);
-const reportOnlyGoogleOrigins =
-  reportOnlyGoogleOriginsRaw.length > 0
-    ? reportOnlyGoogleOriginsRaw
-    : ["https://accounts.google.com", "https://www.googleapis.com", "https://lh3.googleusercontent.com"];
+const reportOnlyImgOrigins = [
+  "https://lh3.googleusercontent.com",
+  "https://tile.openstreetmap.org",
+  ...parseOriginList(process.env.CSP_REPORT_ONLY_IMG_ORIGINS),
+];
 
 const reportOnlyImgSources = [
   "'self'",
   "data:",
   "blob:",
   ...new Set(
-    [reportOnlySupabaseOrigin, ...reportOnlyGoogleOrigins].filter(
+    [reportOnlySupabaseOrigin, ...reportOnlyImgOrigins].filter(
       (value): value is string => !!value,
     ),
   ),
@@ -72,7 +72,6 @@ const reportOnlyConnectSources = [
     [
       reportOnlySupabaseOrigin,
       reportOnlySupabaseOrigin ? toSocketOrigin(reportOnlySupabaseOrigin) : null,
-      ...reportOnlyGoogleOrigins,
       ...parseOriginList(process.env.CSP_REPORT_ONLY_CONNECT_ORIGINS),
     ].filter((value): value is string => !!value),
   ),

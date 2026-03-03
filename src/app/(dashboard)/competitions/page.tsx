@@ -24,6 +24,7 @@ import {
   GameFormFields,
   type SharedGameFormValues,
 } from "@/components/games/game-form-fields";
+import { EMPTY_LOCATION_FIELDS, resolveLocationLabel } from "@/lib/location";
 import {
   Card,
   CardContent,
@@ -85,8 +86,7 @@ const EMPTY_GAME_FORM: GameForm = {
   date: "",
   start_time: "15:00",
   is_home: true,
-  location: "",
-  location_address: "",
+  ...EMPTY_LOCATION_FIELDS,
   competition_id: "",
   round_number: "",
 };
@@ -320,7 +320,7 @@ export default function CompetitionsPage() {
 
   function handleGameFieldChange(
     field: keyof SharedGameFormValues,
-    value: string | boolean,
+    value: SharedGameFormValues[keyof SharedGameFormValues],
   ) {
     setGameForm((prev) => ({
       ...prev,
@@ -365,6 +365,11 @@ export default function CompetitionsPage() {
           is_home: gameForm.is_home,
           location: gameForm.location || null,
           location_address: gameForm.location_address || null,
+          formatted_address: gameForm.formatted_address || null,
+          latitude: gameForm.latitude,
+          longitude: gameForm.longitude,
+          osm_place_id: gameForm.osm_place_id || null,
+          location_source: gameForm.location_source,
         },
       }),
     });
@@ -591,6 +596,11 @@ export default function CompetitionsPage() {
 
                       {visibleGames.map((game) => {
                         const isClosed = isClosedGameStatus(game.status);
+                        const gameLocationLabel = resolveLocationLabel(
+                          game.location,
+                          game.formatted_address,
+                          game.location_address,
+                        );
                         return (
                           <button
                             key={game.id}
@@ -642,7 +652,9 @@ export default function CompetitionsPage() {
                                   isClosed ? "d MMM" : "d MMM · HH:mm",
                                   { locale: pt },
                                 )}
-                                {!isClosed && game.location ? ` · ${game.location}` : ""}
+                                {!isClosed && gameLocationLabel
+                                  ? ` · ${gameLocationLabel}`
+                                  : ""}
                               </p>
                             </div>
                             {gameResultLabel(game) && (

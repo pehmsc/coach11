@@ -13,6 +13,7 @@ import {
 import { RichTextContent } from "@/components/content/RichTextContent";
 import { LocationMapPreview } from "@/components/maps/LocationMapPreview";
 import { OpenMapsButton } from "@/components/maps/OpenMapsButton";
+import { resolveFormattedAddress, resolveLocationLabel } from "@/lib/location";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   resolvePublicGameId,
@@ -114,7 +115,7 @@ export default async function PublicGameDetailPage({
     admin
       .from("games")
       .select(
-        "id, game_datetime, opponent_name, opponent_short_name, location, location_address, notes, is_home, status, score_home, score_away",
+        "id, game_datetime, opponent_name, opponent_short_name, location, location_address, formatted_address, latitude, longitude, osm_place_id, location_source, notes, is_home, status, score_home, score_away",
       )
       .eq("id", resolvedGameId)
       .eq("age_group_id", share.age_group_id)
@@ -129,6 +130,16 @@ export default async function PublicGameDetailPage({
   if (!game) {
     notFound();
   }
+
+  const gameLocationLabel = resolveLocationLabel(
+    game.location,
+    game.formatted_address,
+    game.location_address,
+  );
+  const gameAddress = resolveFormattedAddress(
+    game.formatted_address,
+    game.location_address,
+  );
 
   const { data: convocation } = await admin
     .from("convocations")
@@ -189,10 +200,10 @@ export default async function PublicGameDetailPage({
               <Clock3 size={14} />
               {formatGameDate(game.game_datetime)}
             </span>
-            {game.location && (
+            {gameLocationLabel && (
               <span className="inline-flex items-center gap-1">
                 <MapPin size={14} />
-                {game.location}
+                {gameLocationLabel}
               </span>
             )}
             <span className="rounded-full bg-white/10 px-2.5 py-1 text-xs font-medium text-white">
@@ -203,17 +214,27 @@ export default async function PublicGameDetailPage({
             <OpenMapsButton
               location={game.location}
               locationAddress={game.location_address}
+              formattedAddress={game.formatted_address}
+              latitude={game.latitude}
+              longitude={game.longitude}
               accent="slate"
             />
           </div>
         </section>
 
-        {(game.location || game.location_address) && (
+        {(game.location ||
+          game.location_address ||
+          game.formatted_address ||
+          (game.latitude != null && game.longitude != null)) && (
           <LocationMapPreview
             location={game.location}
             locationAddress={game.location_address}
+            formattedAddress={game.formatted_address}
+            latitude={game.latitude}
+            longitude={game.longitude}
             accent="slate"
             label="Mapa do jogo"
+            resolveFallback
           />
         )}
 
@@ -226,7 +247,7 @@ export default async function PublicGameDetailPage({
               <p>Adversário: {game.opponent_name || "Adversário"}</p>
               <p>Casa/Fora: {game.is_home ? "Casa" : "Fora"}</p>
               <p>Estado: {gameStatusLabel(game.status)}</p>
-              {game.location_address && <p>Morada: {game.location_address}</p>}
+              {gameAddress && <p>Morada: {gameAddress}</p>}
               {game.status === "completed" && (
                 <p>
                   Resultado: {game.score_home ?? "-"} - {game.score_away ?? "-"}

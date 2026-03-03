@@ -20,6 +20,7 @@ import {
   type GameCompetitionOption,
   type SharedGameFormValues,
 } from "@/components/games/game-form-fields";
+import { EMPTY_LOCATION_FIELDS, resolveLocationLabel } from "@/lib/location";
 import {
   isValidManualShortName,
   normalizeManualShortName,
@@ -40,6 +41,11 @@ interface GameRow {
   score_away?: number;
   location?: string;
   location_address?: string;
+  formatted_address?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  osm_place_id?: string;
+  location_source?: "osm" | "manual" | null;
   title?: string;
   competition_id?: string;
 }
@@ -85,8 +91,7 @@ export default function GamesPage() {
     opponent_short_name: "",
     date: "",
     start_time: "15:00",
-    location: "",
-    location_address: "",
+    ...EMPTY_LOCATION_FIELDS,
     is_home: true,
     competition_id: "",
   });
@@ -150,8 +155,7 @@ export default function GamesPage() {
       opponent_short_name: "",
       date: format(today, "yyyy-MM-dd"),
       start_time: "15:00",
-      location: "",
-      location_address: "",
+      ...EMPTY_LOCATION_FIELDS,
       is_home: true,
       competition_id: "",
     });
@@ -160,7 +164,7 @@ export default function GamesPage() {
 
   function handleGameFormFieldChange(
     field: keyof SharedGameFormValues,
-    value: string | boolean,
+    value: SharedGameFormValues[keyof SharedGameFormValues],
   ) {
     setGameForm((prev) => ({
       ...prev,
@@ -199,6 +203,11 @@ export default function GamesPage() {
             start_time: gameForm.start_time,
             location: gameForm.location.trim() || null,
             location_address: gameForm.location_address.trim() || null,
+            formatted_address: gameForm.formatted_address.trim() || null,
+            latitude: gameForm.latitude,
+            longitude: gameForm.longitude,
+            osm_place_id: gameForm.osm_place_id.trim() || null,
+            location_source: gameForm.location_source,
             is_home: gameForm.is_home,
           },
         }),
@@ -442,9 +451,17 @@ function GameCard({ game, onClick }: { game: GameRow; onClick: () => void }) {
             opponentShortName: game.opponent_short_name,
           })}
         </p>
-        {(game.location || game.location_address) && (
+        {resolveLocationLabel(
+          game.location,
+          game.formatted_address,
+          game.location_address,
+        ) && (
           <p className="text-xs text-slate-400 truncate">
-            {game.location || game.location_address}
+            {resolveLocationLabel(
+              game.location,
+              game.formatted_address,
+              game.location_address,
+            )}
           </p>
         )}
       </div>

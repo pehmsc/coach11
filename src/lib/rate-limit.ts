@@ -15,6 +15,8 @@ type RateLimitEntry = { count: number; resetAt: number };
 
 const playerInviteStore = new Map<string, RateLimitEntry>();
 const redeemStore = new Map<string, RateLimitEntry>();
+const locationAutocompleteStore = new Map<string, RateLimitEntry>();
+const locationResolveStore = new Map<string, RateLimitEntry>();
 
 function checkInMemory(
   store: Map<string, RateLimitEntry>,
@@ -87,4 +89,20 @@ export function checkRedeemLimit(
   windowMs = 60 * 60 * 1000,
 ): boolean {
   return checkInMemory(redeemStore, userId, limit, windowMs);
+}
+
+export function checkLocationAutocompleteLimit(
+  key: string,
+  limit = 12,
+  windowMs = 60 * 1000,
+): boolean {
+  return checkInMemory(locationAutocompleteStore, key, limit, windowMs);
+}
+
+export function checkLocationResolveLimit(
+  key: string,
+  limit = 24,
+  windowMs = 5 * 60 * 1000,
+): boolean {
+  return checkInMemory(locationResolveStore, key, limit, windowMs);
 }

@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import "leaflet/dist/leaflet.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -145,4 +146,34 @@
       font-size: 16px !important;
     }
   }
+}
+
+.coach11-map-pin-wrapper {
+  background: transparent;
+  border: 0;
+}
+
+.coach11-map-pin {
+  position: relative;
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border-radius: 9999px;
+  background: var(--coach11-pin, #059669);
+  border: 3px solid #fff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.2);
+}
+
+.coach11-map-pin::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  width: 8px;
+  height: 8px;
+  background: var(--coach11-pin, #059669);
+  border-right: 3px solid #fff;
+  border-bottom: 3px solid #fff;
+  transform: translateX(-50%) rotate(45deg);
+  border-bottom-right-radius: 3px;
 }

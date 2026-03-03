@@ -31,6 +31,7 @@ import {
   type SharedGameFormValues,
 } from "@/components/games/game-form-fields";
 import { LocationFields } from "@/components/maps/LocationFields";
+import { EMPTY_LOCATION_FIELDS, resolveLocationLabel } from "@/lib/location";
 import {
   isValidManualShortName,
   normalizeManualShortName,
@@ -53,6 +54,11 @@ interface CalEvent {
   competition_id?: string;
   location?: string;
   location_address?: string;
+  formatted_address?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  osm_place_id?: string;
+  location_source?: "osm" | "manual" | null;
   is_home?: boolean;
   image_url?: string;
 }
@@ -75,8 +81,7 @@ const EMPTY_FORM: EventForm = {
   opponent_name: "",
   opponent_short_name: "",
   competition_id: "",
-  location: "",
-  location_address: "",
+  ...EMPTY_LOCATION_FIELDS,
   is_home: true,
   notes: "",
   image_url: "",
@@ -172,6 +177,16 @@ export default function CalendarPage() {
         location: typeof s.location === "string" ? s.location : undefined,
         location_address:
           typeof s.location_address === "string" ? s.location_address : undefined,
+        formatted_address:
+          typeof s.formatted_address === "string" ? s.formatted_address : undefined,
+        latitude: typeof s.latitude === "number" ? s.latitude : null,
+        longitude: typeof s.longitude === "number" ? s.longitude : null,
+        osm_place_id:
+          typeof s.osm_place_id === "string" ? s.osm_place_id : undefined,
+        location_source:
+          s.location_source === "osm" || s.location_source === "manual"
+            ? s.location_source
+            : undefined,
         image_url: typeof s.image_url === "string" ? s.image_url : undefined,
       }));
 
@@ -210,6 +225,16 @@ export default function CalendarPage() {
         location: typeof g.location === "string" ? g.location : undefined,
         location_address:
           typeof g.location_address === "string" ? g.location_address : undefined,
+        formatted_address:
+          typeof g.formatted_address === "string" ? g.formatted_address : undefined,
+        latitude: typeof g.latitude === "number" ? g.latitude : null,
+        longitude: typeof g.longitude === "number" ? g.longitude : null,
+        osm_place_id:
+          typeof g.osm_place_id === "string" ? g.osm_place_id : undefined,
+        location_source:
+          g.location_source === "osm" || g.location_source === "manual"
+            ? g.location_source
+            : undefined,
         is_home: typeof g.is_home === "boolean" ? g.is_home : undefined,
         status: typeof g.status === "string" ? g.status : undefined,
         image_url: typeof g.image_url === "string" ? g.image_url : undefined,
@@ -311,6 +336,11 @@ export default function CalendarPage() {
       competition_id: event.competition_id || "",
       location: event.location || "",
       location_address: event.location_address || "",
+      formatted_address: event.formatted_address || "",
+      latitude: event.latitude ?? null,
+      longitude: event.longitude ?? null,
+      osm_place_id: event.osm_place_id || "",
+      location_source: event.location_source ?? null,
       is_home: event.is_home ?? true,
       notes: event.notes || "",
       image_url: event.image_url || "",
@@ -327,7 +357,7 @@ export default function CalendarPage() {
 
   function handleGameFieldChange(
     field: keyof SharedGameFormValues,
-    value: string | boolean,
+    value: SharedGameFormValues[keyof SharedGameFormValues],
   ) {
     setForm((prev) => ({
       ...prev,
@@ -399,6 +429,11 @@ export default function CalendarPage() {
           competition_id: form.competition_id || null,
           location: form.location,
           location_address: form.location_address,
+          formatted_address: form.formatted_address,
+          latitude: form.latitude,
+          longitude: form.longitude,
+          osm_place_id: form.osm_place_id,
+          location_source: form.location_source,
           is_home: form.is_home,
           notes: form.notes,
           image_url: form.image_url,
@@ -649,10 +684,18 @@ export default function CalendarPage() {
                                 {event.start_time.substring(0, 5)}
                               </span>
                             )}
-                            {(event.location_address || event.location) && (
+                            {resolveLocationLabel(
+                              event.location,
+                              event.formatted_address,
+                              event.location_address,
+                            ) && (
                               <span className="text-xs text-slate-400 flex items-center gap-0.5 truncate">
                                 <MapPin size={10} />
-                                {event.location_address || event.location}
+                                {resolveLocationLabel(
+                                  event.location,
+                                  event.formatted_address,
+                                  event.location_address,
+                                )}
                               </span>
                             )}
                           </div>
@@ -815,15 +858,11 @@ export default function CalendarPage() {
               {/* Local */}
               {isTrainingModal && (
                 <LocationFields
-                  location={form.location}
-                  locationAddress={form.location_address}
-                  onLocationChange={(value) =>
-                    setForm((current) => ({ ...current, location: value }))
-                  }
-                  onLocationAddressChange={(value) =>
+                  value={form}
+                  onChange={(value) =>
                     setForm((current) => ({
                       ...current,
-                      location_address: value,
+                      ...value,
                     }))
                   }
                   accent="emerald"

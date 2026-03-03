@@ -10,6 +10,11 @@ import { formatFixtureOpponentLabel } from "@/lib/games/display";
 import { NextResponse } from "next/server";
 import { SHORT_PRIVATE_CACHE_CONTROL } from "@/lib/http/cache";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
+import {
+  normalizeLocationSource,
+  normalizeNullableNumber,
+  resolveFormattedAddress,
+} from "@/lib/location";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 type CalendarEventType = "training" | "game";
@@ -24,6 +29,11 @@ type CalendarPayload = {
   competition_id?: string | null;
   location?: string | null;
   location_address?: string | null;
+  formatted_address?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  osm_place_id?: string | null;
+  location_source?: "osm" | "manual" | null;
   is_home?: boolean;
   notes?: string | null;
   image_url?: string | null;
@@ -59,6 +69,10 @@ function normalizeOptionalId(value: unknown) {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+function normalizeOptionalLocationSource(value: unknown) {
+  return normalizeLocationSource(value);
+}
+
 function normalizeEventType(value: unknown): CalendarEventType | null {
   if (value === "training" || value === "game") return value;
   return null;
@@ -78,9 +92,39 @@ function normalizePayload(value: unknown): CalendarPayload {
     competition_id: normalizeOptionalId(row.competition_id),
     location: normalizeOptionalText(row.location),
     location_address: normalizeOptionalText(row.location_address),
+    formatted_address: normalizeOptionalText(row.formatted_address),
+    latitude: normalizeNullableNumber(row.latitude),
+    longitude: normalizeNullableNumber(row.longitude),
+    osm_place_id: normalizeOptionalId(row.osm_place_id),
+    location_source: normalizeOptionalLocationSource(row.location_source),
     is_home: typeof row.is_home === "boolean" ? row.is_home : undefined,
     notes: normalizeOptionalText(row.notes),
     image_url: normalizeOptionalText(row.image_url),
+  };
+}
+
+function normalizeLocationPayload(payload: CalendarPayload): CalendarPayload {
+  const hasCoordinates =
+    typeof payload.latitude === "number" && Number.isFinite(payload.latitude) &&
+    typeof payload.longitude === "number" && Number.isFinite(payload.longitude);
+  const formattedAddress = resolveFormattedAddress(
+    payload.formatted_address,
+    payload.location_address,
+  );
+
+  return {
+    ...payload,
+    formatted_address: formattedAddress,
+    latitude: hasCoordinates ? payload.latitude ?? null : null,
+    longitude: hasCoordinates ? payload.longitude ?? null : null,
+    osm_place_id: hasCoordinates ? payload.osm_place_id ?? null : null,
+    location_source:
+      payload.location_source ??
+      (payload.location || payload.location_address || formattedAddress
+        ? hasCoordinates
+          ? "osm"
+          : "manual"
+        : null),
   };
 }
 
@@ -328,7 +372,7 @@ export async function POST(request: Request) {
     const { userId, db, context } = routeContext;
     const body = await request.json().catch(() => null);
     const eventType = normalizeEventType(body?.type);
-    const payload = normalizePayload(body?.payload);
+    const payload = normalizeLocationPayload(normalizePayload(body?.payload));
 
     if (!eventType || !payload.date) {
       return NextResponse.json({ error: "Dados inválidos para criar evento." }, { status: 400 });
@@ -376,6 +420,11 @@ export async function POST(request: Request) {
           end_time: payload.end_time,
           location: payload.location,
           location_address: payload.location_address,
+          formatted_address: payload.formatted_address,
+          latitude: payload.latitude,
+          longitude: payload.longitude,
+          osm_place_id: payload.osm_place_id,
+          location_source: payload.location_source,
           notes: payload.notes,
           image_url: payload.image_url,
           status: "scheduled",
@@ -425,6 +474,11 @@ export async function POST(request: Request) {
         opponent_short_name: payload.opponent_short_name,
         location: payload.location,
         location_address: payload.location_address,
+        formatted_address: payload.formatted_address,
+        latitude: payload.latitude,
+        longitude: payload.longitude,
+        osm_place_id: payload.osm_place_id,
+        location_source: payload.location_source,
         is_home: payload.is_home ?? true,
         notes: payload.notes,
         image_url: payload.image_url,
@@ -475,7 +529,7 @@ export async function PATCH(request: Request) {
     const body = await request.json().catch(() => null);
     const id = typeof body?.id === "string" ? body.id : null;
     const eventType = normalizeEventType(body?.type);
-    const payload = normalizePayload(body?.payload);
+    const payload = normalizeLocationPayload(normalizePayload(body?.payload));
 
     if (!id || !eventType || !payload.date) {
       return NextResponse.json(
@@ -546,6 +600,11 @@ export async function PATCH(request: Request) {
           end_time: payload.end_time,
           location: payload.location,
           location_address: payload.location_address,
+          formatted_address: payload.formatted_address,
+          latitude: payload.latitude,
+          longitude: payload.longitude,
+          osm_place_id: payload.osm_place_id,
+          location_source: payload.location_source,
           notes: payload.notes,
           image_url: payload.image_url,
         })
@@ -609,6 +668,11 @@ export async function PATCH(request: Request) {
         opponent_short_name: payload.opponent_short_name,
         location: payload.location,
         location_address: payload.location_address,
+        formatted_address: payload.formatted_address,
+        latitude: payload.latitude,
+        longitude: payload.longitude,
+        osm_place_id: payload.osm_place_id,
+        location_source: payload.location_source,
         is_home: payload.is_home ?? true,
         notes: payload.notes,
         image_url: payload.image_url,

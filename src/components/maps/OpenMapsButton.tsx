@@ -7,7 +7,6 @@ import {
   buildGoogleMapsUrl,
   buildWazeUrl,
   detectMapsPlatform,
-  resolveMapsQuery,
 } from "@/lib/maps";
 import { cn } from "@/lib/utils";
 
@@ -17,6 +16,9 @@ type Variant = "solid" | "link" | "icon";
 type Props = {
   location?: string | null;
   locationAddress?: string | null;
+  formattedAddress?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   label?: string;
   title?: string;
   accent?: Accent;
@@ -58,6 +60,9 @@ function resolveVariantClasses(variant: Variant, accent: Accent) {
 export function OpenMapsButton({
   location,
   locationAddress,
+  formattedAddress,
+  latitude,
+  longitude,
   label = "Abrir no GPS",
   title,
   accent = "emerald",
@@ -65,10 +70,7 @@ export function OpenMapsButton({
   className,
   children,
 }: Props) {
-  const query = resolveMapsQuery(locationAddress, location);
   const [chooserOpen, setChooserOpen] = useState(false);
-
-  if (!query) return null;
 
   const platform =
     typeof navigator === "undefined"
@@ -83,17 +85,36 @@ export function OpenMapsButton({
           navigator.maxTouchPoints || 0,
         );
 
-  const googleUrl = buildGoogleMapsUrl(query);
-  const appleUrl = buildAppleMapsUrl(query);
-  const wazeUrl = buildWazeUrl(query);
+  const googleUrl = buildGoogleMapsUrl({
+    location,
+    locationAddress,
+    formattedAddress,
+    latitude,
+    longitude,
+  });
+  const appleUrl = buildAppleMapsUrl({
+    location,
+    locationAddress,
+    formattedAddress,
+    latitude,
+    longitude,
+  });
+  const wazeUrl = buildWazeUrl({
+    location,
+    locationAddress,
+    formattedAddress,
+    latitude,
+    longitude,
+  });
+
+  if (!googleUrl) return null;
 
   function handleOpen() {
-    if (!googleUrl) return;
     if (platform.isMobile) {
       setChooserOpen(true);
       return;
     }
-    window.open(googleUrl, "_blank", "noopener,noreferrer");
+    window.open(googleUrl ?? undefined, "_blank", "noopener,noreferrer");
   }
 
   const options = [

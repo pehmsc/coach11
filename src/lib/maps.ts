@@ -1,42 +1,103 @@
+import { hasCoordinates, resolveFormattedAddress, resolveLocationLabel } from "@/lib/location";
+
+export type MapsTarget =
+  | string
+  | {
+      location?: string | null;
+      locationAddress?: string | null;
+      formattedAddress?: string | null;
+      latitude?: number | null;
+      longitude?: number | null;
+    }
+  | null
+  | undefined;
+
+function normalizeTarget(target: MapsTarget) {
+  if (typeof target === "string") {
+    const query = target.trim();
+    return {
+      query: query || null,
+      latitude: null,
+      longitude: null,
+    };
+  }
+
+  return {
+    query: resolveMapsQuery(
+      target?.formattedAddress,
+      target?.locationAddress,
+      target?.location,
+    ),
+    latitude: target?.latitude ?? null,
+    longitude: target?.longitude ?? null,
+  };
+}
+
+function buildCoordinateQuery(latitude: number, longitude: number) {
+  return `${latitude},${longitude}`;
+}
+
 export function resolveMapsQuery(
+  formattedAddress: string | null | undefined,
   locationAddress: string | null | undefined,
   location: string | null | undefined,
 ) {
-  const normalizedAddress =
-    typeof locationAddress === "string" ? locationAddress.trim() : "";
-  if (normalizedAddress) return normalizedAddress;
-
-  const normalizedLocation =
-    typeof location === "string" ? location.trim() : "";
-  return normalizedLocation || null;
+  return resolveLocationLabel(location, formattedAddress, locationAddress);
 }
 
-export function buildGoogleMapsUrl(query: string | null | undefined) {
-  const normalizedQuery = typeof query === "string" ? query.trim() : "";
-  if (!normalizedQuery) return null;
-
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(normalizedQuery)}`;
+export function resolveMapsAddress(
+  formattedAddress: string | null | undefined,
+  locationAddress: string | null | undefined,
+) {
+  return resolveFormattedAddress(formattedAddress, locationAddress);
 }
 
-export function buildGoogleMapsEmbedUrl(query: string | null | undefined) {
-  const normalizedQuery = typeof query === "string" ? query.trim() : "";
-  if (!normalizedQuery) return null;
+export function buildGoogleMapsUrl(target: MapsTarget) {
+  const normalizedTarget = normalizeTarget(target);
 
-  return `https://www.google.com/maps?q=${encodeURIComponent(normalizedQuery)}&z=15&output=embed`;
+  if (
+    hasCoordinates({
+      latitude: normalizedTarget.latitude,
+      longitude: normalizedTarget.longitude,
+    })
+  ) {
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(buildCoordinateQuery(normalizedTarget.latitude as number, normalizedTarget.longitude as number))}`;
+  }
+
+  if (!normalizedTarget.query) return null;
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(normalizedTarget.query)}`;
 }
 
-export function buildAppleMapsUrl(query: string | null | undefined) {
-  const normalizedQuery = typeof query === "string" ? query.trim() : "";
-  if (!normalizedQuery) return null;
+export function buildAppleMapsUrl(target: MapsTarget) {
+  const normalizedTarget = normalizeTarget(target);
 
-  return `http://maps.apple.com/?q=${encodeURIComponent(normalizedQuery)}`;
+  if (
+    hasCoordinates({
+      latitude: normalizedTarget.latitude,
+      longitude: normalizedTarget.longitude,
+    })
+  ) {
+    return `http://maps.apple.com/?ll=${encodeURIComponent(buildCoordinateQuery(normalizedTarget.latitude as number, normalizedTarget.longitude as number))}`;
+  }
+
+  if (!normalizedTarget.query) return null;
+  return `http://maps.apple.com/?q=${encodeURIComponent(normalizedTarget.query)}`;
 }
 
-export function buildWazeUrl(query: string | null | undefined) {
-  const normalizedQuery = typeof query === "string" ? query.trim() : "";
-  if (!normalizedQuery) return null;
+export function buildWazeUrl(target: MapsTarget) {
+  const normalizedTarget = normalizeTarget(target);
 
-  return `https://waze.com/ul?q=${encodeURIComponent(normalizedQuery)}&navigate=yes`;
+  if (
+    hasCoordinates({
+      latitude: normalizedTarget.latitude,
+      longitude: normalizedTarget.longitude,
+    })
+  ) {
+    return `https://waze.com/ul?ll=${encodeURIComponent(buildCoordinateQuery(normalizedTarget.latitude as number, normalizedTarget.longitude as number))}&navigate=yes`;
+  }
+
+  if (!normalizedTarget.query) return null;
+  return `https://waze.com/ul?q=${encodeURIComponent(normalizedTarget.query)}&navigate=yes`;
 }
 
 export function detectMapsPlatform(

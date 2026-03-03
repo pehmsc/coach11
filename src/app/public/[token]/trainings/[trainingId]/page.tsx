@@ -3,15 +3,11 @@ import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import { pt } from "date-fns/locale";
-import {
-  ArrowLeft,
-  Clock3,
-  FileText,
-  MapPin,
-} from "lucide-react";
+import { ArrowLeft, Clock3, MapPin } from "lucide-react";
 import { RichTextContent } from "@/components/content/RichTextContent";
 import { LocationMapPreview } from "@/components/maps/LocationMapPreview";
 import { OpenMapsButton } from "@/components/maps/OpenMapsButton";
+import { resolveFormattedAddress, resolveLocationLabel } from "@/lib/location";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   resolvePublicShareRequest,
@@ -119,7 +115,7 @@ export default async function PublicTrainingDetailPage({
     admin
       .from("training_sessions")
       .select(
-        "id, title, session_date, start_time, end_time, location, location_address, notes, status",
+        "id, title, session_date, start_time, end_time, location, location_address, formatted_address, latitude, longitude, osm_place_id, location_source, notes, status",
       )
       .eq("id", resolvedTrainingId)
       .eq("age_group_id", share.age_group_id)
@@ -134,6 +130,16 @@ export default async function PublicTrainingDetailPage({
   if (!training) {
     notFound();
   }
+
+  const trainingLocationLabel = resolveLocationLabel(
+    training.location,
+    training.formatted_address,
+    training.location_address,
+  );
+  const trainingAddress = resolveFormattedAddress(
+    training.formatted_address,
+    training.location_address,
+  );
 
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-8">
@@ -158,10 +164,10 @@ export default async function PublicTrainingDetailPage({
               <Clock3 size={14} />
               {formatTrainingDate(training.session_date, training.start_time)}
             </span>
-            {(training.location || training.location_address) && (
+            {trainingLocationLabel && (
               <span className="inline-flex items-center gap-1">
                 <MapPin size={14} />
-                {training.location || training.location_address}
+                {trainingLocationLabel}
               </span>
             )}
             <span className="rounded-full bg-white/10 px-2.5 py-1 text-xs font-medium text-white">
@@ -172,17 +178,27 @@ export default async function PublicTrainingDetailPage({
             <OpenMapsButton
               location={training.location}
               locationAddress={training.location_address}
+              formattedAddress={training.formatted_address}
+              latitude={training.latitude}
+              longitude={training.longitude}
               accent="slate"
             />
           </div>
         </section>
 
-        {(training.location || training.location_address) && (
+        {(training.location ||
+          training.location_address ||
+          training.formatted_address ||
+          (training.latitude != null && training.longitude != null)) && (
           <LocationMapPreview
             location={training.location}
             locationAddress={training.location_address}
+            formattedAddress={training.formatted_address}
+            latitude={training.latitude}
+            longitude={training.longitude}
             accent="slate"
             label="Mapa do treino"
+            resolveFallback
           />
         )}
 
@@ -192,17 +208,23 @@ export default async function PublicTrainingDetailPage({
               Informações
             </p>
             <div className="mt-3 space-y-2 text-sm text-slate-700">
-              <p>Data: {formatTrainingDate(training.session_date, training.start_time)}</p>
               <p>
-                Horário:
-                {" "}
+                <strong>Data:</strong>{" "}
+                {formatTrainingDate(training.session_date, training.start_time)}
+              </p>
+              <p>
+                <strong>Horário:</strong>{" "}
                 {training.start_time?.slice(0, 5) || "--:--"}
                 {training.end_time ? ` - ${training.end_time.slice(0, 5)}` : ""}
               </p>
-              <p>Estado: {trainingStatusLabel(training.status)}</p>
+              <p>
+                <strong>Estado:</strong> {trainingStatusLabel(training.status)}
+              </p>
               {training.location && <p>Local: {training.location}</p>}
-              {training.location_address && (
-                <p>Morada: {training.location_address}</p>
+              {trainingAddress && (
+                <p>
+                  <strong>Morada:</strong> {trainingAddress}
+                </p>
               )}
             </div>
           </div>
@@ -213,8 +235,10 @@ export default async function PublicTrainingDetailPage({
             </p>
             {training.notes?.trim() ? (
               <div className="mt-3 flex gap-3 text-sm text-slate-700">
-                <FileText size={16} className="mt-0.5 text-slate-400" />
-                <RichTextContent content={training.notes} className="min-w-0 flex-1" />
+                <RichTextContent
+                  content={training.notes}
+                  className="min-w-0 flex-1"
+                />
               </div>
             ) : (
               <p className="mt-3 text-sm text-slate-500">

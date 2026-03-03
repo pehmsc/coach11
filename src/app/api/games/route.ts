@@ -35,7 +35,7 @@ export async function GET() {
     const { data: games, error: gamesError } = await supabase
       .from("games")
       .select(
-        "id, game_datetime, opponent_name, opponent_short_name, is_home, status, score_home, score_away, location, location_address, title, competition_id, team_id, age_group_id",
+        "id, game_datetime, opponent_name, opponent_short_name, is_home, status, score_home, score_away, location, location_address, formatted_address, latitude, longitude, osm_place_id, location_source, title, competition_id, team_id, age_group_id",
       )
       .in("team_id", context.accessibleTeamIds)
       .order("game_datetime", { ascending: false });

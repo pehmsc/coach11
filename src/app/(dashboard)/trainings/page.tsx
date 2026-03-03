@@ -20,6 +20,7 @@ import { NotesEditor } from "@/components/forms/NotesEditor";
 import { LocationFields } from "@/components/maps/LocationFields";
 import { LocationMapPreview } from "@/components/maps/LocationMapPreview";
 import { OpenMapsButton } from "@/components/maps/OpenMapsButton";
+import { EMPTY_LOCATION_FIELDS, resolveLocationLabel } from "@/lib/location";
 import type { Player } from "@/types/database";
 
 interface TrainingRow {
@@ -30,6 +31,11 @@ interface TrainingRow {
   title?: string;
   location?: string;
   location_address?: string;
+  formatted_address?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  osm_place_id?: string;
+  location_source?: "osm" | "manual" | null;
   notes?: string;
   status: string;
   age_group_id?: string;
@@ -80,6 +86,13 @@ export default function TrainingsPage() {
   const [newTrainingEndTime, setNewTrainingEndTime] = useState("20:00");
   const [newTrainingLocation, setNewTrainingLocation] = useState("");
   const [newTrainingLocationAddress, setNewTrainingLocationAddress] = useState("");
+  const [newTrainingFormattedAddress, setNewTrainingFormattedAddress] = useState("");
+  const [newTrainingLatitude, setNewTrainingLatitude] = useState<number | null>(null);
+  const [newTrainingLongitude, setNewTrainingLongitude] = useState<number | null>(null);
+  const [newTrainingOsmPlaceId, setNewTrainingOsmPlaceId] = useState("");
+  const [newTrainingLocationSource, setNewTrainingLocationSource] = useState<
+    "osm" | "manual" | null
+  >(null);
   const [newTrainingNotes, setNewTrainingNotes] = useState("");
   const [canDeleteTrainings, setCanDeleteTrainings] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -231,6 +244,11 @@ export default function TrainingsPage() {
     setNewTrainingEndTime("20:00");
     setNewTrainingLocation("");
     setNewTrainingLocationAddress("");
+    setNewTrainingFormattedAddress("");
+    setNewTrainingLatitude(null);
+    setNewTrainingLongitude(null);
+    setNewTrainingOsmPlaceId("");
+    setNewTrainingLocationSource(null);
     setNewTrainingNotes("");
     setCreateError(null);
   }
@@ -248,6 +266,11 @@ export default function TrainingsPage() {
     setNewTrainingEndTime(source.end_time?.slice(0, 5) || "20:00");
     setNewTrainingLocation(source.location || "");
     setNewTrainingLocationAddress(source.location_address || "");
+    setNewTrainingFormattedAddress(source.formatted_address || "");
+    setNewTrainingLatitude(source.latitude ?? null);
+    setNewTrainingLongitude(source.longitude ?? null);
+    setNewTrainingOsmPlaceId(source.osm_place_id || "");
+    setNewTrainingLocationSource(source.location_source ?? null);
     setNewTrainingNotes(source.notes || "");
     setCreateError(null);
     setDetailError(null);
@@ -278,6 +301,11 @@ export default function TrainingsPage() {
             end_time: newTrainingEndTime || null,
             location: newTrainingLocation.trim() || null,
             location_address: newTrainingLocationAddress.trim() || null,
+            formatted_address: newTrainingFormattedAddress.trim() || null,
+            latitude: newTrainingLatitude,
+            longitude: newTrainingLongitude,
+            osm_place_id: newTrainingOsmPlaceId.trim() || null,
+            location_source: newTrainingLocationSource,
             notes: newTrainingNotes.trim() || null,
           },
         }),
@@ -301,7 +329,11 @@ export default function TrainingsPage() {
 
   const grouped = groupByMonth(sessions);
   const selectedSessionLocationLabel = selectedSession
-    ? selectedSession.session.location || selectedSession.session.location_address
+    ? resolveLocationLabel(
+        selectedSession.session.location,
+        selectedSession.session.formatted_address,
+        selectedSession.session.location_address,
+      )
     : null;
 
   if (loading) {
@@ -354,7 +386,11 @@ export default function TrainingsPage() {
                   const summary = getSummary(session.id);
                   const dt = parseISO(session.session_date);
                   const upcoming = isToday(dt) || isFuture(dt);
-                  const locationLabel = session.location || session.location_address;
+                  const locationLabel = resolveLocationLabel(
+                    session.location,
+                    session.formatted_address,
+                    session.location_address,
+                  );
 
                   return (
                     <button
@@ -496,10 +532,25 @@ export default function TrainingsPage() {
                 />
               </div>
               <LocationFields
-                location={newTrainingLocation}
-                locationAddress={newTrainingLocationAddress}
-                onLocationChange={setNewTrainingLocation}
-                onLocationAddressChange={setNewTrainingLocationAddress}
+                value={{
+                  ...EMPTY_LOCATION_FIELDS,
+                  location: newTrainingLocation,
+                  location_address: newTrainingLocationAddress,
+                  formatted_address: newTrainingFormattedAddress,
+                  latitude: newTrainingLatitude,
+                  longitude: newTrainingLongitude,
+                  osm_place_id: newTrainingOsmPlaceId,
+                  location_source: newTrainingLocationSource,
+                }}
+                onChange={(nextValue) => {
+                  setNewTrainingLocation(nextValue.location);
+                  setNewTrainingLocationAddress(nextValue.location_address);
+                  setNewTrainingFormattedAddress(nextValue.formatted_address);
+                  setNewTrainingLatitude(nextValue.latitude);
+                  setNewTrainingLongitude(nextValue.longitude);
+                  setNewTrainingOsmPlaceId(nextValue.osm_place_id);
+                  setNewTrainingLocationSource(nextValue.location_source);
+                }}
                 accent="emerald"
               />
               <NotesEditor
@@ -583,6 +634,9 @@ export default function TrainingsPage() {
                 <OpenMapsButton
                   location={selectedSession.session.location}
                   locationAddress={selectedSession.session.location_address}
+                  formattedAddress={selectedSession.session.formatted_address}
+                  latitude={selectedSession.session.latitude}
+                  longitude={selectedSession.session.longitude}
                   variant="icon"
                   accent="emerald"
                   title="Abrir no GPS"
@@ -650,11 +704,15 @@ export default function TrainingsPage() {
             ) : (
               <div className="overflow-y-auto flex-1">
                 {(selectedSession.session.location ||
-                  selectedSession.session.location_address) && (
+                  selectedSession.session.location_address ||
+                  selectedSession.session.formatted_address) && (
                   <div className="border-b px-5 py-4">
                     <LocationMapPreview
                       location={selectedSession.session.location}
                       locationAddress={selectedSession.session.location_address}
+                      formattedAddress={selectedSession.session.formatted_address}
+                      latitude={selectedSession.session.latitude}
+                      longitude={selectedSession.session.longitude}
                       accent="emerald"
                       label="Localização"
                     />

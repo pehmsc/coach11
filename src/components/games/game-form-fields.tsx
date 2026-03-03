@@ -3,6 +3,7 @@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LocationFields } from "@/components/maps/LocationFields";
+import { EMPTY_LOCATION_FIELDS } from "@/lib/location";
 import { normalizeManualShortName } from "@/lib/football/short-name";
 
 export type GameCompetitionOption = {
@@ -20,6 +21,11 @@ export type SharedGameFormValues = {
   start_time: string;
   location: string;
   location_address: string;
+  formatted_address: string;
+  latitude: number | null;
+  longitude: number | null;
+  osm_place_id: string;
+  location_source: "osm" | "manual" | null;
   is_home: boolean;
   competition_id: string;
 };
@@ -28,7 +34,10 @@ type GameFormField = keyof SharedGameFormValues;
 
 type Props = {
   values: SharedGameFormValues;
-  onFieldChange: (field: GameFormField, value: string | boolean) => void;
+  onFieldChange: (
+    field: GameFormField,
+    value: SharedGameFormValues[GameFormField],
+  ) => void;
   competitionOptions?: GameCompetitionOption[];
   showCompetitionSelect?: boolean;
   compact?: boolean;
@@ -124,12 +133,25 @@ export function GameFormFields({
       </div>
 
       <LocationFields
-        location={values.location}
-        locationAddress={values.location_address}
-        onLocationChange={(value) => onFieldChange("location", value)}
-        onLocationAddressChange={(value) =>
-          onFieldChange("location_address", value)
-        }
+        value={{
+          ...EMPTY_LOCATION_FIELDS,
+          location: values.location,
+          location_address: values.location_address,
+          formatted_address: values.formatted_address,
+          latitude: values.latitude,
+          longitude: values.longitude,
+          osm_place_id: values.osm_place_id,
+          location_source: values.location_source,
+        }}
+        onChange={(nextValue) => {
+          onFieldChange("location", nextValue.location);
+          onFieldChange("location_address", nextValue.location_address);
+          onFieldChange("formatted_address", nextValue.formatted_address);
+          onFieldChange("latitude", nextValue.latitude);
+          onFieldChange("longitude", nextValue.longitude);
+          onFieldChange("osm_place_id", nextValue.osm_place_id);
+          onFieldChange("location_source", nextValue.location_source);
+        }}
         locationLabel="Local"
         locationPlaceholder="Estádio / Campo"
         accent="blue"

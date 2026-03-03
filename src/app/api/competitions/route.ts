@@ -73,7 +73,7 @@ export async function GET() {
       const gamesRes = await db
         .from("games")
         .select(
-          "id, competition_id, game_datetime, opponent_name, opponent_short_name, is_home, status, score_home, score_away, location, title, created_at",
+          "id, competition_id, game_datetime, opponent_name, opponent_short_name, is_home, status, score_home, score_away, location, location_address, formatted_address, latitude, longitude, osm_place_id, location_source, title, created_at",
         )
         .in("competition_id", competitionIds)
         .order("game_datetime", { ascending: true })

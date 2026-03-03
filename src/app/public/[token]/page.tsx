@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import { pt } from "date-fns/locale";
 import { CalendarDays, Clock3, Dumbbell, MapPin, Swords } from "lucide-react";
+import { resolveLocationLabel } from "@/lib/location";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   buildPublicGameRef,
@@ -23,6 +24,8 @@ type PublicGameRow = {
   opponent_name: string | null;
   opponent_short_name: string | null;
   location: string | null;
+  location_address: string | null;
+  formatted_address: string | null;
   is_home: boolean;
   status: string | null;
   score_home: number | null;
@@ -37,6 +40,7 @@ type PublicTrainingRow = {
   end_time: string | null;
   location: string | null;
   location_address: string | null;
+  formatted_address: string | null;
   notes: string | null;
   status: string | null;
 };
@@ -167,7 +171,7 @@ export default async function PublicCalendarPage({ params }: PublicPageParams) {
     admin
       .from("games")
       .select(
-        "id, game_datetime, opponent_name, opponent_short_name, location, is_home, status, score_home, score_away",
+        "id, game_datetime, opponent_name, opponent_short_name, location, location_address, formatted_address, is_home, status, score_home, score_away",
       )
       .eq("age_group_id", share.age_group_id)
       .gte("game_datetime", new Date().toISOString())
@@ -176,7 +180,7 @@ export default async function PublicCalendarPage({ params }: PublicPageParams) {
     admin
       .from("training_sessions")
       .select(
-        "id, title, session_date, start_time, end_time, location, location_address, notes, status",
+        "id, title, session_date, start_time, end_time, location, location_address, formatted_address, notes, status",
       )
       .eq("age_group_id", share.age_group_id)
       .gte("session_date", todayIsoDate)
@@ -186,7 +190,7 @@ export default async function PublicCalendarPage({ params }: PublicPageParams) {
     admin
       .from("games")
       .select(
-        "id, game_datetime, opponent_name, opponent_short_name, location, is_home, status, score_home, score_away",
+        "id, game_datetime, opponent_name, opponent_short_name, location, location_address, formatted_address, is_home, status, score_home, score_away",
       )
       .eq("age_group_id", share.age_group_id)
       .lt("game_datetime", new Date().toISOString())
@@ -203,7 +207,11 @@ export default async function PublicCalendarPage({ params }: PublicPageParams) {
       kind: "game" as const,
       id: game.id,
       startsAt: game.game_datetime,
-      location: game.location,
+      location: resolveLocationLabel(
+        game.location,
+        game.formatted_address,
+        game.location_address,
+      ),
       status: game.status,
       href: `/public/${token}/games/${buildPublicGameRef(token, game.id)}`,
       title: gameTitle(game),
@@ -218,7 +226,11 @@ export default async function PublicCalendarPage({ params }: PublicPageParams) {
         kind: "training" as const,
         id: training.id,
         startsAt: startsAt || training.session_date,
-        location: training.location || training.location_address,
+        location: resolveLocationLabel(
+          training.location,
+          training.formatted_address,
+          training.location_address,
+        ),
         status: training.status,
         href: `/public/${token}/trainings/${buildPublicTrainingRef(token, training.id)}`,
         title: training.title?.trim() || "Treino",
