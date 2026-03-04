@@ -19,9 +19,10 @@ import type { Player } from "@/types/database";
 interface AttendanceStats {
   player: Player;
   presencas: number;
+  atrasados: number;
   ausencias: number;
   lesionados: number;
-  minutos: number; // presencas * 60
+  minutos: number; // (presencas + atrasados) * 60
 }
 
 interface GameStats {
@@ -48,6 +49,7 @@ type AttendanceSortKey =
   | "player"
   | "minutos"
   | "presencas"
+  | "atrasados"
   | "ausencias"
   | "lesionados";
 type GameSortKey =
@@ -200,16 +202,24 @@ export default function StatisticsPage() {
       const attRows = playersData.attendanceRows ?? [];
       const attMap = new Map<string, AttendanceStats>();
       rawPlayers.forEach((p) => {
-        attMap.set(p.id, { player: p, presencas: 0, ausencias: 0, lesionados: 0, minutos: 0 });
+        attMap.set(p.id, {
+          player: p,
+          presencas: 0,
+          atrasados: 0,
+          ausencias: 0,
+          lesionados: 0,
+          minutos: 0,
+        });
       });
       attRows.forEach((r) => {
         const entry = attMap.get(r.player_id);
         if (!entry) return;
         if (r.status === "present") entry.presencas++;
+        else if (r.status === "late") entry.atrasados++;
         else if (r.status === "absent") entry.ausencias++;
         else if (r.status === "injured") entry.lesionados++;
       });
-      attMap.forEach((entry) => { entry.minutos = entry.presencas * 60; });
+      attMap.forEach((entry) => { entry.minutos = (entry.presencas + entry.atrasados) * 60; });
       setAttendanceStats(Array.from(attMap.values()));
 
       // ── Game stats ──
@@ -426,6 +436,9 @@ export default function StatisticsPage() {
           case "presencas":
             return (dir === "asc" ? a.presencas - b.presencas : b.presencas - a.presencas) ||
               comparePlayersByFirstName(a.player, b.player);
+          case "atrasados":
+            return (dir === "asc" ? a.atrasados - b.atrasados : b.atrasados - a.atrasados) ||
+              comparePlayersByFirstName(a.player, b.player);
           case "ausencias":
             return (dir === "asc" ? a.ausencias - b.ausencias : b.ausencias - a.ausencias) ||
               comparePlayersByFirstName(a.player, b.player);
@@ -568,6 +581,19 @@ export default function StatisticsPage() {
                   <th className="text-center pb-2 font-medium px-2 whitespace-nowrap">
                     <button
                       type="button"
+                      onClick={() => toggleAttendanceSort("atrasados")}
+                      className="inline-flex items-center gap-1"
+                    >
+                      ⏰ Atr.
+                      <SortIcon
+                        active={attendanceSort.key === "atrasados"}
+                        dir={attendanceSort.dir}
+                      />
+                    </button>
+                  </th>
+                  <th className="text-center pb-2 font-medium px-2 whitespace-nowrap">
+                    <button
+                      type="button"
                       onClick={() => toggleAttendanceSort("ausencias")}
                       className="inline-flex items-center gap-1"
                     >
@@ -609,6 +635,9 @@ export default function StatisticsPage() {
                     </td>
                     <td className="py-2 text-center font-bold text-emerald-600 px-2">
                       {s.presencas || "—"}
+                    </td>
+                    <td className="py-2 text-center text-amber-600 px-2">
+                      {s.atrasados || "—"}
                     </td>
                     <td className="py-2 text-center text-red-500 px-2">
                       {s.ausencias || "—"}
