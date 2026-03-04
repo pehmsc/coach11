@@ -1,4 +1,10 @@
-export const SUPER_COORDINATOR_EMAIL = "pedrohmscampos@gmail.com";
+// Email do super-coordenador lido da variável de ambiente (nunca hardcoded).
+// Definir SUPER_COORDINATOR_EMAIL no .env.local e nas env vars de produção.
+const _superCoordinatorEmail = process.env.SUPER_COORDINATOR_EMAIL?.trim().toLowerCase() ?? "";
+if (!_superCoordinatorEmail && process.env.NODE_ENV === "production") {
+  throw new Error("SUPER_COORDINATOR_EMAIL env var é obrigatória em produção.");
+}
+export const SUPER_COORDINATOR_EMAIL = _superCoordinatorEmail;
 
 export type BetaInviteType = "beta_coordinator";
 export type BetaInviteStatus = "sent" | "accepted" | "revoked" | "expired";

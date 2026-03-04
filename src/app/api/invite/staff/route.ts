@@ -20,8 +20,9 @@ function generateCode(length = 8): string {
 }
 
 const StaffInviteSchema = z.object({
-  firstName: z.string().min(1).max(100),
-  lastName: z.string().min(1).max(100),
+  // QC-04: mínimo 2 caracteres para prevenir nomes triviais (ex: "A").
+  firstName: z.string().trim().min(2, "O primeiro nome deve ter pelo menos 2 caracteres.").max(100),
+  lastName: z.string().trim().min(2, "O apelido deve ter pelo menos 2 caracteres.").max(100),
   email: z.string().email().max(254),
   phone: z.string().max(20).nullable().optional(),
   role: z.enum(["coach", "assistant_coach"]),

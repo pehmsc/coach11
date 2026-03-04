@@ -37,8 +37,12 @@ export function respondInternalError(endpointTag: string, error: unknown) {
     error: sanitizeErrorForLog(error),
   });
 
+  // SEC-10: expor o correlationId apenas em desenvolvimento para facilitar debug.
+  // Em produção o ID mantém-se nos logs do servidor mas não é exposto ao cliente.
+  const isDev = process.env.NODE_ENV === "development";
+
   return NextResponse.json(
-    { error: "Erro interno do servidor.", correlationId },
+    { error: "Erro interno do servidor.", ...(isDev && { correlationId }) },
     { status: 500 },
   );
 }

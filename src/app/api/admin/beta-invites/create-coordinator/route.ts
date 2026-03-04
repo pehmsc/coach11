@@ -13,6 +13,10 @@ import { respondInternalError } from "@/lib/http/respond-internal-error";
 
 export const runtime = "nodejs";
 
+// QC-08: constantes nomeadas em vez de números mágicos.
+const MAX_ACTIVE_BETA_COORDINATOR_INVITES = 5;
+const BETA_INVITE_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000; // 30 dias em ms
+
 const CreateCoordinatorInviteSchema = z.object({
   email: z.string().email().max(254),
 });
@@ -73,14 +77,14 @@ export async function POST(request: Request) {
       (existingInvite.status === "sent" || existingInvite.status === "accepted") &&
       !existingInvite.revoked_at;
 
-    if (!canReuseExisting && existingInviteCount >= 5) {
+    if (!canReuseExisting && existingInviteCount >= MAX_ACTIVE_BETA_COORDINATOR_INVITES) {
       return NextResponse.json(
-        { error: "Já existem 5 convites beta_coordinator ativos." },
+        { error: `Já existem ${MAX_ACTIVE_BETA_COORDINATOR_INVITES} convites beta_coordinator ativos.` },
         { status: 409 },
       );
     }
 
-    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    const expiresAt = new Date(Date.now() + BETA_INVITE_EXPIRY_MS).toISOString();
     const { error: upsertError } = await admin.from("beta_invites").upsert({
       email,
       invite_type: "beta_coordinator",

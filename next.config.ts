@@ -34,7 +34,7 @@ function toSocketOrigin(origin: string) {
 
 const csp = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+  "script-src 'self' 'unsafe-inline'",
   "style-src 'self' 'unsafe-inline'",
   `img-src 'self' data: blob: https://${supabaseHost} https://lh3.googleusercontent.com https://tile.openstreetmap.org`,
   `connect-src 'self' https://${supabaseHost} wss://${supabaseHost}`,
@@ -79,7 +79,7 @@ const reportOnlyConnectSources = [
 
 const reportOnlyDirectives = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+  "script-src 'self' 'unsafe-inline'",
   "style-src 'self' 'unsafe-inline'",
   `img-src ${reportOnlyImgSources.join(" ")}`,
   `connect-src ${reportOnlyConnectSources.join(" ")}`,

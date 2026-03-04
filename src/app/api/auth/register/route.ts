@@ -14,11 +14,14 @@ export const runtime = "nodejs";
 const RegisterSchema = z.object({
   fullName: z.string().min(1).max(120),
   email: z.string().email().max(254),
-  password: z.string().min(6).max(200),
+  password: z.string().min(10, "A password deve ter pelo menos 10 caracteres.").max(200),
 });
 
 function mapRegisterError(message: string) {
   const normalized = message.toLowerCase();
+
+  // Nota de segurança (SEC-06): não confirmar explicitamente que o email existe.
+  // Usar mensagem genérica para prevenir enumeração de contas via timing ou conteúdo.
   if (
     normalized.includes("already registered") ||
     normalized.includes("already been registered") ||
@@ -26,7 +29,7 @@ function mapRegisterError(message: string) {
   ) {
     return {
       status: 409,
-      error: "Já existe uma conta com este email. Entra com a password ou recupera o acesso.",
+      error: "Não foi possível criar a conta. Verifica os dados ou tenta iniciar sessão.",
     };
   }
 

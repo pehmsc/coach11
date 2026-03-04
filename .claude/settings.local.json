@@ -14,7 +14,10 @@
       "Bash(npm install:*)",
       "Bash(git -C /Users/pedrocampos/Project_2026/coach11 add package.json package-lock.json)",
       "Bash(git -C:*)",
-      "Bash(grep -l \"public_share\\\\|public_slug\\\\|public_access\" /Users/pedrocampos/Project_2026/coach11/supabase/migrations/*.sql)"
+      "Bash(grep -l \"public_share\\\\|public_slug\\\\|public_access\" /Users/pedrocampos/Project_2026/coach11/supabase/migrations/*.sql)",
+      "Bash(npx vitest run src/__tests__/security-fixes.test.ts)",
+      "Bash(npx vitest run)",
+      "Bash(npx next build)"
     ]
   }
 }

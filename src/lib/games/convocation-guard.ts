@@ -105,11 +105,12 @@ export async function assertConvocationWriteAllowed(
       };
     }
 
-    if (!normalizedReason) {
+    // Mínimo de 3 caracteres após trim para evitar motivos vazios ou triviais.
+    if (normalizedReason.length < 3) {
       return {
         ok: false,
         response: NextResponse.json(
-          { error: "Indica o motivo da correção antes de editar a convocatória." },
+          { error: "Indica o motivo da correção antes de editar a convocatória (mínimo 3 caracteres)." },
           { status: 400 },
         ),
       };

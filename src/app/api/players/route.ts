@@ -8,8 +8,9 @@ const PLAYER_FIELDS =
   "id, age_group_id, first_name, last_name, preferred_position, birth_date, phone, email, jersey_number, status, avatar_url, invite_code, invite_method, invite_sent_at, profile_id";
 
 const PlayerCreateSchema = z.object({
-  first_name: z.string().min(1).max(100),
-  last_name: z.string().min(1).max(100),
+  // QC-04: mínimo 2 caracteres para nomes de jogadores.
+  first_name: z.string().trim().min(2, "O primeiro nome deve ter pelo menos 2 caracteres.").max(100),
+  last_name: z.string().trim().min(2, "O apelido deve ter pelo menos 2 caracteres.").max(100),
   preferred_position: z.string().max(10).nullable().optional(),
   birth_date: z
     .string()

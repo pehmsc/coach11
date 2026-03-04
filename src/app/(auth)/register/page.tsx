@@ -60,8 +60,8 @@ function RegisterForm() {
     setLoading(true);
     setError(null);
     setNotice(null);
-    if (password.length < 6) {
-      setError("A password deve ter pelo menos 6 caracteres.");
+    if (password.length < 10) {
+      setError("A password deve ter pelo menos 10 caracteres.");
       setLoading(false);
       return;
     }

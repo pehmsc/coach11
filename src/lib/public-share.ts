@@ -67,16 +67,14 @@ export function generatePublicShareToken() {
 }
 
 function getPublicShareEncryptionKey() {
-  const secret = (
-    process.env.PUBLIC_SHARE_TOKEN_ENCRYPTION_KEY ??
-    process.env.APP_SECRET ??
-    process.env.SUPABASE_SERVICE_ROLE_KEY ??
-    process.env.SUPABASE_SERVICE_KEY ??
-    process.env.SUPABASE_SERVICE_ROLE
-  )?.trim();
+  // Apenas a variável dedicada é aceite — sem fallback para chaves de serviço.
+  // Gerar com: openssl rand -hex 32
+  // MIGRAÇÃO: se o fallback era SUPABASE_SERVICE_ROLE_KEY, usar o mesmo valor
+  // temporariamente para não invalidar tokens existentes; rotacionar depois.
+  const secret = process.env.PUBLIC_SHARE_TOKEN_ENCRYPTION_KEY?.trim();
 
   if (!secret) {
-    throw new Error("public_share_encryption_secret_missing");
+    throw new Error("public_share_encryption_secret_missing: definir PUBLIC_SHARE_TOKEN_ENCRYPTION_KEY.");
   }
 
   return createHash("sha256").update(secret).digest();

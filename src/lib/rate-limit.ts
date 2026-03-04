@@ -10,6 +10,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 // ─── In-memory stores ────────────────────────────────────────────────────────
+//
+// NOTA ARQUITETURAL: estes stores são por-instância em Vercel serverless.
+// Em deploy distribuído (múltiplas instâncias quentes) o rate limiting
+// é best-effort, não garantido. Para proteção global, migrar para
+// Upstash Redis ou Vercel KV adicionando @upstash/ratelimit.
 
 type RateLimitEntry = { count: number; resetAt: number };
 
@@ -17,6 +22,23 @@ const playerInviteStore = new Map<string, RateLimitEntry>();
 const redeemStore = new Map<string, RateLimitEntry>();
 const locationAutocompleteStore = new Map<string, RateLimitEntry>();
 const locationResolveStore = new Map<string, RateLimitEntry>();
+
+/**
+ * Remove entradas expiradas do store para evitar acumulação de memória
+ * em instâncias serverless de longa duração.
+ * Executado de forma lazy a cada inserção (sem overhead em leituras).
+ */
+function pruneExpiredEntries(store: Map<string, RateLimitEntry>) {
+  const now = Date.now();
+  // Limitar o trabalho por chamada para evitar bloqueios em stores grandes.
+  let pruned = 0;
+  for (const [key, entry] of store) {
+    if (now >= entry.resetAt) {
+      store.delete(key);
+      if (++pruned >= 50) break; // máximo 50 entradas por limpeza lazy
+    }
+  }
+}
 
 function checkInMemory(
   store: Map<string, RateLimitEntry>,
@@ -28,6 +50,8 @@ function checkInMemory(
   const entry = store.get(key);
 
   if (!entry || now >= entry.resetAt) {
+    // Limpeza lazy ao inserir nova entrada
+    pruneExpiredEntries(store);
     store.set(key, { count: 1, resetAt: now + windowMs });
     return false; // not limited
   }

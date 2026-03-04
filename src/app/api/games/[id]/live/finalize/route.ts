@@ -97,13 +97,15 @@ export async function POST(request: Request, { params }: RouteContext) {
       return NextResponse.json({ error: "Formato de estatísticas finais inválido." }, { status: 400 });
     }
 
+    // Limite máximo de 99 golos por jogo — valor realista para qualquer formato.
+    const MAX_SCORE = 99;
     const scoreHome =
       typeof body.score_home === "number" && Number.isFinite(body.score_home)
-        ? Math.max(0, Math.floor(body.score_home))
+        ? Math.min(MAX_SCORE, Math.max(0, Math.floor(body.score_home)))
         : null;
     const scoreAway =
       typeof body.score_away === "number" && Number.isFinite(body.score_away)
-        ? Math.max(0, Math.floor(body.score_away))
+        ? Math.min(MAX_SCORE, Math.max(0, Math.floor(body.score_away)))
         : null;
 
     if (scoreHome === null || scoreAway === null) {
