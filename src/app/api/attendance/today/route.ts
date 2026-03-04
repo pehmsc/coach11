@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 import {
@@ -29,15 +30,6 @@ type AttendanceGetSession = {
   session_date?: string | null;
   start_time?: string | null;
   end_time?: string | null;
-};
-
-type AttendanceSavePayload = {
-  ok?: boolean;
-  error_code?: string;
-  sessionId?: string;
-  attendanceTable?: string;
-  savedCount?: number;
-  sessionStatus?: string | null;
 };
 
 const VALID_STATUSES = new Set<AttendanceStatus>(["present", "late", "absent", "injured"]);
@@ -175,9 +167,16 @@ export async function POST(request: Request) {
       );
     }
 
-    const { data: sessionRow, error: sessionError } = await supabase
+    let db = supabase;
+    try {
+      db = createAdminClient();
+    } catch {
+      db = supabase;
+    }
+
+    const { data: sessionRow, error: sessionError } = await db
       .from("training_sessions")
-      .select("id, session_date, start_time, end_time, status")
+      .select("id, age_group_id, team_id, session_date, start_time, end_time, status")
       .eq("id", sessionId)
       .maybeSingle();
 
@@ -197,6 +196,58 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Sessão não encontrada." }, { status: 404 });
     }
 
+    const sessionAgeGroupId =
+      typeof (sessionRow as Record<string, unknown>)?.age_group_id === "string"
+        ? ((sessionRow as Record<string, unknown>).age_group_id as string)
+        : null;
+    const sessionTeamId =
+      typeof (sessionRow as Record<string, unknown>)?.team_id === "string"
+        ? ((sessionRow as Record<string, unknown>).team_id as string)
+        : null;
+
+    if (!sessionAgeGroupId) {
+      return NextResponse.json(
+        { error: "Sessão de treino sem escalão associado." },
+        { status: 500 },
+      );
+    }
+
+    let isCoordinator = false;
+    if (sessionAgeGroupId) {
+      const { data: ageGroupRow } = await db
+        .from("age_groups")
+        .select("id")
+        .eq("id", sessionAgeGroupId)
+        .eq("coordinator_id", user.id)
+        .maybeSingle();
+      isCoordinator = Boolean(ageGroupRow?.id);
+    }
+
+    let isTeamStaff = false;
+    if (sessionTeamId) {
+      const { data: teamStaffRow } = await db
+        .from("team_staff")
+        .select("id")
+        .eq("team_id", sessionTeamId)
+        .eq("profile_id", user.id)
+        .maybeSingle();
+      isTeamStaff = Boolean(teamStaffRow?.id);
+    }
+
+    if (!isCoordinator && !isTeamStaff) {
+      return NextResponse.json(
+        { error: "Sem permissões para marcar presenças nesta sessão." },
+        { status: 403 },
+      );
+    }
+
+    if (session.status === "completed" && !isCoordinator) {
+      return NextResponse.json(
+        { error: "Só o coordenador pode corrigir presenças depois de fechar o treino." },
+        { status: 403 },
+      );
+    }
+
     if (
       finalize &&
       session.status !== "completed" &&
@@ -213,75 +264,87 @@ export async function POST(request: Request) {
       );
     }
 
-    const rpcRes = await supabase.rpc("rpc_attendance_today_save", {
-      p_session_id: sessionId,
-      p_attendance: attendancePayload,
-      p_finalize: finalize,
-    });
-    if (rpcRes.error) {
+    const playerIds = entries.map(([playerId]) => playerId);
+    const { data: validPlayers, error: validPlayersError } = await db
+      .from("players")
+      .select("id")
+      .eq("age_group_id", sessionAgeGroupId)
+      .in("id", playerIds);
+
+    if (validPlayersError) {
       return NextResponse.json(
-        { error: "Erro ao guardar presenças na base de dados." },
+        { error: "Erro ao validar jogadores da sessão." },
         { status: 500 },
       );
     }
 
-    const payload = (rpcRes.data || null) as AttendanceSavePayload | null;
-    if (payload?.ok) {
-      return NextResponse.json({
-        success: true,
-        sessionId: payload.sessionId || sessionId,
-        attendanceTable: payload.attendanceTable || "training_attendance",
-        savedCount: payload.savedCount ?? entries.length,
-        sessionStatus:
-          typeof payload.sessionStatus === "string"
-            ? payload.sessionStatus
-            : finalize
-              ? "completed"
-              : session.status ?? "scheduled",
-      });
+    const validPlayerIds = new Set((validPlayers || []).map((row) => String(row.id)));
+    if (validPlayerIds.size !== playerIds.length) {
+      return NextResponse.json(
+        { error: "Existem jogadores inválidos para esta sessão de treino." },
+        { status: 400 },
+      );
     }
 
-    switch (payload?.error_code) {
-      case "not_authenticated":
-        return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
-      case "invalid_payload":
-        return NextResponse.json(
-          { error: "Dados inválidos para guardar presenças." },
-          { status: 400 },
-        );
-      case "session_not_found":
-        return NextResponse.json({ error: "Sessão não encontrada." }, { status: 404 });
-      case "forbidden":
-        return NextResponse.json(
-          { error: "Sem permissões para marcar presenças nesta sessão." },
-          { status: 403 },
-        );
-      case "closed_requires_coordinator":
-        return NextResponse.json(
-          { error: "Só o coordenador pode corrigir presenças depois de fechar o treino." },
-          { status: 403 },
-        );
-      case "finalize_before_end":
-        return NextResponse.json(
-          { error: "O treino ainda não chegou à hora de confirmação e fecho." },
-          { status: 409 },
-        );
-      case "no_valid_entries":
-        return NextResponse.json(
-          { error: "Sem presenças válidas para guardar." },
-          { status: 400 },
-        );
-      case "invalid_players":
-        return NextResponse.json(
-          { error: "Existem jogadores inválidos para esta sessão de treino." },
-          { status: 400 },
-        );
-      default:
+    const markedAt = new Date().toISOString();
+    const rowsToSave = entries.map(([playerId, status]) => ({
+      training_session_id: sessionId,
+      player_id: playerId,
+      status,
+      marked_by: user.id,
+      marked_at: markedAt,
+    }));
+
+    const upsertRes = await db
+      .from("training_attendance")
+      .upsert(rowsToSave, { onConflict: "training_session_id,player_id" });
+
+    if (upsertRes.error) {
+      const deleteRes = await db
+        .from("training_attendance")
+        .delete()
+        .eq("training_session_id", sessionId);
+
+      if (deleteRes.error) {
         return NextResponse.json(
           { error: "Erro ao guardar presenças na base de dados." },
           { status: 500 },
         );
+      }
+
+      const insertRes = await db.from("training_attendance").insert(rowsToSave);
+      if (insertRes.error) {
+        return NextResponse.json(
+          { error: "Erro ao guardar presenças na base de dados." },
+          { status: 500 },
+        );
+      }
     }
+
+    let sessionStatus = session.status ?? "scheduled";
+    if (finalize && session.status !== "completed") {
+      const { error: finalizeError } = await db
+        .from("training_sessions")
+        .update({ status: "completed" })
+        .eq("id", sessionId);
+
+      if (finalizeError) {
+        return NextResponse.json(
+          { error: "Erro ao fechar o treino depois de guardar presenças." },
+          { status: 500 },
+        );
+      }
+
+      sessionStatus = "completed";
+    }
+
+    return NextResponse.json({
+      success: true,
+      sessionId,
+      attendanceTable: "training_attendance",
+      savedCount: entries.length,
+      sessionStatus,
+    });
   } catch (error) {
     return respondInternalError("api.attendance.today.post", error);
   }
