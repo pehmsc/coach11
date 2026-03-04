@@ -40,7 +40,7 @@ function isAlwaysAllowedPath(pathname: string) {
   );
 }
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   try {
     const pathname = request.nextUrl.pathname;
 
