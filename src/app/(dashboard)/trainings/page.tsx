@@ -962,6 +962,17 @@ export default function TrainingsPage() {
                   )}
               </div>
               <div className="flex items-center gap-1.5">
+                {canCorrectSelectedSessionAttendance && !editingSelectedSession && (
+                  <button
+                    onClick={() => openAttendanceCorrection(selectedSession.session)}
+                    className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-medium text-emerald-700 transition-colors hover:bg-emerald-100"
+                    title="Corrigir presenças"
+                    disabled={deletingTraining}
+                  >
+                    <Users size={14} />
+                    <span className="hidden sm:inline">Presenças</span>
+                  </button>
+                )}
                 {canEditSelectedSession && !editingSelectedSession && (
                   <button
                     onClick={openEditSelectedSession}

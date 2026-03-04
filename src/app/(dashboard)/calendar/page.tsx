@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import {
   format,
   startOfWeek,
@@ -20,6 +21,7 @@ import {
   Clock,
   AlertCircle,
   Copy,
+  Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { RichTextContent } from "@/components/content/RichTextContent";
@@ -130,6 +132,7 @@ function buildDuplicateTitle(event: CalEvent) {
 }
 
 export default function CalendarPage() {
+  const router = useRouter();
   const [weekStart, setWeekStart] = useState(
     startOfWeek(new Date(), { weekStartsOn: 1 }),
   );
@@ -570,8 +573,18 @@ export default function CalendarPage() {
   const isTrainingModal =
     modalMode === "add_training" || modalMode === "edit_training";
   const canEditSelectedEvent = isEventEditable(selectedEvent, canDeleteEvents);
+  const canCorrectSelectedEventAttendance =
+    selectedEvent?.type === "training" &&
+    selectedEvent?.status === "completed" &&
+    canDeleteEvents;
   const showReadOnlyEventSummary =
     !!selectedEvent && isEditing && modalScreen === "view";
+
+  function openAttendanceCorrectionFromCalendar() {
+    if (!selectedEvent || selectedEvent.type !== "training") return;
+    closeModal();
+    router.push(`/attendance?date=${selectedEvent.date}`);
+  }
 
   if (loading) {
     return (
@@ -993,6 +1006,16 @@ export default function CalendarPage() {
             <div className="sticky bottom-0 z-10 border-t bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shrink-0">
               {showReadOnlyEventSummary && selectedEvent ? (
                 <div className="flex flex-col gap-2 sm:flex-row">
+                  {canCorrectSelectedEventAttendance ? (
+                    <Button
+                      variant="outline"
+                      onClick={openAttendanceCorrectionFromCalendar}
+                      className="border-emerald-200 text-emerald-700 hover:bg-emerald-50 sm:flex-1"
+                    >
+                      <Users size={16} className="mr-2" />
+                      Corrigir presenças
+                    </Button>
+                  ) : null}
                   <Button
                     variant="outline"
                     onClick={duplicateSelectedEvent}
