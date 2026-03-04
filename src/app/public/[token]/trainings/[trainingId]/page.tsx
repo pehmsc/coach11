@@ -16,8 +16,7 @@ import {
 import { resolveFormattedAddress, resolveLocationLabel } from "@/lib/location";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
-  isPublicShareRateLimitedError,
-  resolvePublicAccessRequest,
+  resolvePublicAccessGate,
   resolvePublicTrainingId,
 } from "@/lib/public-share";
 
@@ -117,26 +116,17 @@ export default async function PublicTrainingDetailPage({
 }: PublicTrainingDetailParams) {
   const { token: publicIdentifier, trainingId: publicTrainingRef } = await params;
   const admin = createAdminClient();
+  const gate = await resolvePublicAccessGate(admin, publicIdentifier, await headers());
 
-  let access;
-  try {
-    const resolved = await resolvePublicAccessRequest(
-      admin,
-      publicIdentifier,
-      await headers(),
-    );
-    access = resolved ?? null;
-  } catch (error) {
-    if (isPublicShareRateLimitedError(error)) {
-      return <PublicRateLimitedState />;
-    }
-
+  if (gate.status === 404) {
     notFound();
   }
 
-  if (!access) {
-    notFound();
+  if (gate.status === 429) {
+    return <PublicRateLimitedState />;
   }
+
+  const access = gate.access;
   const { training, ageGroup } = await getPublicTrainingDetailPayload(
     access.ageGroupId,
     access.identifier,

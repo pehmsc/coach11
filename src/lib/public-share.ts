@@ -403,6 +403,28 @@ export function isPublicShareRateLimitedError(error: unknown) {
   return error instanceof Error && error.message === "public_share_rate_limited";
 }
 
+type PublicAccessResolved = {
+  source: "slug" | "token";
+  identifier: string;
+  ageGroupId: string;
+  paused: boolean;
+  share: PublicShareRow | null;
+};
+
+export type PublicAccessGateResult =
+  | {
+      status: 200;
+      access: PublicAccessResolved;
+    }
+  | {
+      status: 404;
+      code: "not_found";
+    }
+  | {
+      status: 429;
+      code: "rate_limited";
+    };
+
 export function slugifyPublicAccessSegment(value: string) {
   return value
     .normalize("NFD")
@@ -493,4 +515,35 @@ export async function resolvePublicAccessRequest(
     paused: false,
     share: tokenAccess.share,
   };
+}
+
+export async function resolvePublicAccessGate(
+  admin: SupabaseClient,
+  identifier: string,
+  headers: HeaderBag,
+): Promise<PublicAccessGateResult> {
+  try {
+    const access = await resolvePublicAccessRequest(admin, identifier, headers);
+
+    if (!access) {
+      return {
+        status: 404,
+        code: "not_found",
+      };
+    }
+
+    return {
+      status: 200,
+      access,
+    };
+  } catch (error) {
+    if (isPublicShareRateLimitedError(error)) {
+      return {
+        status: 429,
+        code: "rate_limited",
+      };
+    }
+
+    throw error;
+  }
 }

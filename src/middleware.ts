@@ -35,7 +35,8 @@ function isAlwaysAllowedPath(pathname: string) {
     pathname.startsWith("/invite") ||
     pathname.startsWith("/invite-only") ||
     pathname.startsWith("/public") ||
-    pathname.startsWith("/api/public")
+    pathname.startsWith("/api/public") ||
+    pathname.startsWith("/api/public-gate")
   );
 }
 

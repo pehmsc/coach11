@@ -12,8 +12,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import {
   buildPublicGameRef,
   buildPublicTrainingRef,
-  isPublicShareRateLimitedError,
-  resolvePublicAccessRequest,
+  resolvePublicAccessGate,
 } from "@/lib/public-share";
 
 export const dynamic = "force-dynamic";
@@ -180,26 +179,17 @@ const getPublicCalendarPayload = unstable_cache(
 export default async function PublicCalendarPage({ params }: PublicPageParams) {
   const { token: publicIdentifier } = await params;
   const admin = createAdminClient();
+  const gate = await resolvePublicAccessGate(admin, publicIdentifier, await headers());
 
-  let access;
-  try {
-    const resolved = await resolvePublicAccessRequest(
-      admin,
-      publicIdentifier,
-      await headers(),
-    );
-    access = resolved ?? null;
-  } catch (error) {
-    if (isPublicShareRateLimitedError(error)) {
-      return <PublicRateLimitedState />;
-    }
-
+  if (gate.status === 404) {
     notFound();
   }
 
-  if (!access) {
-    notFound();
+  if (gate.status === 429) {
+    return <PublicRateLimitedState />;
   }
+
+  const access = gate.access;
   const { ageGroup, upcomingGames, upcomingTrainings, recentGames } =
     await getPublicCalendarPayload(access.ageGroupId);
   const upcomingEvents = [

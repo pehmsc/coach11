@@ -17,9 +17,8 @@ import {
 import { resolveFormattedAddress, resolveLocationLabel } from "@/lib/location";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
-  isPublicShareRateLimitedError,
   resolvePublicGameId,
-  resolvePublicAccessRequest,
+  resolvePublicAccessGate,
   sanitizePublicPlayerName,
 } from "@/lib/public-share";
 
@@ -107,26 +106,17 @@ export default async function PublicGameDetailPage({
 }: PublicGameDetailParams) {
   const { token: publicIdentifier, gameId: publicGameRef } = await params;
   const admin = createAdminClient();
+  const gate = await resolvePublicAccessGate(admin, publicIdentifier, await headers());
 
-  let access;
-  try {
-    const resolved = await resolvePublicAccessRequest(
-      admin,
-      publicIdentifier,
-      await headers(),
-    );
-    access = resolved ?? null;
-  } catch (error) {
-    if (isPublicShareRateLimitedError(error)) {
-      return <PublicRateLimitedState />;
-    }
-
+  if (gate.status === 404) {
     notFound();
   }
 
-  if (!access) {
-    notFound();
+  if (gate.status === 429) {
+    return <PublicRateLimitedState />;
   }
+
+  const access = gate.access;
   const { game, ageGroup } = await getPublicGameDetailPayload(
     access.ageGroupId,
     access.identifier,
