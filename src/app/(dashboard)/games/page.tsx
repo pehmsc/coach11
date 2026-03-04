@@ -480,11 +480,11 @@ export default function GamesPage() {
 
       {createModalOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-[90] flex items-end md:items-center justify-center p-4"
+          className="fixed inset-0 bg-black/50 z-[90] flex items-end justify-center px-4 pt-4 pb-[calc(var(--mobile-footer-height)+env(safe-area-inset-bottom)+0.75rem)] md:items-center md:p-4"
           onClick={() => setCreateModalOpen(false)}
         >
           <div
-            className="min-w-0 overflow-x-hidden bg-white rounded-2xl w-full max-w-md shadow-xl h-[calc(100svh-1rem)] md:h-auto md:max-h-[90vh] overflow-hidden flex flex-col"
+            className="min-w-0 overflow-x-hidden bg-white rounded-2xl w-full max-w-md shadow-xl h-[calc(100dvh-var(--mobile-footer-height)-env(safe-area-inset-bottom)-1rem)] md:h-auto md:max-h-[90vh] overflow-hidden flex flex-col"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-center justify-between p-5 border-b">
@@ -538,7 +538,7 @@ export default function GamesPage() {
                 />
                 {createError && <p className="text-sm text-red-600">{createError}</p>}
               </div>
-              <div className="flex gap-2 border-t bg-white p-5 pt-3 shrink-0 pb-[calc(var(--mobile-footer-height)+env(safe-area-inset-bottom)+1rem)] md:pb-[max(1rem,env(safe-area-inset-bottom))]">
+              <div className="flex gap-2 border-t bg-white p-5 pt-3 shrink-0 pb-[max(1rem,env(safe-area-inset-bottom))]">
                 <Button
                   type="submit"
                   disabled={creatingGame}

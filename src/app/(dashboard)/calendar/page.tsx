@@ -778,11 +778,11 @@ export default function CalendarPage() {
       {/* ── MODAL ── */}
       {modalMode && (
         <div
-          className="fixed inset-0 bg-black/50 z-[90] flex items-end md:items-center justify-center p-4"
+          className="fixed inset-0 bg-black/50 z-[90] flex items-end justify-center px-4 pt-4 pb-[calc(var(--mobile-footer-height)+env(safe-area-inset-bottom)+0.75rem)] md:items-center md:p-4"
           onClick={closeModal}
         >
           <div
-            className="min-w-0 overflow-x-hidden bg-white rounded-2xl w-full max-w-md shadow-xl max-h-[calc(100dvh-1rem)] overflow-hidden flex flex-col"
+            className="min-w-0 overflow-x-hidden bg-white rounded-2xl w-full max-w-md shadow-xl max-h-[calc(100dvh-var(--mobile-footer-height)-env(safe-area-inset-bottom)-1rem)] md:max-h-[calc(100dvh-1rem)] overflow-hidden flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header do modal */}
@@ -968,7 +968,7 @@ export default function CalendarPage() {
               )}
             </div>
 
-            <div className="sticky bottom-0 z-10 border-t bg-white p-4 pb-[calc(var(--mobile-footer-height)+env(safe-area-inset-bottom)+1rem)] md:pb-[max(1rem,env(safe-area-inset-bottom))] shrink-0">
+            <div className="sticky bottom-0 z-10 border-t bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shrink-0">
               {showReadOnlyEventSummary && selectedEvent ? (
                 <div className="flex flex-col gap-2 sm:flex-row">
                   <Button
