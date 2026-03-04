@@ -6,6 +6,10 @@ import { format, addDays, subDays, parseISO, isToday } from "date-fns";
 import { pt } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import {
+  getPresencePromptState,
+  type PresencePromptState,
+} from "@/lib/events/presence-window";
+import {
   CheckCircle2,
   XCircle,
   AlertCircle,
@@ -21,6 +25,9 @@ type AttendanceState = Record<string, AttendanceStatus>;
 interface AttendanceApiSession {
   id: string;
   status?: string;
+  session_date?: string | null;
+  start_time?: string | null;
+  end_time?: string | null;
 }
 
 interface AttendanceApiResponse {
@@ -31,6 +38,8 @@ interface AttendanceApiResponse {
   players?: Player[];
   session?: AttendanceApiSession | null;
   attendance?: Record<string, AttendanceStatus>;
+  presencePromptState?: PresencePromptState;
+  sessionStatus?: string | null;
   error?: string;
 }
 
@@ -65,6 +74,8 @@ export default function AttendancePage() {
   const [attendance, setAttendance] = useState<AttendanceState>({});
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [canManageClosedAttendance, setCanManageClosedAttendance] = useState(false);
+  const [presencePromptState, setPresencePromptState] =
+    useState<PresencePromptState>("hidden");
 
   const dateLabel = isToday(parseISO(selectedDate))
     ? "Hoje"
@@ -99,6 +110,7 @@ export default function AttendancePage() {
         setSessionId(null);
         setNoSession(true);
         setSessionClosed(false);
+        setPresencePromptState("hidden");
         return;
       }
 
@@ -112,6 +124,7 @@ export default function AttendancePage() {
         setSessionId(null);
         setNoSession(true);
         setSessionClosed(false);
+        setPresencePromptState("hidden");
         return;
       }
 
@@ -126,6 +139,15 @@ export default function AttendancePage() {
       setSessionId(payload.session?.id ?? null);
       setNoSession(Boolean(payload.noSession) || !payload.session);
       setSessionClosed(payload.session?.status === "completed");
+      setPresencePromptState(
+        payload.presencePromptState ||
+          getPresencePromptState(
+            payload.session?.session_date,
+            payload.session?.start_time,
+            payload.session?.end_time,
+            payload.session?.status ?? null,
+          ),
+      );
 
       const initialAttendance: AttendanceState = {};
       incomingPlayers.forEach((player) => {
@@ -140,6 +162,7 @@ export default function AttendancePage() {
       setSessionId(null);
       setNoSession(true);
       setSessionClosed(false);
+      setPresencePromptState("hidden");
     } finally {
       setLoading(false);
     }
@@ -179,13 +202,14 @@ export default function AttendancePage() {
     if (!sessionId || (sessionClosed && !canManageClosedAttendance)) return;
     setSaving(true);
     setError(null);
+    const finalize = !sessionClosed && presencePromptState === "close";
 
     try {
       const res = await fetch("/api/attendance/today", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ sessionId, attendance }),
+        body: JSON.stringify({ sessionId, attendance, finalize }),
       });
       const payload = (await res.json().catch(() => ({}))) as AttendanceApiResponse;
 
@@ -196,7 +220,9 @@ export default function AttendancePage() {
       }
 
       setSaved(true);
-      setSessionClosed(true);
+      const isCompleted = payload.sessionStatus === "completed";
+      setSessionClosed(isCompleted);
+      setPresencePromptState(isCompleted ? "closed" : "mark");
       router.refresh(); // Invalidar cache RSC do dashboard
     } catch {
       setError("Erro de ligação ao guardar presenças.");
@@ -240,6 +266,7 @@ export default function AttendancePage() {
       labelColor: "text-orange-600",
     },
   };
+  const isClosingWindow = !sessionClosed && presencePromptState === "close";
 
   // ── Header de navegação de datas ──
   const dateNav = (
@@ -358,6 +385,24 @@ export default function AttendancePage() {
         </div>
       )}
 
+      {!sessionClosed && presencePromptState === "mark" && (
+        <div className="mb-4 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5">
+          <Clock3 size={16} className="text-emerald-600 flex-shrink-0" />
+          <p className="text-sm text-emerald-800">
+            A janela para marcar presenças já abriu. Podes guardar o registo sem fechar o treino.
+          </p>
+        </div>
+      )}
+
+      {isClosingWindow && (
+        <div className="mb-4 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5">
+          <AlertCircle size={16} className="text-amber-600 flex-shrink-0" />
+          <p className="text-sm text-amber-800">
+            O treino chegou à hora de fecho. Revê as presenças e confirma para fechar.
+          </p>
+        </div>
+      )}
+
       {error && (
         <div className="bg-red-50 text-red-700 text-sm p-3 rounded-lg border border-red-200 mb-4">
           {error}
@@ -436,7 +481,11 @@ export default function AttendancePage() {
         {(!saved || sessionClosed) && (
           <Button
             onClick={handleSave}
-            className="w-full bg-emerald-600 hover:bg-emerald-700 h-14 text-base font-semibold rounded-xl shadow-lg"
+            className={`w-full h-14 text-base font-semibold rounded-xl shadow-lg ${
+              isClosingWindow
+                ? "bg-amber-600 hover:bg-amber-700"
+                : "bg-emerald-600 hover:bg-emerald-700"
+            }`}
             disabled={saving || (sessionClosed && !canManageClosedAttendance)}
           >
             <Save size={20} className="mr-2" />
@@ -444,7 +493,9 @@ export default function AttendancePage() {
               ? "A guardar..."
               : sessionClosed
                 ? "Regravar presenças"
-                : `Guardar — ${counts.present + counts.late} presentes · ${counts.absent} ausentes`}
+                : isClosingWindow
+                  ? "Confirmar e fechar treino"
+                  : `Guardar registo — ${counts.present + counts.late} presentes · ${counts.absent} ausentes`}
           </Button>
         )}
       </div>

@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
-import { shouldShowPresencePrompt } from "@/lib/events/presence-window";
+import {
+  getPresencePromptState,
+  shouldShowPresencePrompt,
+} from "@/lib/events/presence-window";
 
 type AttendanceStatus = "present" | "late" | "absent" | "injured";
 
@@ -15,6 +18,7 @@ type AttendanceGetPayload = {
   session?: unknown;
   attendance?: Record<string, AttendanceStatus>;
   attendanceTable?: string | null;
+  presencePromptState?: "hidden" | "mark" | "close" | "closed";
   ok?: boolean;
   error_code?: string;
 };
@@ -33,6 +37,7 @@ type AttendanceSavePayload = {
   sessionId?: string;
   attendanceTable?: string;
   savedCount?: number;
+  sessionStatus?: string | null;
 };
 
 const VALID_STATUSES = new Set<AttendanceStatus>(["present", "late", "absent", "injured"]);
@@ -87,6 +92,14 @@ export async function GET(request: Request) {
         payload.session && typeof payload.session === "object"
           ? (payload.session as AttendanceGetSession)
           : null;
+      const presencePromptState = session
+        ? getPresencePromptState(
+            session.session_date,
+            session.start_time,
+            session.end_time,
+            session.status ?? null,
+          )
+        : "hidden";
 
       if (
         session &&
@@ -102,10 +115,14 @@ export async function GET(request: Request) {
           ...payload,
           noSession: true,
           session: null,
+          presencePromptState: "hidden",
         });
       }
 
-      return NextResponse.json(payload);
+      return NextResponse.json({
+        ...payload,
+        presencePromptState,
+      });
     }
 
     return NextResponse.json(
@@ -137,6 +154,10 @@ export async function POST(request: Request) {
       body && typeof body === "object" && typeof body.attendance === "object"
         ? (body.attendance as Record<string, unknown>)
         : null;
+    const finalize =
+      body && typeof body === "object" && typeof body.finalize === "boolean"
+        ? body.finalize
+        : false;
 
     if (!sessionId || !attendanceInput) {
       return NextResponse.json(
@@ -154,9 +175,48 @@ export async function POST(request: Request) {
       );
     }
 
+    const { data: sessionRow, error: sessionError } = await supabase
+      .from("training_sessions")
+      .select("id, session_date, start_time, end_time, status")
+      .eq("id", sessionId)
+      .maybeSingle();
+
+    if (sessionError) {
+      return NextResponse.json(
+        { error: "Erro ao validar a sessão de treino." },
+        { status: 500 },
+      );
+    }
+
+    const session =
+      sessionRow && typeof sessionRow === "object"
+        ? (sessionRow as AttendanceGetSession)
+        : null;
+
+    if (!session?.id) {
+      return NextResponse.json({ error: "Sessão não encontrada." }, { status: 404 });
+    }
+
+    if (
+      finalize &&
+      session.status !== "completed" &&
+      getPresencePromptState(
+        session.session_date,
+        session.start_time,
+        session.end_time,
+        session.status ?? null,
+      ) !== "close"
+    ) {
+      return NextResponse.json(
+        { error: "O treino ainda não chegou à hora de confirmação e fecho." },
+        { status: 409 },
+      );
+    }
+
     const rpcRes = await supabase.rpc("rpc_attendance_today_save", {
       p_session_id: sessionId,
       p_attendance: attendancePayload,
+      p_finalize: finalize,
     });
     if (rpcRes.error) {
       return NextResponse.json(
@@ -172,6 +232,12 @@ export async function POST(request: Request) {
         sessionId: payload.sessionId || sessionId,
         attendanceTable: payload.attendanceTable || "training_attendance",
         savedCount: payload.savedCount ?? entries.length,
+        sessionStatus:
+          typeof payload.sessionStatus === "string"
+            ? payload.sessionStatus
+            : finalize
+              ? "completed"
+              : session.status ?? "scheduled",
       });
     }
 
@@ -194,6 +260,11 @@ export async function POST(request: Request) {
         return NextResponse.json(
           { error: "Só o coordenador pode corrigir presenças depois de fechar o treino." },
           { status: 403 },
+        );
+      case "finalize_before_end":
+        return NextResponse.json(
+          { error: "O treino ainda não chegou à hora de confirmação e fecho." },
+          { status: 409 },
         );
       case "no_valid_entries":
         return NextResponse.json(

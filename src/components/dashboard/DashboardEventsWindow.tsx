@@ -12,6 +12,8 @@ export type DashboardEventItem = {
   subtitle: string;
   sortTs: number;
   showPresenceCta?: boolean;
+  presenceCtaMode?: "mark" | "close";
+  presenceCtaHref?: string;
   needsConvocation?: boolean;
 };
 
@@ -111,15 +113,19 @@ export function DashboardEventsWindow({ events, anchorTs }: Props) {
             </Link>
 
             {event.showPresenceCta ? (
-              <Link href="/attendance">
+              <Link href={event.presenceCtaHref || "/attendance"}>
                 <div className="ml-2 flex items-center gap-3 rounded-xl border-2 border-amber-300 bg-amber-50 p-3 transition-colors hover:border-amber-400">
                   <AlertCircle size={16} className="shrink-0 text-amber-500" />
                   <div className="flex-1">
                     <p className="text-xs font-semibold text-amber-900">
-                      Confirmar presenças
+                      {event.presenceCtaMode === "close"
+                        ? "Confirmar e fechar treino"
+                        : "Marcar presenças"}
                     </p>
                     <p className="text-xs text-amber-700">
-                      A janela de confirmação já está disponível.
+                      {event.presenceCtaMode === "close"
+                        ? "O treino terminou. Revê o registo e fecha a sessão."
+                        : "A janela para marcar presenças já está disponível."}
                     </p>
                   </div>
                   <span className="text-xs font-medium text-amber-600">→</span>

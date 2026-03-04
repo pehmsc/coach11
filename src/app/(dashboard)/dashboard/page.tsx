@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { DashboardEventsWindow } from "@/components/dashboard/DashboardEventsWindow";
 import RedeemInviteGate from "@/components/invite/RedeemInviteGate";
 import { formatFixtureOpponentLabel } from "@/lib/games/display";
-import { shouldShowPresencePrompt } from "@/lib/events/presence-window";
+import { getPresencePromptState } from "@/lib/events/presence-window";
 import type { TrainingSession, Game } from "@/types/database";
 
 export const dynamic = "force-dynamic";
@@ -281,16 +281,18 @@ export default async function DashboardPage() {
   const todayTraining =
     todayTrainings.find((training) => training.status !== "completed") ||
     todayTrainings[0];
-  const todayTrainingDone = todayTraining?.status === "completed";
-  const showTodayTrainingPrompt = todayTraining
-    ? shouldShowPresencePrompt(
+  const todayTrainingPromptState = todayTraining
+    ? getPresencePromptState(
         todayTraining.session_date,
         todayTraining.start_time,
         todayTraining.end_time,
         todayTraining.status,
         now,
       )
-    : false;
+    : "hidden";
+  const todayTrainingDone = todayTrainingPromptState === "closed";
+  const todayTrainingPresenceState =
+    todayTrainingPromptState === "mark" || todayTrainingPromptState === "close";
 
   const dashboardEvents = [
     ...timelineTrainings.map((training) => ({
@@ -307,8 +309,15 @@ export default async function DashboardPage() {
       ),
       showPresenceCta:
         todayTraining?.id === training.id &&
-        !todayTrainingDone &&
-        showTodayTrainingPrompt,
+        todayTrainingPresenceState,
+      presenceCtaMode:
+        todayTraining?.id === training.id && todayTrainingPresenceState
+          ? (todayTrainingPromptState === "close" ? "close" : "mark") as "mark" | "close"
+          : undefined,
+      presenceCtaHref:
+        todayTraining?.id === training.id
+          ? `/attendance?date=${training.session_date}`
+          : undefined,
     })),
     ...timelineGames
       .filter((game) => game.id !== activeLiveGame?.id)

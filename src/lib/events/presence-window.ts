@@ -1,5 +1,7 @@
 const PORTUGAL_TIMEZONE = "Europe/Lisbon";
 
+export type PresencePromptState = "hidden" | "mark" | "close" | "closed";
+
 function parseDateParts(dateValue: string | null | undefined) {
   if (!dateValue || !/^\d{4}-\d{2}-\d{2}$/.test(dateValue)) return null;
 
@@ -97,15 +99,35 @@ export function shouldShowPresencePrompt(
   status: string | null | undefined,
   now = new Date(),
 ) {
-  if (status === "completed") return false;
+  const state = getPresencePromptState(
+    dateValue,
+    startTime,
+    endTime,
+    status,
+    now,
+  );
+
+  return state === "mark" || state === "close";
+}
+
+export function getPresencePromptState(
+  dateValue: string | null | undefined,
+  startTime: string | null | undefined,
+  endTime: string | null | undefined,
+  status: string | null | undefined,
+  now = new Date(),
+): PresencePromptState {
+  if (status === "completed") return "closed";
 
   const startAt = portugalDateTimeToUtc(dateValue, startTime);
-  if (!startAt) return false;
+  if (!startAt) return "hidden";
 
   const effectiveEndAt =
     portugalDateTimeToUtc(dateValue, endTime) ??
     new Date(startAt.getTime() + 3 * 60 * 60 * 1000);
   const promptStartsAt = new Date(startAt.getTime() - 10 * 60 * 1000);
 
-  return now >= promptStartsAt && now <= effectiveEndAt;
+  if (now < promptStartsAt) return "hidden";
+  if (now < effectiveEndAt) return "mark";
+  return "close";
 }
