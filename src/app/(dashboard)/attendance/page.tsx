@@ -1,14 +1,21 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { format, addDays, subDays, parseISO, isToday } from "date-fns";
 import { pt } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, XCircle, AlertCircle, Save, ChevronLeft, ChevronRight } from "lucide-react";
-import type { Player, AgeGroup } from "@/types/database";
+import {
+  CheckCircle2,
+  XCircle,
+  AlertCircle,
+  Save,
+  ChevronLeft,
+  ChevronRight,
+  Clock3,
+} from "lucide-react";
+import type { Player, AgeGroup, AttendanceStatus } from "@/types/database";
 
-type AttendanceStatus = "present" | "absent" | "injured";
 type AttendanceState = Record<string, AttendanceStatus>;
 
 interface AttendanceApiSession {
@@ -27,16 +34,25 @@ interface AttendanceApiResponse {
   error?: string;
 }
 
-const VALID_STATUSES: AttendanceStatus[] = ["present", "absent", "injured"];
+const VALID_STATUSES: AttendanceStatus[] = ["present", "late", "absent", "injured"];
 
 function isValidStatus(value: unknown): value is AttendanceStatus {
   return typeof value === "string" && VALID_STATUSES.includes(value as AttendanceStatus);
 }
 
+function normalizeDateParam(value: string | null): string {
+  return value && /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ? value
+    : format(new Date(), "yyyy-MM-dd");
+}
+
 export default function AttendancePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const todayStr = format(new Date(), "yyyy-MM-dd");
-  const [selectedDate, setSelectedDate] = useState(todayStr);
+  const [selectedDate, setSelectedDate] = useState(() =>
+    normalizeDateParam(searchParams.get("date")),
+  );
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -48,6 +64,7 @@ export default function AttendancePage() {
   const [ageGroup, setAgeGroup] = useState<AgeGroup | null>(null);
   const [attendance, setAttendance] = useState<AttendanceState>({});
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [canManageClosedAttendance, setCanManageClosedAttendance] = useState(false);
 
   const dateLabel = isToday(parseISO(selectedDate))
     ? "Hoje"
@@ -59,13 +76,23 @@ export default function AttendancePage() {
     setSaved(false);
 
     try {
-      const res = await fetch(`/api/attendance/today?date=${date}`, {
-        cache: "no-store",
-        credentials: "include",
-      });
-      const payload = (await res.json().catch(() => ({}))) as AttendanceApiResponse;
+      const [attendanceRes, contextRes] = await Promise.all([
+        fetch(`/api/attendance/today?date=${date}`, {
+          cache: "no-store",
+          credentials: "include",
+        }),
+        fetch("/api/me/context", {
+          cache: "no-store",
+          credentials: "include",
+        }),
+      ]);
+      const payload = (await attendanceRes.json().catch(() => ({}))) as AttendanceApiResponse;
+      const contextPayload = (await contextRes.json().catch(() => ({}))) as {
+        canManageStaff?: boolean;
+      };
+      setCanManageClosedAttendance(contextPayload?.canManageStaff === true);
 
-      if (!res.ok) {
+      if (!attendanceRes.ok) {
         setError(payload?.error || "Erro ao carregar presenças.");
         setPlayers([]);
         setAgeGroup(null);
@@ -131,10 +158,15 @@ export default function AttendancePage() {
   }
 
   function toggleAttendance(playerId: string) {
+    if (sessionClosed && !canManageClosedAttendance) {
+      return;
+    }
+
     setAttendance((prev) => {
       const current = prev[playerId] ?? "present";
       const cycle: Record<AttendanceStatus, AttendanceStatus> = {
-        present: "absent",
+        present: "late",
+        late: "absent",
         absent: "injured",
         injured: "present",
       };
@@ -144,7 +176,7 @@ export default function AttendancePage() {
   }
 
   async function handleSave() {
-    if (!sessionId) return;
+    if (!sessionId || (sessionClosed && !canManageClosedAttendance)) return;
     setSaving(true);
     setError(null);
 
@@ -179,7 +211,7 @@ export default function AttendancePage() {
       acc[status] = (acc[status] || 0) + 1;
       return acc;
     },
-    { present: 0, absent: 0, injured: 0 } as Record<AttendanceStatus, number>,
+    { present: 0, late: 0, absent: 0, injured: 0 } as Record<AttendanceStatus, number>,
   );
 
   const statusConfig = {
@@ -188,6 +220,12 @@ export default function AttendancePage() {
       bg: "bg-white border-emerald-200",
       label: "Presente",
       labelColor: "text-emerald-600",
+    },
+    late: {
+      icon: <Clock3 size={28} className="text-amber-500 flex-shrink-0" />,
+      bg: "bg-amber-50 border-amber-200",
+      label: "Atrasado",
+      labelColor: "text-amber-700",
     },
     absent: {
       icon: <XCircle size={28} className="text-red-500 flex-shrink-0" />,
@@ -313,7 +351,9 @@ export default function AttendancePage() {
         <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 mb-4">
           <CheckCircle2 size={16} className="text-emerald-500 flex-shrink-0" />
           <p className="text-sm text-slate-600">
-            Treino fechado — podes editar e guardar novamente.
+            {canManageClosedAttendance
+              ? "Treino fechado — podes corrigir e guardar novamente."
+              : "Treino fechado — só o coordenador pode corrigir presenças."}
           </p>
         </div>
       )}
@@ -324,10 +364,14 @@ export default function AttendancePage() {
         </div>
       )}
 
-      <div className="grid grid-cols-3 gap-2 mb-4">
+      <div className="grid grid-cols-2 gap-2 mb-4 sm:grid-cols-4">
         <div className="bg-emerald-50 rounded-xl p-3 text-center">
           <p className="text-3xl font-bold text-emerald-600">{counts.present}</p>
           <p className="text-xs text-emerald-700 font-medium mt-0.5">Presentes</p>
+        </div>
+        <div className="bg-amber-50 rounded-xl p-3 text-center">
+          <p className="text-3xl font-bold text-amber-600">{counts.late}</p>
+          <p className="text-xs text-amber-700 font-medium mt-0.5">Atrasados</p>
         </div>
         <div className="bg-red-50 rounded-xl p-3 text-center">
           <p className="text-3xl font-bold text-red-500">{counts.absent}</p>
@@ -340,7 +384,7 @@ export default function AttendancePage() {
       </div>
 
       <p className="text-xs text-slate-400 mb-3 px-1">
-        Toca num atleta para alternar estado: Presente → Ausente → Lesionado
+        Toca num atleta para alternar estado: Presente → Atrasado → Ausente → Lesionado
       </p>
 
       <div className="space-y-2 mb-6">
@@ -353,6 +397,7 @@ export default function AttendancePage() {
               key={player.id}
               onClick={() => toggleAttendance(player.id)}
               className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all active:scale-[0.98] text-left ${config.bg}`}
+              disabled={sessionClosed && !canManageClosedAttendance}
             >
               <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center flex-shrink-0">
                 <span className="text-sm font-bold text-slate-500">
@@ -384,7 +429,7 @@ export default function AttendancePage() {
       <div className="sticky bottom-20 md:bottom-4">
         {saved && (
           <div className="bg-emerald-50 border-2 border-emerald-200 text-emerald-700 p-3 rounded-xl text-center font-semibold text-sm mb-2">
-            ✓ {sessionClosed ? "Atualizado" : "Presenças guardadas"}! ({counts.present} presentes · {counts.absent} ausentes ·{" "}
+            ✓ {sessionClosed ? "Atualizado" : "Presenças guardadas"}! ({counts.present} presentes · {counts.late} atrasados · {counts.absent} ausentes ·{" "}
             {counts.injured} lesionados)
           </div>
         )}
@@ -392,14 +437,14 @@ export default function AttendancePage() {
           <Button
             onClick={handleSave}
             className="w-full bg-emerald-600 hover:bg-emerald-700 h-14 text-base font-semibold rounded-xl shadow-lg"
-            disabled={saving}
+            disabled={saving || (sessionClosed && !canManageClosedAttendance)}
           >
             <Save size={20} className="mr-2" />
             {saving
               ? "A guardar..."
               : sessionClosed
-                ? `Regravar — ${counts.present} presentes`
-                : `Guardar — ${counts.present} presentes · ${counts.absent} ausentes`}
+                ? "Regravar presenças"
+                : `Guardar — ${counts.present + counts.late} presentes · ${counts.absent} ausentes`}
           </Button>
         )}
       </div>

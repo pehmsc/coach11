@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { format, parseISO, isToday, isFuture } from "date-fns";
 import { pt } from "date-fns/locale";
 import {
@@ -52,6 +53,7 @@ interface TrainingRow {
 interface AttendanceSummary {
   session_id: string;
   present: number;
+  late: number;
   absent: number;
   injured: number;
   total: number;
@@ -85,7 +87,40 @@ function isTrainingClosed(session: TrainingRow, now = new Date()) {
   return !!endAt && endAt.getTime() < now.getTime();
 }
 
+function getAttendanceStatusClasses(status: string) {
+  if (status === "present") {
+    return {
+      dot: "bg-emerald-500",
+      text: "text-emerald-600",
+      label: "Presente",
+    };
+  }
+
+  if (status === "late") {
+    return {
+      dot: "bg-amber-500",
+      text: "text-amber-600",
+      label: "Atrasado",
+    };
+  }
+
+  if (status === "absent") {
+    return {
+      dot: "bg-red-500",
+      text: "text-red-500",
+      label: "Ausente",
+    };
+  }
+
+  return {
+    dot: "bg-orange-400",
+    text: "text-orange-500",
+    label: "Lesionado",
+  };
+}
+
 export default function TrainingsPage() {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [sessions, setSessions] = useState<TrainingRow[]>([]);
   const [attendance, setAttendance] = useState<AttendanceSummary[]>([]);
@@ -345,6 +380,14 @@ export default function TrainingsPage() {
     setSavingSelectedSession(false);
   }
 
+  function openAttendanceCorrection(session: TrainingRow) {
+    setSelectedSession(null);
+    setShowDeleteConfirm(false);
+    setDetailError(null);
+    setEditingSelectedSession(false);
+    router.push(`/attendance?date=${session.session_date}`);
+  }
+
   async function handleSaveSelectedSession(e: { preventDefault(): void }) {
     e.preventDefault();
     if (!selectedSession) return;
@@ -483,6 +526,8 @@ export default function TrainingsPage() {
     : null;
   const canEditSelectedSession =
     !!selectedSessionStartsAt && selectedSessionStartsAt.getTime() > Date.now();
+  const canCorrectSelectedSessionAttendance =
+    canDeleteTrainings && selectedSession?.session.status === "completed";
 
   if (loading) {
     return (
@@ -604,7 +649,9 @@ export default function TrainingsPage() {
                         </button>
                         {summary ? (
                           <div className="text-right">
-                            <p className="text-sm font-bold text-emerald-700">{summary.present}</p>
+                            <p className="text-sm font-bold text-emerald-700">
+                              {summary.present + summary.late}
+                            </p>
                             <p className="text-[10px] text-slate-400">presentes</p>
                           </div>
                         ) : (
@@ -694,7 +741,9 @@ export default function TrainingsPage() {
                               <div className="flex flex-shrink-0 items-center gap-2">
                                 {summary ? (
                                   <div className="text-right">
-                                    <p className="text-sm font-bold text-slate-700">{summary.present}</p>
+                                    <p className="text-sm font-bold text-slate-700">
+                                      {summary.present + summary.late}
+                                    </p>
                                     <p className="text-[10px] text-slate-400">presentes</p>
                                   </div>
                                 ) : (
@@ -1050,6 +1099,16 @@ export default function TrainingsPage() {
                   <p className="mt-1 text-xs text-slate-500">
                     O treino está fechado, mas não existem registos de presenças associados.
                   </p>
+                  {canCorrectSelectedSessionAttendance && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="mt-4 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                      onClick={() => openAttendanceCorrection(selectedSession.session)}
+                    >
+                      Corrigir presenças
+                    </Button>
+                  )}
                 </div>
               </div>
             ) : (
@@ -1081,26 +1140,38 @@ export default function TrainingsPage() {
                     />
                   </div>
                 )}
+                {canCorrectSelectedSessionAttendance && (
+                  <div className="border-b px-5 py-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                      onClick={() => openAttendanceCorrection(selectedSession.session)}
+                    >
+                      Corrigir presenças
+                    </Button>
+                  </div>
+                )}
                 <div className="divide-y">
                   {Object.values(selectedSession.attendance)
                     .sort((a, b) => a.player.first_name.localeCompare(b.player.first_name))
-                    .map(({ player, status }) => (
-                      <div key={player.id} className="flex items-center gap-3 px-5 py-3">
-                        <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
-                          status === "present" ? "bg-emerald-500" :
-                          status === "absent" ? "bg-red-500" : "bg-orange-400"
-                        }`} />
-                        <p className="text-sm text-slate-800">
-                          {player.first_name} {player.last_name}
-                        </p>
-                        <span className={`ml-auto text-xs font-medium ${
-                          status === "present" ? "text-emerald-600" :
-                          status === "absent" ? "text-red-500" : "text-orange-500"
-                        }`}>
-                          {status === "present" ? "Presente" : status === "absent" ? "Ausente" : "Lesionado"}
-                        </span>
-                      </div>
-                    ))}
+                    .map(({ player, status }) => {
+                      const statusUi = getAttendanceStatusClasses(status);
+
+                      return (
+                        <div key={player.id} className="flex items-center gap-3 px-5 py-3">
+                          <div
+                            className={`h-2.5 w-2.5 flex-shrink-0 rounded-full ${statusUi.dot}`}
+                          />
+                          <p className="text-sm text-slate-800">
+                            {player.first_name} {player.last_name}
+                          </p>
+                          <span className={`ml-auto text-xs font-medium ${statusUi.text}`}>
+                            {statusUi.label}
+                          </span>
+                        </div>
+                      );
+                    })}
                 </div>
               </div>
             )}

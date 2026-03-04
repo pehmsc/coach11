@@ -88,6 +88,22 @@ function statusBadge(game: GameRow) {
   );
 }
 
+function groupByMonth(games: GameRow[]): { label: string; games: GameRow[] }[] {
+  const map = new Map<string, GameRow[]>();
+
+  for (const game of games) {
+    const key = format(parseISO(game.game_datetime), "MMMM yyyy", { locale: pt });
+    const bucket = map.get(key) ?? [];
+    bucket.push(game);
+    map.set(key, bucket);
+  }
+
+  return Array.from(map.entries()).map(([label, monthGames]) => ({
+    label,
+    games: monthGames,
+  }));
+}
+
 export default function GamesPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -100,6 +116,7 @@ export default function GamesPage() {
   const [createError, setCreateError] = useState<string | null>(null);
   const [competitionOptions, setCompetitionOptions] = useState<GameCompetitionOption[]>([]);
   const [ageGroupId, setAgeGroupId] = useState<string | null>(null);
+  const [closedGamesExpanded, setClosedGamesExpanded] = useState(false);
   const [gameForm, setGameForm] = useState<
     SharedGameFormValues & { title: string; notes: string; image_url: string }
   >({
@@ -308,8 +325,16 @@ export default function GamesPage() {
   }
 
   // Split future vs past
-  const upcoming = games.filter((g) => !isClosedGameStatus(g.status));
-  const past = games.filter((g) => isClosedGameStatus(g.status));
+  const upcoming = games
+    .filter((g) => !isClosedGameStatus(g.status))
+    .slice()
+    .sort((a, b) => new Date(a.game_datetime).getTime() - new Date(b.game_datetime).getTime());
+  const past = games
+    .filter((g) => isClosedGameStatus(g.status))
+    .slice()
+    .sort((a, b) => new Date(b.game_datetime).getTime() - new Date(a.game_datetime).getTime());
+  const groupedUpcomingGames = groupByMonth(upcoming);
+  const groupedPastGames = groupByMonth(past);
 
   if (loading) {
     return (
@@ -376,15 +401,14 @@ export default function GamesPage() {
         </Button>
       </div>
 
-      {/* Próximos */}
-      {upcoming.length > 0 && (
-        <section className="mb-6">
-          <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Próximos</h2>
-          <div className="space-y-2">
-            {upcoming
-              .slice()
-              .sort((a, b) => new Date(a.game_datetime).getTime() - new Date(b.game_datetime).getTime())
-              .map((game) => (
+      <div className="space-y-6">
+        {groupedUpcomingGames.map(({ label, games: monthGames }) => (
+          <section key={label}>
+            <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500 capitalize">
+              {label}
+            </h2>
+            <div className="space-y-2">
+              {monthGames.map((game) => (
                 <GameCard
                   key={game.id}
                   game={game}
@@ -398,35 +422,61 @@ export default function GamesPage() {
                   }
                 />
               ))}
-          </div>
-        </section>
-      )}
+            </div>
+          </section>
+        ))}
 
-      {/* Jogados */}
-      {past.length > 0 && (
-        <section>
-          <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Jogados</h2>
-          <div className="space-y-2">
-            {past
-              .slice()
-              .sort((a, b) => new Date(b.game_datetime).getTime() - new Date(a.game_datetime).getTime())
-              .map((game) => (
-                <GameCard
-                  key={game.id}
-                  game={game}
-                  onDuplicate={() => openDuplicateGame(game)}
-                  onClick={() =>
-                    router.push(
-                      game.status === "completed"
-                        ? `/games/${game.id}/summary`
-                        : `/games/${game.id}`,
-                    )
-                  }
-                />
-              ))}
-          </div>
+        <section className="rounded-2xl border border-slate-200 bg-white">
+          <button
+            type="button"
+            onClick={() => setClosedGamesExpanded((current) => !current)}
+            className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left"
+          >
+            <div>
+              <p className="text-sm font-semibold text-slate-900">Jogos Terminados</p>
+              <p className="mt-1 text-xs text-slate-500">
+                {past.length} jogo{past.length !== 1 ? "s" : ""} terminado{past.length !== 1 ? "s" : ""}
+              </p>
+            </div>
+            <span className="text-xs font-medium text-slate-500">
+              {closedGamesExpanded ? "Fechar" : "Expandir"}
+            </span>
+          </button>
+
+          {closedGamesExpanded && (
+            <div className="space-y-6 border-t border-slate-100 px-4 py-4">
+              {groupedPastGames.length === 0 ? (
+                <p className="text-sm text-slate-500">Ainda não existem jogos terminados.</p>
+              ) : (
+                groupedPastGames.map(({ label, games: monthGames }) => (
+                  <section key={`closed-${label}`}>
+                    <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500 capitalize">
+                      {label}
+                    </h2>
+                    <div className="space-y-2">
+                      {monthGames.map((game) => (
+                        <GameCard
+                          key={game.id}
+                          game={game}
+                          className="border-slate-100 bg-slate-50 hover:border-slate-200"
+                          onDuplicate={() => openDuplicateGame(game)}
+                          onClick={() =>
+                            router.push(
+                              game.status === "completed"
+                                ? `/games/${game.id}/summary`
+                                : `/games/${game.id}`,
+                            )
+                          }
+                        />
+                      ))}
+                    </div>
+                  </section>
+                ))
+              )}
+            </div>
+          )}
         </section>
-      )}
+      </div>
 
       {createModalOpen && (
         <div
@@ -519,10 +569,12 @@ export default function GamesPage() {
 
 function GameCard({
   game,
+  className,
   onClick,
   onDuplicate,
 }: {
   game: GameRow;
+  className?: string;
   onClick: () => void;
   onDuplicate: () => void;
 }) {
@@ -533,7 +585,7 @@ function GameCard({
   return (
     <button
       onClick={onClick}
-      className="w-full flex items-center gap-3 p-4 bg-white border border-slate-100 rounded-2xl hover:border-slate-200 hover:shadow-sm transition-all text-left"
+      className={`w-full flex items-center gap-3 rounded-2xl border p-4 text-left transition-all hover:shadow-sm ${className ?? "bg-white border-slate-100 hover:border-slate-200"}`}
     >
       {/* Date column */}
       <div className="flex-shrink-0 w-12 text-center">

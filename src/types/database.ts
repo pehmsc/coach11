@@ -1,6 +1,6 @@
 export type UserRole = "coordinator" | "coach" | "player" | "parent";
 export type PlayerStatus = "active" | "injured" | "suspended" | "inactive";
-export type AttendanceStatus = "present" | "absent" | "injured";
+export type AttendanceStatus = "present" | "late" | "absent" | "injured";
 export type FootballFormat = "5" | "7" | "9" | "11";
 export type EventStatus = "scheduled" | "live" | "completed" | "cancelled";
 export type ConvocationStatus = "draft" | "confirmed" | "closed";

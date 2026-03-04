@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { shouldShowPresencePrompt } from "@/lib/events/presence-window";
 
-type AttendanceStatus = "present" | "absent" | "injured";
+type AttendanceStatus = "present" | "late" | "absent" | "injured";
 
 type AttendanceGetPayload = {
   success?: boolean;
@@ -35,7 +35,7 @@ type AttendanceSavePayload = {
   savedCount?: number;
 };
 
-const VALID_STATUSES = new Set<AttendanceStatus>(["present", "absent", "injured"]);
+const VALID_STATUSES = new Set<AttendanceStatus>(["present", "late", "absent", "injured"]);
 
 function isValidStatus(value: unknown): value is AttendanceStatus {
   return typeof value === "string" && VALID_STATUSES.has(value as AttendanceStatus);
@@ -90,6 +90,7 @@ export async function GET(request: Request) {
 
       if (
         session &&
+        session.status !== "completed" &&
         !shouldShowPresencePrompt(
           session.session_date,
           session.start_time,
@@ -187,6 +188,11 @@ export async function POST(request: Request) {
       case "forbidden":
         return NextResponse.json(
           { error: "Sem permissões para marcar presenças nesta sessão." },
+          { status: 403 },
+        );
+      case "closed_requires_coordinator":
+        return NextResponse.json(
+          { error: "Só o coordenador pode corrigir presenças depois de fechar o treino." },
           { status: 403 },
         );
       case "no_valid_entries":

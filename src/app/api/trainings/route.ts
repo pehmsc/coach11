@@ -27,11 +27,12 @@ type TrainingRow = {
   team_id?: string | null;
 };
 
-type AttendanceStatus = "present" | "absent" | "injured";
+type AttendanceStatus = "present" | "late" | "absent" | "injured";
 
 type AttendanceSummary = {
   session_id: string;
   present: number;
+  late: number;
   absent: number;
   injured: number;
   total: number;
@@ -44,6 +45,7 @@ type AttendanceDetail = {
 
 const VALID_ATTENDANCE_STATUSES = new Set<AttendanceStatus>([
   "present",
+  "late",
   "absent",
   "injured",
 ]);
@@ -56,6 +58,7 @@ function buildSummary(sessionId: string, rows: Array<{ status: AttendanceStatus 
   const summary: AttendanceSummary = {
     session_id: sessionId,
     present: 0,
+    late: 0,
     absent: 0,
     injured: 0,
     total: rows.length,
@@ -63,6 +66,7 @@ function buildSummary(sessionId: string, rows: Array<{ status: AttendanceStatus 
 
   for (const row of rows) {
     if (row.status === "present") summary.present += 1;
+    else if (row.status === "late") summary.late += 1;
     else if (row.status === "absent") summary.absent += 1;
     else if (row.status === "injured") summary.injured += 1;
   }
@@ -270,12 +274,14 @@ export async function GET(request: Request) {
         const current = summaryMap.get(row.training_session_id) ?? {
           session_id: row.training_session_id,
           present: 0,
+          late: 0,
           absent: 0,
           injured: 0,
           total: 0,
         };
 
         if (row.status === "present") current.present += 1;
+        else if (row.status === "late") current.late += 1;
         else if (row.status === "absent") current.absent += 1;
         else if (row.status === "injured") current.injured += 1;
         current.total += 1;
