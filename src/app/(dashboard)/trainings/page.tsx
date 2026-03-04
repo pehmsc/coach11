@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { format, parseISO, isToday, isFuture } from "date-fns";
 import { pt } from "date-fns/locale";
 import {
@@ -121,6 +121,7 @@ function getAttendanceStatusClasses(status: string) {
 
 export default function TrainingsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [sessions, setSessions] = useState<TrainingRow[]>([]);
   const [attendance, setAttendance] = useState<AttendanceSummary[]>([]);
@@ -174,6 +175,23 @@ export default function TrainingsPage() {
     void loadData();
   }, []);
 
+  useEffect(() => {
+    const requestedSessionId = searchParams.get("open");
+    if (!requestedSessionId || loading || loadingDetail || selectedSession) {
+      return;
+    }
+
+    const targetSession = sessions.find((session) => session.id === requestedSessionId);
+    if (targetSession) {
+      void handleSessionClick(targetSession);
+      return;
+    }
+
+    if (sessions.length > 0) {
+      router.replace("/trainings", { scroll: false });
+    }
+  }, [loading, loadingDetail, router, searchParams, selectedSession, sessions]);
+
   async function loadData() {
     setLoading(true);
 
@@ -214,6 +232,12 @@ export default function TrainingsPage() {
 
   function getSummary(sessionId: string): AttendanceSummary | null {
     return attendance.find((a) => a.session_id === sessionId) ?? null;
+  }
+
+  function clearOpenSessionQuery() {
+    if (searchParams.get("open")) {
+      router.replace("/trainings", { scroll: false });
+    }
   }
 
   async function handleSessionClick(session: TrainingRow) {
@@ -297,8 +321,7 @@ export default function TrainingsPage() {
 
       setSessions((prev) => prev.filter((item) => item.id !== sessionId));
       setAttendance((prev) => prev.filter((item) => item.session_id !== sessionId));
-      setSelectedSession(null);
-      setShowDeleteConfirm(false);
+      closeSelectedSessionModal();
       await loadData();
     } catch {
       setDetailError("Erro de ligação ao apagar treino.");
@@ -351,7 +374,16 @@ export default function TrainingsPage() {
     setDetailError(null);
     setShowDeleteConfirm(false);
     setSelectedSession(null);
+    clearOpenSessionQuery();
     setCreateModalOpen(true);
+  }
+
+  function closeSelectedSessionModal() {
+    setSelectedSession(null);
+    setShowDeleteConfirm(false);
+    setDetailError(null);
+    setEditingSelectedSession(false);
+    clearOpenSessionQuery();
   }
 
   function openEditSelectedSession() {
@@ -901,10 +933,7 @@ export default function TrainingsPage() {
           className="fixed inset-0 bg-black/50 z-[70] flex items-end justify-center px-4 pt-4 pb-[calc(var(--mobile-footer-height)+env(safe-area-inset-bottom)+0.75rem)] md:items-center md:p-4"
           onClick={() => {
             if (deletingTraining) return;
-            setSelectedSession(null);
-            setShowDeleteConfirm(false);
-            setDetailError(null);
-            setEditingSelectedSession(false);
+            closeSelectedSessionModal();
           }}
         >
           <div
@@ -963,10 +992,7 @@ export default function TrainingsPage() {
                 )}
                 <button
                   onClick={() => {
-                    setSelectedSession(null);
-                    setShowDeleteConfirm(false);
-                    setDetailError(null);
-                    setEditingSelectedSession(false);
+                    closeSelectedSessionModal();
                   }}
                   disabled={deletingTraining}
                 >

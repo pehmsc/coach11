@@ -22,8 +22,6 @@ import {
   Copy,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { RichTextContent } from "@/components/content/RichTextContent";
 import { NotesEditor } from "@/components/forms/NotesEditor";
 import { EventImagePicker } from "@/components/media/EventImagePicker";
@@ -150,6 +148,7 @@ export default function CalendarPage() {
   const [competitionOptions, setCompetitionOptions] = useState<GameCompetitionOption[]>([]);
   const [saving, setSaving] = useState(false);
   const [opError, setOpError] = useState<string | null>(null);
+  const [draftMode, setDraftMode] = useState<"create" | "duplicate">("create");
 
   const loadEvents = useCallback(async () => {
     if (!ageGroupId) return;
@@ -357,6 +356,7 @@ export default function CalendarPage() {
     setSelectedEvent(null);
     setOpError(null);
     setModalScreen("edit");
+    setDraftMode("create");
     setForm({
       ...EMPTY_FORM,
       date,
@@ -369,6 +369,7 @@ export default function CalendarPage() {
     setSelectedEvent(event);
     setOpError(null);
     setModalScreen("view");
+    setDraftMode("create");
     setForm({
       title: event.title || "",
       date: event.date,
@@ -396,6 +397,7 @@ export default function CalendarPage() {
 
     setOpError(null);
     setModalScreen("edit");
+    setDraftMode("duplicate");
     setSelectedEvent(null);
     setForm({
       title: buildDuplicateTitle(selectedEvent),
@@ -426,6 +428,7 @@ export default function CalendarPage() {
     setModalMode(null);
     setModalScreen("edit");
     setSelectedEvent(null);
+    setDraftMode("create");
     setForm(EMPTY_FORM);
     setOpError(null);
   }
@@ -786,15 +789,25 @@ export default function CalendarPage() {
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header do modal */}
-            <div className="flex justify-between items-center p-5 border-b bg-white z-10 shrink-0">
-              <h3 className="font-bold text-slate-900">
-                {modalMode === "add_training" && "🏃 Novo Treino"}
-                {modalMode === "add_game" && "⚽ Novo Jogo"}
-                {modalMode === "edit_training" &&
-                  (showReadOnlyEventSummary ? "🏃 Detalhes do Treino" : "✏️ Editar Treino")}
-                {modalMode === "edit_game" &&
-                  (showReadOnlyEventSummary ? "⚽ Detalhes do Jogo" : "✏️ Editar Jogo")}
-              </h3>
+            <div className="flex items-start justify-between p-5 border-b bg-white z-10 shrink-0">
+              <div>
+                <h3 className="font-bold text-slate-900">
+                  {modalMode === "add_training" &&
+                    (draftMode === "duplicate" ? "Duplicar treino" : "Novo treino")}
+                  {modalMode === "add_game" &&
+                    (draftMode === "duplicate" ? "Duplicar jogo" : "Novo jogo")}
+                  {modalMode === "edit_training" &&
+                    (showReadOnlyEventSummary ? "Detalhes do treino" : "Editar treino")}
+                  {modalMode === "edit_game" &&
+                    (showReadOnlyEventSummary ? "Detalhes do jogo" : "Editar jogo")}
+                </h3>
+                {(modalMode === "add_training" || modalMode === "add_game") &&
+                  draftMode === "duplicate" && (
+                    <p className="mt-1 text-xs text-slate-500">
+                      Revê os dados e escolhe uma nova data antes de guardar.
+                    </p>
+                  )}
+              </div>
               <button onClick={closeModal}>
                 <X size={20} className="text-slate-400" />
               </button>
@@ -883,8 +896,10 @@ export default function CalendarPage() {
                   />
 
                   <div className="space-y-1">
-                    <Label>Título</Label>
-                    <Input
+                    <label className="text-sm font-medium text-slate-700">
+                      Título
+                    </label>
+                    <input
                       value={form.title}
                       placeholder={
                         isTrainingModal ? "ex: Treino físico" : "ex: Jornada 5"
@@ -892,6 +907,7 @@ export default function CalendarPage() {
                       onChange={(e) =>
                         setForm((f) => ({ ...f, title: e.target.value }))
                       }
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                     />
                   </div>
 
@@ -908,38 +924,44 @@ export default function CalendarPage() {
                     <>
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <div className="space-y-1">
-                          <Label>
-                            <Clock size={12} className="inline mr-1" />
+                          <label className="text-sm font-medium text-slate-700">
                             Data *
-                          </Label>
-                          <Input
+                          </label>
+                          <input
                             type="date"
                             value={form.date}
                             onChange={(e) =>
                               setForm((f) => ({ ...f, date: e.target.value }))
                             }
+                            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                           />
                         </div>
                         <div className="space-y-1">
-                          <Label>Início</Label>
-                          <Input
+                          <label className="text-sm font-medium text-slate-700">
+                            Início
+                          </label>
+                          <input
                             type="time"
                             value={form.start_time}
                             onChange={(e) =>
                               setForm((f) => ({ ...f, start_time: e.target.value }))
                             }
+                            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                           />
                         </div>
                       </div>
 
                       <div className="space-y-1">
-                        <Label>Fim</Label>
-                        <Input
+                        <label className="text-sm font-medium text-slate-700">
+                          Fim
+                        </label>
+                        <input
                           type="time"
                           value={form.end_time}
                           onChange={(e) =>
                             setForm((f) => ({ ...f, end_time: e.target.value }))
                           }
+                          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                         />
                       </div>
 

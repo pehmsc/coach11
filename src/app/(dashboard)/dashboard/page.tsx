@@ -296,7 +296,7 @@ export default async function DashboardPage() {
     ...timelineTrainings.map((training) => ({
       id: `training-${training.id}`,
       type: "training" as const,
-      href: "/trainings",
+      href: `/trainings?open=${training.id}`,
       title: training.title?.trim() || "Treino",
       subtitle: `${relativeDay(training.session_date)}${
         training.start_time ? ` · ${training.start_time.substring(0, 5)}` : ""
