@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveUserTeamContext } from "@/lib/auth/team-context";
@@ -31,6 +32,11 @@ type MessageMemberRow = {
   role: string;
 };
 
+type AuthUserLike = {
+  email?: string | null;
+  user_metadata?: Record<string, unknown> | null;
+};
+
 function normalizeLimit(value: string | null) {
   const parsed = Number.parseInt(value || "", 10);
   if (!Number.isFinite(parsed)) return 80;
@@ -53,17 +59,92 @@ function normalizeMentionUserIds(value: unknown) {
   );
 }
 
+function normalizeDisplayName(value: unknown) {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
+function buildNameFromEmail(email: string | null | undefined) {
+  if (typeof email !== "string") return null;
+  const localPart = email.split("@")[0]?.trim();
+  if (!localPart) return null;
+
+  const normalized = localPart
+    .replace(/[._-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!normalized) return null;
+
+  return normalized
+    .split(" ")
+    .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
+    .join(" ");
+}
+
+function resolveDisplayNameFromAuthUser(user: AuthUserLike | null | undefined) {
+  const metadata = (user?.user_metadata ?? {}) as Record<string, unknown>;
+
+  return (
+    normalizeDisplayName(metadata.full_name) ||
+    normalizeDisplayName(metadata.name) ||
+    buildNameFromEmail(user?.email)
+  );
+}
+
+async function loadAuthDisplayNamesById(
+  admin: SupabaseClient,
+  profileIds: string[],
+) {
+  const uniqueIds = Array.from(
+    new Set(profileIds.filter((profileId) => typeof profileId === "string" && profileId.length > 0)),
+  );
+  const displayNameByProfileId = new Map<string, string>();
+
+  if (uniqueIds.length === 0) return displayNameByProfileId;
+
+  const authUsers = await Promise.allSettled(
+    uniqueIds.map(async (profileId) => {
+      const { data, error } = await admin.auth.admin.getUserById(profileId);
+      if (error || !data.user) {
+        return { profileId, displayName: null as string | null };
+      }
+
+      return {
+        profileId,
+        displayName: resolveDisplayNameFromAuthUser({
+          email: data.user.email,
+          user_metadata: (data.user.user_metadata ?? {}) as Record<string, unknown>,
+        }),
+      };
+    }),
+  );
+
+  for (const result of authUsers) {
+    if (result.status !== "fulfilled" || !result.value.displayName) continue;
+    displayNameByProfileId.set(result.value.profileId, result.value.displayName);
+  }
+
+  return displayNameByProfileId;
+}
+
 function mapMessageWithProfile(
   message: TeamMessageRow,
   profileMap: Map<string, ProfileRow>,
+  authDisplayNameMap?: Map<string, string>,
 ) {
   const profile = profileMap.get(message.sender_id);
+  const senderName =
+    normalizeDisplayName(profile?.full_name) ||
+    authDisplayNameMap?.get(message.sender_id) ||
+    "Membro da equipa";
   return {
     id: message.id,
     team_id: message.team_id,
     age_group_id: message.age_group_id,
     sender_id: message.sender_id,
-    sender_name: profile?.full_name || "Membro da equipa",
+    sender_name: senderName,
     sender_avatar_url: profile?.avatar_url || null,
     content: message.content,
     created_at: message.created_at,
@@ -73,6 +154,12 @@ function mapMessageWithProfile(
 export async function GET(request: Request) {
   try {
     const supabase = await createClient();
+    let admin: SupabaseClient | null = null;
+    try {
+      admin = createAdminClient();
+    } catch {
+      admin = null;
+    }
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -120,13 +207,30 @@ export async function GET(request: Request) {
       (profileRows as ProfileRow[]).map((row) => [row.id, row]),
     );
 
-    const memberContext = await getTeamMembersDetailed(supabase, {
+    const memberContext = await getTeamMembersDetailed(admin ?? supabase, {
       teamId: context.teamId,
       ageGroupId: context.ageGroup.id,
     });
+    const missingDisplayNameIds = Array.from(
+      new Set([
+        ...senderIds.filter((senderId) => !normalizeDisplayName(profileMap.get(senderId)?.full_name)),
+        ...memberContext.members
+          .filter((member) => !normalizeDisplayName(member.fullName))
+          .map((member) => member.profileId),
+      ]),
+    );
+    const authDisplayNameMap =
+      admin && missingDisplayNameIds.length > 0
+        ? await loadAuthDisplayNamesById(admin, missingDisplayNameIds)
+        : new Map<string, string>();
+
     const members: MessageMemberRow[] = memberContext.members.map((member) => ({
       id: member.profileId,
-      full_name: member.fullName || "Membro da equipa",
+      full_name:
+        normalizeDisplayName(member.fullName) ||
+        authDisplayNameMap.get(member.profileId) ||
+        buildNameFromEmail(member.email) ||
+        "Membro da equipa",
       role: member.role,
     }));
 
@@ -154,7 +258,9 @@ export async function GET(request: Request) {
         ageGroupId: context.ageGroup.id,
         currentUserId: user.id,
         members,
-        messages: messages.map((row) => mapMessageWithProfile(row, profileMap)),
+        messages: messages.map((row) =>
+          mapMessageWithProfile(row, profileMap, authDisplayNameMap)
+        ),
       },
       {
         headers: {
@@ -243,6 +349,15 @@ export async function POST(request: Request) {
       .select("id, full_name, avatar_url")
       .eq("id", user.id)
       .maybeSingle();
+    let senderDisplayName = normalizeDisplayName(senderProfile?.full_name);
+    if (!senderDisplayName) {
+      try {
+        senderDisplayName =
+          (await loadAuthDisplayNamesById(createAdminClient(), [user.id])).get(user.id) || null;
+      } catch {
+        senderDisplayName = null;
+      }
+    }
 
     try {
       await createNotificationsForTeam(db, {
@@ -252,10 +367,7 @@ export async function POST(request: Request) {
         type: "message",
         entityId: inserted.id,
         title: "Nova mensagem da equipa técnica",
-        body:
-          (senderProfile?.full_name || "Um membro da equipa") +
-          ": " +
-          content.slice(0, 120),
+        body: (senderDisplayName || "Um membro da equipa") + ": " + content.slice(0, 120),
         linkPath: "/messages",
         excludeActor: true,
       });
@@ -273,9 +385,7 @@ export async function POST(request: Request) {
           type: "message",
           entityId: inserted.id,
           title: "Foste mencionado numa mensagem",
-          body: `${
-            senderProfile?.full_name || "Um membro da equipa"
-          } mencionou-te no chat`,
+          body: `${senderDisplayName || "Um membro da equipa"} mencionou-te no chat`,
           linkPath: "/messages",
           excludeActor: true,
         });
@@ -290,7 +400,7 @@ export async function POST(request: Request) {
     const profileMap = new Map<string, ProfileRow>();
     profileMap.set(user.id, {
       id: user.id,
-      full_name: senderProfile?.full_name || null,
+      full_name: senderDisplayName,
       avatar_url: senderProfile?.avatar_url || null,
     });
 
