@@ -9,6 +9,11 @@ import {
 
 type AttendanceStatus = "present" | "late" | "absent" | "injured";
 
+type DatabaseWriteError = {
+  code?: string;
+  message?: string;
+};
+
 type AttendanceGetPayload = {
   success?: boolean;
   linked?: boolean;
@@ -49,6 +54,19 @@ function toValidatedAttendance(input: Record<string, unknown>) {
       ([playerId, status]) => typeof playerId === "string" && isValidStatus(status),
     ),
   ) as Record<string, AttendanceStatus>;
+}
+
+function getAttendanceWriteErrorMessage(error: unknown): string {
+  const dbError = error as DatabaseWriteError | null;
+  if (
+    dbError?.code === "23514" &&
+    typeof dbError.message === "string" &&
+    dbError.message.includes("training_attendance_status_check")
+  ) {
+    return 'A base de dados ainda não aceita o estado "Atrasado". Falta aplicar a migration de presenças.';
+  }
+
+  return "Erro ao guardar presenças na base de dados.";
 }
 
 export async function GET(request: Request) {
@@ -321,7 +339,7 @@ export async function POST(request: Request) {
       if (deleteRes.error) {
         console.error("attendance.delete-fallback.failed", deleteRes.error);
         return NextResponse.json(
-          { error: "Erro ao guardar presenças na base de dados." },
+          { error: getAttendanceWriteErrorMessage(upsertRes.error) },
           { status: 500 },
         );
       }
@@ -330,7 +348,7 @@ export async function POST(request: Request) {
       if (insertRes.error) {
         console.error("attendance.insert-fallback.failed", insertRes.error);
         return NextResponse.json(
-          { error: "Erro ao guardar presenças na base de dados." },
+          { error: getAttendanceWriteErrorMessage(insertRes.error) },
           { status: 500 },
         );
       }

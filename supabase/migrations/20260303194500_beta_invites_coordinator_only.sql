@@ -13,6 +13,12 @@ alter table public.beta_invites
   drop constraint if exists beta_invites_staff_metadata_role_chk;
 
 alter table public.beta_invites
+  drop constraint if exists beta_invites_invite_type_coordinator_only_chk;
+
+alter table public.beta_invites
+  drop constraint if exists beta_invites_target_age_group_null_chk;
+
+alter table public.beta_invites
   add constraint beta_invites_invite_type_coordinator_only_chk
     check (invite_type = 'beta_coordinator');
 
