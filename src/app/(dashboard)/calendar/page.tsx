@@ -19,6 +19,7 @@ import {
   MapPin,
   Clock,
   AlertCircle,
+  Copy,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -114,6 +115,20 @@ function isEventEditable(event: CalEvent | null, canDeleteEvents: boolean) {
     return canDeleteEvents;
   }
   return event.status !== "completed" && event.status !== "cancelled";
+}
+
+function buildDuplicateTitle(event: CalEvent) {
+  const fallbackTitle =
+    event.title ||
+    (event.type === "training"
+      ? "Treino"
+      : formatFixtureOpponentLabel({
+          isHome: event.is_home ?? true,
+          opponentName: event.opponent_name,
+          opponentShortName: event.opponent_short_name,
+        }));
+
+  return `Cópia ${fallbackTitle}`.trim();
 }
 
 export default function CalendarPage() {
@@ -374,6 +389,37 @@ export default function CalendarPage() {
       image_url: event.image_url || "",
     });
     setModalMode(event.type === "training" ? "edit_training" : "edit_game");
+  }
+
+  function duplicateSelectedEvent() {
+    if (!selectedEvent) return;
+
+    setOpError(null);
+    setModalScreen("edit");
+    setSelectedEvent(null);
+    setForm({
+      title: buildDuplicateTitle(selectedEvent),
+      date: "",
+      start_time: selectedEvent.start_time || (selectedEvent.type === "training" ? "18:00" : "10:00"),
+      end_time: selectedEvent.end_time || "",
+      opponent_name: selectedEvent.opponent_name || "",
+      opponent_short_name:
+        normalizeManualShortName(selectedEvent.opponent_short_name, 5) || "",
+      competition_id: selectedEvent.competition_id || "",
+      location: selectedEvent.location || "",
+      location_address: selectedEvent.location_address || "",
+      formatted_address: selectedEvent.formatted_address || "",
+      latitude: selectedEvent.latitude ?? null,
+      longitude: selectedEvent.longitude ?? null,
+      osm_place_id: selectedEvent.osm_place_id || "",
+      location_source: selectedEvent.location_source ?? null,
+      is_home: selectedEvent.is_home ?? true,
+      notes: selectedEvent.notes || "",
+      image_url: selectedEvent.image_url || "",
+    });
+    setModalMode(
+      selectedEvent.type === "training" ? "add_training" : "add_game",
+    );
   }
 
   function closeModal() {
@@ -860,7 +906,7 @@ export default function CalendarPage() {
 
                   {isTrainingModal && (
                     <>
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <div className="space-y-1">
                           <Label>
                             <Clock size={12} className="inline mr-1" />
@@ -922,13 +968,21 @@ export default function CalendarPage() {
               )}
             </div>
 
-            <div className="sticky bottom-0 z-10 border-t bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shrink-0">
+            <div className="sticky bottom-0 z-10 border-t bg-white p-4 pb-[calc(var(--mobile-footer-height)+env(safe-area-inset-bottom)+1rem)] md:pb-[max(1rem,env(safe-area-inset-bottom))] shrink-0">
               {showReadOnlyEventSummary && selectedEvent ? (
-                <div className="flex gap-2">
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Button
+                    variant="outline"
+                    onClick={duplicateSelectedEvent}
+                    className="sm:flex-1"
+                  >
+                    <Copy size={16} className="mr-2" />
+                    Duplicar
+                  </Button>
                   {canEditSelectedEvent ? (
                     <Button
                       onClick={() => setModalScreen("edit")}
-                      className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                      className="sm:flex-1 bg-emerald-600 hover:bg-emerald-700"
                     >
                       Editar
                     </Button>
@@ -936,17 +990,17 @@ export default function CalendarPage() {
                   <Button
                     variant="outline"
                     onClick={closeModal}
-                    className={canEditSelectedEvent ? "flex-1" : "w-full"}
+                    className={canEditSelectedEvent ? "sm:flex-1" : "w-full"}
                   >
                     Cancelar
                   </Button>
                 </div>
               ) : (
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                   <Button
                     onClick={saveEvent}
                     disabled={saving || !form.date}
-                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 min-w-[8rem]"
+                    className="w-full bg-emerald-600 hover:bg-emerald-700 sm:min-w-[8rem] sm:flex-1"
                   >
                     {saving
                       ? "A guardar..."
@@ -968,7 +1022,7 @@ export default function CalendarPage() {
                       closeModal();
                     }}
                     disabled={saving}
-                    className="flex-1 min-w-[8rem]"
+                    className="w-full sm:min-w-[8rem] sm:flex-1"
                   >
                     Cancelar
                   </Button>

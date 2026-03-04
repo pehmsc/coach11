@@ -480,7 +480,7 @@ export default function GamesPage() {
 
       {createModalOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-50 flex items-end md:items-center justify-center p-4"
+          className="fixed inset-0 bg-black/50 z-[90] flex items-end md:items-center justify-center p-4"
           onClick={() => setCreateModalOpen(false)}
         >
           <div
@@ -538,7 +538,7 @@ export default function GamesPage() {
                 />
                 {createError && <p className="text-sm text-red-600">{createError}</p>}
               </div>
-              <div className="flex gap-2 border-t bg-white p-5 pt-3 shrink-0 pb-[max(1rem,env(safe-area-inset-bottom))]">
+              <div className="flex gap-2 border-t bg-white p-5 pt-3 shrink-0 pb-[calc(var(--mobile-footer-height)+env(safe-area-inset-bottom)+1rem)] md:pb-[max(1rem,env(safe-area-inset-bottom))]">
                 <Button
                   type="submit"
                   disabled={creatingGame}

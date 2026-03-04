@@ -114,6 +114,22 @@ function trainingStatusLabel(status: string | null | undefined) {
   }
 }
 
+function eventToneClasses(kind: "game" | "training") {
+  if (kind === "game") {
+    return {
+      card: "border-blue-200 bg-blue-50 hover:border-blue-300",
+      typeBadge: "bg-blue-100 text-blue-700",
+      statusBadge: "bg-white/80 text-blue-700",
+    };
+  }
+
+  return {
+    card: "border-emerald-200 bg-emerald-50 hover:border-emerald-300",
+    typeBadge: "bg-emerald-100 text-emerald-700",
+    statusBadge: "bg-white/80 text-emerald-700",
+  };
+}
+
 function gameTitle(game: PublicGameRow) {
   const opponent = game.opponent_name || "Adversário";
   return game.is_home ? `vs ${opponent}` : `@ ${opponent}`;
@@ -256,11 +272,12 @@ export default async function PublicCalendarPage({ params }: PublicPageParams) {
             </div>
           ) : (
             upcomingEvents.map((event) => {
+              const tone = eventToneClasses(event.kind);
               const content = (
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${tone.typeBadge}`}>
                         {event.kind === "game" ? (
                           <Swords size={12} />
                         ) : (
@@ -268,7 +285,7 @@ export default async function PublicCalendarPage({ params }: PublicPageParams) {
                         )}
                         {event.kind === "game" ? "Jogo" : "Treino"}
                       </span>
-                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
+                      <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${tone.statusBadge}`}>
                         {event.kind === "game"
                           ? gameStatusLabel(event.status)
                           : trainingStatusLabel(event.status)}
@@ -297,7 +314,7 @@ export default async function PublicCalendarPage({ params }: PublicPageParams) {
                 <Link
                   key={event.id}
                   href={event.href}
-                  className="block rounded-2xl border border-slate-200 bg-white p-4 transition-colors hover:border-emerald-300"
+                  className={`block rounded-2xl border p-4 transition-colors ${tone.card}`}
                 >
                   {content}
                 </Link>
@@ -319,7 +336,7 @@ export default async function PublicCalendarPage({ params }: PublicPageParams) {
               <Link
                 key={game.id}
                 href={`/public/${access.identifier}/games/${buildPublicGameRef(access.identifier, game.id)}`}
-                className="block rounded-2xl border border-slate-200 bg-white p-4 transition-colors hover:border-emerald-300"
+                className="block rounded-2xl border border-blue-200 bg-blue-50 p-4 transition-colors hover:border-blue-300"
               >
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>

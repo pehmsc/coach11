@@ -765,7 +765,7 @@ export default function TrainingsPage() {
 
       {createModalOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-50 flex items-end md:items-center justify-center p-4"
+          className="fixed inset-0 bg-black/50 z-[90] flex items-end md:items-center justify-center p-4"
           onClick={() => setCreateModalOpen(false)}
         >
           <div
@@ -802,7 +802,7 @@ export default function TrainingsPage() {
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <div className="space-y-1">
                   <label className="text-sm font-medium text-slate-700">Data *</label>
                   <input
@@ -869,7 +869,7 @@ export default function TrainingsPage() {
                 />
                 {createError && <p className="text-sm text-red-600">{createError}</p>}
               </div>
-              <div className="flex gap-2 border-t bg-white p-5 pt-3 shrink-0 pb-[max(1rem,env(safe-area-inset-bottom))]">
+              <div className="flex gap-2 border-t bg-white p-5 pt-3 shrink-0 pb-[calc(var(--mobile-footer-height)+env(safe-area-inset-bottom)+1rem)] md:pb-[max(1rem,env(safe-area-inset-bottom))]">
                 <Button
                   type="submit"
                   disabled={creatingTraining}
@@ -997,7 +997,7 @@ export default function TrainingsPage() {
                       className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
                     />
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <div className="space-y-1">
                       <label className="text-sm font-medium text-slate-700">Data *</label>
                       <input
@@ -1063,7 +1063,7 @@ export default function TrainingsPage() {
                     rows={7}
                   />
                 </div>
-                <div className="flex gap-2 border-t bg-white p-5 pt-3 shrink-0 pb-[max(1rem,env(safe-area-inset-bottom))]">
+                <div className="flex gap-2 border-t bg-white p-5 pt-3 shrink-0 pb-[calc(var(--mobile-footer-height)+env(safe-area-inset-bottom)+1rem)] md:pb-[max(1rem,env(safe-area-inset-bottom))]">
                   <Button
                     type="submit"
                     disabled={savingSelectedSession}

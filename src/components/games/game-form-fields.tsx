@@ -59,7 +59,9 @@ export function GameFormFields({
   compact = false,
 }: Props) {
   const inputSizeClass = compact ? "text-sm h-8" : "text-sm";
-  const gridClass = compact ? "grid grid-cols-2 gap-2" : "grid grid-cols-2 gap-3";
+  const gridClass = compact
+    ? "grid grid-cols-1 gap-2 sm:grid-cols-2"
+    : "grid grid-cols-1 gap-3 sm:grid-cols-2";
   const sectionGap = compact ? "space-y-2" : "space-y-3";
 
   return (
