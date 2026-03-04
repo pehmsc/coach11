@@ -176,7 +176,7 @@ export async function POST(request: Request) {
 
     const { data: sessionRow, error: sessionError } = await db
       .from("training_sessions")
-      .select("id, age_group_id, team_id, session_date, start_time, end_time, status")
+      .select("id, club_id, age_group_id, team_id, session_date, start_time, end_time, status")
       .eq("id", sessionId)
       .maybeSingle();
 
@@ -204,10 +204,21 @@ export async function POST(request: Request) {
       typeof (sessionRow as Record<string, unknown>)?.team_id === "string"
         ? ((sessionRow as Record<string, unknown>).team_id as string)
         : null;
+    const sessionClubId =
+      typeof (sessionRow as Record<string, unknown>)?.club_id === "string"
+        ? ((sessionRow as Record<string, unknown>).club_id as string)
+        : null;
 
     if (!sessionAgeGroupId) {
       return NextResponse.json(
         { error: "Sessão de treino sem escalão associado." },
+        { status: 500 },
+      );
+    }
+
+    if (!sessionClubId) {
+      return NextResponse.json(
+        { error: "Sessão de treino sem clube associado." },
         { status: 500 },
       );
     }
@@ -288,6 +299,7 @@ export async function POST(request: Request) {
 
     const markedAt = new Date().toISOString();
     const rowsToSave = entries.map(([playerId, status]) => ({
+      club_id: sessionClubId,
       training_session_id: sessionId,
       player_id: playerId,
       status,
@@ -300,12 +312,14 @@ export async function POST(request: Request) {
       .upsert(rowsToSave, { onConflict: "training_session_id,player_id" });
 
     if (upsertRes.error) {
+      console.error("attendance.upsert.failed", upsertRes.error);
       const deleteRes = await db
         .from("training_attendance")
         .delete()
         .eq("training_session_id", sessionId);
 
       if (deleteRes.error) {
+        console.error("attendance.delete-fallback.failed", deleteRes.error);
         return NextResponse.json(
           { error: "Erro ao guardar presenças na base de dados." },
           { status: 500 },
@@ -314,6 +328,7 @@ export async function POST(request: Request) {
 
       const insertRes = await db.from("training_attendance").insert(rowsToSave);
       if (insertRes.error) {
+        console.error("attendance.insert-fallback.failed", insertRes.error);
         return NextResponse.json(
           { error: "Erro ao guardar presenças na base de dados." },
           { status: 500 },
