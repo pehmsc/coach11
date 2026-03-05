@@ -1,5 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
+import { portugalDateTimeToUtc } from "@/lib/events/presence-window";
+import { getFixtureConnector } from "@/lib/games/display";
 import { NextResponse } from "next/server";
 
 type RouteContext = {
@@ -8,6 +10,7 @@ type RouteContext = {
 
 type ConvocationStatus = "draft" | "confirmed" | "closed";
 type MatchPhase = "pre_match" | "first_half" | "halftime" | "second_half" | "review" | "completed";
+const PORTUGAL_TIMEZONE = "Europe/Lisbon";
 
 function toConvocationStatus(value: string | null | undefined): ConvocationStatus {
   if (value === "confirmed" || value === "closed") return value;
@@ -20,6 +23,54 @@ function isMissingCheckpointTableError(message: string | null | undefined) {
     message.includes("game_live_checkpoints") &&
     (message.includes("does not exist") || message.includes("relation"))
   );
+}
+
+function isMissingRelationError(
+  message: string | null | undefined,
+  relationName: string,
+) {
+  if (!message) return false;
+  return (
+    message.includes(relationName) &&
+    (message.includes("does not exist") || message.includes("relation"))
+  );
+}
+
+function getPortugalDateKey(value: string | null | undefined) {
+  if (!value) return null;
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: PORTUGAL_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(parsed);
+
+  const lookup = Object.fromEntries(
+    parts
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, part.value]),
+  );
+
+  if (!lookup.year || !lookup.month || !lookup.day) return null;
+  return `${lookup.year}-${lookup.month}-${lookup.day}`;
+}
+
+function formatPortugalTime(value: string | null | undefined) {
+  if (!value) return null;
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+
+  return new Intl.DateTimeFormat("pt-PT", {
+    timeZone: PORTUGAL_TIMEZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(parsed);
 }
 
 function normalizeLiveStatusForUi(value: string | null | undefined) {
@@ -218,49 +269,161 @@ export async function GET(_request: Request, { params }: RouteContext) {
       );
     }
 
+    const { data: externalRowsRaw, error: externalRowsError } = await supabase
+      .from("external_player_convocations")
+      .select("id, name, jersey_number, position, lineup_status, created_at")
+      .eq("game_id", gameId)
+      .order("created_at", { ascending: true });
+
+    if (
+      externalRowsError &&
+      !isMissingRelationError(externalRowsError.message, "external_player_convocations")
+    ) {
+      return NextResponse.json(
+        { error: "Erro ao carregar jogadores externos da convocatória." },
+        { status: 500 },
+      );
+    }
+
+    const externalRows = ((externalRowsRaw || []) as Array<{
+      id: string;
+      name: string;
+      jersey_number: number | null;
+      position: string | null;
+      lineup_status: string | null;
+      created_at: string;
+    }>).filter((row) => row?.id && row?.name);
+
     const blockedIds = new Set<string>();
-    if (game.competition_id && game.game_datetime) {
-      const gameDate = String(game.game_datetime).split("T")[0];
+    const sameDayConflictLabelByPlayerId = new Map<string, string>();
 
-      if (gameDate) {
-        const { data: sameDayGames } = await supabase
-          .from("games")
-          .select("id")
-          .neq("id", gameId)
-          .not("competition_id", "is", null)
-          .gte("game_datetime", `${gameDate}T00:00:00`)
-          .lte("game_datetime", `${gameDate}T23:59:59`);
+    const gameDateKey = getPortugalDateKey(
+      typeof game.game_datetime === "string" ? game.game_datetime : null,
+    );
+    const dayStartUtc = portugalDateTimeToUtc(gameDateKey, "00:00:00");
+    const dayEndUtc = portugalDateTimeToUtc(gameDateKey, "23:59:59");
 
-        const sameDayIds = (sameDayGames || []).map((g) => g.id);
+    if (gameDateKey && dayStartUtc && dayEndUtc) {
+      const sameDayGamesQuery = supabase
+        .from("games")
+        .select("id, game_datetime, opponent_name, is_home, competition_id")
+        .neq("id", gameId)
+        .gte("game_datetime", dayStartUtc.toISOString())
+        .lte("game_datetime", dayEndUtc.toISOString())
+        .order("game_datetime", { ascending: true });
 
-        if (sameDayIds.length > 0) {
-          const { data: otherConvocations } = await supabase
-            .from("convocations")
-            .select("id")
-            .in("game_id", sameDayIds);
+      if (typeof game.club_id === "string" && game.club_id.length > 0) {
+        sameDayGamesQuery.eq("club_id", game.club_id);
+      }
 
-          const otherConvocationIds = (otherConvocations || []).map((c) => c.id);
+      const { data: sameDayGames, error: sameDayGamesError } = await sameDayGamesQuery;
 
-          if (otherConvocationIds.length > 0) {
-            const { data: blockedRows } = await supabase
+      if (sameDayGamesError) {
+        return NextResponse.json(
+          { error: "Erro ao validar convocatórias no mesmo dia." },
+          { status: 500 },
+        );
+      }
+
+      const sameDayGameIds = (sameDayGames || []).map((entry) => entry.id);
+      const sameDayGamesById = new Map(
+        (sameDayGames || []).map((entry) => [entry.id, entry]),
+      );
+
+      if (sameDayGameIds.length > 0) {
+        const { data: otherConvocations, error: otherConvocationsError } = await supabase
+          .from("convocations")
+          .select("id, game_id")
+          .in("game_id", sameDayGameIds);
+
+        if (otherConvocationsError) {
+          return NextResponse.json(
+            { error: "Erro ao carregar convocatórias no mesmo dia." },
+            { status: 500 },
+          );
+        }
+
+        const otherConvocationIds = (otherConvocations || []).map((entry) => entry.id);
+        const convocationGameById = new Map(
+          (otherConvocations || []).map((entry) => [entry.id, entry.game_id]),
+        );
+
+        if (otherConvocationIds.length > 0) {
+          const { data: sameDayConvocationPlayers, error: sameDayConvocationPlayersError } =
+            await supabase
               .from("convocation_players")
-              .select("player_id")
+              .select("player_id, convocation_id")
               .in("convocation_id", otherConvocationIds);
 
-            (blockedRows || []).forEach((row) => blockedIds.add(row.player_id));
+          if (sameDayConvocationPlayersError) {
+            return NextResponse.json(
+              { error: "Erro ao validar jogadores convocados no mesmo dia." },
+              { status: 500 },
+            );
           }
+
+          (sameDayConvocationPlayers || []).forEach((row) => {
+            const otherGameId = convocationGameById.get(row.convocation_id);
+            if (!otherGameId) return;
+
+            const otherGame = sameDayGamesById.get(otherGameId);
+            if (!otherGame) return;
+
+            if (game.competition_id && otherGame.competition_id) {
+              blockedIds.add(row.player_id);
+            }
+
+            if (!sameDayConflictLabelByPlayerId.has(row.player_id)) {
+              const opponentName =
+                (typeof otherGame.opponent_name === "string" && otherGame.opponent_name.trim()) ||
+                "Adversário";
+              const connector = getFixtureConnector(Boolean(otherGame.is_home));
+              const timeLabel = formatPortugalTime(
+                typeof otherGame.game_datetime === "string"
+                  ? otherGame.game_datetime
+                  : null,
+              );
+              const text = timeLabel
+                ? `Já convocado hoje: ${connector} ${opponentName} às ${timeLabel}`
+                : `Já convocado hoje: ${connector} ${opponentName}`;
+              sameDayConflictLabelByPlayerId.set(row.player_id, text);
+            }
+          });
         }
       }
     }
 
-    const players = (activePlayers || []).map((player) => {
-      const isConvocated = selectedIds.has(player.id);
-      return {
-        ...player,
-        isConvocated,
-        isBlocked: blockedIds.has(player.id) && !isConvocated,
-      };
-    });
+    const players = [
+      ...(activePlayers || []).map((player) => {
+        const isConvocated = selectedIds.has(player.id);
+        return {
+          ...player,
+          isConvocated,
+          isBlocked: blockedIds.has(player.id) && !isConvocated,
+          sameDayConflictLabel:
+            sameDayConflictLabelByPlayerId.get(player.id) ?? null,
+          isExternal: false,
+          externalConvocationId: null,
+        };
+      }),
+      ...externalRows.map((row) => ({
+        id: `external:${row.id}`,
+        age_group_id: game.age_group_id ?? "",
+        first_name: row.name,
+        last_name: "",
+        jersey_number:
+          typeof row.jersey_number === "number" ? row.jersey_number : null,
+        preferred_position:
+          typeof row.position === "string" ? row.position : null,
+        status: "active" as const,
+        created_at: row.created_at,
+        isConvocated: true,
+        isBlocked: false,
+        sameDayConflictLabel: null,
+        isExternal: true,
+        externalConvocationId: row.id,
+      })),
+    ];
 
     // Football format from age_group
     let footballFormat: string | null = null;
@@ -300,6 +463,16 @@ export async function GET(_request: Request, { params }: RouteContext) {
         if (status === "on_field") starterIdsSet.add(playerId);
       });
     }
+
+    externalRows.forEach((row) => {
+      const externalPlayerId = `external:${row.id}`;
+      const normalized =
+        row.lineup_status === "on_field" ? "on_field" : "substitute";
+      lineupStatuses[externalPlayerId] = normalized;
+      if (normalized === "on_field") {
+        starterIdsSet.add(externalPlayerId);
+      }
+    });
 
     let kits: Record<string, unknown>[] = [];
     if (teamId) {

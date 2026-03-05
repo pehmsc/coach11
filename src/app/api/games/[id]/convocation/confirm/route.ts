@@ -93,7 +93,27 @@ export async function POST(_request: Request, { params }: RouteContext) {
     }
 
     const uniquePlayers = new Set((selectedRows || []).map((row) => row.player_id));
-    const playersCount = uniquePlayers.size;
+
+    const { count: externalPlayersCount, error: externalPlayersCountError } = await supabase
+      .from("external_player_convocations")
+      .select("id", { head: true, count: "exact" })
+      .eq("game_id", gameId);
+
+    if (
+      externalPlayersCountError &&
+      !(
+        externalPlayersCountError.message?.includes("external_player_convocations") &&
+        (externalPlayersCountError.message.includes("does not exist") ||
+          externalPlayersCountError.message.includes("relation"))
+      )
+    ) {
+      return NextResponse.json(
+        { error: "Erro ao validar jogadores externos convocados." },
+        { status: 500 },
+      );
+    }
+
+    const playersCount = uniquePlayers.size + (externalPlayersCount ?? 0);
 
     if (!playersCount || playersCount <= 0) {
       return NextResponse.json(

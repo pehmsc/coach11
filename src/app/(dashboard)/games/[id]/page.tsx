@@ -17,6 +17,7 @@ import {
   Pencil,
   Trash2,
   X,
+  UserPlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EMPTY_LOCATION_FIELDS, resolveLocationLabel } from "@/lib/location";
@@ -43,6 +44,9 @@ import type { Game, Player } from "@/types/database";
 interface PlayerWithStatus extends Player {
   isConvocated: boolean;
   isBlocked: boolean; // já convocado noutro jogo de competição no mesmo dia
+  isExternal?: boolean;
+  externalConvocationId?: string | null;
+  sameDayConflictLabel?: string | null;
 }
 
 const FORMATIONS_BY_FORMAT: Record<string, string[]> = {
@@ -153,6 +157,11 @@ export default function GameDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletingGame, setDeletingGame] = useState(false);
+  const [showExternalPlayerModal, setShowExternalPlayerModal] = useState(false);
+  const [externalPlayerName, setExternalPlayerName] = useState("");
+  const [externalPlayerNumber, setExternalPlayerNumber] = useState("");
+  const [externalPlayerPosition, setExternalPlayerPosition] = useState("");
+  const [savingExternalPlayer, setSavingExternalPlayer] = useState(false);
 
   // Game edit state
   const [editingGame, setEditingGame] = useState(false);
@@ -355,6 +364,9 @@ export default function GameDetailPage() {
   }
 
   async function handleLineupToggle(playerId: string) {
+    const targetPlayer = players.find((player) => player.id === playerId) ?? null;
+    const isExternalPlayer = targetPlayer?.isExternal === true;
+    const externalConvocationId = targetPlayer?.externalConvocationId ?? null;
     const current = lineupStatuses[playerId];
     const newStatus: "on_field" | "substitute" =
       current === "on_field" ? "substitute" : "on_field";
@@ -388,11 +400,32 @@ export default function GameDetailPage() {
       return;
     }
 
+    if (isExternalPlayer && !externalConvocationId) {
+      setLineupStatuses((prev) => ({
+        ...prev,
+        [playerId]: current ?? "substitute",
+      }));
+      setSavingLineupPlayer(null);
+      setError("Jogador externo inválido para atualizar lineup.");
+      return;
+    }
+
     try {
-      const res = await fetch(`/api/games/${id}/convocation/lineup`, {
+      const endpoint = isExternalPlayer
+        ? `/api/games/${id}/convocation/external/lineup`
+        : `/api/games/${id}/convocation/lineup`;
+      const requestBody = isExternalPlayer
+        ? {
+            ...payload,
+            externalConvocationId,
+            playerId: undefined,
+          }
+        : payload;
+
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(requestBody),
       });
       if (!res.ok) {
         const payload = await res.json().catch(() => ({}));
@@ -403,6 +436,8 @@ export default function GameDetailPage() {
         setError(
           (payload as { error?: string })?.error || "Erro ao guardar lineup.",
         );
+      } else {
+        setConvocationStatus("draft");
       }
     } catch {
       setLineupStatuses((prev) => ({
@@ -539,6 +574,46 @@ export default function GameDetailPage() {
     setSaving(player.id);
     setError(null);
 
+    if (player.isExternal && player.externalConvocationId) {
+      const payload = buildConvocationPayload({
+        externalConvocationId: player.externalConvocationId,
+      });
+      if (!payload) {
+        setSaving(null);
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/games/${id}/convocation/external/remove`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const responseBody = await res.json().catch(() => ({}));
+
+        if (!res.ok || responseBody?.success !== true) {
+          setError(
+            responseBody?.error ||
+              "Erro ao remover jogador externo da convocatória.",
+          );
+        } else {
+          setPlayers((prev) => prev.filter((entry) => entry.id !== player.id));
+          setLineupStatuses((prev) => {
+            const next = { ...prev };
+            delete next[player.id];
+            return next;
+          });
+          setConvocationStatus("draft");
+        }
+      } catch {
+        setError("Erro de ligação ao remover jogador externo.");
+      } finally {
+        setSaving(null);
+      }
+
+      return;
+    }
+
     const payload = buildConvocationPayload({ playerId: player.id });
     if (!payload) {
       setSaving(null);
@@ -601,6 +676,101 @@ export default function GameDetailPage() {
       setError("Erro de ligação ao guardar convocatória.");
     } finally {
       setConfirmingConvocation(false);
+    }
+  }
+
+  function resetExternalPlayerForm() {
+    setExternalPlayerName("");
+    setExternalPlayerNumber("");
+    setExternalPlayerPosition("");
+  }
+
+  function closeExternalPlayerModal() {
+    if (savingExternalPlayer) return;
+    setShowExternalPlayerModal(false);
+    resetExternalPlayerForm();
+  }
+
+  async function handleAddExternalPlayer(e: { preventDefault(): void }) {
+    e.preventDefault();
+    setSavingExternalPlayer(true);
+    setError(null);
+
+    const numberValue = Number(externalPlayerNumber);
+    if (!Number.isInteger(numberValue) || numberValue < 0 || numberValue > 99) {
+      setError("O número do jogador deve ser um inteiro entre 0 e 99.");
+      setSavingExternalPlayer(false);
+      return;
+    }
+
+    const payload = buildConvocationPayload({
+      name: externalPlayerName.trim(),
+      number: numberValue,
+      position: externalPlayerPosition.trim(),
+    });
+    if (!payload) {
+      setSavingExternalPlayer(false);
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/games/${id}/convocation/external`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const responseBody = await res.json().catch(() => ({}));
+
+      if (!res.ok || !responseBody?.player?.id) {
+        setError(
+          responseBody?.error ||
+            "Erro ao adicionar jogador externo à convocatória.",
+        );
+        setSavingExternalPlayer(false);
+        return;
+      }
+
+      const externalPlayerId = `external:${responseBody.player.id}`;
+      const insertedPlayer: PlayerWithStatus = {
+        id: externalPlayerId,
+        age_group_id: game?.age_group_id ?? "",
+        first_name: String(responseBody.player.name || "Jogador externo"),
+        last_name: "",
+        preferred_position:
+          typeof responseBody.player.position === "string"
+            ? responseBody.player.position
+            : undefined,
+        jersey_number:
+          typeof responseBody.player.jersey_number === "number"
+            ? responseBody.player.jersey_number
+            : undefined,
+        status: "active",
+        created_at:
+          typeof responseBody.player.created_at === "string"
+            ? responseBody.player.created_at
+            : new Date().toISOString(),
+        isConvocated: true,
+        isBlocked: false,
+        isExternal: true,
+        externalConvocationId: responseBody.player.id,
+        sameDayConflictLabel: null,
+      };
+
+      setPlayers((prev) => [...prev, insertedPlayer]);
+      setLineupStatuses((prev) => ({
+        ...prev,
+        [externalPlayerId]:
+          responseBody.player.lineup_status === "on_field"
+            ? "on_field"
+            : "substitute",
+      }));
+      setConvocationStatus("draft");
+      setShowExternalPlayerModal(false);
+      resetExternalPlayerForm();
+    } catch {
+      setError("Erro de ligação ao adicionar jogador externo.");
+    } finally {
+      setSavingExternalPlayer(false);
     }
   }
 
@@ -1142,6 +1312,93 @@ export default function GameDetailPage() {
         </div>
       )}
 
+      {showExternalPlayerModal && (
+        <div
+          className="fixed inset-0 z-[80] flex items-end justify-center bg-black/50 px-4 pt-4 pb-[calc(var(--mobile-footer-height)+env(safe-area-inset-bottom)+0.75rem)] md:items-center md:p-4"
+          onClick={closeExternalPlayerModal}
+        >
+          <div
+            className="min-w-0 overflow-x-hidden bg-white rounded-2xl w-full max-w-md shadow-xl h-[calc(100dvh-var(--mobile-footer-height)-env(safe-area-inset-bottom)-1rem)] md:h-auto md:max-h-[80vh] overflow-hidden flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-5 border-b">
+              <h3 className="font-bold text-slate-900">Adicionar jogador externo</h3>
+              <button onClick={closeExternalPlayerModal} disabled={savingExternalPlayer}>
+                <X size={20} className="text-slate-400" />
+              </button>
+            </div>
+            <form onSubmit={handleAddExternalPlayer} className="flex min-h-0 min-w-0 flex-1 flex-col">
+              <div
+                className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-5 space-y-3 [overflow-wrap:anywhere]"
+                style={{ WebkitOverflowScrolling: "touch" }}
+              >
+                <div className="space-y-1">
+                  <label className="text-sm font-medium text-slate-700">Nome *</label>
+                  <input
+                    type="text"
+                    value={externalPlayerName}
+                    onChange={(event) => setExternalPlayerName(event.target.value)}
+                    placeholder="Nome do jogador"
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                    required
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium text-slate-700">Número *</label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={99}
+                      value={externalPlayerNumber}
+                      onChange={(event) => setExternalPlayerNumber(event.target.value)}
+                      placeholder="0-99"
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium text-slate-700">Posição *</label>
+                    <input
+                      type="text"
+                      value={externalPlayerPosition}
+                      onChange={(event) => setExternalPlayerPosition(event.target.value)}
+                      placeholder="Ex: Médio"
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                      required
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-slate-500">
+                  Este jogador fica apenas nesta convocatória e não é adicionado ao plantel.
+                </p>
+              </div>
+              <div className="flex gap-2 border-t bg-white p-5 pt-3 shrink-0 pb-[max(1rem,env(safe-area-inset-bottom))]">
+                <Button
+                  type="submit"
+                  disabled={savingExternalPlayer}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700"
+                >
+                  {savingExternalPlayer ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : (
+                    "Guardar"
+                  )}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={closeExternalPlayerModal}
+                  disabled={savingExternalPlayer}
+                >
+                  Cancelar
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {showDeleteConfirm && (
         <div
           className="fixed inset-0 bg-black/50 z-50 flex items-end md:items-center justify-center p-4"
@@ -1416,7 +1673,19 @@ export default function GameDetailPage() {
           <Shield size={18} className="text-slate-600" />
           <h2 className="font-bold text-slate-900">Convocatória</h2>
         </div>
-        <div className="text-right">
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 border-blue-200 text-blue-700 hover:bg-blue-50"
+            onClick={() => setShowExternalPlayerModal(true)}
+            disabled={!convocationEditable}
+          >
+            <UserPlus size={14} className="mr-1.5" />
+            Outro jogador
+          </Button>
+          <div className="text-right">
           <span className="text-sm text-slate-500 block">
             {convocatedCount} convocado{convocatedCount !== 1 ? "s" : ""}
           </span>
@@ -1435,6 +1704,7 @@ export default function GameDetailPage() {
                 ? "Fechada"
                 : "Rascunho"}
           </span>
+          </div>
         </div>
       </div>
 
@@ -1573,9 +1843,9 @@ export default function GameDetailPage() {
                         {player.preferred_position}
                       </p>
                     )}
-                    {player.isBlocked && (
+                    {player.sameDayConflictLabel && (
                       <p className="text-xs text-orange-500">
-                        Jogo de competição no mesmo dia
+                        {player.sameDayConflictLabel}
                       </p>
                     )}
                   </div>
@@ -1665,9 +1935,17 @@ function ConvocatedRow({
           className={`font-medium text-sm truncate ${isStarter ? "text-blue-900" : "text-slate-700"}`}
         >
           {player.first_name} {player.last_name}
+          {player.isExternal && (
+            <span className="ml-1 align-middle text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+              (externo)
+            </span>
+          )}
         </p>
         {player.preferred_position && (
           <p className="text-xs text-slate-400">{player.preferred_position}</p>
+        )}
+        {player.sameDayConflictLabel && (
+          <p className="text-xs text-orange-500">{player.sameDayConflictLabel}</p>
         )}
       </div>
       {/* Toggle lineup badge */}

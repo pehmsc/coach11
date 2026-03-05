@@ -72,6 +72,7 @@ export default function AttendancePage() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [ageGroup, setAgeGroup] = useState<AgeGroup | null>(null);
   const [attendance, setAttendance] = useState<AttendanceState>({});
+  const [initialAttendance, setInitialAttendance] = useState<AttendanceState>({});
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [canManageClosedAttendance, setCanManageClosedAttendance] = useState(false);
   const [presencePromptState, setPresencePromptState] =
@@ -111,6 +112,7 @@ export default function AttendancePage() {
         setNoSession(true);
         setSessionClosed(false);
         setPresencePromptState("hidden");
+        setInitialAttendance({});
         return;
       }
 
@@ -125,6 +127,7 @@ export default function AttendancePage() {
         setNoSession(true);
         setSessionClosed(false);
         setPresencePromptState("hidden");
+        setInitialAttendance({});
         return;
       }
 
@@ -155,6 +158,7 @@ export default function AttendancePage() {
         initialAttendance[player.id] = isValidStatus(status) ? status : "present";
       });
       setAttendance(initialAttendance);
+      setInitialAttendance(initialAttendance);
     } catch {
       setError("Erro de ligação ao carregar presenças.");
       setPlayers([]);
@@ -163,6 +167,7 @@ export default function AttendancePage() {
       setNoSession(true);
       setSessionClosed(false);
       setPresencePromptState("hidden");
+      setInitialAttendance({});
     } finally {
       setLoading(false);
     }
@@ -223,6 +228,7 @@ export default function AttendancePage() {
       const isCompleted = payload.sessionStatus === "completed";
       setSessionClosed(isCompleted);
       setPresencePromptState(isCompleted ? "closed" : "mark");
+      setInitialAttendance(attendance);
       router.refresh(); // Invalidar cache RSC do dashboard
     } catch {
       setError("Erro de ligação ao guardar presenças.");
@@ -267,6 +273,15 @@ export default function AttendancePage() {
     },
   };
   const isClosingWindow = !sessionClosed && presencePromptState === "close";
+  const hasAttendanceChanges = players.some((player) => {
+    const current = attendance[player.id] ?? "present";
+    const baseline = initialAttendance[player.id] ?? "present";
+    return current !== baseline;
+  });
+  const saveDisabled =
+    saving ||
+    (sessionClosed && !canManageClosedAttendance) ||
+    (!hasAttendanceChanges && !isClosingWindow);
 
   // ── Header de navegação de datas ──
   const dateNav = (
@@ -471,33 +486,38 @@ export default function AttendancePage() {
         })}
       </div>
 
-      <div className="sticky bottom-20 md:bottom-4">
+      <div className="sticky bottom-[calc(var(--mobile-footer-height)+env(safe-area-inset-bottom)+0.5rem)] z-10 md:bottom-4">
         {saved && (
           <div className="bg-emerald-50 border-2 border-emerald-200 text-emerald-700 p-3 rounded-xl text-center font-semibold text-sm mb-2">
             ✓ {sessionClosed ? "Atualizado" : "Presenças guardadas"}! ({counts.present} presentes · {counts.late} atrasados · {counts.absent} ausentes ·{" "}
             {counts.injured} lesionados)
           </div>
         )}
-        {(!saved || sessionClosed) && (
-          <Button
-            onClick={handleSave}
-            className={`w-full h-14 text-base font-semibold rounded-xl shadow-lg ${
-              isClosingWindow
-                ? "bg-amber-600 hover:bg-amber-700"
-                : "bg-emerald-600 hover:bg-emerald-700"
-            }`}
-            disabled={saving || (sessionClosed && !canManageClosedAttendance)}
-          >
-            <Save size={20} className="mr-2" />
-            {saving
-              ? "A guardar..."
-              : sessionClosed
-                ? "Regravar presenças"
-                : isClosingWindow
-                  ? "Confirmar e fechar treino"
-                  : `Guardar registo — ${counts.present + counts.late} presentes · ${counts.absent} ausentes`}
-          </Button>
-        )}
+        <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-lg">
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-12 flex-1"
+              onClick={() => router.back()}
+              disabled={saving}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleSave}
+              className={`h-12 flex-1 text-base font-semibold ${
+                isClosingWindow
+                  ? "bg-amber-600 hover:bg-amber-700"
+                  : "bg-emerald-600 hover:bg-emerald-700"
+              }`}
+              disabled={saveDisabled}
+            >
+              <Save size={18} className="mr-2" />
+              {saving ? "A guardar..." : "Guardar"}
+            </Button>
+          </div>
+        </div>
       </div>
     </div>
   );
