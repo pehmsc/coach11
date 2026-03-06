@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveUserTeamContext } from "@/lib/auth/team-context";
 import { getTeamMembersDetailed } from "@/lib/team/members";
 import { NextResponse } from "next/server";
-import { SHORT_PRIVATE_CACHE_CONTROL } from "@/lib/http/cache";
+import { PRIVATE_SWR_CACHE_CONTROL } from "@/lib/http/cache";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 
 function normalizeKitRowForUi(row: Record<string, unknown>) {
@@ -86,7 +86,7 @@ export async function GET() {
         },
         {
           headers: {
-            "Cache-Control": SHORT_PRIVATE_CACHE_CONTROL,
+            "Cache-Control": PRIVATE_SWR_CACHE_CONTROL,
           },
         },
       );
@@ -210,7 +210,7 @@ export async function GET() {
       },
       {
         headers: {
-          "Cache-Control": SHORT_PRIVATE_CACHE_CONTROL,
+          "Cache-Control": PRIVATE_SWR_CACHE_CONTROL,
         },
       },
     );

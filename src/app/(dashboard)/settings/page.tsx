@@ -3,6 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useState, useEffect, useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +14,7 @@ import { Loader2, User, Palette, Bell, Camera, AlertTriangle } from "lucide-reac
 import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
 import { pt } from "date-fns/locale";
+import { clearClientCaches } from "@/lib/query/cache-clear";
 import type { Profile } from "@/types/database";
 
 type Tab = "account" | "theme" | "notifications";
@@ -26,6 +28,7 @@ const ROLE_LABELS: Record<string, string> = {
 
 export default function SettingsPage() {
   const supabase = useMemo(() => createClient(), []);
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<Tab>("account");
 
   // Profile state
@@ -245,6 +248,7 @@ export default function SettingsPage() {
 
       toast.success("Conta apagada com sucesso.");
       await supabase.auth.signOut().catch(() => null);
+      clearClientCaches(queryClient);
       window.location.href = "/";
     } catch {
       toast.error("Erro de ligação ao apagar conta.");

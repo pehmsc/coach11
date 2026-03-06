@@ -1,19 +1,24 @@
 "use client";
 
 import { Suspense, useEffect, useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ShieldAlert } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { clearClientCaches } from "@/lib/query/cache-clear";
 
 function InviteOnlyContent() {
+  const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const reason = useMemo(() => searchParams.get("reason"), [searchParams]);
 
   useEffect(() => {
     const supabase = createClient();
-    void supabase.auth.signOut().catch(() => null);
-  }, []);
+    void supabase.auth.signOut().catch(() => null).finally(() => {
+      clearClientCaches(queryClient);
+    });
+  }, [queryClient]);
 
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-10">

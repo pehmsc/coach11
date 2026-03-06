@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
+import { PRIVATE_SWR_CACHE_CONTROL } from "@/lib/http/cache";
 import { NextResponse } from "next/server";
 
 type StatisticsRpcPayload = {
@@ -65,16 +66,23 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Sem permissões" }, { status: 403 });
     }
 
-    return NextResponse.json({
-      success: true,
-      players: asArray(payload.players),
-      attendanceRows: asArray(payload.attendanceRows),
-      finalStats: asArray(payload.finalStats),
-      convocations: asArray(payload.convocations),
-      convocationPlayers: asArray(payload.convocationPlayers),
-      gameIds: asArray(payload.gameIds),
-      gameEvents: asArray(payload.gameEvents),
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        players: asArray(payload.players),
+        attendanceRows: asArray(payload.attendanceRows),
+        finalStats: asArray(payload.finalStats),
+        convocations: asArray(payload.convocations),
+        convocationPlayers: asArray(payload.convocationPlayers),
+        gameIds: asArray(payload.gameIds),
+        gameEvents: asArray(payload.gameEvents),
+      },
+      {
+        headers: {
+          "Cache-Control": PRIVATE_SWR_CACHE_CONTROL,
+        },
+      },
+    );
   } catch (error) {
     console.error("Erro ao carregar estatísticas:", error);
     return respondInternalError("api.statistics.players.get", error);

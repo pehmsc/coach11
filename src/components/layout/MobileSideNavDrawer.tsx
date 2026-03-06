@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import { useEffect, useId, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { usePathname, useRouter } from "next/navigation";
 import { LogOut, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { clearClientCaches } from "@/lib/query/cache-clear";
 import { useUnreadNotifications } from "@/components/layout/use-unread-notifications";
 import { InstallPWAButton } from "@/components/pwa/InstallPWAButton";
 import {
@@ -39,6 +41,7 @@ export function MobileSideNavDrawer({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const unreadMessagesCount = useUnreadNotifications(profile?.id ?? null, {
     type: "message",
   });
@@ -123,6 +126,7 @@ export function MobileSideNavDrawer({
   async function handleLogout() {
     const supabase = createClient();
     await supabase.auth.signOut();
+    clearClientCaches(queryClient);
     onClose();
     router.push("/login");
     router.refresh();

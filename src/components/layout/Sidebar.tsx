@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { useQueryClient } from "@tanstack/react-query";
 import { usePathname, useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { clearClientCaches } from "@/lib/query/cache-clear";
 import type { Profile } from "@/types/database";
 import { useUnreadNotifications } from "@/components/layout/use-unread-notifications";
 import {
@@ -21,6 +23,7 @@ interface SidebarProps {
 export function Sidebar({ profile, avatarUrl }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const unreadMessagesCount = useUnreadNotifications(profile?.id ?? null, {
     type: "message",
   });
@@ -31,6 +34,7 @@ export function Sidebar({ profile, avatarUrl }: SidebarProps) {
   async function handleLogout() {
     const supabase = createClient();
     await supabase.auth.signOut();
+    clearClientCaches(queryClient);
     router.push("/login");
     router.refresh();
   }

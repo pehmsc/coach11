@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useMemo, useState } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
   BarChart2,
   AlertTriangle,
@@ -13,6 +14,9 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Player } from "@/types/database";
+import { apiFetch } from "@/lib/http/apiFetch";
+import { useMeContext } from "@/lib/hooks/useMeContext";
+import { queryKeys } from "@/lib/query/keys";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -70,13 +74,6 @@ type GameSortKey =
 
 // ── API helpers ──────────────────────────────────────────────────────────────
 
-interface ContextResponse {
-  ageGroupId?: string;
-  ageGroup?: { id: string } | null;
-  teamId?: string;
-  error?: string;
-}
-
 interface AttendanceRow {
   player_id: string;
   status: string;
@@ -112,6 +109,17 @@ interface GameEventRow {
   player_id: string | null;
   event_type: string;
   is_opponent_event: boolean;
+}
+
+interface StatisticsPlayersResponse {
+  success?: boolean;
+  players?: Player[];
+  attendanceRows?: AttendanceRow[];
+  finalStats?: FinalStatRow[];
+  convocations?: ConvocationRow[];
+  convocationPlayers?: ConvocationPlayerRow[];
+  gameIds?: string[];
+  gameEvents?: GameEventRow[];
 }
 
 function isGoalkeeper(player: Player | undefined) {
@@ -153,11 +161,6 @@ function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
 
 export default function StatisticsPage() {
   const [activeTab, setActiveTab] = useState<Tab>("attendance");
-  const [loading, setLoading] = useState(true);
-  const [ageGroupId, setAgeGroupId] = useState<string | null>(null);
-  const [players, setPlayers] = useState<Player[]>([]);
-  const [attendanceStats, setAttendanceStats] = useState<AttendanceStats[]>([]);
-  const [gameStats, setGameStats] = useState<GameStats[]>([]);
   const [attendanceSort, setAttendanceSort] = useState<{
     key: AttendanceSortKey;
     dir: SortDir;
@@ -166,173 +169,170 @@ export default function StatisticsPage() {
     key: GameSortKey;
     dir: SortDir;
   }>({ key: "player", dir: "asc" });
+  const meContextQuery = useMeContext();
+  const ageGroupId = meContextQuery.data?.ageGroup?.id ?? null;
 
-  useEffect(() => {
-    void loadAll();
-  }, []);
+  const statisticsQuery = useQuery({
+    queryKey: ageGroupId
+      ? queryKeys.statistics.players(ageGroupId)
+      : [...queryKeys.statistics.root(), "players", "none"],
+    queryFn: () =>
+      apiFetch<StatisticsPlayersResponse>(
+        `/api/statistics/players?ageGroupId=${ageGroupId}`,
+      ),
+    enabled: Boolean(ageGroupId),
+    placeholderData: keepPreviousData,
+  });
 
-  async function loadAll() {
-    setLoading(true);
-    try {
-      // Get age group context (works for both coordinators and coaches)
-      const ctxRes = await fetch("/api/me/context", { credentials: "include" });
-      const ctx = (await ctxRes.json().catch(() => ({}))) as ContextResponse;
-      const agId = ctx.ageGroupId ?? ctx.ageGroup?.id ?? null;
-      if (!agId) { setLoading(false); return; }
-      setAgeGroupId(agId);
+  const players = useMemo(
+    () => statisticsQuery.data?.players ?? [],
+    [statisticsQuery.data?.players],
+  );
 
-      // Fetch players
-      const playersRes = await fetch(`/api/statistics/players?ageGroupId=${agId}`, {
-        credentials: "include",
+  const attendanceStats = useMemo(() => {
+    const attRows = statisticsQuery.data?.attendanceRows ?? [];
+    const attMap = new Map<string, AttendanceStats>();
+
+    players.forEach((player) => {
+      attMap.set(player.id, {
+        player,
+        presencas: 0,
+        atrasados: 0,
+        ausencias: 0,
+        lesionados: 0,
+        minutos: 0,
       });
-      const playersData = await playersRes.json().catch(() => ({ players: [] })) as {
-        players?: Player[];
-        attendanceRows?: AttendanceRow[];
-        finalStats?: FinalStatRow[];
-        convocations?: ConvocationRow[];
-        convocationPlayers?: ConvocationPlayerRow[];
-        gameIds?: string[];
-        gameEvents?: GameEventRow[];
-      };
+    });
 
-      const rawPlayers = playersData.players ?? [];
-      setPlayers(rawPlayers);
+    attRows.forEach((row) => {
+      const entry = attMap.get(row.player_id);
+      if (!entry) return;
+      if (row.status === "present") entry.presencas += 1;
+      else if (row.status === "late") entry.atrasados += 1;
+      else if (row.status === "absent") entry.ausencias += 1;
+      else if (row.status === "injured") entry.lesionados += 1;
+    });
 
-      // ── Attendance ──
-      const attRows = playersData.attendanceRows ?? [];
-      const attMap = new Map<string, AttendanceStats>();
-      rawPlayers.forEach((p) => {
-        attMap.set(p.id, {
-          player: p,
-          presencas: 0,
-          atrasados: 0,
-          ausencias: 0,
-          lesionados: 0,
-          minutos: 0,
-        });
+    attMap.forEach((entry) => {
+      entry.minutos = (entry.presencas + entry.atrasados) * 60;
+    });
+
+    return Array.from(attMap.values());
+  }, [players, statisticsQuery.data?.attendanceRows]);
+
+  const gameStats = useMemo(() => {
+    const finalStats = statisticsQuery.data?.finalStats ?? [];
+    const convocations = statisticsQuery.data?.convocations ?? [];
+    const convocationPlayers = statisticsQuery.data?.convocationPlayers ?? [];
+    const gameEvents = statisticsQuery.data?.gameEvents ?? [];
+
+    const convGameIdsByPlayer = new Map<string, Set<string>>();
+    const convocationToGame = new Map<string, string>();
+    convocations.forEach((convocation) =>
+      convocationToGame.set(convocation.id, convocation.game_id),
+    );
+
+    convocationPlayers.forEach((entry) => {
+      const gameId = convocationToGame.get(entry.convocation_id);
+      if (!gameId) return;
+      if (!convGameIdsByPlayer.has(entry.player_id)) {
+        convGameIdsByPlayer.set(entry.player_id, new Set());
+      }
+      convGameIdsByPlayer.get(entry.player_id)?.add(gameId);
+    });
+
+    const gameStatsMap = new Map<string, GameStats>();
+    players.forEach((player) => {
+      gameStatsMap.set(player.id, {
+        player,
+        golos: 0,
+        autoGolos: 0,
+        assistencias: 0,
+        minutos: 0,
+        gs: 0,
+        titular: 0,
+        suplente: 0,
+        convocatorias: convGameIdsByPlayer.get(player.id)?.size ?? 0,
+        mvp: 0,
+        amarelos: 0,
+        vermelhos: 0,
+        totalJogos: 0,
+        mediaNotaSum: 0,
+        mediaNotaCount: 0,
       });
-      attRows.forEach((r) => {
-        const entry = attMap.get(r.player_id);
-        if (!entry) return;
-        if (r.status === "present") entry.presencas++;
-        else if (r.status === "late") entry.atrasados++;
-        else if (r.status === "absent") entry.ausencias++;
-        else if (r.status === "injured") entry.lesionados++;
-      });
-      attMap.forEach((entry) => { entry.minutos = (entry.presencas + entry.atrasados) * 60; });
-      setAttendanceStats(Array.from(attMap.values()));
+    });
 
-      // ── Game stats ──
-      const finalStats = playersData.finalStats ?? [];
-      const convocations = playersData.convocations ?? [];
-      const convPlayers = playersData.convocationPlayers ?? [];
-
-      // Build: player → set of game_ids convocated
-      const convGameIdsByPlayer = new Map<string, Set<string>>();
-      // convocation_id → game_id
-      const convGameMap = new Map<string, string>();
-      convocations.forEach((c) => convGameMap.set(c.id, c.game_id));
-
-      convPlayers.forEach((cp) => {
-        const gameId = convGameMap.get(cp.convocation_id);
-        if (!gameId) return;
-        if (!convGameIdsByPlayer.has(cp.player_id)) {
-          convGameIdsByPlayer.set(cp.player_id, new Set());
+    finalStats
+      .filter((entry) => entry.is_finalized)
+      .forEach((entry) => {
+        const playerStats = gameStatsMap.get(entry.player_id);
+        if (!playerStats) return;
+        playerStats.golos += entry.goals ?? 0;
+        playerStats.autoGolos += entry.own_goals ?? 0;
+        playerStats.assistencias += entry.assists ?? 0;
+        playerStats.minutos += entry.minutes_played ?? 0;
+        playerStats.amarelos += entry.yellow_cards ?? 0;
+        playerStats.vermelhos += entry.red_cards ?? 0;
+        if (entry.lineup_type === "starter") playerStats.titular += 1;
+        else playerStats.suplente += 1;
+        if (entry.is_mvp) playerStats.mvp += 1;
+        if (entry.coach_rating !== null && entry.coach_rating !== undefined) {
+          playerStats.mediaNotaSum += entry.coach_rating;
+          playerStats.mediaNotaCount += 1;
         }
-        convGameIdsByPlayer.get(cp.player_id)!.add(gameId);
+        playerStats.totalJogos += 1;
       });
 
-      const gsMap = new Map<string, GameStats>();
-      rawPlayers.forEach((p) => {
-        gsMap.set(p.id, {
-          player: p,
-          golos: 0,
-          autoGolos: 0,
-          assistencias: 0,
-          minutos: 0,
-          gs: 0,
-          titular: 0,
-          suplente: 0,
-          convocatorias: convGameIdsByPlayer.get(p.id)?.size ?? 0,
-          mvp: 0,
-          amarelos: 0,
-          vermelhos: 0,
-          totalJogos: 0,
-          mediaNotaSum: 0,
-          mediaNotaCount: 0,
-        });
-      });
+    const playerById = new Map(players.map((player) => [player.id, player]));
+    const fallbackGoalkeeperByGame = new Map<string, string>();
+    const finalizedRows = finalStats.filter((row) => row.is_finalized);
+    const rowsByGame = new Map<string, FinalStatRow[]>();
 
-      finalStats
-        .filter((s) => s.is_finalized)
-        .forEach((s) => {
-          const entry = gsMap.get(s.player_id);
-          if (!entry) return;
-          entry.golos += s.goals ?? 0;
-          entry.autoGolos += s.own_goals ?? 0;
-          entry.assistencias += s.assists ?? 0;
-          entry.minutos += s.minutes_played ?? 0;
-          entry.amarelos += s.yellow_cards ?? 0;
-          entry.vermelhos += s.red_cards ?? 0;
-          if (s.lineup_type === "starter") entry.titular++;
-          else entry.suplente++;
-          if (s.is_mvp) entry.mvp++;
-          if (s.coach_rating !== null && s.coach_rating !== undefined) {
-            entry.mediaNotaSum += s.coach_rating;
-            entry.mediaNotaCount++;
-          }
-          entry.totalJogos++;
-        });
+    finalizedRows.forEach((row) => {
+      if (!row.game_id) return;
+      if (!rowsByGame.has(row.game_id)) rowsByGame.set(row.game_id, []);
+      rowsByGame.get(row.game_id)?.push(row);
+    });
 
-      // GS (golos sofridos):
-      // 1) Regra principal: usar player_id do evento adversário (is_opponent_event=true).
-      // 2) Fallback: quando não há player_id, atribuir ao GR com mais minutos nesse jogo.
-      const gameEvents = playersData.gameEvents ?? [];
-      const playerById = new Map(rawPlayers.map((player) => [player.id, player]));
+    rowsByGame.forEach((rows, gameId) => {
+      const bestGoalkeeper = [...rows]
+        .filter((row) => isGoalkeeper(playerById.get(row.player_id)))
+        .sort((a, b) => (b.minutes_played ?? 0) - (a.minutes_played ?? 0))[0];
 
-      // game_id -> goalkeeper with most minutes (fallback only)
-      const fallbackGoalkeeperByGame = new Map<string, string>();
-      const finalizedRows = finalStats.filter((row) => row.is_finalized);
-      const rowsByGame = new Map<string, FinalStatRow[]>();
-      finalizedRows.forEach((row) => {
-        if (!row.game_id) return;
-        if (!rowsByGame.has(row.game_id)) rowsByGame.set(row.game_id, []);
-        rowsByGame.get(row.game_id)!.push(row);
-      });
-      rowsByGame.forEach((rows, gameId) => {
-        const bestGk = [...rows]
-          .filter((row) => {
-            const player = playerById.get(row.player_id);
-            return isGoalkeeper(player);
-          })
-          .sort((a, b) => (b.minutes_played ?? 0) - (a.minutes_played ?? 0))[0];
-        if (bestGk?.player_id) {
-          fallbackGoalkeeperByGame.set(gameId, bestGk.player_id);
-        }
-      });
+      if (bestGoalkeeper?.player_id) {
+        fallbackGoalkeeperByGame.set(gameId, bestGoalkeeper.player_id);
+      }
+    });
 
-      const isConcededEvent = (event: GameEventRow) =>
-        event.is_opponent_event &&
-        (event.event_type === "goal" || event.event_type === "penalty_goal");
+    const isConcededEvent = (event: GameEventRow) =>
+      event.is_opponent_event &&
+      (event.event_type === "goal" || event.event_type === "penalty_goal");
 
-      gameEvents.filter(isConcededEvent).forEach((event) => {
-        const directPlayerId =
-          typeof event.player_id === "string" && event.player_id.length > 0
-            ? event.player_id
-            : null;
-        const targetPlayerId =
-          directPlayerId ?? fallbackGoalkeeperByGame.get(event.game_id) ?? null;
-        if (!targetPlayerId) return;
-        const entry = gsMap.get(targetPlayerId);
-        if (!entry) return;
-        entry.gs += 1;
-      });
+    gameEvents.filter(isConcededEvent).forEach((event) => {
+      const directPlayerId =
+        typeof event.player_id === "string" && event.player_id.length > 0
+          ? event.player_id
+          : null;
+      const targetPlayerId =
+        directPlayerId ?? fallbackGoalkeeperByGame.get(event.game_id) ?? null;
+      if (!targetPlayerId) return;
+      const entry = gameStatsMap.get(targetPlayerId);
+      if (!entry) return;
+      entry.gs += 1;
+    });
 
-      setGameStats(Array.from(gsMap.values()));
-    } finally {
-      setLoading(false);
-    }
-  }
+    return Array.from(gameStatsMap.values());
+  }, [
+    players,
+    statisticsQuery.data?.convocationPlayers,
+    statisticsQuery.data?.convocations,
+    statisticsQuery.data?.finalStats,
+    statisticsQuery.data?.gameEvents,
+  ]);
+
+  const loading =
+    meContextQuery.isPending ||
+    (Boolean(ageGroupId) && statisticsQuery.isPending && !statisticsQuery.data);
 
   // Yellow card alerts
   const yellowAlerts = useMemo(

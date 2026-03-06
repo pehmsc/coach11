@@ -69,6 +69,16 @@ function getAttendanceWriteErrorMessage(error: unknown): string {
   return "Erro ao guardar presenças na base de dados.";
 }
 
+function jsonNoStore(body: unknown, init?: ResponseInit) {
+  return NextResponse.json(body, {
+    ...init,
+    headers: {
+      ...(init?.headers ?? {}),
+      "Cache-Control": "private, no-store",
+    },
+  });
+}
+
 export async function GET(request: Request) {
   try {
     const supabase = await createClient();
@@ -77,7 +87,7 @@ export async function GET(request: Request) {
     } = await supabase.auth.getUser();
 
     if (!user) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+      return jsonNoStore({ error: "Não autenticado" }, { status: 401 });
     }
 
     const date = normalizeDateParam(new URL(request.url).searchParams.get("date"));
@@ -86,7 +96,7 @@ export async function GET(request: Request) {
     });
 
     if (rpcRes.error) {
-      return NextResponse.json(
+      return jsonNoStore(
         { error: "Erro ao carregar sessão de treino do dia." },
         { status: 500 },
       );
@@ -94,7 +104,7 @@ export async function GET(request: Request) {
 
     const payload = (rpcRes.data || null) as AttendanceGetPayload | null;
     if (payload?.ok === false && payload.error_code === "not_authenticated") {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+      return jsonNoStore({ error: "Não autenticado" }, { status: 401 });
     }
 
     if (payload?.success) {
@@ -121,7 +131,7 @@ export async function GET(request: Request) {
           session.status ?? null,
         )
       ) {
-        return NextResponse.json({
+        return jsonNoStore({
           ...payload,
           noSession: true,
           session: null,
@@ -129,13 +139,13 @@ export async function GET(request: Request) {
         });
       }
 
-      return NextResponse.json({
+      return jsonNoStore({
         ...payload,
         presencePromptState,
       });
     }
 
-    return NextResponse.json(
+    return jsonNoStore(
       { error: "Erro ao carregar sessão de treino do dia." },
       { status: 500 },
     );

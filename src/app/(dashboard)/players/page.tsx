@@ -1,6 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,6 +31,8 @@ import {
   Mail,
   Phone,
 } from "lucide-react";
+import { ApiFetchError, apiFetch } from "@/lib/http/apiFetch";
+import { queryKeys } from "@/lib/query/keys";
 import type { Player, AgeGroup, PlayerStatus } from "@/types/database";
 
 const POSITIONS = ["GR", "DD", "DC", "DE", "MD", "MC", "ME", "AV", "EE", "ED"];
@@ -62,6 +70,32 @@ const EMPTY_FORM = {
   jerseyNumber: "",
 };
 
+type PlayersApiPayload = {
+  success?: boolean;
+  ageGroup?: AgeGroup | null;
+  players?: Player[];
+  error?: string;
+};
+
+type PlayerApiPayload = {
+  success?: boolean;
+  player?: Player;
+  error?: string;
+};
+
+type PlayerDeletePayload = {
+  success?: boolean;
+  error?: string;
+};
+
+type PlayerInvitePayload = {
+  success?: boolean;
+  emailSent?: boolean;
+  inviteCode?: string;
+  warning?: string;
+  error?: string;
+};
+
 function generateInviteCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   const arr = new Uint8Array(8);
@@ -72,45 +106,165 @@ function generateInviteCode(): string {
 }
 
 export default function PlayersPage() {
-  const [players, setPlayers] = useState<Player[]>([]);
-  const [ageGroup, setAgeGroup] = useState<AgeGroup | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [editingPlayer, setEditingPlayer] = useState<Player | null>(null);
-  const [saving, setSaving] = useState(false);
   const [deletingPlayerId, setDeletingPlayerId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [form, setForm] = useState(EMPTY_FORM);
 
-  async function loadData() {
-    setLoading(true);
-    setLoadError(null);
-    const res = await fetch("/api/players", { cache: "no-store" });
-    const payload = (await res.json().catch(() => null)) as
-      | { success?: boolean; ageGroup?: AgeGroup; players?: Player[]; error?: string }
-      | null;
+  const playersQuery = useQuery({
+    queryKey: queryKeys.players(),
+    queryFn: () => apiFetch<PlayersApiPayload>("/api/players"),
+    placeholderData: keepPreviousData,
+  });
 
-    if (!res.ok || !payload?.success) {
-      setAgeGroup(null);
-      setPlayers([]);
-      setLoadError(payload?.error || "Erro ao carregar plantel.");
-      setLoading(false);
-      return;
-    }
+  const ageGroup = playersQuery.data?.ageGroup ?? null;
+  const players = playersQuery.data?.players ?? [];
+  const loadError =
+    playersQuery.error instanceof ApiFetchError
+      ? playersQuery.error.message
+      : null;
 
-    setAgeGroup(payload.ageGroup || null);
-    setPlayers(payload.players || []);
-    setLoadError(null);
-    setLoading(false);
+  function updatePlayersCache(updater: (current: Player[]) => Player[]) {
+    queryClient.setQueryData<PlayersApiPayload>(queryKeys.players(), (previous) => {
+      if (!previous) return previous;
+      const currentPlayers = Array.isArray(previous.players) ? previous.players : [];
+      return {
+        ...previous,
+        players: updater(currentPlayers),
+      };
+    });
   }
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadData();
-  }, []);
+  const savePlayerMutation = useMutation({
+    mutationFn: async ({
+      playerId,
+      payload,
+    }: {
+      playerId: string | null;
+      payload: Record<string, unknown>;
+    }) => {
+      if (playerId) {
+        return apiFetch<PlayerApiPayload>(`/api/players/${playerId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      }
+
+      return apiFetch<PlayerApiPayload>("/api/players", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...payload,
+          age_group_id: ageGroup?.id,
+          status: "active",
+        }),
+      });
+    },
+    onSuccess: (data, variables) => {
+      if (!data?.player) return;
+
+      if (variables.playerId) {
+        updatePlayersCache((current) =>
+          current.map((player) =>
+            player.id === variables.playerId ? data.player as Player : player,
+          ),
+        );
+      } else {
+        updatePlayersCache((current) => [...current, data.player as Player]);
+      }
+    },
+  });
+
+  const updateStatusMutation = useMutation({
+    mutationFn: ({
+      playerId,
+      status,
+    }: {
+      playerId: string;
+      status: PlayerStatus;
+    }) =>
+      apiFetch<PlayerApiPayload>(`/api/players/${playerId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      }),
+    onMutate: async ({ playerId, status }) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.players() });
+      const previous = queryClient.getQueryData<PlayersApiPayload>(queryKeys.players());
+
+      updatePlayersCache((current) =>
+        current.map((player) =>
+          player.id === playerId ? { ...player, status } : player,
+        ),
+      );
+
+      return { previous };
+    },
+    onError: (_error, _variables, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(queryKeys.players(), context.previous);
+      }
+    },
+    onSuccess: (data, variables) => {
+      if (!data?.player) return;
+      updatePlayersCache((current) =>
+        current.map((player) =>
+          player.id === variables.playerId ? (data.player as Player) : player,
+        ),
+      );
+    },
+  });
+
+  const deletePlayerMutation = useMutation({
+    mutationFn: (playerId: string) =>
+      apiFetch<PlayerDeletePayload>(`/api/players/${playerId}`, {
+        method: "DELETE",
+      }),
+    onSuccess: (_payload, playerId) => {
+      updatePlayersCache((current) =>
+        current.filter((player) => player.id !== playerId),
+      );
+    },
+  });
+
+  const invitePlayerMutation = useMutation({
+    mutationFn: async ({
+      player,
+      method,
+    }: {
+      player: Player;
+      method: "email" | "phone" | "code";
+    }) => {
+      if (method === "email" && player.email) {
+        const payload = await apiFetch<PlayerInvitePayload>("/api/invite/player", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ playerId: player.id }),
+        });
+        return { type: "email" as const, payload };
+      }
+
+      const inviteCode = generateInviteCode();
+      const payload = await apiFetch<PlayerApiPayload>(`/api/players/${player.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          invite_code: inviteCode,
+          invite_method: method,
+          invite_sent_at: new Date().toISOString(),
+        }),
+      });
+
+      return { type: "manual" as const, payload, inviteCode };
+    },
+  });
+
+  const saving = savePlayerMutation.isPending || invitePlayerMutation.isPending;
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) {
@@ -153,7 +307,6 @@ export default function PlayersPage() {
   async function handleSubmit(e: { preventDefault(): void }) {
     e.preventDefault();
     if (!ageGroup) return;
-    setSaving(true);
     setError(null);
 
     const payload = {
@@ -166,54 +319,25 @@ export default function PlayersPage() {
       jersey_number: form.jerseyNumber ? parseInt(form.jerseyNumber) : null,
     };
 
-    if (editingPlayer) {
-      const res = await fetch(`/api/players/${editingPlayer.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+    try {
+      await savePlayerMutation.mutateAsync({
+        playerId: editingPlayer?.id ?? null,
+        payload,
       });
-      const data = await res.json().catch(() => null);
-      if (!res.ok || !data?.player) {
-        setError("Erro ao guardar.");
-        setSaving(false);
-        return;
-      }
-      setPlayers((prev) =>
-        prev.map((p) => (p.id === editingPlayer.id ? (data.player as Player) : p)),
-      );
-    } else {
-      const res = await fetch("/api/players", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...payload,
-          age_group_id: ageGroup.id,
-          status: "active",
-        }),
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok || !data?.player) {
-        setError("Erro ao adicionar.");
-        setSaving(false);
-        return;
-      }
-      setPlayers((prev) => [...prev, data.player as Player]);
+      closeForm();
+    } catch (mutationError) {
+      const message =
+        mutationError instanceof ApiFetchError
+          ? mutationError.message
+          : editingPlayer
+            ? "Erro ao guardar."
+            : "Erro ao adicionar.";
+      setError(message);
     }
-
-    closeForm();
-    setSaving(false);
   }
 
-  async function updateStatus(playerId: string, status: PlayerStatus) {
-    const res = await fetch(`/api/players/${playerId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
-    });
-    if (!res.ok) return;
-    setPlayers((prev) =>
-      prev.map((p) => (p.id === playerId ? { ...p, status } : p)),
-    );
+  function updateStatus(playerId: string, status: PlayerStatus) {
+    updateStatusMutation.mutate({ playerId, status });
   }
 
   async function handleDeletePlayer(player: Player) {
@@ -225,75 +349,75 @@ export default function PlayersPage() {
     setDeletingPlayerId(player.id);
     setError(null);
 
-    const res = await fetch(`/api/players/${player.id}`, {
-      method: "DELETE",
-    });
-    const data = await res.json().catch(() => null);
-
-    if (!res.ok || !data?.success) {
-      const message = data?.error || "Erro ao apagar atleta.";
+    try {
+      await deletePlayerMutation.mutateAsync(player.id);
+      closeForm();
+      toast.success("Atleta apagado", {
+        description: `${player.first_name} ${player.last_name} foi removido do plantel.`,
+      });
+    } catch (deleteError) {
+      const message =
+        deleteError instanceof ApiFetchError
+          ? deleteError.message
+          : "Erro ao apagar atleta.";
       setError(message);
       toast.error("Erro ao apagar atleta", {
         description: message,
       });
+    } finally {
       setDeletingPlayerId(null);
-      return;
     }
-
-    setPlayers((prev) => prev.filter((p) => p.id !== player.id));
-    setDeletingPlayerId(null);
-    closeForm();
-    toast.success("Atleta apagado", {
-      description: `${player.first_name} ${player.last_name} foi removido do plantel.`,
-    });
   }
 
   async function sendInvite(
     player: Player,
     method: "email" | "phone" | "code",
   ) {
-    if (method === "email" && player.email) {
-      setSaving(true);
-      const res = await fetch("/api/invite/player", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ playerId: player.id }),
-      });
-      const data = await res.json();
-      setSaving(false);
+    try {
+      const result = await invitePlayerMutation.mutateAsync({ player, method });
 
-      if (data.success) {
-        if (data.emailSent) {
-          toast.success(`Email enviado para ${player.first_name}!`, {
-            description: `Código: ${data.inviteCode}`,
-          });
-        } else {
-          toast.warning(`Email não enviado`, {
-            description: `Partilha o código manualmente: ${data.inviteCode}`,
-          });
+      if (result.type === "email") {
+        if (result.payload.success) {
+          if (result.payload.emailSent) {
+            toast.success(`Email enviado para ${player.first_name}!`, {
+              description: `Código: ${result.payload.inviteCode}`,
+            });
+          } else {
+            toast.warning("Email não enviado", {
+              description: `Partilha o código manualmente: ${result.payload.inviteCode}`,
+            });
+          }
+          await queryClient.invalidateQueries({ queryKey: queryKeys.players() });
+          return;
         }
-        loadData();
-      } else {
+
         toast.error("Erro ao gerar convite", {
-          description: data.error || "Erro desconhecido",
+          description: result.payload.error || "Erro desconhecido",
         });
+        return;
       }
-    } else {
-      // Convite por código (sem email) — gerado com crypto.getRandomValues
-      const inviteCode = generateInviteCode();
-      await fetch(`/api/players/${player.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          invite_code: inviteCode,
-          invite_method: method,
-          invite_sent_at: new Date().toISOString(),
-        }),
-      });
+
+      if (result.payload.player) {
+        updatePlayersCache((current) =>
+          current.map((entry) =>
+            entry.id === player.id ? (result.payload.player as Player) : entry,
+          ),
+        );
+      } else {
+        await queryClient.invalidateQueries({ queryKey: queryKeys.players() });
+      }
+
       toast.success(`Código gerado para ${player.first_name}`, {
-        description: `Código: ${inviteCode}`,
+        description: `Código: ${result.inviteCode}`,
       });
-      loadData();
+    } catch (inviteError) {
+      const message =
+        inviteError instanceof ApiFetchError
+          ? inviteError.message
+          : "Erro desconhecido ao gerar convite.";
+      toast.error("Erro ao gerar convite", {
+        description: message,
+      });
     }
   }
 
@@ -318,7 +442,7 @@ export default function PlayersPage() {
     return sortDir === "asc" ? <ArrowUp size={10} /> : <ArrowDown size={10} />;
   };
 
-  if (loading)
+  if (playersQuery.isPending && !playersQuery.data)
     return (
       <div className="p-4 md:p-8">
         <p className="text-slate-500">A carregar...</p>

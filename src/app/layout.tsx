@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import { PWAClient } from "@/components/pwa/PWAClient";
+import { QueryProvider } from "@/components/providers/QueryProvider";
 import "./globals.css";
 
 const geistSans = localFont({
@@ -68,7 +69,9 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <PWAClient>{children}</PWAClient>
+        <QueryProvider>
+          <PWAClient>{children}</PWAClient>
+        </QueryProvider>
       </body>
     </html>
   );

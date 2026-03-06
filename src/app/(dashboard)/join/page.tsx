@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -13,14 +14,26 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import { Check, Ticket, ArrowRight, Loader2 } from "lucide-react";
+import { ApiFetchError, apiFetch } from "@/lib/http/apiFetch";
+import { invalidateContextSensitiveQueries } from "@/lib/query/invalidation";
+
+type RedeemInviteResponse = {
+  success?: boolean;
+  error?: string;
+  role?: string;
+  ageGroup?: {
+    clubName?: string;
+    name?: string;
+  };
+};
 
 export default function JoinPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const supabase = useMemo(() => createClient(), []);
 
   const [code, setCode] = useState(searchParams.get("code") || "");
-  const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<{
@@ -35,20 +48,38 @@ export default function JoinPage() {
     coordinator: "Coordenador",
   };
 
-  const handleRedeemWithCode = useCallback(async (inviteCode: string) => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const res = await fetch("/api/invite/redeem", {
+  const redeemInviteMutation = useMutation({
+    mutationFn: (inviteCode: string) =>
+      apiFetch<RedeemInviteResponse>("/api/invite/redeem", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ inviteCode }),
+      }),
+  });
+  const redeemInvite = redeemInviteMutation.mutateAsync;
+
+  const handleRedeemWithCode = useCallback(async (inviteCode: string) => {
+    setError(null);
+
+    try {
+      const data = await redeemInvite(inviteCode);
+      if (!data.success) {
+        setError(data.error || "Código inválido ou já utilizado.");
+        return;
+      }
+
+      setSuccess({
+        clubName: data.ageGroup?.clubName || "",
+        ageGroupName: data.ageGroup?.name || "",
+        role: data.role || "",
       });
-
-      const data = await res.json().catch(() => ({}));
-
-      if (res.status === 409) {
+      await invalidateContextSensitiveQueries(queryClient);
+    } catch (redeemError) {
+      if (redeemError instanceof ApiFetchError && redeemError.status === 409) {
+        const data =
+          redeemError.data && typeof redeemError.data === "object"
+            ? (redeemError.data as { error?: string })
+            : null;
         const message = String(data?.error || "");
         if (message.toLowerCase().includes("já estás associado")) {
           router.push("/dashboard");
@@ -56,27 +87,12 @@ export default function JoinPage() {
         }
 
         setError(message || "Este convite já foi utilizado.");
-        setLoading(false);
         return;
       }
 
-      if (!res.ok || !data.success) {
-        setError(data.error || "Código inválido ou já utilizado.");
-        setLoading(false);
-        return;
-      }
-
-      setSuccess({
-        clubName: data.ageGroup?.clubName || "",
-        ageGroupName: data.ageGroup?.name || "",
-        role: data.role,
-      });
-    } catch {
       setError("Erro de ligação. Tenta novamente.");
     }
-
-    setLoading(false);
-  }, [router]);
+  }, [queryClient, redeemInvite, router]);
 
   const checkUserStatus = useCallback(async () => {
     const {
@@ -220,10 +236,10 @@ export default function JoinPage() {
 
               <Button
                 type="submit"
-                disabled={loading || code.trim().length < 8}
+                disabled={redeemInviteMutation.isPending || code.trim().length < 8}
                 className="w-full bg-emerald-600 hover:bg-emerald-700 h-12"
               >
-                {loading ? (
+                {redeemInviteMutation.isPending ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />A
                     verificar...

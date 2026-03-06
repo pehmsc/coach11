@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveUserTeamContext } from "@/lib/auth/team-context";
+import { PRIVATE_SWR_CACHE_CONTROL } from "@/lib/http/cache";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -116,11 +117,18 @@ export async function GET(request: Request) {
       );
     }
 
-    return NextResponse.json({
-      success: true,
-      ageGroup: ageGroupRes.data,
-      players: players || [],
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        ageGroup: ageGroupRes.data,
+        players: players || [],
+      },
+      {
+        headers: {
+          "Cache-Control": PRIVATE_SWR_CACHE_CONTROL,
+        },
+      },
+    );
   } catch (error) {
     console.error("Erro em GET /api/players:", error);
     return NextResponse.json({ error: "Erro interno do servidor." }, { status: 500 });

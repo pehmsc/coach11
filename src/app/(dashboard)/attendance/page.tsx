@@ -1,6 +1,11 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { format, addDays, subDays, parseISO, isToday } from "date-fns";
 import { pt } from "date-fns/locale";
@@ -18,6 +23,9 @@ import {
   ChevronRight,
   Clock3,
 } from "lucide-react";
+import { ApiFetchError, apiFetch } from "@/lib/http/apiFetch";
+import { useMeContext } from "@/lib/hooks/useMeContext";
+import { queryKeys } from "@/lib/query/keys";
 import type { Player, AgeGroup, AttendanceStatus } from "@/types/database";
 
 type AttendanceState = Record<string, AttendanceStatus>;
@@ -57,14 +65,14 @@ function normalizeDateParam(value: string | null): string {
 
 export default function AttendancePage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const searchParams = useSearchParams();
+  const meContextQuery = useMeContext();
   const todayStr = format(new Date(), "yyyy-MM-dd");
   const [selectedDate, setSelectedDate] = useState(() =>
     normalizeDateParam(searchParams.get("date")),
   );
 
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [noSession, setNoSession] = useState(false);
   const [sessionClosed, setSessionClosed] = useState(false);
@@ -74,93 +82,45 @@ export default function AttendancePage() {
   const [attendance, setAttendance] = useState<AttendanceState>({});
   const [initialAttendance, setInitialAttendance] = useState<AttendanceState>({});
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [canManageClosedAttendance, setCanManageClosedAttendance] = useState(false);
   const [presencePromptState, setPresencePromptState] =
     useState<PresencePromptState>("hidden");
+  const canManageClosedAttendance = meContextQuery.data?.canManageStaff === true;
+
+  const attendanceQuery = useQuery({
+    queryKey: queryKeys.attendance.today(selectedDate),
+    queryFn: () =>
+      apiFetch<AttendanceApiResponse>(`/api/attendance/today?date=${selectedDate}`),
+  });
+
+  const saveAttendanceMutation = useMutation({
+    mutationFn: (params: {
+      sessionId: string;
+      attendance: AttendanceState;
+      finalize: boolean;
+    }) =>
+      apiFetch<AttendanceApiResponse>("/api/attendance/today", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(params),
+      }),
+  });
 
   const dateLabel = isToday(parseISO(selectedDate))
     ? "Hoje"
     : format(parseISO(selectedDate), "EEEE, d 'de' MMMM", { locale: pt });
 
-  const loadData = useCallback(async (date: string) => {
-    setLoading(true);
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    const payload = attendanceQuery.data;
+    if (!payload) return;
+
     setError(null);
-    setSaved(false);
 
-    try {
-      const [attendanceRes, contextRes] = await Promise.all([
-        fetch(`/api/attendance/today?date=${date}`, {
-          cache: "no-store",
-          credentials: "include",
-        }),
-        fetch("/api/me/context", {
-          cache: "no-store",
-          credentials: "include",
-        }),
-      ]);
-      const payload = (await attendanceRes.json().catch(() => ({}))) as AttendanceApiResponse;
-      const contextPayload = (await contextRes.json().catch(() => ({}))) as {
-        canManageStaff?: boolean;
-      };
-      setCanManageClosedAttendance(contextPayload?.canManageStaff === true);
-
-      if (!attendanceRes.ok) {
-        setError(payload?.error || "Erro ao carregar presenças.");
-        setPlayers([]);
-        setAgeGroup(null);
-        setSessionId(null);
-        setNoSession(true);
-        setSessionClosed(false);
-        setPresencePromptState("hidden");
-        setInitialAttendance({});
-        return;
-      }
-
-      if (!payload?.linked) {
-        setError(
-          payload?.error ||
-            "Não foi possível identificar o escalão desta conta para marcar presenças.",
-        );
-        setPlayers([]);
-        setAgeGroup(null);
-        setSessionId(null);
-        setNoSession(true);
-        setSessionClosed(false);
-        setPresencePromptState("hidden");
-        setInitialAttendance({});
-        return;
-      }
-
-      const incomingPlayers = Array.isArray(payload.players) ? payload.players : [];
-      const incomingAttendance =
-        payload.attendance && typeof payload.attendance === "object"
-          ? payload.attendance
-          : {};
-
-      setPlayers(incomingPlayers);
-      setAgeGroup(payload.ageGroup ?? null);
-      setSessionId(payload.session?.id ?? null);
-      setNoSession(Boolean(payload.noSession) || !payload.session);
-      setSessionClosed(payload.session?.status === "completed");
-      setPresencePromptState(
-        payload.presencePromptState ||
-          getPresencePromptState(
-            payload.session?.session_date,
-            payload.session?.start_time,
-            payload.session?.end_time,
-            payload.session?.status ?? null,
-          ),
+    if (!payload?.linked) {
+      setError(
+        payload?.error ||
+          "Não foi possível identificar o escalão desta conta para marcar presenças.",
       );
-
-      const initialAttendance: AttendanceState = {};
-      incomingPlayers.forEach((player) => {
-        const status = incomingAttendance[player.id];
-        initialAttendance[player.id] = isValidStatus(status) ? status : "present";
-      });
-      setAttendance(initialAttendance);
-      setInitialAttendance(initialAttendance);
-    } catch {
-      setError("Erro de ligação ao carregar presenças.");
       setPlayers([]);
       setAgeGroup(null);
       setSessionId(null);
@@ -168,20 +128,65 @@ export default function AttendancePage() {
       setSessionClosed(false);
       setPresencePromptState("hidden");
       setInitialAttendance({});
-    } finally {
-      setLoading(false);
+      return;
     }
-  }, []);
+
+    const incomingPlayers = Array.isArray(payload.players) ? payload.players : [];
+    const incomingAttendance =
+      payload.attendance && typeof payload.attendance === "object"
+        ? payload.attendance
+        : {};
+
+    setPlayers(incomingPlayers);
+    setAgeGroup(payload.ageGroup ?? null);
+    setSessionId(payload.session?.id ?? null);
+    setNoSession(Boolean(payload.noSession) || !payload.session);
+    setSessionClosed(payload.session?.status === "completed");
+    setPresencePromptState(
+      payload.presencePromptState ||
+        getPresencePromptState(
+          payload.session?.session_date,
+          payload.session?.start_time,
+          payload.session?.end_time,
+          payload.session?.status ?? null,
+        ),
+    );
+
+    const nextAttendance: AttendanceState = {};
+    incomingPlayers.forEach((player) => {
+      const status = incomingAttendance[player.id];
+      nextAttendance[player.id] = isValidStatus(status) ? status : "present";
+    });
+    setAttendance(nextAttendance);
+    setInitialAttendance(nextAttendance);
+  }, [attendanceQuery.data]);
 
   useEffect(() => {
-    void loadData(selectedDate);
-  }, [selectedDate, loadData]);
+    if (!attendanceQuery.error || attendanceQuery.data) return;
+    const message =
+      attendanceQuery.error instanceof ApiFetchError
+        ? attendanceQuery.error.message
+        : "Erro de ligação ao carregar presenças.";
+    setError(message);
+    setPlayers([]);
+    setAgeGroup(null);
+    setSessionId(null);
+    setNoSession(true);
+    setSessionClosed(false);
+    setPresencePromptState("hidden");
+    setInitialAttendance({});
+  }, [attendanceQuery.error, attendanceQuery.data]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  const loading = attendanceQuery.isPending && !attendanceQuery.data;
 
   function goToPrevDay() {
+    setSaved(false);
     setSelectedDate((d) => format(subDays(parseISO(d), 1), "yyyy-MM-dd"));
   }
 
   function goToNextDay() {
+    setSaved(false);
     setSelectedDate((d) => format(addDays(parseISO(d), 1), "yyyy-MM-dd"));
   }
 
@@ -205,22 +210,17 @@ export default function AttendancePage() {
 
   async function handleSave() {
     if (!sessionId || (sessionClosed && !canManageClosedAttendance)) return;
-    setSaving(true);
     setError(null);
     const finalize = !sessionClosed && presencePromptState === "close";
 
     try {
-      const res = await fetch("/api/attendance/today", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ sessionId, attendance, finalize }),
+      const payload = await saveAttendanceMutation.mutateAsync({
+        sessionId,
+        attendance,
+        finalize,
       });
-      const payload = (await res.json().catch(() => ({}))) as AttendanceApiResponse;
-
-      if (!res.ok || !payload?.success) {
+      if (!payload?.success) {
         setError(payload?.error || "Erro ao guardar presenças.");
-        setSaving(false);
         return;
       }
 
@@ -229,11 +229,16 @@ export default function AttendancePage() {
       setSessionClosed(isCompleted);
       setPresencePromptState(isCompleted ? "closed" : "mark");
       setInitialAttendance(attendance);
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.attendance.today(selectedDate),
+      });
       router.refresh(); // Invalidar cache RSC do dashboard
-    } catch {
-      setError("Erro de ligação ao guardar presenças.");
-    } finally {
-      setSaving(false);
+    } catch (mutationError) {
+      const message =
+        mutationError instanceof ApiFetchError
+          ? mutationError.message
+          : "Erro de ligação ao guardar presenças.";
+      setError(message);
     }
   }
 
@@ -278,6 +283,7 @@ export default function AttendancePage() {
     const baseline = initialAttendance[player.id] ?? "present";
     return current !== baseline;
   });
+  const saving = saveAttendanceMutation.isPending;
   const saveDisabled =
     saving ||
     (sessionClosed && !canManageClosedAttendance) ||

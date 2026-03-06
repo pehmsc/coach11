@@ -17,7 +17,6 @@ import {
   Pencil,
   Trash2,
   X,
-  UserPlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EMPTY_LOCATION_FIELDS, resolveLocationLabel } from "@/lib/location";
@@ -1809,20 +1808,20 @@ export default function GameDetailPage() {
                 disabled={!convocationEditable}
                 className={`w-full flex items-center gap-3 p-3 rounded-xl mb-1.5 text-left border-2 transition-colors ${
                   convocationEditable
-                    ? "border-blue-200 bg-blue-50 hover:border-blue-300 hover:bg-blue-100"
+                    ? "border-emerald-200 bg-emerald-50 hover:border-emerald-300 hover:bg-emerald-100"
                     : "border-slate-100 bg-slate-50 opacity-60 cursor-not-allowed"
                 }`}
               >
-                <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center flex-shrink-0">
-                  <UserPlus size={16} />
+                <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-base font-bold flex-shrink-0">
+                  +
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-blue-900">Outro jogador</p>
-                  <p className="text-xs text-blue-700">
+                  <p className="text-sm text-slate-700">Outro jogador</p>
+                  <p className="text-xs text-slate-500">
                     Adicionar jogador externo apenas para este jogo
                   </p>
                 </div>
-                <div className="w-6 h-6 rounded-full border-2 border-blue-300 bg-white/80 flex-shrink-0" />
+                <div className="w-6 h-6 rounded-full border-2 border-emerald-300 bg-white/80 flex-shrink-0" />
               </button>
               {notConvocated.map((player) => (
                 <button
