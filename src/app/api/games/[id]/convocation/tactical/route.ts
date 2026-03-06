@@ -4,15 +4,14 @@ import {
   insertConvocationAuditLog,
 } from "@/lib/games/convocation-guard";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
+import {
+  type TacticalRpcResult,
+  updateGameTacticalSystem,
+} from "@/lib/repositories/convocation.repository";
 import { NextResponse } from "next/server";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
-};
-
-type TacticalRpcResult = {
-  ok?: boolean;
-  error_code?: string;
 };
 
 function mapTacticalError(errorCode: string | undefined) {
@@ -65,10 +64,11 @@ export async function POST(request: Request, { params }: RouteContext) {
       return writeGuard.response;
     }
 
-    const rpcResult = await supabase.rpc("rpc_update_game_tactical_auth", {
-      p_game_id: gameId,
-      p_tactical_system: tacticalSystem,
-    });
+    const rpcResult = await updateGameTacticalSystem(
+      supabase,
+      gameId,
+      tacticalSystem,
+    );
 
     if (rpcResult.error) {
       return respondInternalError("api.games.id.convocation.tactical.post.rpc", rpcResult.error);

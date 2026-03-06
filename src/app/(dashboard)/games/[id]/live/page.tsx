@@ -3,8 +3,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { format, parseISO } from "date-fns";
-import { pt } from "date-fns/locale";
 import {
   ArrowLeft,
   Plus,
@@ -12,16 +10,16 @@ import {
   X,
   Check,
   Loader2,
-  AlertCircle,
   ArrowLeftRight,
   FileDown,
   Star,
 } from "lucide-react";
+import { LiveErrorState, LiveLoadingState, LiveLockedState } from "@/components/games/live/LiveScreenStates";
+import { LiveScoreboardCard } from "@/components/games/live/LiveScoreboardCard";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
+import { useGameLiveController } from "@/lib/hooks/useGameLiveController";
 import { exportMatchReportPDF } from "@/lib/pdf/matchReport";
-import { resolveFixtureScoreboardShortNames } from "@/lib/games/display";
 import type { Game, Player, GameEvent, GameEventType } from "@/types/database";
 
 interface LivePlayer extends Player {
@@ -1702,27 +1700,28 @@ export default function LiveGamePage() {
     setExportingPDF(false);
   }
 
+  const {
+    liveUnlocked,
+    matchMetaLabel,
+    homeShortName,
+    awayShortName,
+    ourTeamShortName,
+    opponentTeamShortName,
+  } = useGameLiveController({
+    game,
+    now: new Date(nowMs),
+    homeClubName,
+    homeClubShortName,
+  });
+
   // ── Loading / error states ──
 
   if (loading) {
-    return (
-      <div className="p-4 md:p-8 max-w-2xl mx-auto space-y-4">
-        <Skeleton className="h-6 w-32" />
-        <Skeleton className="h-32 w-full rounded-xl" />
-        {[1, 2, 3].map((i) => (
-          <Skeleton key={i} className="h-16 w-full rounded-xl" />
-        ))}
-      </div>
-    );
+    return <LiveLoadingState />;
   }
 
   if (error || !game) {
-    return (
-      <div className="p-4 text-center py-16">
-        <AlertCircle size={40} className="text-red-400 mx-auto mb-3" />
-        <p className="text-slate-700">{error || "Erro ao carregar jogo."}</p>
-      </div>
-    );
+    return <LiveErrorState message={error || "Erro ao carregar jogo."} />;
   }
 
   if (game.status === "completed") {
@@ -1733,41 +1732,9 @@ export default function LiveGamePage() {
     );
   }
 
-  const gameStartAt = game.game_datetime ? parseISO(game.game_datetime) : null;
-  const liveUnlocked = gameStartAt
-    ? new Date() >= new Date(gameStartAt.getTime() - 10 * 60 * 1000)
-    : true;
-
   if (!isFinalized && !liveUnlocked) {
-    return (
-      <div className="p-4 md:p-8 max-w-2xl mx-auto">
-        <button
-          onClick={() => router.back()}
-          className="flex items-center gap-2 text-slate-500 hover:text-slate-700 text-sm mb-4"
-        >
-          <ArrowLeft size={16} /> Voltar
-        </button>
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-800">
-          O live deste jogo só fica disponível 10 minutos antes do início.
-        </div>
-      </div>
-    );
+    return <LiveLockedState onBack={() => router.back()} />;
   }
-
-  const matchDateTimeLabel = game.game_datetime
-    ? format(parseISO(game.game_datetime), "d MMM · HH:mm", { locale: pt })
-    : "Sem data";
-  const matchMetaLabel = game.location
-    ? `${matchDateTimeLabel} · ${game.location}`
-    : matchDateTimeLabel;
-  const { homeShortName, awayShortName, ourTeamShortName, opponentTeamShortName } =
-    resolveFixtureScoreboardShortNames({
-    isHome: game.is_home,
-    ourTeamPreferredShortName: homeClubShortName,
-    ourTeamName: homeClubName || "Casa",
-    opponentPreferredShortName: game.opponent_short_name,
-    opponentName: game.opponent_name || "Adversário",
-    });
 
   return (
     <div className="p-4 md:p-8 max-w-2xl mx-auto pb-24">
@@ -1779,21 +1746,17 @@ export default function LiveGamePage() {
         <ArrowLeft size={16} /> Voltar
       </button>
 
-      {/* Scoreboard */}
-      <div className="rounded-2xl bg-slate-900 text-white p-5 mb-5 text-center">
-        <p className="text-slate-300 text-sm mb-1">{matchMetaLabel}</p>
-        <div className="text-3xl md:text-4xl font-black tracking-tight">
-          {homeShortName} {score.home} – {score.away} {awayShortName}
-        </div>
-        <p className="text-slate-300 text-sm mt-2">
-          {formatClock(clockSeconds)} · {currentMinute}&apos;
-        </p>
-        {isFinalized && (
-          <span className="mt-2 inline-block text-xs bg-emerald-500 text-white px-3 py-0.5 rounded-full">
-            Finalizado
-          </span>
-        )}
-      </div>
+      <LiveScoreboardCard
+        matchMetaLabel={matchMetaLabel}
+        homeShortName={homeShortName}
+        awayShortName={awayShortName}
+        scoreHome={score.home}
+        scoreAway={score.away}
+        clockSeconds={clockSeconds}
+        currentMinute={currentMinute}
+        isFinalized={isFinalized}
+        formatClock={formatClock}
+      />
 
       {/* ── PRE-MATCH: Lineup selection ── */}
       {phase === "pre_match" && convocatedPlayers.length > 0 && (

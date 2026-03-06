@@ -1,0 +1,775 @@
+import { NextResponse } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { resolveUserTeamContext } from "@/lib/auth/team-context";
+import { deleteGameCascade, deleteTrainingSessionCascade } from "@/lib/events/delete-cascade";
+import {
+  isValidManualShortName,
+  normalizeManualShortName,
+} from "@/lib/football/short-name";
+import { formatFixtureOpponentLabel } from "@/lib/games/display";
+import { SHORT_PRIVATE_CACHE_CONTROL } from "@/lib/http/cache";
+import { respondInternalError } from "@/lib/http/respond-internal-error";
+import {
+  type LocationSource,
+  normalizeLocationSource,
+  normalizeNullableNumber,
+  resolveFormattedAddress,
+} from "@/lib/location";
+import { createNotificationsForTeam } from "@/lib/notifications/service";
+import {
+  getAgeGroupFromTeamId,
+  getAgeGroupLabelById,
+  getCompetitionForTeam,
+  getGameAccessRow,
+  getTrainingSessionAccessRow,
+  insertGame,
+  insertTrainingSession,
+  isCoordinatorForAgeGroup,
+  listGamesInRange,
+  listTrainingSessionsInRange,
+  updateGame,
+  updateTrainingSession,
+} from "@/lib/repositories/calendar-events.repository";
+import { createClient } from "@/lib/supabase/server";
+
+type CalendarEventType = "training" | "game";
+
+type CalendarPayload = {
+  title?: string | null;
+  date?: string | null;
+  start_time?: string | null;
+  end_time?: string | null;
+  opponent_name?: string | null;
+  opponent_short_name?: string | null;
+  competition_id?: string | null;
+  location?: string | null;
+  location_address?: string | null;
+  formatted_address?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  osm_place_id?: string | null;
+  location_source?: LocationSource | null;
+  is_home?: boolean;
+  notes?: string | null;
+  image_url?: string | null;
+};
+
+type RouteContextData = {
+  userId: string;
+  db: SupabaseClient;
+  context: Awaited<ReturnType<typeof resolveUserTeamContext>>;
+};
+
+function normalizeOptionalText(value: unknown) {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function normalizeDate(value: unknown) {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? trimmed : null;
+}
+
+function normalizeTime(value: unknown) {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  const match = /^(\d{2}):(\d{2})(?::\d{2})?$/.exec(trimmed);
+  if (!match) return null;
+  return `${match[1]}:${match[2]}`;
+}
+
+function normalizeOptionalId(value: unknown) {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function normalizeOptionalLocationSource(value: unknown) {
+  return normalizeLocationSource(value);
+}
+
+function inferLocationSource(
+  explicitSource: LocationSource | null | undefined,
+  placeId: string | null | undefined,
+  hasCoordinates: boolean,
+  hasSignal: boolean,
+): LocationSource | null {
+  if (explicitSource) return explicitSource;
+  if (!hasSignal) return null;
+  if (!hasCoordinates) return "manual";
+  if (typeof placeId === "string" && placeId.trim().startsWith("GOOGLE:")) {
+    return "google";
+  }
+  return "osm";
+}
+
+function normalizeEventType(value: unknown): CalendarEventType | null {
+  if (value === "training" || value === "game") return value;
+  return null;
+}
+
+function normalizePayload(value: unknown): CalendarPayload {
+  if (!value || typeof value !== "object") return {};
+  const row = value as Record<string, unknown>;
+  const opponentShortNameRaw = normalizeOptionalText(row.opponent_short_name);
+  return {
+    title: normalizeOptionalText(row.title),
+    date: normalizeDate(row.date),
+    start_time: normalizeTime(row.start_time),
+    end_time: normalizeTime(row.end_time),
+    opponent_name: normalizeOptionalText(row.opponent_name),
+    opponent_short_name: normalizeManualShortName(opponentShortNameRaw, 5),
+    competition_id: normalizeOptionalId(row.competition_id),
+    location: normalizeOptionalText(row.location),
+    location_address: normalizeOptionalText(row.location_address),
+    formatted_address: normalizeOptionalText(row.formatted_address),
+    latitude: normalizeNullableNumber(row.latitude),
+    longitude: normalizeNullableNumber(row.longitude),
+    osm_place_id: normalizeOptionalId(row.osm_place_id),
+    location_source: normalizeOptionalLocationSource(row.location_source),
+    is_home: typeof row.is_home === "boolean" ? row.is_home : undefined,
+    notes: normalizeOptionalText(row.notes),
+    image_url: normalizeOptionalText(row.image_url),
+  };
+}
+
+function normalizeLocationPayload(payload: CalendarPayload): CalendarPayload {
+  const hasCoordinates =
+    typeof payload.latitude === "number" && Number.isFinite(payload.latitude) &&
+    typeof payload.longitude === "number" && Number.isFinite(payload.longitude);
+  const formattedAddress = resolveFormattedAddress(
+    payload.formatted_address,
+    payload.location_address,
+  );
+
+  return {
+    ...payload,
+    formatted_address: formattedAddress,
+    latitude: hasCoordinates ? payload.latitude ?? null : null,
+    longitude: hasCoordinates ? payload.longitude ?? null : null,
+    osm_place_id: hasCoordinates ? payload.osm_place_id ?? null : null,
+    location_source: inferLocationSource(
+      payload.location_source,
+      payload.osm_place_id ?? null,
+      hasCoordinates,
+      Boolean(payload.location || payload.location_address || formattedAddress),
+    ),
+  };
+}
+
+function resolveGameTitle(payload: CalendarPayload) {
+  if (payload.title) return payload.title;
+  if (payload.opponent_name || payload.opponent_short_name) {
+    return formatFixtureOpponentLabel({
+      isHome: payload.is_home ?? true,
+      opponentName: payload.opponent_name,
+      opponentShortName: payload.opponent_short_name,
+    });
+  }
+  return "Jogo";
+}
+
+async function buildRouteContext(): Promise<RouteContextData | NextResponse> {
+  const db = await createClient();
+  const {
+    data: { user },
+  } = await db.auth.getUser();
+
+  if (!user) {
+    return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
+  }
+
+  const context = await resolveUserTeamContext(db, user.id);
+
+  if (context.accessibleAgeGroupIds.length === 0 || context.accessibleTeamIds.length === 0) {
+    return NextResponse.json(
+      { error: "Sem equipa/escalão associado para gerir calendário." },
+      { status: 403 },
+    );
+  }
+
+  return {
+    userId: user.id,
+    db,
+    context,
+  };
+}
+
+function resolveTargetAgeGroupId(
+  context: Awaited<ReturnType<typeof resolveUserTeamContext>>,
+  requestedAgeGroupId: unknown,
+) {
+  if (
+    typeof requestedAgeGroupId === "string" &&
+    context.accessibleAgeGroupIds.includes(requestedAgeGroupId)
+  ) {
+    return requestedAgeGroupId;
+  }
+  return context.ageGroup?.id ?? context.accessibleAgeGroupIds[0] ?? null;
+}
+
+function resolveTargetTeamId(
+  context: Awaited<ReturnType<typeof resolveUserTeamContext>>,
+  targetAgeGroupId: string,
+  requestedTeamId: unknown,
+) {
+  const ageGroupTeamIds = context.accessibleTeams
+    .filter((team) => team.age_group_id === targetAgeGroupId)
+    .map((team) => team.id);
+
+  if (
+    typeof requestedTeamId === "string" &&
+    ageGroupTeamIds.includes(requestedTeamId)
+  ) {
+    return requestedTeamId;
+  }
+
+  if (context.teamId && ageGroupTeamIds.includes(context.teamId)) {
+    return context.teamId;
+  }
+
+  return ageGroupTeamIds[0] ?? null;
+}
+
+async function resolveCompetitionId(
+  db: SupabaseClient,
+  teamId: string,
+  requestedCompetitionId: string | null | undefined,
+) {
+  if (!requestedCompetitionId) return { id: null as string | null, error: null as string | null };
+
+  const { data, error } = await getCompetitionForTeam(db, requestedCompetitionId, teamId);
+
+  if (error || !data?.id) {
+    return {
+      id: null as string | null,
+      error: "Competição inválida para esta equipa.",
+    };
+  }
+
+  return { id: data.id as string, error: null as string | null };
+}
+
+function hasAccessToEvent(
+  context: Awaited<ReturnType<typeof resolveUserTeamContext>>,
+  teamId: string | null | undefined,
+  ageGroupId: string | null | undefined,
+) {
+  if (teamId && context.accessibleTeamIds.includes(teamId)) return true;
+  if (ageGroupId && context.accessibleAgeGroupIds.includes(ageGroupId)) return true;
+  return false;
+}
+
+async function resolveExistingAgeGroupId(
+  db: SupabaseClient,
+  teamId: string | null | undefined,
+  ageGroupId: string | null | undefined,
+) {
+  if (ageGroupId) return ageGroupId;
+  if (!teamId) return null;
+
+  const { data } = await getAgeGroupFromTeamId(db, teamId);
+  return data?.age_group_id ?? null;
+}
+
+export async function handleCalendarEventsGet(request: Request) {
+  try {
+    const routeContext = await buildRouteContext();
+    if (routeContext instanceof NextResponse) return routeContext;
+
+    const { userId, db, context } = routeContext;
+    const { searchParams } = new URL(request.url);
+    const from = searchParams.get("from");
+    const to = searchParams.get("to");
+    const requestedAgeGroupId = searchParams.get("ageGroupId");
+
+    if (!from || !to) {
+      return NextResponse.json(
+        { error: "Parâmetros from e to são obrigatórios." },
+        { status: 400 },
+      );
+    }
+
+    const targetAgeGroupId = resolveTargetAgeGroupId(context, requestedAgeGroupId);
+    if (!targetAgeGroupId) {
+      return NextResponse.json(
+        { error: "Não foi possível determinar o escalão alvo." },
+        { status: 422 },
+      );
+    }
+
+    let ageGroupName = "";
+    if (targetAgeGroupId === context.ageGroup?.id && context.ageGroup) {
+      ageGroupName = `${context.ageGroup.club_name} · ${context.ageGroup.name}`;
+    } else {
+      const { data: ageGroup } = await getAgeGroupLabelById(db, targetAgeGroupId);
+      if (ageGroup) {
+        ageGroupName = `${ageGroup.club_name} · ${ageGroup.name}`;
+      }
+    }
+
+    const [{ data: sessions, error: sessionsError }, { data: games, error: gamesError }] =
+      await Promise.all([
+        listTrainingSessionsInRange(db, targetAgeGroupId, from, to),
+        listGamesInRange(db, targetAgeGroupId, from, to),
+      ]);
+
+    if (sessionsError) {
+      return NextResponse.json(
+        { error: "Erro ao carregar treinos do calendário." },
+        { status: 500 },
+      );
+    }
+    if (gamesError) {
+      return NextResponse.json(
+        { error: "Erro ao carregar jogos do calendário." },
+        { status: 500 },
+      );
+    }
+
+    const currentTeamAgeGroupId =
+      context.teamId && context.accessibleTeams.find((row) => row.id === context.teamId)
+        ? context.accessibleTeams.find((row) => row.id === context.teamId)?.age_group_id
+        : null;
+    const fallbackTeamId =
+      context.accessibleTeams.find((row) => row.age_group_id === targetAgeGroupId)?.id ?? null;
+    const targetTeamId =
+      currentTeamAgeGroupId === targetAgeGroupId ? context.teamId : fallbackTeamId;
+
+    const coordinatorRes = await isCoordinatorForAgeGroup(db, targetAgeGroupId, userId);
+    const canDeleteEvents = !!coordinatorRes.data;
+
+    return NextResponse.json(
+      {
+        success: true,
+        linked: true,
+        ageGroupId: targetAgeGroupId,
+        ageGroupName,
+        teamId: targetTeamId,
+        canDeleteEvents,
+        sessions: sessions || [],
+        games: games || [],
+      },
+      {
+        headers: {
+          "Cache-Control": SHORT_PRIVATE_CACHE_CONTROL,
+        },
+      },
+    );
+  } catch (error) {
+    return respondInternalError("api.calendar.events.get", error);
+  }
+}
+
+export async function handleCalendarEventsPost(request: Request) {
+  try {
+    const routeContext = await buildRouteContext();
+    if (routeContext instanceof NextResponse) return routeContext;
+
+    const { userId, db, context } = routeContext;
+    const body = await request.json().catch(() => null);
+    const eventType = normalizeEventType(body?.type);
+    const payload = normalizeLocationPayload(normalizePayload(body?.payload));
+
+    if (!eventType || !payload.date) {
+      return NextResponse.json({ error: "Dados inválidos para criar evento." }, { status: 400 });
+    }
+    if (eventType === "game" && !isValidManualShortName(payload.opponent_short_name, 2, 5)) {
+      return NextResponse.json(
+        { error: "A sigla do adversário deve ter entre 2 e 5 caracteres." },
+        { status: 400 },
+      );
+    }
+
+    const targetAgeGroupId = resolveTargetAgeGroupId(context, body?.ageGroupId);
+    if (!targetAgeGroupId) {
+      return NextResponse.json(
+        { error: "Não foi possível determinar o escalão." },
+        { status: 422 },
+      );
+    }
+
+    const targetTeamId = resolveTargetTeamId(context, targetAgeGroupId, body?.teamId);
+    if (!targetTeamId) {
+      return NextResponse.json(
+        { error: "Não foi possível determinar a equipa para o evento." },
+        { status: 422 },
+      );
+    }
+
+    const competitionResult =
+      eventType === "game"
+        ? await resolveCompetitionId(db, targetTeamId, payload.competition_id)
+        : { id: null as string | null, error: null as string | null };
+    if (competitionResult.error) {
+      return NextResponse.json({ error: competitionResult.error }, { status: 400 });
+    }
+
+    if (eventType === "training") {
+      const { data, error } = await insertTrainingSession(db, {
+        age_group_id: targetAgeGroupId,
+        team_id: targetTeamId,
+        title: payload.title || "Treino",
+        session_date: payload.date,
+        start_time: payload.start_time || "00:00",
+        end_time: payload.end_time,
+        location: payload.location,
+        location_address: payload.location_address,
+        formatted_address: payload.formatted_address,
+        latitude: payload.latitude,
+        longitude: payload.longitude,
+        osm_place_id: payload.osm_place_id,
+        location_source: payload.location_source,
+        notes: payload.notes,
+        image_url: payload.image_url,
+      });
+
+      if (error) {
+        return respondInternalError("api.calendar.events.post.create_training", error);
+      }
+
+      try {
+        await createNotificationsForTeam(db, {
+          teamId: targetTeamId,
+          ageGroupId: targetAgeGroupId,
+          actorId: userId,
+          type: "new_training",
+          entityId: data.id,
+          title: "Novo treino agendado",
+          body: `${payload.title || "Treino"} · ${payload.date}${payload.start_time ? ` às ${payload.start_time}` : ""}`,
+          linkPath: "/calendar",
+          excludeActor: true,
+        });
+      } catch (notificationError) {
+        console.error("Erro ao gerar notificações de treino:", notificationError);
+      }
+
+      return NextResponse.json({
+        success: true,
+        type: "training",
+        event: data,
+        ageGroupId: targetAgeGroupId,
+        teamId: targetTeamId,
+      });
+    }
+
+    const gameDatetime = `${payload.date}T${payload.start_time || "00:00"}:00`;
+    const { data, error } = await insertGame(db, {
+      age_group_id: targetAgeGroupId,
+      team_id: targetTeamId,
+      title: resolveGameTitle(payload),
+      game_datetime: gameDatetime,
+      end_time: payload.end_time,
+      competition_id: competitionResult.id,
+      opponent_name: payload.opponent_name,
+      opponent_short_name: payload.opponent_short_name,
+      location: payload.location,
+      location_address: payload.location_address,
+      formatted_address: payload.formatted_address,
+      latitude: payload.latitude,
+      longitude: payload.longitude,
+      osm_place_id: payload.osm_place_id,
+      location_source: payload.location_source,
+      is_home: payload.is_home ?? true,
+      notes: payload.notes,
+      image_url: payload.image_url,
+    });
+
+    if (error) {
+      return respondInternalError("api.calendar.events.post.create_game", error);
+    }
+
+    try {
+      await createNotificationsForTeam(db, {
+        teamId: targetTeamId,
+        ageGroupId: targetAgeGroupId,
+        actorId: userId,
+        type: "new_game",
+        entityId: data.id,
+        title: "Novo jogo adicionado",
+        body: `${payload.opponent_name || "Adversário"} · ${payload.date}${payload.start_time ? ` às ${payload.start_time}` : ""}`,
+        linkPath: `/games/${data.id}`,
+        excludeActor: true,
+      });
+    } catch (notificationError) {
+      console.error("Erro ao gerar notificações de jogo:", notificationError);
+    }
+
+    return NextResponse.json({
+      success: true,
+      type: "game",
+      event: data,
+      ageGroupId: targetAgeGroupId,
+      teamId: targetTeamId,
+    });
+  } catch (error) {
+    return respondInternalError("api.calendar.events.post", error);
+  }
+}
+
+export async function handleCalendarEventsPatch(request: Request) {
+  try {
+    const routeContext = await buildRouteContext();
+    if (routeContext instanceof NextResponse) return routeContext;
+
+    const { userId, db, context } = routeContext;
+    const body = await request.json().catch(() => null);
+    const id = typeof body?.id === "string" ? body.id : null;
+    const eventType = normalizeEventType(body?.type);
+    const payload = normalizeLocationPayload(normalizePayload(body?.payload));
+
+    if (!id || !eventType || !payload.date) {
+      return NextResponse.json(
+        { error: "Dados inválidos para editar evento." },
+        { status: 400 },
+      );
+    }
+    if (eventType === "game" && !isValidManualShortName(payload.opponent_short_name, 2, 5)) {
+      return NextResponse.json(
+        { error: "A sigla do adversário deve ter entre 2 e 5 caracteres." },
+        { status: 400 },
+      );
+    }
+
+    const targetAgeGroupId = resolveTargetAgeGroupId(context, body?.ageGroupId);
+    if (!targetAgeGroupId) {
+      return NextResponse.json(
+        { error: "Não foi possível determinar o escalão." },
+        { status: 422 },
+      );
+    }
+
+    const targetTeamId = resolveTargetTeamId(context, targetAgeGroupId, body?.teamId);
+    if (!targetTeamId) {
+      return NextResponse.json(
+        { error: "Não foi possível determinar a equipa para o evento." },
+        { status: 422 },
+      );
+    }
+
+    const competitionResult =
+      eventType === "game"
+        ? await resolveCompetitionId(db, targetTeamId, payload.competition_id)
+        : { id: null as string | null, error: null as string | null };
+    if (competitionResult.error) {
+      return NextResponse.json({ error: competitionResult.error }, { status: 400 });
+    }
+
+    if (eventType === "training") {
+      const { data: existing } = await getTrainingSessionAccessRow(db, id);
+
+      if (!existing) {
+        return NextResponse.json({ error: "Treino não encontrado." }, { status: 404 });
+      }
+
+      const existingAgeGroupId = await resolveExistingAgeGroupId(
+        db,
+        existing.team_id,
+        existing.age_group_id,
+      );
+      const hasAccess = hasAccessToEvent(context, existing.team_id, existingAgeGroupId);
+      if (!hasAccess) {
+        return NextResponse.json({ error: "Sem permissões para este treino." }, { status: 403 });
+      }
+
+      const { data, error } = await updateTrainingSession(db, id, {
+        age_group_id: targetAgeGroupId,
+        team_id: targetTeamId,
+        title: payload.title || "Treino",
+        session_date: payload.date,
+        start_time: payload.start_time || "00:00",
+        end_time: payload.end_time,
+        location: payload.location,
+        location_address: payload.location_address,
+        formatted_address: payload.formatted_address,
+        latitude: payload.latitude,
+        longitude: payload.longitude,
+        osm_place_id: payload.osm_place_id,
+        location_source: payload.location_source,
+        notes: payload.notes,
+        image_url: payload.image_url,
+      });
+
+      if (error) {
+        return respondInternalError("api.calendar.events.patch.update_training", error);
+      }
+
+      return NextResponse.json({
+        success: true,
+        type: "training",
+        event: data,
+        ageGroupId: targetAgeGroupId,
+        teamId: targetTeamId,
+      });
+    }
+
+    const { data: existingGame } = await getGameAccessRow(db, id);
+
+    if (!existingGame) {
+      return NextResponse.json({ error: "Jogo não encontrado." }, { status: 404 });
+    }
+
+    const existingAgeGroupId = await resolveExistingAgeGroupId(
+      db,
+      existingGame.team_id,
+      existingGame.age_group_id,
+    );
+    const hasAccess = hasAccessToEvent(context, existingGame.team_id, existingAgeGroupId);
+    if (!hasAccess) {
+      return NextResponse.json({ error: "Sem permissões para este jogo." }, { status: 403 });
+    }
+
+    if (existingGame.status === "completed") {
+      if (!existingAgeGroupId) {
+        return NextResponse.json({ error: "Sem permissões para este jogo." }, { status: 403 });
+      }
+
+      const coordinator = await isCoordinatorForAgeGroup(db, existingAgeGroupId, userId);
+      if (!coordinator.data) {
+        return NextResponse.json(
+          { error: "Só o coordenador pode editar jogos terminados." },
+          { status: 403 },
+        );
+      }
+    }
+
+    const gameDatetime = `${payload.date}T${payload.start_time || "00:00"}:00`;
+    const { data, error } = await updateGame(db, id, {
+      age_group_id: targetAgeGroupId,
+      team_id: targetTeamId,
+      title: resolveGameTitle(payload),
+      game_datetime: gameDatetime,
+      end_time: payload.end_time,
+      competition_id: competitionResult.id,
+      opponent_name: payload.opponent_name,
+      opponent_short_name: payload.opponent_short_name,
+      location: payload.location,
+      location_address: payload.location_address,
+      formatted_address: payload.formatted_address,
+      latitude: payload.latitude,
+      longitude: payload.longitude,
+      osm_place_id: payload.osm_place_id,
+      location_source: payload.location_source,
+      is_home: payload.is_home ?? true,
+      notes: payload.notes,
+      image_url: payload.image_url,
+    });
+
+    if (error) {
+      return respondInternalError("api.calendar.events.patch.update_game", error);
+    }
+
+    return NextResponse.json({
+      success: true,
+      type: "game",
+      event: data,
+      ageGroupId: targetAgeGroupId,
+      teamId: targetTeamId,
+    });
+  } catch (error) {
+    return respondInternalError("api.calendar.events.patch", error);
+  }
+}
+
+export async function handleCalendarEventsDelete(request: Request) {
+  try {
+    const routeContext = await buildRouteContext();
+    if (routeContext instanceof NextResponse) return routeContext;
+
+    const { userId, db, context } = routeContext;
+    const body = await request.json().catch(() => null);
+    const id = typeof body?.id === "string" ? body.id : null;
+    const eventType = normalizeEventType(body?.type);
+
+    if (!id || !eventType) {
+      return NextResponse.json(
+        { error: "Dados inválidos para apagar evento." },
+        { status: 400 },
+      );
+    }
+
+    if (eventType === "training") {
+      const { data: existing } = await getTrainingSessionAccessRow(db, id);
+
+      if (!existing) {
+        return NextResponse.json({ error: "Treino não encontrado." }, { status: 404 });
+      }
+
+      const existingAgeGroupId = await resolveExistingAgeGroupId(
+        db,
+        existing.team_id,
+        existing.age_group_id,
+      );
+      const hasAccess = hasAccessToEvent(context, existing.team_id, existingAgeGroupId);
+      if (!hasAccess) {
+        return NextResponse.json({ error: "Sem permissões para este treino." }, { status: 403 });
+      }
+
+      if (!existingAgeGroupId) {
+        return NextResponse.json(
+          { error: "Só o coordenador pode apagar treinos." },
+          { status: 403 },
+        );
+      }
+
+      const coordinator = await isCoordinatorForAgeGroup(db, existingAgeGroupId, userId);
+      if (!coordinator.data) {
+        return NextResponse.json(
+          { error: "Só o coordenador pode apagar treinos." },
+          { status: 403 },
+        );
+      }
+
+      try {
+        await deleteTrainingSessionCascade(db, id);
+      } catch (deleteError) {
+        return respondInternalError("api.calendar.events.delete.training_cascade", deleteError);
+      }
+
+      return NextResponse.json({ success: true, type: "training", id });
+    }
+
+    const { data: existingGame } = await getGameAccessRow(db, id);
+
+    if (!existingGame) {
+      return NextResponse.json({ error: "Jogo não encontrado." }, { status: 404 });
+    }
+
+    const existingAgeGroupId = await resolveExistingAgeGroupId(
+      db,
+      existingGame.team_id,
+      existingGame.age_group_id,
+    );
+    const hasAccess = hasAccessToEvent(context, existingGame.team_id, existingAgeGroupId);
+    if (!hasAccess) {
+      return NextResponse.json({ error: "Sem permissões para este jogo." }, { status: 403 });
+    }
+
+    if (!existingAgeGroupId) {
+      return NextResponse.json(
+        { error: "Só o coordenador pode apagar jogos." },
+        { status: 403 },
+      );
+    }
+
+    const coordinator = await isCoordinatorForAgeGroup(db, existingAgeGroupId, userId);
+    if (!coordinator.data) {
+      return NextResponse.json(
+        { error: "Só o coordenador pode apagar jogos." },
+        { status: 403 },
+      );
+    }
+
+    try {
+      await deleteGameCascade(db, id);
+    } catch (deleteError) {
+      return respondInternalError("api.calendar.events.delete.game_cascade", deleteError);
+    }
+
+    return NextResponse.json({ success: true, type: "game", id });
+  } catch (error) {
+    return respondInternalError("api.calendar.events.delete", error);
+  }
+}

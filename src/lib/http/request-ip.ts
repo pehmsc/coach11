@@ -1,4 +1,4 @@
-type HeaderBag = {
+export type HeaderBag = {
   get(name: string): string | null;
 };
 

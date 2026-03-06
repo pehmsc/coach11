@@ -2,6 +2,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendWebPushToUsers } from "@/lib/pwa/web-push-server";
 import { getTeamMemberProfileIds } from "@/lib/team/members";
+import {
+  deleteNotificationById,
+  insertNotification,
+  insertNotificationRecipients,
+} from "@/lib/repositories/notifications.repository";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -80,9 +85,9 @@ async function insertNotificationBroadcast(
   recipientIds: string[],
 ) {
   const createdAt = new Date().toISOString();
-  const { data: notification, error: notificationError } = await admin
-    .from("notifications")
-    .insert({
+  const { data: notification, error: notificationError } = await insertNotification(
+    admin,
+    {
       user_id: null,
       age_group_id: input.ageGroupId,
       team_id: input.teamId ?? null,
@@ -95,9 +100,8 @@ async function insertNotificationBroadcast(
       payload: buildNotificationPayload(input),
       created_at: createdAt,
       read_at: null,
-    })
-    .select("id, created_at")
-    .single();
+    },
+  );
 
   if (notificationError || !notification?.id) {
     throw new Error(
@@ -115,12 +119,10 @@ async function insertNotificationBroadcast(
     created_at: notification.created_at || createdAt,
   }));
 
-  const { error: recipientsError } = await admin
-    .from("notification_recipients")
-    .insert(rows);
+  const { error: recipientsError } = await insertNotificationRecipients(admin, rows);
 
   if (recipientsError) {
-    await admin.from("notifications").delete().eq("id", notification.id);
+    await deleteNotificationById(admin, notification.id);
     throw new Error(`Erro ao criar recipients da notificação: ${recipientsError.message}`);
   }
 

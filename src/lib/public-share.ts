@@ -8,11 +8,8 @@ import {
   randomBytes,
 } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { extractRequestIp, type HeaderBag } from "./http/request-ip";
 import { getCanonicalAppUrl } from "./config/canonical-app-url";
-
-type HeaderBag = {
-  get(name: string): string | null;
-};
 
 export type PublicShareRow = {
   id: string;
@@ -151,21 +148,7 @@ export function sanitizePublicPlayerName(
   return `${first} ${last[0]?.toUpperCase() || ""}.`;
 }
 
-export function extractRequestIp(headers: HeaderBag) {
-  const forwardedFor = headers.get("x-forwarded-for");
-  if (forwardedFor) {
-    const first = forwardedFor.split(",")[0]?.trim();
-    if (first) return first;
-  }
-
-  const realIp = headers.get("x-real-ip")?.trim();
-  if (realIp) return realIp;
-
-  const cfIp = headers.get("cf-connecting-ip")?.trim();
-  if (cfIp) return cfIp;
-
-  return "unknown";
-}
+export { extractRequestIp };
 
 export function buildPublicGameRef(rawToken: string, gameId: string) {
   return createHmac("sha256", rawToken).update(gameId).digest("base64url").slice(0, 24);
