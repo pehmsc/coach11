@@ -142,10 +142,8 @@ export function sanitizePublicPlayerName(
   const first = typeof firstName === "string" ? firstName.trim() : "";
   const last = typeof lastName === "string" ? lastName.trim() : "";
 
-  if (!first) return "Jogador";
-  if (!last) return first;
-
-  return `${first} ${last[0]?.toUpperCase() || ""}.`;
+  const fullName = [first, last].filter(Boolean).join(" ");
+  return fullName || "Jogador";
 }
 
 export { extractRequestIp };
