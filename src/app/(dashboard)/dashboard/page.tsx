@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { format, addDays, addHours, parseISO, isToday, isTomorrow } from "date-fns";
+import { format, addDays, parseISO, isToday, isTomorrow } from "date-fns";
 import { pt } from "date-fns/locale";
 import {
   Calendar,
@@ -15,6 +15,10 @@ import { DashboardEventsWindow } from "@/components/dashboard/DashboardEventsWin
 import RedeemInviteGate from "@/components/invite/RedeemInviteGate";
 import { formatFixtureOpponentLabel } from "@/lib/games/display";
 import { getPresencePromptState } from "@/lib/events/presence-window";
+import {
+  getGameDashboardPriorityState,
+  getTrainingDashboardPriorityState,
+} from "@/lib/events/dashboard-priority";
 import type { TrainingSession, Game } from "@/types/database";
 
 export const dynamic = "force-dynamic";
@@ -135,7 +139,6 @@ export default async function DashboardPage() {
   const todayDate = format(now, "yyyy-MM-dd");
   const pastWindowStart = format(addDays(now, -30), "yyyy-MM-dd");
   const futureWindowEnd = format(addDays(now, 30), "yyyy-MM-dd");
-  const in48h = addHours(now, 48);
 
   // Treinos + jogos numa janela útil para paginação local do dashboard.
   let timelineTrainings: TrainingSession[] = [];
@@ -261,8 +264,8 @@ export default async function DashboardPage() {
     }
   }
 
-  // Jogos com convocatória já confirmada (para não mostrar alerta)
-  const confirmedGameIds = new Set<string>();
+  // Jogos com qualquer convocatória criada (mesmo draft) deixam de pedir criação.
+  const gamesWithConvocationIds = new Set<string>();
   if (timelineGames.length > 0) {
     const upcomingGameIds = timelineGames.map((g) => g.id);
     const { data: existingConvocations } = await (admin ?? supabase)
@@ -271,8 +274,8 @@ export default async function DashboardPage() {
       .in("game_id", upcomingGameIds)
       .in("status", ["confirmed", "closed", "draft"]);
     (existingConvocations || []).forEach((c) => {
-      // Qualquer convocatória existente (mesmo draft) fecha o alerta
-      if (c.game_id) confirmedGameIds.add(c.game_id);
+      // Qualquer convocatória existente (mesmo draft) fecha o alerta de criação.
+      if (c.game_id) gamesWithConvocationIds.add(c.game_id);
     });
   }
 
@@ -291,38 +294,47 @@ export default async function DashboardPage() {
       )
     : "hidden";
   const todayTrainingDone = todayTrainingPromptState === "closed";
-  const todayTrainingPresenceState =
-    todayTrainingPromptState === "mark" || todayTrainingPromptState === "close";
 
   const dashboardEvents = [
-    ...timelineTrainings.map((training) => ({
-      id: `training-${training.id}`,
-      type: "training" as const,
-      href: `/trainings?open=${training.id}`,
-      title: training.title?.trim() || "Treino",
-      subtitle: `${relativeDay(training.session_date)}${
-        training.start_time ? ` · ${training.start_time.substring(0, 5)}` : ""
-      }${training.location ? ` · ${training.location}` : ""}`,
-      sortTs: toTimestampFromDateAndTime(
+    ...timelineTrainings.map((training) => {
+      const trainingPriority = getTrainingDashboardPriorityState(
         training.session_date,
         training.start_time,
-      ),
-      showPresenceCta:
-        todayTraining?.id === training.id &&
-        todayTrainingPresenceState,
-      presenceCtaMode:
-        todayTraining?.id === training.id && todayTrainingPresenceState
-          ? (todayTrainingPromptState === "close" ? "close" : "mark") as "mark" | "close"
-          : undefined,
-      presenceCtaHref:
-        todayTraining?.id === training.id
+        training.end_time,
+        training.status,
+        now,
+      );
+
+      return {
+        id: `training-${training.id}`,
+        type: "training" as const,
+        href: `/trainings?open=${training.id}`,
+        title: training.title?.trim() || "Treino",
+        subtitle: `${relativeDay(training.session_date)}${
+          training.start_time ? ` · ${training.start_time.substring(0, 5)}` : ""
+        }${training.location ? ` · ${training.location}` : ""}`,
+        sortTs: toTimestampFromDateAndTime(
+          training.session_date,
+          training.start_time,
+        ),
+        isPriority: trainingPriority.isPriority,
+        showPresenceCta: trainingPriority.isPriority,
+        presenceCtaMode: trainingPriority.presenceCtaMode,
+        presenceCtaHref: trainingPriority.isPriority
           ? `/attendance?date=${training.session_date}`
           : undefined,
-    })),
+      };
+    }),
     ...timelineGames
       .filter((game) => game.id !== activeLiveGame?.id)
       .map((game) => {
-        const gameDate = game.game_datetime ? parseISO(game.game_datetime) : null;
+        const gamePriority = getGameDashboardPriorityState(
+          game.game_datetime,
+          game.status,
+          gamesWithConvocationIds.has(game.id),
+          now,
+        );
+
         return {
           id: `game-${game.id}`,
           type: "game" as const,
@@ -340,11 +352,9 @@ export default async function DashboardPage() {
               : ""
           }${game.location ? ` · ${game.location}` : ""}`,
           sortTs: toTimestampFromDateTime(game.game_datetime),
-          needsConvocation:
-            !!gameDate &&
-            gameDate <= in48h &&
-            gameDate >= now &&
-            !confirmedGameIds.has(game.id),
+          isPriority: gamePriority.isPriority,
+          needsConvocation: gamePriority.needsConvocation,
+          convocationCtaMode: gamePriority.convocationCtaMode,
         };
       }),
   ].sort((a, b) => a.sortTs - b.sortTs);

@@ -3,6 +3,10 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { AlertCircle, ChevronDown, ChevronUp } from "lucide-react";
+import {
+  DASHBOARD_PRIORITY_WINDOW_SIZE,
+  getDashboardPriorityWindowStartIndex,
+} from "@/lib/events/dashboard-priority";
 
 export type DashboardEventItem = {
   id: string;
@@ -11,10 +15,12 @@ export type DashboardEventItem = {
   title: string;
   subtitle: string;
   sortTs: number;
+  isPriority?: boolean;
   showPresenceCta?: boolean;
   presenceCtaMode?: "mark" | "close";
   presenceCtaHref?: string;
   needsConvocation?: boolean;
+  convocationCtaMode?: "upcoming" | "overdue";
 };
 
 type Props = {
@@ -27,13 +33,10 @@ function clamp(value: number, min: number, max: number) {
 }
 
 export function DashboardEventsWindow({ events, anchorTs }: Props) {
-  const maxStart = Math.max(0, events.length - 5);
+  const maxStart = Math.max(0, events.length - DASHBOARD_PRIORITY_WINDOW_SIZE);
   const initialStartIndex = useMemo(() => {
-    const nextUpcomingIndex = events.findIndex((event) => event.sortTs >= anchorTs);
-
-    if (nextUpcomingIndex === -1) return 0;
-    return clamp(nextUpcomingIndex, 0, maxStart);
-  }, [anchorTs, events, maxStart]);
+    return getDashboardPriorityWindowStartIndex(events, anchorTs);
+  }, [anchorTs, events]);
   const [startIndex, setStartIndex] = useState(initialStartIndex);
 
   useEffect(() => {
@@ -41,8 +44,11 @@ export function DashboardEventsWindow({ events, anchorTs }: Props) {
   }, [initialStartIndex]);
 
   const visibleEvents = useMemo(() => {
-    const nextVisible = events.slice(startIndex, startIndex + 5);
-    while (nextVisible.length < 5) {
+    const nextVisible = events.slice(
+      startIndex,
+      startIndex + DASHBOARD_PRIORITY_WINDOW_SIZE,
+    );
+    while (nextVisible.length < DASHBOARD_PRIORITY_WINDOW_SIZE) {
         nextVisible.push({
           id: `placeholder-${nextVisible.length}`,
           type: "training",
@@ -139,10 +145,14 @@ export function DashboardEventsWindow({ events, anchorTs }: Props) {
                   <AlertCircle size={16} className="shrink-0 text-amber-500" />
                   <div className="flex-1">
                     <p className="text-xs font-semibold text-amber-900">
-                      Convocatória por criar
+                      {event.convocationCtaMode === "overdue"
+                        ? "Convocatória pendente"
+                        : "Convocatória por criar"}
                     </p>
                     <p className="text-xs text-amber-700">
-                      Jogo em menos de 48h. Define já os convocados.
+                      {event.convocationCtaMode === "overdue"
+                        ? "A hora do evento já passou e a convocatória continua por resolver."
+                        : "Jogo em menos de 48h. Define já os convocados."}
                     </p>
                   </div>
                   <span className="text-xs font-medium text-amber-600">→</span>

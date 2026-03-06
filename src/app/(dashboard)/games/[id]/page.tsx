@@ -48,6 +48,23 @@ interface PlayerWithStatus extends Player {
   sameDayConflictLabel?: string | null;
 }
 
+function getPlayerCardMeta(player: Pick<PlayerWithStatus, "jersey_number" | "preferred_position">) {
+  const parts: string[] = [];
+
+  if (typeof player.jersey_number === "number") {
+    parts.push(`#${player.jersey_number}`);
+  }
+
+  if (
+    typeof player.preferred_position === "string" &&
+    player.preferred_position.trim().length > 0
+  ) {
+    parts.push(player.preferred_position.trim());
+  }
+
+  return parts.join(" · ");
+}
+
 const FORMATIONS_BY_FORMAT: Record<string, string[]> = {
   "5": ["1-2-2", "1-1-3", "1-3-1"],
   "7": ["1-2-3-1", "1-3-2-1", "1-2-2-2", "1-1-3-2", "1-2-1-3"],
@@ -1845,9 +1862,9 @@ export default function GameDetailPage() {
                     <p className="text-sm text-slate-600 truncate">
                       {player.first_name} {player.last_name}
                     </p>
-                    {player.preferred_position && (
+                    {getPlayerCardMeta(player) && (
                       <p className="text-xs text-slate-400">
-                        {player.preferred_position}
+                        {getPlayerCardMeta(player)}
                       </p>
                     )}
                     {player.sameDayConflictLabel && (
@@ -1919,6 +1936,7 @@ function ConvocatedRow({
   disabled: boolean;
 }) {
   const badgeLabel = isGk ? "GR" : isStarter ? "Titular" : "Suplente";
+  const playerMeta = getPlayerCardMeta(player);
 
   return (
     <div
@@ -1948,9 +1966,7 @@ function ConvocatedRow({
             </span>
           )}
         </p>
-        {player.preferred_position && (
-          <p className="text-xs text-slate-400">{player.preferred_position}</p>
-        )}
+        {playerMeta && <p className="text-xs text-slate-400">{playerMeta}</p>}
         {player.sameDayConflictLabel && (
           <p className="text-xs text-orange-500">{player.sameDayConflictLabel}</p>
         )}

@@ -15,11 +15,15 @@ import {
   formatTimeRange,
 } from "@/lib/events/time";
 import { resolveFormattedAddress, resolveLocationLabel } from "@/lib/location";
+import {
+  buildPublicConvocationEntries,
+  type PublicConvocationEntry,
+} from "@/lib/games/public-convocation";
+import { getStarterPlayerIdsFromLiveStats } from "@/lib/games/lineup";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   resolvePublicGameId,
   resolvePublicAccessGate,
-  sanitizePublicPlayerName,
 } from "@/lib/public-share";
 
 export const dynamic = "force-dynamic";
@@ -50,6 +54,18 @@ function gameStatusLabel(status: string | null | undefined) {
     default:
       return "Agendado";
   }
+}
+
+function isMissingRelationError(
+  message: string | null | undefined,
+  relationName: string,
+) {
+  if (!message) return false;
+
+  return (
+    message.includes(relationName) &&
+    (message.includes("does not exist") || message.includes("relation"))
+  );
 }
 
 const getPublicGameDetailPayload = unstable_cache(
@@ -147,32 +163,93 @@ export default async function PublicGameDetailPage({
     .limit(1)
     .maybeSingle();
 
-  let sanitizedPlayers: string[] = [];
+  let convocationPlayers: PublicConvocationEntry[] = [];
 
   if (convocation?.id) {
-    const { data: convocationPlayers } = await admin
-      .from("convocation_players")
-      .select("player_id")
-      .eq("convocation_id", convocation.id);
+    const [
+      { data: selectedRows },
+      { data: liveRows },
+      externalPlayersRes,
+    ] = await Promise.all([
+      admin
+        .from("convocation_players")
+        .select("player_id")
+        .eq("convocation_id", convocation.id),
+      admin
+        .from("game_stats_live")
+        .select("player_id, status, start_minute")
+        .eq("game_id", game.id),
+      admin
+        .from("external_player_convocations")
+        .select("id, name, lineup_status")
+        .eq("game_id", game.id)
+        .order("created_at", { ascending: true }),
+    ]);
 
     const playerIds = Array.from(
       new Set(
-        (convocationPlayers || [])
+        (selectedRows || [])
           .map((row) => row.player_id)
           .filter((value): value is string => typeof value === "string"),
       ),
     );
 
+    const starterIds = getStarterPlayerIdsFromLiveStats(
+      ((liveRows || []) as Array<{
+        player_id?: string | null;
+        status?: string | null;
+        start_minute?: number | null;
+      }>),
+    );
+
+    const externalPlayers =
+      externalPlayersRes.error &&
+      !isMissingRelationError(
+        externalPlayersRes.error.message,
+        "external_player_convocations",
+      )
+        ? []
+        : (
+            (externalPlayersRes.data || []) as Array<{
+              id: string;
+              name: string | null;
+              lineup_status: string | null;
+            }>
+          );
+
+    let squadPlayers: Array<{
+      id: string;
+      first_name: string | null;
+      last_name: string | null;
+    }> = [];
+
     if (playerIds.length > 0) {
       const { data: players } = await admin
         .from("players")
-        .select("first_name, last_name")
+        .select("id, first_name, last_name")
         .in("id", playerIds);
 
-      sanitizedPlayers = (players || []).map((player) =>
-        sanitizePublicPlayerName(player.first_name, player.last_name),
-      );
+      squadPlayers = (players || []) as Array<{
+        id: string;
+        first_name: string | null;
+        last_name: string | null;
+      }>;
     }
+
+    convocationPlayers = buildPublicConvocationEntries({
+      selectedPlayerIds: playerIds,
+      squadPlayers: squadPlayers.map((player) => ({
+        id: player.id,
+        firstName: player.first_name,
+        lastName: player.last_name,
+      })),
+      starterIds,
+      externalPlayers: externalPlayers.map((player) => ({
+        id: player.id,
+        name: player.name,
+        lineupStatus: player.lineup_status,
+      })),
+    });
   }
 
   return (
@@ -300,7 +377,7 @@ export default async function PublicGameDetailPage({
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
             Convocatória
           </p>
-          {sanitizedPlayers.length === 0 ? (
+          {convocationPlayers.length === 0 ? (
             <p className="mt-3 text-sm text-slate-500">
               Sem convocatória disponível.
             </p>
@@ -308,16 +385,16 @@ export default async function PublicGameDetailPage({
             <div className="mt-3">
               <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
                 <ShieldCheck size={14} />
-                {sanitizedPlayers.length} convocado
-                {sanitizedPlayers.length !== 1 ? "s" : ""}
+                {convocationPlayers.length} convocado
+                {convocationPlayers.length !== 1 ? "s" : ""}
               </div>
               <div className="grid gap-2 sm:grid-cols-2">
-                {sanitizedPlayers.map((playerName) => (
+                {convocationPlayers.map((player) => (
                   <div
-                    key={playerName}
+                    key={player.id}
                     className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-sm text-slate-700"
                   >
-                    {playerName}
+                    {player.name}
                   </div>
                 ))}
               </div>

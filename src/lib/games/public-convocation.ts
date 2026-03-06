@@ -1,0 +1,91 @@
+import { sanitizePublicPlayerName } from "../public-share";
+import { normalizeLiveStatusForUi } from "./lineup";
+
+type PublicConvocationSquadPlayer = {
+  id: string;
+  firstName: string | null | undefined;
+  lastName: string | null | undefined;
+};
+
+type PublicConvocationExternalPlayer = {
+  id: string;
+  name: string | null | undefined;
+  lineupStatus?: string | null | undefined;
+};
+
+type BuildPublicConvocationEntriesInput = {
+  selectedPlayerIds: string[];
+  squadPlayers: PublicConvocationSquadPlayer[];
+  starterIds?: Iterable<string>;
+  externalPlayers?: PublicConvocationExternalPlayer[];
+};
+
+export type PublicConvocationEntry = {
+  id: string;
+  name: string;
+  isStarter: boolean;
+  isExternal: boolean;
+};
+
+function sanitizeExternalPlayerName(name: string | null | undefined) {
+  const normalized = typeof name === "string" ? name.trim() : "";
+  return normalized || "Jogador";
+}
+
+function comparePublicConvocationEntries(
+  a: PublicConvocationEntry,
+  b: PublicConvocationEntry,
+) {
+  if (a.isStarter !== b.isStarter) {
+    return a.isStarter ? -1 : 1;
+  }
+
+  return (
+    a.name.localeCompare(b.name, "pt", { sensitivity: "base" }) ||
+    a.id.localeCompare(b.id, "pt", { sensitivity: "base" })
+  );
+}
+
+export function buildPublicConvocationEntries({
+  selectedPlayerIds,
+  squadPlayers,
+  starterIds = [],
+  externalPlayers = [],
+}: BuildPublicConvocationEntriesInput): PublicConvocationEntry[] {
+  const starterIdSet = new Set(Array.from(starterIds));
+  const squadPlayerById = new Map(
+    squadPlayers.map((player) => [
+      player.id,
+      sanitizePublicPlayerName(player.firstName, player.lastName),
+    ]),
+  );
+
+  const uniqueSelectedIds = Array.from(
+    new Set(
+      selectedPlayerIds.filter(
+        (playerId): playerId is string =>
+          typeof playerId === "string" && playerId.trim().length > 0,
+      ),
+    ),
+  );
+
+  const entries = uniqueSelectedIds.map((playerId) => ({
+    id: playerId,
+    name: squadPlayerById.get(playerId) || "Jogador",
+    isStarter: starterIdSet.has(playerId),
+    isExternal: false,
+  }));
+
+  externalPlayers.forEach((player) => {
+    if (!player.id) return;
+
+    entries.push({
+      id: `external:${player.id}`,
+      name: sanitizeExternalPlayerName(player.name),
+      isStarter: normalizeLiveStatusForUi(player.lineupStatus) === "on_field",
+      isExternal: true,
+    });
+  });
+
+  return entries.sort(comparePublicConvocationEntries);
+}

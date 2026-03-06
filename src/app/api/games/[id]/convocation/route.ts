@@ -2,6 +2,10 @@ import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { portugalDateTimeToUtc } from "@/lib/events/presence-window";
 import { getFixtureConnector } from "@/lib/games/display";
+import {
+  getStarterPlayerIdsFromLiveStats,
+  normalizeLiveStatusForUi,
+} from "@/lib/games/lineup";
 import { NextResponse } from "next/server";
 
 type RouteContext = {
@@ -71,28 +75,6 @@ function formatPortugalTime(value: string | null | undefined) {
     minute: "2-digit",
     hour12: false,
   }).format(parsed);
-}
-
-function normalizeLiveStatusForUi(value: string | null | undefined) {
-  if (!value) return null;
-  if (
-    value === "on_field" ||
-    value === "starter" ||
-    value === "playing" ||
-    value === "titular"
-  ) {
-    return "on_field";
-  }
-  if (
-    value === "substitute" ||
-    value === "on_bench" ||
-    value === "substituted_out" ||
-    value === "bench" ||
-    value === "suplente"
-  ) {
-    return "substitute";
-  }
-  return null;
 }
 
 function normalizeKitRowForUi(row: Record<string, unknown>) {
@@ -448,21 +430,19 @@ export async function GET(_request: Request, { params }: RouteContext) {
       .select("player_id, status, start_minute")
       .eq("game_id", gameId);
     const lineupStatuses: Record<string, string> = {};
-    const starterIdsSet = new Set<string>();
+    const starterIdsSet = getStarterPlayerIdsFromLiveStats(
+      ((liveStats || []) as Array<{
+        player_id?: string | null;
+        status?: string | null;
+        start_minute?: number | null;
+      }>),
+    );
     (liveStats || []).forEach((row) => {
       const r = row as unknown as { player_id?: string; status?: string; start_minute?: number | null };
       if (!r.player_id) return;
       const normalized = normalizeLiveStatusForUi(r.status);
       if (normalized) lineupStatuses[r.player_id] = normalized;
-      if (r.start_minute === 0 || r.status === "starter") {
-        starterIdsSet.add(r.player_id);
-      }
     });
-    if (starterIdsSet.size === 0) {
-      Object.entries(lineupStatuses).forEach(([playerId, status]) => {
-        if (status === "on_field") starterIdsSet.add(playerId);
-      });
-    }
 
     externalRows.forEach((row) => {
       const externalPlayerId = `external:${row.id}`;
