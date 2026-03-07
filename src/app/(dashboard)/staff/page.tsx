@@ -69,10 +69,13 @@ interface StaffInvite {
 }
 
 type TechnicalStaffUsage = {
+  coordinatorIsSuperCoordinator: boolean;
+  limit: number | null;
+  limitEnforced: boolean;
   activeTechnicalStaffCount: number;
   pendingTechnicalInviteCount: number;
   totalUsed: number;
-  remainingSlots: number;
+  remainingSlots: number | null;
   overLimit: boolean;
 };
 
@@ -188,7 +191,10 @@ export default function StaffPage() {
       toast.error("Apenas o coordenador pode enviar convites.");
       return;
     }
-    if ((technicalStaffUsage?.remainingSlots || 0) <= 0) {
+    if (
+      technicalStaffUsage?.limitEnforced !== false &&
+      (technicalStaffUsage?.remainingSlots ?? 0) <= 0
+    ) {
       toast.error(
         "Este escalão já atingiu o limite de 1 membro de equipa técnica convidado.",
       );
@@ -353,7 +359,10 @@ export default function StaffPage() {
   }
 
   const noRemainingTechnicalSlots =
-    canManageStaff && (technicalStaffUsage?.remainingSlots || 0) <= 0;
+    canManageStaff &&
+    technicalStaffUsage?.limitEnforced !== false &&
+    (technicalStaffUsage?.remainingSlots ?? 0) <= 0;
+  const hasUnlimitedTechnicalStaff = technicalStaffUsage?.limitEnforced === false;
 
   return (
     <div className="p-4 md:p-8 max-w-2xl mx-auto space-y-6">
@@ -379,7 +388,9 @@ export default function StaffPage() {
       {canManageStaff && technicalStaffUsage ? (
         <Card
           className={
-            technicalStaffUsage.overLimit
+            hasUnlimitedTechnicalStaff
+              ? "border-sky-200 bg-sky-50"
+              : technicalStaffUsage.overLimit
               ? "border-red-200 bg-red-50"
               : noRemainingTechnicalSlots
                 ? "border-amber-200 bg-amber-50"
@@ -390,10 +401,14 @@ export default function StaffPage() {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-sm font-semibold text-slate-900">
-                  Limite da equipa técnica convidada
+                  {hasUnlimitedTechnicalStaff
+                    ? "Convites da equipa técnica"
+                    : "Limite da equipa técnica convidada"}
                 </p>
                 <p className="mt-1 text-sm text-slate-600">
-                  {technicalStaffUsage.totalUsed}/1 vaga usada
+                  {hasUnlimitedTechnicalStaff
+                    ? `${technicalStaffUsage.totalUsed} membro${technicalStaffUsage.totalUsed === 1 ? "" : "s"} técnico${technicalStaffUsage.totalUsed === 1 ? "" : "s"} registado${technicalStaffUsage.totalUsed === 1 ? "" : "s"}`
+                    : `${technicalStaffUsage.totalUsed}/${technicalStaffUsage.limit ?? 1} vaga usada`}
                   {technicalStaffUsage.activeTechnicalStaffCount > 0
                     ? ` · ${technicalStaffUsage.activeTechnicalStaffCount} membro ativo`
                     : ""}
@@ -403,12 +418,18 @@ export default function StaffPage() {
                 </p>
               </div>
               <div className="rounded-full bg-white px-3 py-1 text-sm font-semibold text-slate-700">
-                {technicalStaffUsage.remainingSlots > 0
-                  ? `${technicalStaffUsage.remainingSlots} livre`
-                  : "Sem vagas"}
+                {hasUnlimitedTechnicalStaff
+                  ? "Sem limite"
+                  : technicalStaffUsage.remainingSlots && technicalStaffUsage.remainingSlots > 0
+                    ? `${technicalStaffUsage.remainingSlots} livre`
+                    : "Sem vagas"}
               </div>
             </div>
-            {technicalStaffUsage.overLimit ? (
+            {hasUnlimitedTechnicalStaff ? (
+              <p className="mt-3 text-sm text-sky-700">
+                Esta conta está marcada como super coordinator. O limite de staff não é aplicado neste escalão para testes e administração.
+              </p>
+            ) : technicalStaffUsage.overLimit ? (
               <p className="mt-3 text-sm text-red-700">
                 Este escalão já está acima da regra pretendida de 1 membro técnico no
                 total. Novos convites ficam bloqueados até removeres excesso existente.

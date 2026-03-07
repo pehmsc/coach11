@@ -17,6 +17,17 @@ export type MeContextResponse = {
     club_name?: string;
   } | null;
   accessibleTeamIds?: string[];
+  technicalStaffUsage?: {
+    coordinatorId?: string | null;
+    coordinatorIsSuperCoordinator?: boolean;
+    limit?: number | null;
+    limitEnforced?: boolean;
+    activeTechnicalStaffCount?: number;
+    pendingTechnicalInviteCount?: number;
+    totalUsed?: number;
+    remainingSlots?: number | null;
+    overLimit?: boolean;
+  } | null;
   profile?: {
     id?: string;
     full_name?: string;

@@ -87,7 +87,7 @@ export async function POST(request: Request) {
     try {
       const usage = await getAgeGroupTechnicalStaffUsage(admin, ageGroup.id);
 
-      if (usage.remainingSlots <= 0) {
+      if (usage.limitEnforced && (usage.remainingSlots ?? 0) <= 0) {
         return NextResponse.json(
           {
             error: `${TECHNICAL_STAFF_LIMIT_ERROR_MESSAGE} Remove o membro atual ou um convite pendente antes de enviar outro.`,

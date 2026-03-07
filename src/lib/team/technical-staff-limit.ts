@@ -10,10 +10,13 @@ const TECHNICAL_INVITE_ROLES = [...AGE_GROUP_STAFF_ROLES];
 
 export type AgeGroupTechnicalStaffUsage = {
   coordinatorId: string | null;
+  coordinatorIsSuperCoordinator: boolean;
+  limit: number | null;
+  limitEnforced: boolean;
   activeTechnicalStaffCount: number;
   pendingTechnicalInviteCount: number;
   totalUsed: number;
-  remainingSlots: number;
+  remainingSlots: number | null;
   overLimit: boolean;
 };
 
@@ -50,6 +53,23 @@ export async function getAgeGroupTechnicalStaffUsage(
     ageGroup && typeof ageGroup.coordinator_id === "string"
       ? ageGroup.coordinator_id
       : null;
+  let coordinatorIsSuperCoordinator = false;
+
+  if (coordinatorId) {
+    const { data: coordinatorProfile, error: coordinatorProfileError } = await admin
+      .from("profiles")
+      .select("is_super_coordinator")
+      .eq("id", coordinatorId)
+      .maybeSingle();
+
+    if (coordinatorProfileError) {
+      throw new Error(
+        `technical_staff_usage_coordinator_profile_failed:${coordinatorProfileError.message || "falha desconhecida"}`,
+      );
+    }
+
+    coordinatorIsSuperCoordinator = coordinatorProfile?.is_super_coordinator === true;
+  }
 
   const [staffMembersRes, pendingInvitesRes] = await Promise.all([
     admin
@@ -92,13 +112,19 @@ export async function getAgeGroupTechnicalStaffUsage(
 
   const pendingTechnicalInviteCount = (pendingInvitesRes.data || []).length;
   const totalUsed = activeTechnicalStaffCount + pendingTechnicalInviteCount;
+  const limitEnforced = !coordinatorIsSuperCoordinator;
 
   return {
     coordinatorId,
+    coordinatorIsSuperCoordinator,
+    limit: limitEnforced ? TECHNICAL_STAFF_LIMIT : null,
+    limitEnforced,
     activeTechnicalStaffCount,
     pendingTechnicalInviteCount,
     totalUsed,
-    remainingSlots: Math.max(0, TECHNICAL_STAFF_LIMIT - totalUsed),
-    overLimit: totalUsed > TECHNICAL_STAFF_LIMIT,
+    remainingSlots: limitEnforced
+      ? Math.max(0, TECHNICAL_STAFF_LIMIT - totalUsed)
+      : null,
+    overLimit: limitEnforced ? totalUsed > TECHNICAL_STAFF_LIMIT : false,
   };
 }

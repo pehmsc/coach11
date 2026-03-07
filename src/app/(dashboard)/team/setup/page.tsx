@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -922,6 +923,33 @@ export default function TeamSetupPage() {
       )}
 
       {/* ── SECÇÃO 5: EQUIPA TÉCNICA ── */}
+      {existingAgeGroup && (accountRole === "coordinator" || isSuperCoordinator) && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Users size={16} /> Equipa Técnica
+            </CardTitle>
+            <CardDescription className="mt-1">
+              {isSuperCoordinator
+                ? "A tua conta super coordinator pode convidar staff sem limite neste escalão."
+                : "Depois de criares o escalão, já podes convidar a equipa técnica a partir da área dedicada."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-slate-600">
+              {isSuperCoordinator
+                ? "Os convites beta continuam separados e exclusivos das ferramentas admin."
+                : "Coordenadores beta normais podem convidar a equipa técnica dentro da regra ativa do escalão."}
+            </p>
+            <Button asChild className="bg-emerald-600 hover:bg-emerald-700">
+              <Link href="/staff">
+                <Plus size={14} className="mr-1" /> Convidar
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       {false && existingAgeGroup && (
         <Card>
           <CardHeader className="pb-3">
