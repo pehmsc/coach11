@@ -57,6 +57,36 @@ async function uploadLogoWithRetry(
   return uploadError;
 }
 
+async function removeExistingLogoVariants(
+  admin: ReturnType<typeof createAdminClient>,
+  ageGroupId: string,
+) {
+  const { data, error } = await admin.storage.from("club-logos").list(ageGroupId, {
+    limit: 100,
+  });
+
+  if (error) {
+    if (error.message?.toLowerCase().includes("bucket")) {
+      return;
+    }
+
+    throw error;
+  }
+
+  const paths = (data || [])
+    .filter((item) => !!item.id && !!item.name)
+    .map((item) => `${ageGroupId}/${item.name}`);
+
+  if (paths.length === 0) {
+    return;
+  }
+
+  const { error: removeError } = await admin.storage.from("club-logos").remove(paths);
+  if (removeError) {
+    throw removeError;
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
@@ -152,6 +182,16 @@ export async function POST(request: Request) {
 
     const filePath = `${ageGroup.id}/logo.${extension}`;
     const fileBytes = new Uint8Array(await file.arrayBuffer());
+
+    try {
+      await removeExistingLogoVariants(admin, ageGroup.id);
+    } catch (cleanupError) {
+      console.error("Erro ao limpar logos antigos:", cleanupError);
+      return NextResponse.json(
+        { error: "Erro ao preparar a substituição do logotipo." },
+        { status: 500 },
+      );
+    }
 
     const uploadError = await uploadLogoWithRetry(
       admin,

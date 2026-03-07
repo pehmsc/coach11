@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { checkRedeemLimit } from "@/lib/rate-limit";
+import { TECHNICAL_STAFF_LIMIT_ERROR_MESSAGE } from "@/lib/team/technical-staff-limit";
 
 type RedeemRpcResult = {
   ok?: boolean;
@@ -37,6 +38,13 @@ function mapRedeemError(errorCode: string | undefined) {
       return {
         body: { error: "Escalão não encontrado. Contacta o coordenador." },
         status: 422,
+      };
+    case "technical_staff_limit_reached":
+      return {
+        body: {
+          error: `${TECHNICAL_STAFF_LIMIT_ERROR_MESSAGE} O coordenador precisa de libertar a vaga antes de aceitares este convite.`,
+        },
+        status: 409,
       };
     case "team_create_failed":
       return {

@@ -68,6 +68,14 @@ interface StaffInvite {
   invite_sent_at: string;
 }
 
+type TechnicalStaffUsage = {
+  activeTechnicalStaffCount: number;
+  pendingTechnicalInviteCount: number;
+  totalUsed: number;
+  remainingSlots: number;
+  overLimit: boolean;
+};
+
 const EMPTY_FORM = {
   firstName: "",
   lastName: "",
@@ -90,6 +98,7 @@ export default function StaffPage() {
   const [invites, setInvites] = useState<StaffInvite[]>([]);
   const [activeStaffProfileIds, setActiveStaffProfileIds] = useState<string[]>([]);
   const [invitesExpanded, setInvitesExpanded] = useState(false);
+  const [technicalStaffUsage, setTechnicalStaffUsage] = useState<TechnicalStaffUsage | null>(null);
 
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -122,6 +131,12 @@ export default function StaffPage() {
     }
 
     setCanManageStaff(ctx?.canManageStaff === true);
+    setTechnicalStaffUsage(
+      ctx?.technicalStaffUsage &&
+        typeof ctx.technicalStaffUsage === "object"
+        ? (ctx.technicalStaffUsage as TechnicalStaffUsage)
+        : null,
+    );
 
     // Invites from context
     const nextInvites = (ctx?.staffInvites as StaffInvite[]) || [];
@@ -171,6 +186,12 @@ export default function StaffPage() {
     e.preventDefault();
     if (!canManageStaff) {
       toast.error("Apenas o coordenador pode enviar convites.");
+      return;
+    }
+    if ((technicalStaffUsage?.remainingSlots || 0) <= 0) {
+      toast.error(
+        "Este escalão já atingiu o limite de 1 membro de equipa técnica convidado.",
+      );
       return;
     }
     setSending(true);
@@ -336,6 +357,9 @@ export default function StaffPage() {
     );
   }
 
+  const noRemainingTechnicalSlots =
+    canManageStaff && (technicalStaffUsage?.remainingSlots || 0) <= 0;
+
   return (
     <div className="p-4 md:p-8 max-w-2xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
@@ -345,11 +369,67 @@ export default function StaffPage() {
             onClick={() => { setShowForm(true); setInviteResult(null); }}
             className="bg-emerald-600 hover:bg-emerald-700"
             size="sm"
+            disabled={noRemainingTechnicalSlots}
+            title={
+              noRemainingTechnicalSlots
+                ? "O escalão já atingiu o limite de 1 membro técnico."
+                : undefined
+            }
           >
             <Plus size={16} className="mr-1" /> Convidar
           </Button>
         )}
       </div>
+
+      {canManageStaff && technicalStaffUsage ? (
+        <Card
+          className={
+            technicalStaffUsage.overLimit
+              ? "border-red-200 bg-red-50"
+              : noRemainingTechnicalSlots
+                ? "border-amber-200 bg-amber-50"
+                : "border-emerald-200 bg-emerald-50"
+          }
+        >
+          <CardContent className="pt-6">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold text-slate-900">
+                  Limite da equipa técnica convidada
+                </p>
+                <p className="mt-1 text-sm text-slate-600">
+                  {technicalStaffUsage.totalUsed}/1 vaga usada
+                  {technicalStaffUsage.activeTechnicalStaffCount > 0
+                    ? ` · ${technicalStaffUsage.activeTechnicalStaffCount} membro ativo`
+                    : ""}
+                  {technicalStaffUsage.pendingTechnicalInviteCount > 0
+                    ? ` · ${technicalStaffUsage.pendingTechnicalInviteCount} convite pendente`
+                    : ""}
+                </p>
+              </div>
+              <div className="rounded-full bg-white px-3 py-1 text-sm font-semibold text-slate-700">
+                {technicalStaffUsage.remainingSlots > 0
+                  ? `${technicalStaffUsage.remainingSlots} livre`
+                  : "Sem vagas"}
+              </div>
+            </div>
+            {technicalStaffUsage.overLimit ? (
+              <p className="mt-3 text-sm text-red-700">
+                Este escalão já está acima da regra pretendida de 1 membro técnico no
+                total. Novos convites ficam bloqueados até removeres excesso existente.
+              </p>
+            ) : noRemainingTechnicalSlots ? (
+              <p className="mt-3 text-sm text-amber-700">
+                O backend já bloqueia novos convites enquanto a vaga estiver ocupada.
+              </p>
+            ) : (
+              <p className="mt-3 text-sm text-emerald-700">
+                Podes convidar apenas 1 treinador principal ou 1 treinador adjunto.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
 
       {/* Membros activos */}
       <Card>

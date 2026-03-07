@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { NextResponse } from "next/server";
+import { TECHNICAL_STAFF_LIMIT_ERROR_MESSAGE } from "@/lib/team/technical-staff-limit";
 
 type StaffInviteRow = {
   id: string;
@@ -129,6 +130,13 @@ export async function POST() {
           return NextResponse.json(
             { error: "Escalão do convite não encontrado." },
             { status: 422 },
+          );
+        case "technical_staff_limit_reached":
+          return NextResponse.json(
+            {
+              error: `${TECHNICAL_STAFF_LIMIT_ERROR_MESSAGE} O coordenador precisa de libertar a vaga antes de aceitar este convite.`,
+            },
+            { status: 409 },
           );
         default:
           return NextResponse.json(

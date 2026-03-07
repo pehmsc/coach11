@@ -9,6 +9,11 @@ import { ensureInviteAuthUser } from "@/lib/auth/invite-auth-user";
 import { getCanonicalAppUrl } from "@/lib/config/canonical-app-url";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { resolveUserTeamContext } from "@/lib/auth/team-context";
+import {
+  getAgeGroupTechnicalStaffUsage,
+  isTechnicalStaffLimitError,
+  TECHNICAL_STAFF_LIMIT_ERROR_MESSAGE,
+} from "@/lib/team/technical-staff-limit";
 
 export const runtime = "nodejs";
 
@@ -64,32 +69,13 @@ export async function POST(request: Request) {
       );
     }
 
-    const { data: requesterProfile, error: requesterProfileError } = await admin
-      .from("profiles")
-      .select("id, is_super_coordinator")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    if (requesterProfileError) {
-      return NextResponse.json(
-        { error: "Não foi possível validar as permissões do convite." },
-        { status: 500 },
-      );
-    }
-
-    const isSuperCoordinator = requesterProfile?.is_super_coordinator === true;
-
     // 🏟 Buscar escalão ativo do coordenador
-    let ageGroupQuery = admin
+    const { data: ageGroup, error: ageGroupError } = await admin
       .from("age_groups")
       .select("id, name, club_name, club_id")
-      .eq("id", context.ageGroup.id);
-
-    if (!isSuperCoordinator) {
-      ageGroupQuery = ageGroupQuery.eq("coordinator_id", user.id);
-    }
-
-    const { data: ageGroup, error: ageGroupError } = await ageGroupQuery.maybeSingle();
+      .eq("id", context.ageGroup.id)
+      .eq("coordinator_id", user.id)
+      .maybeSingle();
 
     if (ageGroupError || !ageGroup) {
       return NextResponse.json(
@@ -98,53 +84,22 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!isSuperCoordinator) {
-      const { data: ageGroupTeams, error: teamsError } = await admin
-        .from("teams")
-        .select("id")
-        .eq("age_group_id", ageGroup.id);
+    try {
+      const usage = await getAgeGroupTechnicalStaffUsage(admin, ageGroup.id);
 
-      if (teamsError) {
-        return NextResponse.json(
-          { error: "Não foi possível validar o limite de convites." },
-          { status: 500 },
-        );
-      }
-
-      const teamIds = (ageGroupTeams || [])
-        .map((team) => team.id)
-        .filter((teamId): teamId is string => typeof teamId === "string");
-
-      const [staffMembersRes, pendingInvitesRes] = await Promise.all([
-        teamIds.length > 0
-          ? admin.from("team_staff").select("id").in("team_id", teamIds)
-          : Promise.resolve({ data: [], error: null }),
-        admin
-          .from("staff_invites")
-          .select("id")
-          .eq("age_group_id", ageGroup.id)
-          .is("accepted_at", null),
-      ]);
-
-      if (staffMembersRes.error || pendingInvitesRes.error) {
-        return NextResponse.json(
-          { error: "Não foi possível validar o limite de convites." },
-          { status: 500 },
-        );
-      }
-
-      const activeTechnicalStaffCount = (staffMembersRes.data || []).length;
-      const pendingTechnicalInviteCount = (pendingInvitesRes.data || []).length;
-
-      if (activeTechnicalStaffCount + pendingTechnicalInviteCount >= 1) {
+      if (usage.remainingSlots <= 0) {
         return NextResponse.json(
           {
-            error:
-              "Este escalão já atingiu o limite atual de 1 membro de equipa técnica convidado. Remove o convite atual ou fala com o coordenador principal.",
+            error: `${TECHNICAL_STAFF_LIMIT_ERROR_MESSAGE} Remove o membro atual ou um convite pendente antes de enviar outro.`,
           },
           { status: 409 },
         );
       }
+    } catch {
+      return NextResponse.json(
+        { error: "Não foi possível validar o limite de convites." },
+        { status: 500 },
+      );
     }
 
     // 📩 Validar dados do convite
@@ -195,6 +150,14 @@ export async function POST(request: Request) {
 
     if (dbError) {
       console.error("Erro ao criar convite:", dbError);
+      if (isTechnicalStaffLimitError(dbError)) {
+        return NextResponse.json(
+          {
+            error: `${TECHNICAL_STAFF_LIMIT_ERROR_MESSAGE} Remove o membro atual ou um convite pendente antes de enviar outro.`,
+          },
+          { status: 409 },
+        );
+      }
       return NextResponse.json(
         { error: "Erro ao criar convite" },
         { status: 500 },

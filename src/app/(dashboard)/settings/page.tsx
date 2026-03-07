@@ -19,6 +19,11 @@ import type { Profile } from "@/types/database";
 
 type Tab = "account" | "theme" | "notifications";
 
+type ManagedAgeGroup = {
+  id: string;
+  name?: string | null;
+};
+
 const ROLE_LABELS: Record<string, string> = {
   coordinator: "Coordenador",
   coach: "Treinador",
@@ -49,6 +54,7 @@ export default function SettingsPage() {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [deletingAccount, setDeletingAccount] = useState(false);
+  const [managedAgeGroups, setManagedAgeGroups] = useState<ManagedAgeGroup[]>([]);
 
   useEffect(() => {
     void loadProfile();
@@ -63,6 +69,7 @@ export default function SettingsPage() {
     if (!user) {
       setAuthEmail("");
       setNextEmail("");
+      setManagedAgeGroups([]);
       setLoading(false);
       return;
     }
@@ -94,8 +101,12 @@ export default function SettingsPage() {
     }
 
     try {
-      const contextRes = await fetch("/api/me/context", { cache: "no-store" });
+      const [contextRes, managedAgeGroupsRes] = await Promise.all([
+        fetch("/api/me/context", { cache: "no-store" }),
+        fetch("/api/me/age-group", { cache: "no-store" }),
+      ]);
       const contextPayload = await contextRes.json().catch(() => ({}));
+      const managedAgeGroupsPayload = await managedAgeGroupsRes.json().catch(() => ({}));
 
       if (contextRes.ok) {
         const isSuper =
@@ -107,9 +118,19 @@ export default function SettingsPage() {
             prev ? { ...prev, is_super_coordinator: true } : prev,
           );
         }
+      }
+
+      if (managedAgeGroupsRes.ok) {
+        setManagedAgeGroups(
+          Array.isArray(managedAgeGroupsPayload?.managedAgeGroups)
+            ? (managedAgeGroupsPayload.managedAgeGroups as ManagedAgeGroup[])
+            : [],
+        );
       } else {
+        setManagedAgeGroups([]);
       }
     } catch {
+      setManagedAgeGroups([]);
     }
 
     setLoading(false);
@@ -237,10 +258,17 @@ export default function SettingsPage() {
         body: JSON.stringify({ confirmation: "DELETE_ACCOUNT" }),
       });
       const payload = (await res.json().catch(() => null)) as
-        | { success?: boolean; error?: string }
+        | {
+            success?: boolean;
+            error?: string;
+            managedAgeGroups?: ManagedAgeGroup[];
+          }
         | null;
 
       if (!res.ok || !payload?.success) {
+        if (Array.isArray(payload?.managedAgeGroups)) {
+          setManagedAgeGroups(payload.managedAgeGroups);
+        }
         toast.error(payload?.error || "Não foi possível apagar a conta.");
         setDeletingAccount(false);
         return;
@@ -261,6 +289,10 @@ export default function SettingsPage() {
     { id: "theme", label: "Tema", icon: <Palette size={16} /> },
     { id: "notifications", label: "Notificações", icon: <Bell size={16} /> },
   ];
+  const hasManagedAgeGroups = managedAgeGroups.length > 0;
+  const managedAgeGroupNames = managedAgeGroups
+    .map((ageGroup) => ageGroup.name?.trim())
+    .filter((value): value is string => !!value);
 
   return (
     <div className="p-4 md:p-8 max-w-2xl mx-auto">
@@ -451,19 +483,44 @@ export default function SettingsPage() {
                     Alterar palavra-passe
                   </Button>
                   <div className="mt-4 pt-4 border-t border-slate-100">
-                    <p className="text-sm text-slate-500 mb-3">
-                      Apagar a tua conta remove o acesso, perfil e ligações associadas.
-                    </p>
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        setDeleteConfirmText("");
-                        setDeleteModalOpen(true);
-                      }}
-                      className="w-full border-red-200 text-red-600 hover:bg-red-50"
-                    >
-                      Apagar conta
-                    </Button>
+                    {hasManagedAgeGroups ? (
+                      <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+                        <p className="text-sm font-medium text-amber-900">
+                          A conta não pode ser apagada enquanto fores coordenador de um escalão.
+                        </p>
+                        <p className="mt-1 text-sm text-amber-800">
+                          Primeiro apaga o escalão em <strong>Equipa</strong>. Isso remove os dados
+                          do escalão, equipa técnica, jogadores, jogos, treinos, links públicos e
+                          imagens associadas.
+                        </p>
+                        {managedAgeGroupNames.length > 0 ? (
+                          <p className="mt-2 text-xs text-amber-700">
+                            Escalão atual: {managedAgeGroupNames.join(", ")}
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-slate-500 mb-3">
+                        Apagar a tua conta remove o acesso, perfil e ligações pessoais ainda
+                        associadas à conta.
+                      </p>
+                    )}
+                    {hasManagedAgeGroups ? (
+                      <Button asChild variant="outline" className="mt-3 w-full">
+                        <Link href="/team">Ir para Equipa</Link>
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setDeleteConfirmText("");
+                          setDeleteModalOpen(true);
+                        }}
+                        className="w-full border-red-200 text-red-600 hover:bg-red-50"
+                      >
+                        Apagar conta
+                      </Button>
+                    )}
                   </div>
                 </CardContent>
               </Card>

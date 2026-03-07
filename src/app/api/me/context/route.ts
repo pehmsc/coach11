@@ -5,6 +5,7 @@ import { getTeamMembersDetailed } from "@/lib/team/members";
 import { NextResponse } from "next/server";
 import { PRIVATE_SWR_CACHE_CONTROL } from "@/lib/http/cache";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
+import { getAgeGroupTechnicalStaffUsage } from "@/lib/team/technical-staff-limit";
 
 function normalizeKitRowForUi(row: Record<string, unknown>) {
   const playerType =
@@ -82,6 +83,7 @@ export async function GET() {
           staffMembers: [],
           activeStaffProfileIds: [],
           staffInvites: [],
+          technicalStaffUsage: null,
           profile: resolvedProfile || null,
         },
         {
@@ -108,7 +110,7 @@ export async function GET() {
         })
       : { coordinatorId: null, members: [] };
 
-    const [kitsRes, invitesRes] = await Promise.all([
+    const [kitsRes, invitesRes, technicalStaffUsageRes] = await Promise.all([
       context.teamId
         ? db
             .from("kit_pieces")
@@ -125,6 +127,9 @@ export async function GET() {
             .eq("age_group_id", context.ageGroup.id)
             .order("created_at", { ascending: false })
         : Promise.resolve({ data: [], error: null }),
+      canManageStaff
+        ? getAgeGroupTechnicalStaffUsage(db, context.ageGroup.id).catch(() => null)
+        : Promise.resolve(null),
     ]);
 
     const missingAvatarProfileIds = Array.from(
@@ -206,6 +211,7 @@ export async function GET() {
         activeStaffProfileIds: staffProfileIds,
         staffMembers,
         staffInvites: invitesRes.data || [],
+        technicalStaffUsage: technicalStaffUsageRes,
         profile: resolvedProfile || null,
       },
       {
