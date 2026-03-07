@@ -16,6 +16,7 @@ import {
 import { LiveErrorState, LiveLoadingState, LiveLockedState } from "@/components/games/live/LiveScreenStates";
 import { LiveScoreboardCard } from "@/components/games/live/LiveScoreboardCard";
 import { StickyBackLink } from "@/components/navigation/StickyBackLink";
+import { AppModal } from "@/components/ui/app-modal";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useGameLiveController } from "@/lib/hooks/useGameLiveController";
@@ -2327,37 +2328,27 @@ export default function LiveGamePage() {
 
       {/* ── EVENT MODAL ── */}
       {modalType && (
-        <div
-          className="fixed inset-0 bg-black/50 z-50 flex items-end md:items-center justify-center p-4"
-          onClick={closeModal}
+        <AppModal
+          open={Boolean(modalType)}
+          onClose={closeModal}
+          title={
+            <>
+              {modalType === "substitution"
+                ? "🔄 Substituição"
+                : modalType === "goal"
+                  ? "⚽ Golo"
+                  : EVENT_LABELS[modalType] ?? modalType}
+              {modalType === "goal" &&
+              goalTeamSide === "ours" &&
+              goalKind === "goal" &&
+              goalStep === "assist"
+                ? " — Assistência?"
+                : ""}
+            </>
+          }
+          closeLabel="Fechar modal de evento"
+          bodyClassName="space-y-3"
         >
-          <div
-            className="bg-white rounded-2xl w-full max-w-md shadow-xl max-h-[calc(100dvh-1rem)] md:max-h-[90vh] overflow-hidden flex flex-col"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex justify-between items-center p-4 border-b bg-white shrink-0">
-              <h3 className="font-bold text-slate-900">
-                {modalType === "substitution"
-                  ? "🔄 Substituição"
-                  : modalType === "goal"
-                    ? "⚽ Golo"
-                    : EVENT_LABELS[modalType] ?? modalType}
-                {modalType === "goal" &&
-                goalTeamSide === "ours" &&
-                goalKind === "goal" &&
-                goalStep === "assist"
-                  ? " — Assistência?"
-                  : ""}
-              </h3>
-              <button onClick={closeModal}>
-                <X size={20} className="text-slate-400" />
-              </button>
-            </div>
-
-            <div
-              className="p-4 space-y-3 flex-1 overflow-y-auto pb-[max(1.25rem,env(safe-area-inset-bottom))]"
-              style={{ WebkitOverflowScrolling: "touch" }}
-            >
               {/* SUBSTITUTION */}
               {modalType === "substitution" && (
                 <>
@@ -2895,9 +2886,7 @@ export default function LiveGamePage() {
                   </div>
                 </>
               )}
-            </div>
-          </div>
-        </div>
+        </AppModal>
       )}
     </div>
   );

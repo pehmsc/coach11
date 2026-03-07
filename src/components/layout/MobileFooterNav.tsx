@@ -36,7 +36,7 @@ export function MobileFooterNav({
       />
 
       <nav
-        className="fixed inset-x-0 bottom-0 z-50 border-t border-slate-800 bg-slate-900/95 backdrop-blur supports-[backdrop-filter]:bg-slate-900/90"
+        className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-800 bg-slate-900/95 backdrop-blur supports-[backdrop-filter]:bg-slate-900/90"
         aria-label="Navegação principal mobile"
       >
         <div

@@ -41,7 +41,7 @@ export function StickyBackLink({
     <div
       className={cn(
         sticky
-          ? "sticky top-0 z-[80] isolate backdrop-blur supports-[backdrop-filter]:bg-slate-50/90"
+          ? "sticky top-0 z-30 isolate backdrop-blur supports-[backdrop-filter]:bg-slate-50/90"
           : "isolate",
         wrapperClassName || DEFAULT_WRAPPER_CLASS_NAME,
       )}
