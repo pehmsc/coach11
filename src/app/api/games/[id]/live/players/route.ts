@@ -104,6 +104,10 @@ function isValidUpdate(value: unknown): value is PlayerLiveUpdate {
   return true;
 }
 
+function isExternalPlayerId(value: string | null | undefined) {
+  return typeof value === "string" && value.startsWith("external:");
+}
+
 function computeSentOffPlayerIds(events: Array<{
   event_type?: string | null;
   player_id?: string | null;
@@ -154,6 +158,16 @@ export async function POST(request: Request, { params }: RouteContext) {
     }
 
     const updates = updatesRaw as PlayerLiveUpdate[];
+    if (updates.some((row) => isExternalPlayerId(row.playerId))) {
+      return NextResponse.json(
+        {
+          error:
+            'A live interna ainda não suporta jogadores "Outro" em campo. Mantém-nos no banco ou ajusta a convocatória antes de iniciar.',
+        },
+        { status: 400 },
+      );
+    }
+
     const access = await assertGameAccess(supabase, gameId);
     if (!access.ok) return access.response;
     if (access.gameStatus === "completed" && !access.isCoordinator) {

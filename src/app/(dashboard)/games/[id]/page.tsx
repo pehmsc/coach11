@@ -20,6 +20,7 @@ import {
 import { StickyBackLink } from "@/components/navigation/StickyBackLink";
 import { Button } from "@/components/ui/button";
 import { EMPTY_LOCATION_FIELDS, resolveLocationLabel } from "@/lib/location";
+import { getConvocationEditorState } from "@/lib/games/convocation-editor";
 import { LocationFields } from "@/components/maps/LocationFields";
 import { LocationMapPreview } from "@/components/maps/LocationMapPreview";
 import { NotesEditor } from "@/components/forms/NotesEditor";
@@ -147,6 +148,8 @@ export default function GameDetailPage() {
   const [convocationStatus, setConvocationStatus] = useState<
     "draft" | "confirmed" | "closed"
   >("draft");
+  const [isEditingConfirmedConvocation, setIsEditingConfirmedConvocation] =
+    useState(false);
   const [now, setNow] = useState(() => new Date());
   const [game, setGame] = useState<Game | null>(null);
   const [players, setPlayers] = useState<PlayerWithStatus[]>([]);
@@ -228,6 +231,7 @@ export default function GameDetailPage() {
         setTeamKits([]);
         setKitSelection(EMPTY_KIT_SELECTION);
         setConvocationStatus("draft");
+        setIsEditingConfirmedConvocation(false);
         setLivePhase(null);
         setCanEditCompleted(false);
         setError(payload?.error || "Erro ao carregar jogo.");
@@ -253,6 +257,7 @@ export default function GameDetailPage() {
       } else {
         setConvocationStatus("draft");
       }
+      setIsEditingConfirmedConvocation(false);
 
       const sortedPlayers = (
         Array.isArray(payload.players) ? [...payload.players] : []
@@ -315,6 +320,7 @@ export default function GameDetailPage() {
       setTeamKits([]);
       setKitSelection(EMPTY_KIT_SELECTION);
       setConvocationStatus("draft");
+      setIsEditingConfirmedConvocation(false);
       setLivePhase(null);
       setCanEditCompleted(false);
       setError("Erro de ligação ao carregar jogo.");
@@ -344,6 +350,11 @@ export default function GameDetailPage() {
     return normalizedReason
       ? { ...base, correctionReason: normalizedReason }
       : base;
+  }
+
+  function markConvocationDirty() {
+    setConvocationStatus("draft");
+    setIsEditingConfirmedConvocation(false);
   }
 
   async function handleTacticalChange(formation: string) {
@@ -454,7 +465,7 @@ export default function GameDetailPage() {
           (payload as { error?: string })?.error || "Erro ao guardar lineup.",
         );
       } else {
-        setConvocationStatus("draft");
+        markConvocationDirty();
       }
     } catch {
       setLineupStatuses((prev) => ({
@@ -578,7 +589,7 @@ export default function GameDetailPage() {
       setKitSelection(savedSelection);
       setKitDraftSelection(savedSelection);
       setKitEditorOpen(false);
-      setConvocationStatus("draft");
+      markConvocationDirty();
     } catch {
       setError("Erro de ligação ao guardar equipamentos da convocatória.");
     } finally {
@@ -620,7 +631,7 @@ export default function GameDetailPage() {
             delete next[player.id];
             return next;
           });
-          setConvocationStatus("draft");
+          markConvocationDirty();
         }
       } catch {
         setError("Erro de ligação ao remover jogador externo.");
@@ -649,7 +660,7 @@ export default function GameDetailPage() {
       if (!res.ok || typeof responseBody?.isConvocated !== "boolean") {
         setError(responseBody?.error || "Erro ao atualizar convocatória.");
       } else {
-        setConvocationStatus("draft");
+        markConvocationDirty();
         const newIsConvocated = responseBody.isConvocated as boolean;
         setPlayers((prev) =>
           prev.map((p) =>
@@ -666,7 +677,7 @@ export default function GameDetailPage() {
   }
 
   async function handleConfirmConvocation() {
-    if (confirmConvocationLockRef.current || convocationStatus === "confirmed") {
+    if (confirmConvocationLockRef.current) {
       return;
     }
 
@@ -695,6 +706,7 @@ export default function GameDetailPage() {
       }
 
       setConvocationStatus("confirmed");
+      setIsEditingConfirmedConvocation(false);
       toast.success(
         game?.status === "completed"
           ? "Correção da convocatória guardada."
@@ -793,7 +805,7 @@ export default function GameDetailPage() {
             ? "on_field"
             : "substitute",
       }));
-      setConvocationStatus("draft");
+      markConvocationDirty();
       setShowExternalPlayerModal(false);
       resetExternalPlayerForm();
     } catch {
@@ -1037,19 +1049,25 @@ export default function GameDetailPage() {
   const minutesUntilLive = liveUnlockAt
     ? Math.max(0, differenceInMinutes(liveUnlockAt, now))
     : 0;
-  const convocationEditable =
-    game.status === "scheduled" ||
-    (game.status === "completed" &&
-      correctionMode &&
-      canEditCompleted &&
-      correctionReason.trim().length > 0);
-  const isConvocationConfirmed = convocationStatus === "confirmed";
+  const convocationEditorState = getConvocationEditorState({
+    gameStatus: game.status,
+    convocationStatus,
+    isEditingConfirmed: isEditingConfirmedConvocation,
+    canEditCompleted,
+    correctionMode,
+    correctionReason,
+    hasPlayers: convocatedCount > 0,
+    confirming: confirmingConvocation,
+  });
+  const convocationEditable = convocationEditorState.baseEditable;
+  const canEditConvocationContent =
+    convocationEditorState.canEditContent && !isLiveInProgress;
+  const canReopenConfirmedConvocation =
+    convocationEditorState.canReopenConfirmed && !isLiveInProgress;
+  const effectiveConvocationStatus = convocationEditorState.effectiveStatus;
+  const isConvocationConfirmed = convocationEditorState.isConfirmed;
   const canConfirmConvocation =
-    !confirmingConvocation &&
-    convocatedCount > 0 &&
-    convocationStatus !== "closed" &&
-    !isConvocationConfirmed &&
-    convocationEditable;
+    convocationEditorState.canConfirm && !isLiveInProgress;
   const gameLocationLabel = resolveLocationLabel(
     game.location,
     game.formatted_address,
@@ -1544,7 +1562,7 @@ export default function GameDetailPage() {
                 setKitDraftSelection(kitSelection);
                 setKitEditorOpen(true);
               }}
-              disabled={!convocationEditable}
+              disabled={!canEditConvocationContent}
             >
               Editar kit
             </Button>
@@ -1705,27 +1723,51 @@ export default function GameDetailPage() {
           <Shield size={18} className="text-slate-600" />
           <h2 className="font-bold text-slate-900">Convocatória</h2>
         </div>
-        <div className="text-right">
-          <span className="text-sm text-slate-500 block">
-            {convocatedCount} convocado{convocatedCount !== 1 ? "s" : ""}
-          </span>
-          <span
-            className={`text-[11px] font-semibold ${
-              convocationStatus === "confirmed"
-                ? "text-emerald-600"
-                : convocationStatus === "closed"
-                  ? "text-slate-500"
-                  : "text-amber-600"
-            }`}
-          >
-            {convocationStatus === "confirmed"
-              ? "Guardada"
-              : convocationStatus === "closed"
-                ? "Fechada"
-                : "Rascunho"}
-          </span>
+        <div className="flex items-center gap-3">
+          <div className="text-right">
+            <span className="text-sm text-slate-500 block">
+              {convocatedCount} convocado{convocatedCount !== 1 ? "s" : ""}
+            </span>
+            <span
+              className={`text-[11px] font-semibold ${
+                effectiveConvocationStatus === "confirmed"
+                  ? "text-emerald-600"
+                  : effectiveConvocationStatus === "closed"
+                    ? "text-slate-500"
+                    : "text-amber-600"
+              }`}
+            >
+              {effectiveConvocationStatus === "confirmed"
+                ? "Guardada"
+                : effectiveConvocationStatus === "closed"
+                  ? "Fechada"
+                  : isEditingConfirmedConvocation
+                    ? "A editar"
+                    : "Rascunho"}
+            </span>
+          </div>
+          {canReopenConfirmedConvocation && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setError(null);
+                setIsEditingConfirmedConvocation(true);
+              }}
+            >
+              Editar convocatória
+            </Button>
+          )}
         </div>
       </div>
+
+      {canReopenConfirmedConvocation && (
+        <div className="mb-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          Convocatória guardada. Podes reabri-la para adicionar, remover, trocar jogadores
+          e voltar a definir titulares antes do jogo entrar em live.
+        </div>
+      )}
 
       {error && (
         <div className="bg-red-50 text-red-700 text-sm p-3 rounded-lg mb-3 border border-red-200">
@@ -1759,7 +1801,7 @@ export default function GameDetailPage() {
                   onRemove={() => void togglePlayer(player)}
                   savingToggle={saving === player.id}
                   savingLineup={savingLineupPlayer === player.id}
-                  disabled={!convocationEditable}
+                  disabled={!canEditConvocationContent}
                 />
               ))}
             </div>
@@ -1791,7 +1833,7 @@ export default function GameDetailPage() {
                   onRemove={() => void togglePlayer(player)}
                   savingToggle={saving === player.id}
                   savingLineup={savingLineupPlayer === player.id}
-                  disabled={!convocationEditable}
+                  disabled={!canEditConvocationContent}
                 />
               ))}
             </div>
@@ -1810,7 +1852,7 @@ export default function GameDetailPage() {
                   onValueChange={(v) =>
                     void handleTacticalChange(v === "__none__" ? "" : v)
                   }
-                  disabled={savingTactical || !convocationEditable}
+                  disabled={savingTactical || !canEditConvocationContent}
                 >
                   <SelectTrigger className="h-9">
                     <SelectValue placeholder="Seleciona a formação" />
@@ -1838,9 +1880,9 @@ export default function GameDetailPage() {
               <button
                 type="button"
                 onClick={() => setShowExternalPlayerModal(true)}
-                disabled={!convocationEditable}
+                disabled={!canEditConvocationContent}
                 className={`w-full flex items-center gap-3 p-3 rounded-xl mb-1.5 text-left border-2 transition-colors ${
-                  convocationEditable
+                  canEditConvocationContent
                     ? "border-emerald-200 bg-emerald-50 hover:border-emerald-300 hover:bg-emerald-100"
                     : "border-slate-100 bg-slate-50 opacity-60 cursor-not-allowed"
                 }`}
@@ -1863,7 +1905,7 @@ export default function GameDetailPage() {
                   disabled={
                     saving === player.id ||
                     player.isBlocked ||
-                    !convocationEditable
+                    !canEditConvocationContent
                   }
                   className={`w-full flex items-center gap-3 p-3 rounded-xl mb-1.5 text-left border-2 transition-colors ${
                     player.isBlocked
@@ -1913,10 +1955,27 @@ export default function GameDetailPage() {
 
       <div className="sticky bottom-[calc(var(--mobile-footer-height)+env(safe-area-inset-bottom)+0.5rem)] z-20 mt-5 md:bottom-4">
         {isConvocationConfirmed ? (
-          <div className="rounded-2xl border-2 border-emerald-200 bg-emerald-50 px-4 py-3 text-center text-sm font-semibold text-emerald-700 shadow-sm">
-            ✓ {game.status === "completed"
-              ? "Correção da convocatória guardada."
-              : "Convocatória guardada."}
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3 shadow-sm">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm font-semibold text-emerald-700">
+                ✓ {game.status === "completed"
+                  ? "Correção da convocatória guardada."
+                  : "Convocatória guardada."}
+              </p>
+              {canReopenConfirmedConvocation && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800"
+                  onClick={() => {
+                    setError(null);
+                    setIsEditingConfirmedConvocation(true);
+                  }}
+                >
+                  Editar convocatória
+                </Button>
+              )}
+            </div>
           </div>
         ) : (
           <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-lg">

@@ -6,6 +6,11 @@ import { format, parseISO } from "date-fns";
 import { pt } from "date-fns/locale";
 import { CalendarDays, Clock3, Dumbbell, MapPin, ShieldCheck, Swords } from "lucide-react";
 import { hasPublicConvocationContent } from "@/lib/games/public-convocation";
+import {
+  PUBLIC_CURRENT_GAME_STATUSES,
+  PUBLIC_RECENT_RESULT_STATUSES,
+  sortPublicCurrentGames,
+} from "@/lib/events/public-calendar";
 import { buildDateTimeFromDateAndTime } from "@/lib/events/time";
 import { resolveLocationLabel } from "@/lib/location";
 import { PublicRateLimitedState } from "@/components/public/PublicRateLimitedState";
@@ -269,12 +274,10 @@ const getPublicCalendarPayload = unstable_cache(
   async (ageGroupId: string) => {
     const admin = createAdminClient();
     const todayIsoDate = new Date().toISOString().slice(0, 10);
-    const nowIso = new Date().toISOString();
 
     const [
       { data: ageGroup },
-      liveGamesRes,
-      upcomingGamesRes,
+      currentGamesRes,
       upcomingTrainingsRes,
       recentRes,
     ] = await Promise.all([
@@ -289,17 +292,7 @@ const getPublicCalendarPayload = unstable_cache(
           "id, game_datetime, opponent_name, opponent_short_name, location, location_address, formatted_address, is_home, status, score_home, score_away",
         )
         .eq("age_group_id", ageGroupId)
-        .eq("status", "live")
-        .order("game_datetime", { ascending: true })
-        .limit(4),
-      admin
-        .from("games")
-        .select(
-          "id, game_datetime, opponent_name, opponent_short_name, location, location_address, formatted_address, is_home, status, score_home, score_away",
-        )
-        .eq("age_group_id", ageGroupId)
-        .gte("game_datetime", nowIso)
-        .neq("status", "live")
+        .in("status", [...PUBLIC_CURRENT_GAME_STATUSES])
         .order("game_datetime", { ascending: true })
         .limit(12),
       admin
@@ -318,29 +311,24 @@ const getPublicCalendarPayload = unstable_cache(
           "id, game_datetime, opponent_name, opponent_short_name, location, location_address, formatted_address, is_home, status, score_home, score_away",
         )
         .eq("age_group_id", ageGroupId)
-        .lt("game_datetime", nowIso)
-        .neq("status", "live")
+        .in("status", [...PUBLIC_RECENT_RESULT_STATUSES])
         .order("game_datetime", { ascending: false })
         .limit(6),
     ]);
 
-    const liveGames = (liveGamesRes.data || []) as PublicGameRow[];
-    const upcomingGames = (upcomingGamesRes.data || []) as PublicGameRow[];
-    const mergedUpcomingGames = Array.from(
-      new Map(
-        [...liveGames, ...upcomingGames].map((game) => [game.id, game]),
-      ).values(),
+    const currentGames = sortPublicCurrentGames(
+      (currentGamesRes.data || []) as PublicGameRow[],
     );
 
     const convocationAvailabilityByGameId =
       await getPublicConvocationAvailabilityByGameId(admin, [
-        ...mergedUpcomingGames.map((game) => game.id),
+        ...currentGames.map((game) => game.id),
         ...((recentRes.data || []) as PublicGameRow[]).map((game) => game.id),
       ]);
 
     return {
       ageGroup,
-      upcomingGames: mergedUpcomingGames.map((game) => ({
+      upcomingGames: currentGames.map((game) => ({
         ...game,
         hasPublicConvocation: convocationAvailabilityByGameId.get(game.id) === true,
       })),
@@ -351,7 +339,7 @@ const getPublicCalendarPayload = unstable_cache(
       })),
     };
   },
-  ["public-calendar-page-v2"],
+  ["public-calendar-page-v3"],
   { revalidate: 30 },
 );
 

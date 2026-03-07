@@ -107,6 +107,10 @@ function isValidEventInput(value: unknown): value is EventInput {
   return true;
 }
 
+function isExternalPlayerId(value: string | null | undefined) {
+  return typeof value === "string" && value.startsWith("external:");
+}
+
 function isDbOnFieldStatus(value: string | null | undefined) {
   if (!value) return false;
   return value === "starter" || value === "playing" || value === "on_field" || value === "titular";
@@ -200,6 +204,21 @@ export async function POST(request: Request, { params }: RouteContext) {
     }
 
     const rows = rowsRaw as EventInput[];
+    if (
+      rows.some(
+        (row) =>
+          isExternalPlayerId(row.player_id ?? null) ||
+          isExternalPlayerId(row.related_player_id ?? null),
+      )
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            'A live interna ainda não suporta eventos individuais para jogadores "Outro". Ajusta a convocatória antes de iniciar.',
+        },
+        { status: 400 },
+      );
+    }
 
     const access = await assertGameAccess(supabase, gameId);
     if (!access.ok) return access.response;

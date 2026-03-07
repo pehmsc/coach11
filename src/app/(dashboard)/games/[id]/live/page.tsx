@@ -19,12 +19,15 @@ import { StickyBackLink } from "@/components/navigation/StickyBackLink";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useGameLiveController } from "@/lib/hooks/useGameLiveController";
+import { getLiveKickoffState } from "@/lib/games/live-kickoff";
 import { exportMatchReportPDF } from "@/lib/pdf/matchReport";
 import type { Game, Player, GameEvent, GameEventType } from "@/types/database";
 
 interface LivePlayer extends Player {
   isOnField: boolean;
   isInitialBench: boolean; // was set as bench in pre-match
+  isExternal?: boolean;
+  externalConvocationId?: string | null;
 }
 
 type MatchPhase =
@@ -346,6 +349,8 @@ export default function LiveGamePage() {
   const [phase, setPhase] = useState<MatchPhase>("pre_match");
   const [savingEvent, setSavingEvent] = useState(false);
   const [savingLineup, setSavingLineup] = useState<string | null>(null);
+  const [startingFirstHalf, setStartingFirstHalf] = useState(false);
+  const [kickoffError, setKickoffError] = useState<string | null>(null);
   const [finalizing, setFinalizing] = useState(false);
   const [exportingPDF, setExportingPDF] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -452,7 +457,13 @@ export default function LiveGamePage() {
       throw new Error("live_convocation_sync_failed");
     }
 
-    const rawPlayers = payload.players as Array<Player & { isConvocated?: boolean }>;
+    const rawPlayers = payload.players as Array<
+      Player & {
+        isConvocated?: boolean;
+        isExternal?: boolean;
+        externalConvocationId?: string | null;
+      }
+    >;
     const convPlayers = rawPlayers
       .filter((player) => player?.isConvocated === true)
       .sort(
@@ -493,6 +504,7 @@ export default function LiveGamePage() {
   const loadData = useCallback(async () => {
     setClockHydrated(false);
     setError(null);
+    setKickoffError(null);
 
     const convRes = await fetch(`/api/games/${id}/convocation`, { cache: "no-store" });
     const convPayload = await convRes.json().catch(() => ({}));
@@ -597,7 +609,13 @@ export default function LiveGamePage() {
     let enriched: LivePlayer[] = [];
 
     if (Array.isArray(convPayload?.players)) {
-      const rawPlayers = convPayload.players as Array<Player & { isConvocated?: boolean }>;
+      const rawPlayers = convPayload.players as Array<
+        Player & {
+          isConvocated?: boolean;
+          isExternal?: boolean;
+          externalConvocationId?: string | null;
+        }
+      >;
       const convPlayers = rawPlayers
         .filter((player) => player?.isConvocated === true)
         .sort(
@@ -798,6 +816,12 @@ export default function LiveGamePage() {
   }, [game?.status, id, router]);
 
   useEffect(() => {
+    if (phase !== "pre_match" && kickoffError) {
+      setKickoffError(null);
+    }
+  }, [kickoffError, phase]);
+
+  useEffect(() => {
     if (!clockHydrated) return;
     persistClock(id, {
       version: 1,
@@ -896,6 +920,13 @@ export default function LiveGamePage() {
       status: LiveStatus,
       options?: { startMinute?: number | null; endMinute?: number | null },
     ) => {
+      const player = convocatedPlayers.find((entry) => entry.id === playerId);
+      if (player?.isExternal) {
+        throw new Error(
+          'A live interna ainda não suporta jogadores "Outro" em campo.',
+        );
+      }
+
       const updatePayload: {
         playerId: string;
         status: LiveStatus;
@@ -925,7 +956,7 @@ export default function LiveGamePage() {
         );
       }
     },
-    [id],
+    [convocatedPlayers, id],
   );
 
   useEffect(() => {
@@ -1027,6 +1058,10 @@ export default function LiveGamePage() {
         map.set(player.id, { label: "Expulso", selectable: false });
         return;
       }
+      if (player.isExternal) {
+        map.set(player.id, { label: "Banco", selectable: false });
+        return;
+      }
       map.set(player.id, {
         label: player.isOnField ? "Em campo" : "Banco",
         selectable: true,
@@ -1057,6 +1092,12 @@ export default function LiveGamePage() {
   const suspendedBenchPlayers = sortPlayersByName(
     playersOnBench.filter((player) => sentOffPlayerIds.has(player.id)),
   );
+  const hasExternalConvocatedPlayers = convocatedPlayers.some(
+    (player) => player.isExternal === true,
+  );
+  const kickoffState = getLiveKickoffState({
+    starters: playersOnField,
+  });
 
   const isLivePhase = phase === "first_half" || phase === "second_half";
   const canRegisterEvents = isLivePhase || !!clockState.runningSinceMs;
@@ -1109,7 +1150,10 @@ export default function LiveGamePage() {
   const persistInitialLineupSnapshot = useCallback(
     async (starterPlayerIds: string[]) => {
       const starterIdSet = new Set(starterPlayerIds);
-      const updates = convocatedPlayers.map((player) => {
+      const internalPlayers = convocatedPlayers.filter(
+        (player) => player.isExternal !== true,
+      );
+      const updates = internalPlayers.map((player) => {
         const isStarter = starterIdSet.has(player.id);
         return {
           playerId: player.id,
@@ -1138,12 +1182,18 @@ export default function LiveGamePage() {
   );
 
   async function handleStartFirstHalf() {
+    const kickoffState = getLiveKickoffState({
+      starters: playersOnField,
+    });
     const starterPlayerIds = playersOnField.map((player) => player.id);
-    if (starterPlayerIds.length === 0) {
-      toast.error("Seleciona pelo menos 1 titular.");
+    if (!kickoffState.canStart) {
+      setKickoffError(kickoffState.reason);
+      toast.error(kickoffState.reason);
       return;
     }
 
+    setStartingFirstHalf(true);
+    setKickoffError(null);
     try {
       await persistInitialLineupSnapshot(starterPlayerIds);
       setInitialStarterIds(starterPlayerIds);
@@ -1159,7 +1209,10 @@ export default function LiveGamePage() {
         starterCount: starterPlayerIds.length,
         error,
       });
+      setKickoffError(message);
       toast.error(`Erro ao iniciar jogo: ${message}`);
+    } finally {
+      setStartingFirstHalf(false);
     }
   }
 
@@ -1377,6 +1430,18 @@ export default function LiveGamePage() {
   async function confirmSubstitution() {
     if (!selectedSubInId || !selectedSubOutId) return;
 
+    const selectedSubInPlayer =
+      convocatedPlayers.find((player) => player.id === selectedSubInId) ?? null;
+    const selectedSubOutPlayer =
+      convocatedPlayers.find((player) => player.id === selectedSubOutId) ?? null;
+
+    if (selectedSubInPlayer?.isExternal || selectedSubOutPlayer?.isExternal) {
+      toast.error(
+        'A live interna só suporta substituições com jogadores do plantel.',
+      );
+      return;
+    }
+
     const outAvailability = getPlayerAvailability(selectedSubOutId);
     if (!outAvailability.selectable || outAvailability.label !== "Em campo") {
       toast.error("Jogador de saída tem de estar em campo e elegível.");
@@ -1451,19 +1516,48 @@ export default function LiveGamePage() {
   async function toggleLineup(playerId: string) {
     const player = convocatedPlayers.find((p) => p.id === playerId);
     if (!player) return;
-    setSavingLineup(playerId);
 
     const newIsOnField = !player.isOnField;
     const newStatus = newIsOnField ? "on_field" : "substitute";
 
+    if (player.isExternal && newIsOnField) {
+      const message =
+        'Os jogadores "Outro" não podem arrancar a live como titulares. Mantém-nos no banco ou ajusta a convocatória antes de iniciar.';
+      setKickoffError(message);
+      toast.error(message);
+      return;
+    }
+
+    if (player.isExternal && !player.externalConvocationId) {
+      toast.error("Jogador externo inválido para atualizar lineup.");
+      return;
+    }
+
+    setSavingLineup(playerId);
+
     try {
-      const res = await fetch(`/api/games/${id}/convocation/lineup`, {
+      const endpoint = player.isExternal
+        ? `/api/games/${id}/convocation/external/lineup`
+        : `/api/games/${id}/convocation/lineup`;
+      const body = player.isExternal
+        ? {
+            externalConvocationId: player.externalConvocationId,
+            lineupStatus: newStatus,
+          }
+        : {
+            playerId,
+            lineupStatus: newStatus,
+          };
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ playerId, lineupStatus: newStatus }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) {
-        throw new Error("lineup_save_failed");
+        const payload = await res.json().catch(() => null);
+        throw new Error(
+          (payload as { error?: string } | null)?.error || "lineup_save_failed",
+        );
       }
       const nextPlayers = convocatedPlayers.map((p) =>
         p.id === playerId
@@ -1471,13 +1565,20 @@ export default function LiveGamePage() {
           : p,
       );
       setConvocatedPlayers(nextPlayers);
+      if (kickoffError) {
+        setKickoffError(null);
+      }
       if (phase === "pre_match") {
         setInitialStarterIds(
           nextPlayers.filter((playerItem) => playerItem.isOnField).map((playerItem) => playerItem.id),
         );
       }
-    } catch {
-      toast.error("Erro ao guardar titular/banco.");
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message !== "lineup_save_failed"
+          ? error.message
+          : "Erro ao guardar titular/banco.";
+      toast.error(message);
     }
     setSavingLineup(null);
   }
@@ -1758,66 +1859,80 @@ export default function LiveGamePage() {
 
       {/* ── PRE-MATCH: Lineup selection ── */}
       {phase === "pre_match" && convocatedPlayers.length > 0 && (
-        <div className="mb-5 rounded-xl border border-slate-200 bg-white overflow-hidden">
-          <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
-            <div>
-              <p className="font-bold text-slate-900 text-sm">Escalação inicial</p>
-              <p className="text-xs text-slate-500">Toca para alternar Titular / Banco</p>
+        <>
+          {hasExternalConvocatedPlayers && (
+            <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+              Os jogadores &quot;Outro&quot; continuam visíveis na convocatória, mas a live interna só
+              suporta entradas em campo e estatísticas individuais para jogadores do plantel.
+              Mantém-nos no banco ou ajusta a convocatória antes de iniciar.
             </div>
-            <div className="text-right">
-              <span className="text-sm font-bold text-emerald-600">{playersOnField.length}</span>
-              <span className="text-xs text-slate-400"> titulares</span>
-              {playersAvailableToEnter.length > 0 && (
-                <>
-                  <span className="text-slate-300 mx-1">·</span>
-                  <span className="text-sm font-bold text-slate-500">
-                    {playersAvailableToEnter.length}
-                  </span>
-                  <span className="text-xs text-slate-400"> banco</span>
-                </>
-              )}
+          )}
+          <div className="mb-5 rounded-xl border border-slate-200 bg-white overflow-hidden">
+            <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <p className="font-bold text-slate-900 text-sm">Escalação inicial</p>
+                <p className="text-xs text-slate-500">Toca para alternar Titular / Banco</p>
+              </div>
+              <div className="text-right">
+                <span className="text-sm font-bold text-emerald-600">{playersOnField.length}</span>
+                <span className="text-xs text-slate-400"> titulares</span>
+                {playersAvailableToEnter.length > 0 && (
+                  <>
+                    <span className="text-slate-300 mx-1">·</span>
+                    <span className="text-sm font-bold text-slate-500">
+                      {playersAvailableToEnter.length}
+                    </span>
+                    <span className="text-xs text-slate-400"> banco</span>
+                  </>
+                )}
+              </div>
             </div>
-          </div>
-          <div className="divide-y divide-slate-50">
-            {convocatedPlayers.map((player) => (
-              <button
-                key={player.id}
-                onClick={() => toggleLineup(player.id)}
-                disabled={savingLineup === player.id}
-                className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
-                  player.isOnField
-                    ? "bg-emerald-50 hover:bg-emerald-100"
-                    : "bg-white hover:bg-slate-50"
-                }`}
-              >
-                <div
-                  className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
-                    player.isOnField ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-400"
-                  }`}
-                >
-                  {player.jersey_number || "—"}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-slate-800 truncate">
-                    {player.first_name} {player.last_name}
-                  </p>
-                  {player.preferred_position && (
-                    <p className="text-xs text-slate-400">{player.preferred_position}</p>
-                  )}
-                </div>
-                <span
-                  className={`text-xs font-semibold px-2.5 py-1 rounded-full flex-shrink-0 ${
+            <div className="divide-y divide-slate-50">
+              {convocatedPlayers.map((player) => (
+                <button
+                  key={player.id}
+                  onClick={() => toggleLineup(player.id)}
+                  disabled={savingLineup === player.id || startingFirstHalf}
+                  className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
                     player.isOnField
-                      ? "bg-emerald-100 text-emerald-700"
-                      : "bg-slate-100 text-slate-500"
+                      ? "bg-emerald-50 hover:bg-emerald-100"
+                      : "bg-white hover:bg-slate-50"
                   }`}
                 >
-                  {savingLineup === player.id ? "..." : player.isOnField ? "Titular" : "Banco"}
-                </span>
-              </button>
-            ))}
+                  <div
+                    className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                      player.isOnField ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-400"
+                    }`}
+                  >
+                    {player.jersey_number || "—"}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-slate-800 truncate">
+                      {player.first_name} {player.last_name}
+                    </p>
+                    {player.preferred_position && (
+                      <p className="text-xs text-slate-400">{player.preferred_position}</p>
+                    )}
+                    {player.isExternal && (
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-600">
+                        Outro
+                      </p>
+                    )}
+                  </div>
+                  <span
+                    className={`text-xs font-semibold px-2.5 py-1 rounded-full flex-shrink-0 ${
+                      player.isOnField
+                        ? "bg-emerald-100 text-emerald-700"
+                        : "bg-slate-100 text-slate-500"
+                    }`}
+                  >
+                    {savingLineup === player.id ? "..." : player.isOnField ? "Titular" : "Banco"}
+                  </span>
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        </>
       )}
 
       {/* ── Clock + Phase controls ── */}
@@ -1844,17 +1959,37 @@ export default function LiveGamePage() {
 
           <div className="grid grid-cols-1 gap-2">
             {phase === "pre_match" && (
-              <Button
-                onClick={() => {
-                  void handleStartFirstHalf();
-                }}
-                disabled={playersOnField.length === 0}
-                className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:text-slate-500"
-              >
-                {playersOnField.length === 0
-                  ? "Seleciona pelo menos 1 titular"
-                  : `Iniciar 1ª parte (${playersOnField.length} titulares)`}
-              </Button>
+              <div className="space-y-2">
+                <Button
+                  onClick={() => {
+                    void handleStartFirstHalf();
+                  }}
+                  disabled={startingFirstHalf || !kickoffState.canStart}
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:text-slate-500"
+                >
+                  {startingFirstHalf ? (
+                    <>
+                      <Loader2 size={16} className="mr-2 animate-spin" />
+                      A iniciar 1ª parte...
+                    </>
+                  ) : playersOnField.length === 0 ? (
+                    "Seleciona pelo menos 1 titular"
+                  ) : kickoffState.canStart ? (
+                    `Iniciar 1ª parte (${playersOnField.length} titulares)`
+                  ) : (
+                    "Corrige os titulares antes de iniciar"
+                  )}
+                </Button>
+                {kickoffError ? (
+                  <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                    {kickoffError}
+                  </p>
+                ) : !kickoffState.canStart && kickoffState.reason ? (
+                  <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    {kickoffState.reason}
+                  </p>
+                ) : null}
+              </div>
             )}
             {phase === "first_half" && (
               <Button
