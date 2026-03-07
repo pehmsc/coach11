@@ -419,10 +419,12 @@ export async function resolvePublicAccessRequest(
   admin: SupabaseClient,
   identifier: string,
   headers: HeaderBag,
+  options?: { trackAccess?: boolean },
 ) {
   const normalizedIdentifier = identifier.trim();
   const normalizedSlug = slugifyPublicAccessSegment(normalizedIdentifier);
   const ip = extractRequestIp(headers);
+  const trackAccess = options?.trackAccess !== false;
 
   if (normalizedSlug) {
     const { data: ageGroupBySlug, error: ageGroupError } = await admin
@@ -448,7 +450,9 @@ export async function resolvePublicAccessRequest(
         return null;
       }
 
-      await registerPublicAgeGroupAccess(admin, ageGroup.id);
+      if (trackAccess) {
+        await registerPublicAgeGroupAccess(admin, ageGroup.id);
+      }
 
       return {
         source: "slug" as const,
@@ -485,7 +489,9 @@ export async function resolvePublicAccessRequest(
     return null;
   }
 
-  await registerPublicShareAccess(admin, tokenAccess.share);
+  if (trackAccess) {
+    await registerPublicShareAccess(admin, tokenAccess.share);
+  }
 
   return {
     source: "token" as const,
@@ -500,9 +506,15 @@ export async function resolvePublicAccessGate(
   admin: SupabaseClient,
   identifier: string,
   headers: HeaderBag,
+  options?: { trackAccess?: boolean },
 ): Promise<PublicAccessGateResult> {
   try {
-    const access = await resolvePublicAccessRequest(admin, identifier, headers);
+    const access = await resolvePublicAccessRequest(
+      admin,
+      identifier,
+      headers,
+      options,
+    );
 
     if (!access) {
       return {

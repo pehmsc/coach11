@@ -1,13 +1,14 @@
-import Link from "next/link";
 import Image from "next/image";
 import { unstable_cache } from "next/cache";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import { pt } from "date-fns/locale";
-import { ArrowLeft, Clock3, FileText, MapPin, ShieldCheck } from "lucide-react";
+import { Clock3, FileText, MapPin, ShieldCheck } from "lucide-react";
 import { RichTextContent } from "@/components/content/RichTextContent";
 import { LocationMapPreview } from "@/components/maps/LocationMapPreview";
+import { StickyBackLink } from "@/components/navigation/StickyBackLink";
+import { PublicGameLivePanel } from "@/components/public/PublicGameLivePanel";
 import { PublicRateLimitedState } from "@/components/public/PublicRateLimitedState";
 import {
   addMinutesToTime,
@@ -17,9 +18,12 @@ import {
 import { resolveFormattedAddress, resolveLocationLabel } from "@/lib/location";
 import {
   buildPublicConvocationEntries,
+  hasPublicConvocationContent,
   type PublicConvocationEntry,
+  resolvePublicConvocationNotes,
 } from "@/lib/games/public-convocation";
 import { getStarterPlayerIdsFromLiveStats } from "@/lib/games/lineup";
+import { getPublicGameLiveSnapshot } from "@/lib/games/public-live";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   resolvePublicGameId,
@@ -103,7 +107,7 @@ const getPublicGameDetailPayload = unstable_cache(
         .maybeSingle(),
       admin
         .from("age_groups")
-        .select("club_name, name")
+        .select("club_name, club_short_name, name")
         .eq("id", ageGroupId)
         .maybeSingle(),
     ]);
@@ -113,7 +117,7 @@ const getPublicGameDetailPayload = unstable_cache(
       ageGroup,
     };
   },
-  ["public-game-detail-v1"],
+  ["public-game-detail-v2"],
   { revalidate: 30 },
 );
 
@@ -157,13 +161,20 @@ export default async function PublicGameDetailPage({
 
   const { data: convocation } = await admin
     .from("convocations")
-    .select("id")
+    .select("id, notes")
     .eq("game_id", game.id)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
 
   let convocationPlayers: PublicConvocationEntry[] = [];
+  const initialLiveSnapshot = await getPublicGameLiveSnapshot(admin, {
+    id: game.id,
+    is_home: game.is_home ?? true,
+    status: game.status ?? null,
+    score_home: game.score_home ?? null,
+    score_away: game.score_away ?? null,
+  });
 
   if (convocation?.id) {
     const [
@@ -252,16 +263,23 @@ export default async function PublicGameDetailPage({
     });
   }
 
+  const publicConvocationNotes = resolvePublicConvocationNotes({
+    convocationNotes: convocation?.notes,
+    legacyGameNotes: game.notes,
+  });
+  const hasPublicConvocation = hasPublicConvocationContent({
+    playerCount: convocationPlayers.length,
+    notes: publicConvocationNotes,
+  });
+
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-8">
       <div className="mx-auto max-w-3xl space-y-6">
-        <Link
+        <StickyBackLink
           href={`/public/${access.identifier}`}
-          className="inline-flex items-center gap-2 text-sm text-slate-500 hover:text-slate-700"
-        >
-          <ArrowLeft size={16} />
-          Voltar ao calendário
-        </Link>
+          label="Voltar ao calendário"
+          wrapperClassName="-mx-4 bg-slate-50/95 px-4 py-2"
+        />
 
         <section className="rounded-3xl bg-slate-900 px-6 py-8 text-white">
           <p className="text-sm uppercase tracking-[0.2em] text-emerald-300">
@@ -304,6 +322,20 @@ export default async function PublicGameDetailPage({
             </div>
           </div>
         </section>
+
+        <PublicGameLivePanel
+          apiPath={`/api/public/games/${encodeURIComponent(access.identifier)}/${encodeURIComponent(publicGameRef)}/live`}
+          game={{
+            game_datetime: game.game_datetime,
+            location: game.location,
+            is_home: game.is_home,
+            opponent_name: game.opponent_name,
+            opponent_short_name: game.opponent_short_name,
+          }}
+          homeClubName={ageGroup?.club_name ?? null}
+          homeClubShortName={ageGroup?.club_short_name ?? null}
+          initialSnapshot={initialLiveSnapshot}
+        />
 
         {game.image_url && (
           <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white">
@@ -355,21 +387,23 @@ export default async function PublicGameDetailPage({
 
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-              Notas
+              Acesso público
             </p>
-            {game.notes?.trim() ? (
-              <div className="mt-3 flex gap-3 text-sm text-slate-700">
-                <FileText size={16} className="mt-0.5 text-slate-400" />
-                <RichTextContent
-                  content={game.notes}
-                  className="min-w-0 flex-1"
-                />
-              </div>
-            ) : (
-              <p className="mt-3 text-sm text-slate-500">
-                Sem notas adicionais para este jogo.
+            <div className="mt-3 space-y-2 text-sm text-slate-700">
+              <p>
+                <strong>Convocatória:</strong>{" "}
+                {hasPublicConvocation ? "Disponível" : "Sem publicação"}
               </p>
-            )}
+              <p>
+                <strong>Live estatística:</strong>{" "}
+                {initialLiveSnapshot.checkpoint || initialLiveSnapshot.events.length > 0
+                  ? "Disponível neste momento"
+                  : "Mostrada quando o jogo entrar em live"}
+              </p>
+              <p className="text-slate-500">
+                Este link mostra apenas informação pública do jogo.
+              </p>
+            </div>
           </div>
         </section>
 
@@ -377,27 +411,45 @@ export default async function PublicGameDetailPage({
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
             Convocatória
           </p>
-          {convocationPlayers.length === 0 ? (
+          {!hasPublicConvocation ? (
             <p className="mt-3 text-sm text-slate-500">
               Sem convocatória disponível.
             </p>
           ) : (
-            <div className="mt-3">
-              <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
-                <ShieldCheck size={14} />
-                {convocationPlayers.length} convocado
-                {convocationPlayers.length !== 1 ? "s" : ""}
-              </div>
-              <div className="grid gap-2 sm:grid-cols-2">
-                {convocationPlayers.map((player) => (
-                  <div
-                    key={player.id}
-                    className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-sm text-slate-700"
-                  >
-                    {player.name}
+            <div className="mt-3 space-y-4">
+              {convocationPlayers.length > 0 ? (
+                <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
+                  <ShieldCheck size={14} />
+                  {convocationPlayers.length} convocado
+                  {convocationPlayers.length !== 1 ? "s" : ""}
+                </div>
+              ) : null}
+
+              {publicConvocationNotes ? (
+                <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                  <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-600">
+                    <FileText size={14} />
+                    Notas da convocatória
                   </div>
-                ))}
-              </div>
+                  <RichTextContent
+                    content={publicConvocationNotes}
+                    className="text-sm text-slate-700"
+                  />
+                </div>
+              ) : null}
+
+              {convocationPlayers.length > 0 ? (
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {convocationPlayers.map((player) => (
+                    <div
+                      key={player.id}
+                      className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-sm text-slate-700"
+                    >
+                      {player.name}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </div>
           )}
         </section>

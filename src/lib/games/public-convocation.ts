@@ -27,6 +27,11 @@ export type PublicConvocationEntry = {
   isExternal: boolean;
 };
 
+function normalizePublicConvocationNotes(value: string | null | undefined) {
+  const normalized = typeof value === "string" ? value.trim() : "";
+  return normalized || null;
+}
+
 function sanitizeExternalPlayerName(name: string | null | undefined) {
   const normalized = typeof name === "string" ? name.trim() : "";
   return normalized || "Jogador";
@@ -88,4 +93,21 @@ export function buildPublicConvocationEntries({
   });
 
   return entries.sort(comparePublicConvocationEntries);
+}
+
+export function resolvePublicConvocationNotes(params: {
+  convocationNotes?: string | null | undefined;
+  legacyGameNotes?: string | null | undefined;
+}) {
+  return (
+    normalizePublicConvocationNotes(params.convocationNotes) ||
+    normalizePublicConvocationNotes(params.legacyGameNotes)
+  );
+}
+
+export function hasPublicConvocationContent(params: {
+  playerCount: number;
+  notes?: string | null | undefined;
+}) {
+  return params.playerCount > 0 || normalizePublicConvocationNotes(params.notes) !== null;
 }

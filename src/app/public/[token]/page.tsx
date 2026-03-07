@@ -4,7 +4,7 @@ import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import { pt } from "date-fns/locale";
-import { CalendarDays, Clock3, Dumbbell, MapPin, Swords } from "lucide-react";
+import { CalendarDays, Clock3, Dumbbell, MapPin, ShieldCheck, Swords } from "lucide-react";
 import { buildDateTimeFromDateAndTime } from "@/lib/events/time";
 import { resolveLocationLabel } from "@/lib/location";
 import { PublicRateLimitedState } from "@/components/public/PublicRateLimitedState";
@@ -34,6 +34,7 @@ type PublicGameRow = {
   status: string | null;
   score_home: number | null;
   score_away: number | null;
+  hasPublicConvocation?: boolean;
 };
 
 type PublicTrainingRow = {
@@ -45,7 +46,6 @@ type PublicTrainingRow = {
   location: string | null;
   location_address: string | null;
   formatted_address: string | null;
-  notes: string | null;
   status: string | null;
 };
 
@@ -59,6 +59,7 @@ type PublicCalendarItem =
       href: string;
       title: string;
       meta: string;
+      hasPublicConvocation?: boolean;
     }
   | {
       kind: "training";
@@ -69,6 +70,7 @@ type PublicCalendarItem =
       href: string;
       title: string;
       meta: string;
+      hasPublicConvocation?: boolean;
     };
 
 function formatGameDate(value: string | null | undefined) {
@@ -120,6 +122,7 @@ function eventToneClasses(kind: "game" | "training") {
       card: "border-blue-200 bg-blue-50 hover:border-blue-300",
       typeBadge: "bg-blue-100 text-blue-700",
       statusBadge: "bg-white/80 text-blue-700",
+      infoBadge: "bg-emerald-100 text-emerald-700",
     };
   }
 
@@ -127,12 +130,104 @@ function eventToneClasses(kind: "game" | "training") {
     card: "border-emerald-200 bg-emerald-50 hover:border-emerald-300",
     typeBadge: "bg-emerald-100 text-emerald-700",
     statusBadge: "bg-white/80 text-emerald-700",
+    infoBadge: "bg-white/80 text-emerald-700",
   };
 }
 
 function gameTitle(game: PublicGameRow) {
   const opponent = game.opponent_name || "Adversário";
   return game.is_home ? `vs ${opponent}` : `@ ${opponent}`;
+}
+
+function isMissingRelationError(
+  message: string | null | undefined,
+  relationName: string,
+) {
+  if (!message) return false;
+
+  return (
+    message.includes(relationName) &&
+    (message.includes("does not exist") || message.includes("relation"))
+  );
+}
+
+async function getPublicConvocationAvailabilityByGameId(
+  admin: ReturnType<typeof createAdminClient>,
+  gameIds: string[],
+) {
+  const availabilityByGameId = new Map<string, boolean>();
+  const uniqueGameIds = Array.from(
+    new Set(gameIds.filter((value): value is string => typeof value === "string" && value.length > 0)),
+  );
+
+  uniqueGameIds.forEach((gameId) => {
+    availabilityByGameId.set(gameId, false);
+  });
+
+  if (uniqueGameIds.length === 0) {
+    return availabilityByGameId;
+  }
+
+  const { data: convocationRows, error: convocationError } = await admin
+    .from("convocations")
+    .select("id, game_id, created_at")
+    .in("game_id", uniqueGameIds)
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false });
+
+  if (convocationError) {
+    return availabilityByGameId;
+  }
+
+  const latestConvocationIdByGameId = new Map<string, string>();
+  (convocationRows || []).forEach((row) => {
+    if (row.game_id && row.id && !latestConvocationIdByGameId.has(row.game_id)) {
+      latestConvocationIdByGameId.set(row.game_id, row.id);
+    }
+  });
+
+  const latestConvocationIds = Array.from(latestConvocationIdByGameId.values());
+
+  const [{ data: convocationPlayers }, externalPlayersRes] = await Promise.all([
+    latestConvocationIds.length > 0
+      ? admin
+          .from("convocation_players")
+          .select("convocation_id")
+          .in("convocation_id", latestConvocationIds)
+      : Promise.resolve({ data: [], error: null }),
+    admin
+      .from("external_player_convocations")
+      .select("game_id")
+      .in("game_id", uniqueGameIds),
+  ]);
+
+  const convocationIdsWithPlayers = new Set(
+    ((convocationPlayers || []) as Array<{ convocation_id: string | null }>)
+      .map((row) => row.convocation_id)
+      .filter((value): value is string => typeof value === "string"),
+  );
+  const gameIdsWithExternalPlayers =
+    externalPlayersRes.error &&
+    !isMissingRelationError(
+      externalPlayersRes.error.message,
+      "external_player_convocations",
+    )
+      ? new Set<string>()
+      : new Set(
+          (((externalPlayersRes.data || []) as Array<{ game_id: string | null }>)
+            .map((row) => row.game_id)
+            .filter((value): value is string => typeof value === "string")),
+        );
+
+  latestConvocationIdByGameId.forEach((convocationId, gameId) => {
+    availabilityByGameId.set(
+      gameId,
+      convocationIdsWithPlayers.has(convocationId) ||
+        gameIdsWithExternalPlayers.has(gameId),
+    );
+  });
+
+  return availabilityByGameId;
 }
 
 const getPublicCalendarPayload = unstable_cache(
@@ -163,7 +258,7 @@ const getPublicCalendarPayload = unstable_cache(
       admin
         .from("training_sessions")
         .select(
-          "id, title, session_date, start_time, end_time, location, location_address, formatted_address, notes, status",
+          "id, title, session_date, start_time, end_time, location, location_address, formatted_address, status",
         )
         .eq("age_group_id", ageGroupId)
         .gte("session_date", todayIsoDate)
@@ -181,11 +276,23 @@ const getPublicCalendarPayload = unstable_cache(
         .limit(6),
     ]);
 
+    const convocationAvailabilityByGameId =
+      await getPublicConvocationAvailabilityByGameId(admin, [
+        ...((upcomingGamesRes.data || []) as PublicGameRow[]).map((game) => game.id),
+        ...((recentRes.data || []) as PublicGameRow[]).map((game) => game.id),
+      ]);
+
     return {
       ageGroup,
-      upcomingGames: (upcomingGamesRes.data || []) as PublicGameRow[],
+      upcomingGames: ((upcomingGamesRes.data || []) as PublicGameRow[]).map((game) => ({
+        ...game,
+        hasPublicConvocation: convocationAvailabilityByGameId.get(game.id) === true,
+      })),
       upcomingTrainings: (upcomingTrainingsRes.data || []) as PublicTrainingRow[],
-      recentGames: (recentRes.data || []) as PublicGameRow[],
+      recentGames: ((recentRes.data || []) as PublicGameRow[]).map((game) => ({
+        ...game,
+        hasPublicConvocation: convocationAvailabilityByGameId.get(game.id) === true,
+      })),
     };
   },
   ["public-calendar-page-v1"],
@@ -222,6 +329,7 @@ export default async function PublicCalendarPage({ params }: PublicPageParams) {
       href: `/public/${access.identifier}/games/${buildPublicGameRef(access.identifier, game.id)}`,
       title: gameTitle(game),
       meta: formatGameDate(game.game_datetime),
+      hasPublicConvocation: game.hasPublicConvocation === true,
     })),
     ...upcomingTrainings.map((training) => {
       const startsAt = buildTrainingDateTime(
@@ -290,6 +398,12 @@ export default async function PublicCalendarPage({ params }: PublicPageParams) {
                           ? gameStatusLabel(event.status)
                           : trainingStatusLabel(event.status)}
                       </span>
+                      {event.kind === "game" && event.hasPublicConvocation ? (
+                        <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${tone.infoBadge}`}>
+                          <ShieldCheck size={12} />
+                          Convocatória disponível
+                        </span>
+                      ) : null}
                     </div>
                     <p className="text-lg font-semibold text-slate-900">
                       {event.title}

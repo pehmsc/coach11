@@ -2,7 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
-import { buildPublicConvocationEntries } from "./public-convocation";
+import {
+  buildPublicConvocationEntries,
+  hasPublicConvocationContent,
+  resolvePublicConvocationNotes,
+} from "./public-convocation";
 
 describe("public-convocation", () => {
   it("keeps all convocated players beyond 15 and groups starters before substitutes", () => {
@@ -32,5 +36,37 @@ describe("public-convocation", () => {
 
     expect(entries.some((entry) => entry.id === "external:external-1")).toBe(true);
     expect(entries.some((entry) => entry.id === "external:external-2")).toBe(true);
+  });
+
+  it("prefers dedicated convocation notes and falls back to legacy public game notes", () => {
+    expect(
+      resolvePublicConvocationNotes({
+        convocationNotes: " Trazer caneleiras ",
+        legacyGameNotes: "Texto antigo",
+      }),
+    ).toBe("Trazer caneleiras");
+
+    expect(
+      resolvePublicConvocationNotes({
+        convocationNotes: "   ",
+        legacyGameNotes: " Levar equipamento azul ",
+      }),
+    ).toBe("Levar equipamento azul");
+  });
+
+  it("treats public convocation notes as valid public content even without players", () => {
+    expect(
+      hasPublicConvocationContent({
+        playerCount: 0,
+        notes: "Chegar 15 minutos antes.",
+      }),
+    ).toBe(true);
+
+    expect(
+      hasPublicConvocationContent({
+        playerCount: 0,
+        notes: "   ",
+      }),
+    ).toBe(false);
   });
 });

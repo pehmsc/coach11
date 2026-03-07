@@ -1,13 +1,13 @@
-import Link from "next/link";
 import Image from "next/image";
 import { unstable_cache } from "next/cache";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import { pt } from "date-fns/locale";
-import { ArrowLeft, Clock3, MapPin } from "lucide-react";
+import { Clock3, MapPin } from "lucide-react";
 import { RichTextContent } from "@/components/content/RichTextContent";
 import { LocationMapPreview } from "@/components/maps/LocationMapPreview";
+import { StickyBackLink } from "@/components/navigation/StickyBackLink";
 import { PublicRateLimitedState } from "@/components/public/PublicRateLimitedState";
 import {
   buildDateTimeFromDateAndTime,
@@ -107,7 +107,7 @@ const getPublicTrainingDetailPayload = unstable_cache(
       ageGroup,
     };
   },
-  ["public-training-detail-v1"],
+  ["public-training-detail-v2"],
   { revalidate: 30 },
 );
 
@@ -150,13 +150,11 @@ export default async function PublicTrainingDetailPage({
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-8">
       <div className="mx-auto max-w-3xl space-y-6">
-        <Link
+        <StickyBackLink
           href={`/public/${access.identifier}`}
-          className="inline-flex items-center gap-2 text-sm text-slate-500 hover:text-slate-700"
-        >
-          <ArrowLeft size={16} />
-          Voltar ao calendário
-        </Link>
+          label="Voltar ao calendário"
+          wrapperClassName="-mx-4 bg-slate-50/95 px-4 py-2"
+        />
 
         <section className="rounded-3xl bg-slate-900 px-6 py-8 text-white">
           <p className="text-sm uppercase tracking-[0.2em] text-emerald-300">
