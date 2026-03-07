@@ -126,18 +126,7 @@ export async function POST(request: Request, { params }: RouteContext) {
       );
     }
 
-    let hasAccess = false;
-    let teamId: string | null = game.team_id;
-
-    if (game.age_group_id) {
-      const { data: ageGroup } = await supabase
-        .from("age_groups")
-        .select("id")
-        .eq("id", game.age_group_id)
-        .eq("coordinator_id", user.id)
-        .maybeSingle();
-      hasAccess = !!ageGroup;
-    }
+    let teamId: string | null = writeGuard.access.teamId ?? game.team_id;
 
     if (!teamId && game.age_group_id) {
       const { data: fallbackTeam } = await supabase
@@ -148,23 +137,6 @@ export async function POST(request: Request, { params }: RouteContext) {
         .limit(1)
         .maybeSingle();
       teamId = fallbackTeam?.id ?? null;
-    }
-
-    if (!hasAccess && teamId) {
-      const { data: staffLink } = await supabase
-        .from("team_staff")
-        .select("id")
-        .eq("team_id", teamId)
-        .eq("profile_id", user.id)
-        .maybeSingle();
-      hasAccess = !!staffLink;
-    }
-
-    if (!hasAccess) {
-      return NextResponse.json(
-        { error: "Sem permissões para editar os equipamentos deste jogo." },
-        { status: 403 },
-      );
     }
 
     if (!teamId) {

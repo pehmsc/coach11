@@ -4,6 +4,7 @@ import {
 } from "@/lib/football/short-name";
 import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
+import { fetchGameAccessContext } from "@/lib/games/access";
 import { normalizeLocationSource, normalizeNullableNumber } from "@/lib/location";
 import { NextResponse } from "next/server";
 
@@ -29,10 +30,9 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       return NextResponse.json({ error: "Dados inválidos." }, { status: 400 });
     }
 
-    // Verify game exists and get team/age_group
     const { data: game } = await supabase
       .from("games")
-      .select("id, team_id, age_group_id, status")
+      .select("id")
       .eq("id", gameId)
       .maybeSingle();
 
@@ -40,50 +40,18 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       return NextResponse.json({ error: "Jogo não encontrado." }, { status: 404 });
     }
 
-    // Check access: coordinator or staff
-    let hasAccess = false;
-    let isCoordinator = false;
-    const ageGroupId = (game as unknown as { age_group_id?: string }).age_group_id ?? null;
-    let teamId: string | null = (game as unknown as { team_id?: string }).team_id ?? null;
-
-    if (ageGroupId) {
-      const { data: ag } = await supabase
-        .from("age_groups")
-        .select("id")
-        .eq("id", ageGroupId)
-        .eq("coordinator_id", user.id)
-        .maybeSingle();
-      hasAccess = !!ag;
-      isCoordinator = !!ag;
+    let access = null;
+    try {
+      access = await fetchGameAccessContext(supabase, gameId);
+    } catch {
+      return NextResponse.json({ error: "Erro ao validar jogo." }, { status: 500 });
     }
 
-    if (!teamId && ageGroupId) {
-      const { data: ft } = await supabase
-        .from("teams")
-        .select("id")
-        .eq("age_group_id", ageGroupId)
-        .order("created_at", { ascending: true })
-        .limit(1)
-        .maybeSingle();
-      teamId = (ft as unknown as { id?: string } | null)?.id ?? null;
-    }
-
-    if (!hasAccess && teamId) {
-      const { data: sl } = await supabase
-        .from("team_staff")
-        .select("id")
-        .eq("team_id", teamId)
-        .eq("profile_id", user.id)
-        .maybeSingle();
-      hasAccess = !!sl;
-    }
-
-    if (!hasAccess) {
+    if (!access?.exists || !access.canAccess) {
       return NextResponse.json({ error: "Sem permissões." }, { status: 403 });
     }
 
-    const gameStatus = (game as unknown as { status?: string }).status ?? null;
-    if (gameStatus === "completed" && !isCoordinator) {
+    if (access.status === "completed" && !access.isCoordinator) {
       return NextResponse.json(
         { error: "Só o coordenador pode editar jogos terminados." },
         { status: 403 },

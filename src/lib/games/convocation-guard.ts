@@ -1,15 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-
-type RpcGameAccessContext = {
-  exists: boolean;
-  canWrite: boolean;
-  isCoordinator: boolean;
-  status: string | null;
-  teamId: string | null;
-  ageGroupId: string | null;
-};
+import {
+  type GameAccessContext as RpcGameAccessContext,
+  fetchGameAccessContext,
+} from "@/lib/games/access";
 
 type ConvocationWriteGuardResult =
   | {
@@ -23,37 +18,21 @@ type ConvocationWriteGuardResult =
       response: NextResponse;
     };
 
-function parseGameAccessContext(value: unknown): RpcGameAccessContext | null {
-  if (!value || typeof value !== "object") return null;
-  const row = value as Record<string, unknown>;
-
-  return {
-    exists: row.exists === true,
-    canWrite: row.canWrite === true,
-    isCoordinator: row.isCoordinator === true,
-    status: typeof row.status === "string" ? row.status : null,
-    teamId: typeof row.teamId === "string" ? row.teamId : null,
-    ageGroupId: typeof row.ageGroupId === "string" ? row.ageGroupId : null,
-  };
-}
-
 export async function assertConvocationWriteAllowed(
   supabase: SupabaseClient,
   gameId: string,
   correctionReason?: string | null,
 ): Promise<ConvocationWriteGuardResult> {
-  const { data, error } = await supabase.rpc("rpc_game_access_context", {
-    p_game_id: gameId,
-  });
-
-  if (error) {
+  let access: RpcGameAccessContext | null = null;
+  try {
+    access = await fetchGameAccessContext(supabase, gameId);
+  } catch {
     return {
       ok: false,
       response: NextResponse.json({ error: "Erro ao validar o jogo." }, { status: 500 }),
     };
   }
 
-  const access = parseGameAccessContext(data);
   if (!access?.exists) {
     return {
       ok: false,

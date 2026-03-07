@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
+import { fetchGameAccessContext } from "@/lib/games/access";
 import {
   GAME_EVENT_SELECT_COLUMNS,
   normalizeStoredGameEventRowsForClient,
@@ -10,86 +11,10 @@ import {
   toExternalLivePlayerId,
 } from "@/lib/games/live-player-ids";
 import { NextResponse } from "next/server";
-import type { SupabaseClient } from "@supabase/supabase-js";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
 };
-
-async function assertGameAccess(
-  db: SupabaseClient,
-  gameId: string,
-  userId: string,
-) {
-  const { data: game, error: gameError } = await db
-    .from("games")
-    .select("id, team_id, age_group_id")
-    .eq("id", gameId)
-    .maybeSingle();
-
-  if (gameError) {
-    return {
-      ok: false as const,
-      response: NextResponse.json({ error: "Erro ao validar jogo." }, { status: 500 }),
-    };
-  }
-
-  if (!game) {
-    return {
-      ok: false as const,
-      response: NextResponse.json({ error: "Jogo não encontrado." }, { status: 404 }),
-    };
-  }
-
-  let hasAccess = false;
-  let isCoordinator = false;
-  let teamId: string | null = (game as { team_id?: string }).team_id ?? null;
-  const ageGroupId = (game as { age_group_id?: string }).age_group_id ?? null;
-
-  if (ageGroupId) {
-    const { data: ageGroupOwner } = await db
-      .from("age_groups")
-      .select("id")
-      .eq("id", ageGroupId)
-      .eq("coordinator_id", userId)
-      .maybeSingle();
-    hasAccess = !!ageGroupOwner;
-    isCoordinator = !!ageGroupOwner;
-  }
-
-  if (!teamId && ageGroupId) {
-    const { data: fallbackTeam } = await db
-      .from("teams")
-      .select("id")
-      .eq("age_group_id", ageGroupId)
-      .order("created_at", { ascending: true })
-      .limit(1)
-      .maybeSingle();
-    teamId = (fallbackTeam as { id?: string } | null)?.id ?? null;
-  }
-
-  if (!hasAccess && teamId) {
-    const { data: staffLink } = await db
-      .from("team_staff")
-      .select("id")
-      .eq("team_id", teamId)
-      .eq("profile_id", userId)
-      .maybeSingle();
-    hasAccess = !!staffLink;
-  }
-
-  if (!hasAccess) {
-    return {
-      ok: false as const,
-      response: NextResponse.json({ error: "Sem permissões." }, { status: 403 }),
-    };
-  }
-
-  return {
-    ok: true as const,
-    isCoordinator,
-  };
-}
 
 export async function GET(_request: Request, { params }: RouteContext) {
   try {
@@ -104,8 +29,20 @@ export async function GET(_request: Request, { params }: RouteContext) {
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
 
-    const access = await assertGameAccess(supabase, gameId, user.id);
-    if (!access.ok) return access.response;
+    let access = null;
+    try {
+      access = await fetchGameAccessContext(supabase, gameId);
+    } catch {
+      return NextResponse.json({ error: "Erro ao validar jogo." }, { status: 500 });
+    }
+
+    if (!access?.exists) {
+      return NextResponse.json({ error: "Jogo não encontrado." }, { status: 404 });
+    }
+
+    if (!access.canAccess) {
+      return NextResponse.json({ error: "Sem permissões." }, { status: 403 });
+    }
 
     const { data: game, error: gameError } = await supabase
       .from("games")

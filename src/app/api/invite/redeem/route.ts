@@ -30,8 +30,9 @@ function mapRedeemError(errorCode: string | undefined) {
         status: 409,
       };
     case "cross_club_forbidden":
+    case "cross_age_group_forbidden":
       return {
-        body: { error: "Este convite pertence a outro clube." },
+        body: { error: "Esta conta já está associada a outro escalão." },
         status: 403,
       };
     case "age_group_not_found":

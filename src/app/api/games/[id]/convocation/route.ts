@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { portugalDateTimeToUtc } from "@/lib/events/presence-window";
+import { fetchGameAccessContext } from "@/lib/games/access";
 import { getFixtureConnector } from "@/lib/games/display";
 import {
   getStarterPlayerIdsFromLiveStats,
@@ -118,51 +119,22 @@ export async function GET(_request: Request, { params }: RouteContext) {
       return NextResponse.json({ error: "Jogo não encontrado." }, { status: 404 });
     }
 
-    let hasAccess = false;
-    let isCoordinator = false;
-    let teamId: string | null = game.team_id;
-
-    // Parallelizar: coordinator check e fallback team lookup são independentes
-    const [coordinatorRes, fallbackTeamRes] = await Promise.all([
-      game.age_group_id
-        ? supabase
-            .from("age_groups")
-            .select("id")
-            .eq("id", game.age_group_id)
-            .eq("coordinator_id", user.id)
-            .maybeSingle()
-        : Promise.resolve({ data: null, error: null }),
-      !teamId && game.age_group_id
-        ? supabase
-            .from("teams")
-            .select("id")
-            .eq("age_group_id", game.age_group_id)
-            .order("created_at", { ascending: true })
-            .limit(1)
-            .maybeSingle()
-        : Promise.resolve({ data: null, error: null }),
-    ]);
-
-    hasAccess = !!coordinatorRes.data;
-    isCoordinator = !!coordinatorRes.data;
-    if (!teamId) teamId = (fallbackTeamRes.data as { id: string } | null)?.id ?? null;
-
-    if (!hasAccess && teamId) {
-      const { data: staffLink } = await supabase
-        .from("team_staff")
-        .select("id")
-        .eq("team_id", teamId)
-        .eq("profile_id", user.id)
-        .maybeSingle();
-      hasAccess = !!staffLink;
+    let access = null;
+    try {
+      access = await fetchGameAccessContext(supabase, gameId);
+    } catch {
+      return NextResponse.json({ error: "Erro ao validar jogo." }, { status: 500 });
     }
 
-    if (!hasAccess) {
+    if (!access?.exists || !access.canAccess) {
       return NextResponse.json(
         { error: "Sem permissões para ver esta convocatória." },
         { status: 403 },
       );
     }
+
+    const isCoordinator = access.isCoordinator;
+    const teamId = access.teamId ?? game.team_id ?? null;
 
     const { data: convocations, error: convocationError } = await supabase
       .from("convocations")
@@ -294,8 +266,10 @@ export async function GET(_request: Request, { params }: RouteContext) {
         .lte("game_datetime", dayEndUtc.toISOString())
         .order("game_datetime", { ascending: true });
 
-      if (typeof game.club_id === "string" && game.club_id.length > 0) {
-        sameDayGamesQuery.eq("club_id", game.club_id);
+      if (typeof game.age_group_id === "string" && game.age_group_id.length > 0) {
+        sameDayGamesQuery.eq("age_group_id", game.age_group_id);
+      } else if (teamId) {
+        sameDayGamesQuery.eq("team_id", teamId);
       }
 
       const { data: sameDayGames, error: sameDayGamesError } = await sameDayGamesQuery;

@@ -38,6 +38,19 @@ type AttendanceGetSession = {
   end_time?: string | null;
 };
 
+type TrainingSessionAccessContext = {
+  exists: boolean;
+  canAccess: boolean;
+  isCoordinator: boolean;
+  status: string | null;
+  teamId: string | null;
+  ageGroupId: string | null;
+  clubId: string | null;
+  sessionDate: string | null;
+  startTime: string | null;
+  endTime: string | null;
+};
+
 const VALID_STATUSES = new Set<AttendanceStatus>(["present", "late", "absent", "injured"]);
 
 function isValidStatus(value: unknown): value is AttendanceStatus {
@@ -78,6 +91,24 @@ function jsonNoStore(body: unknown, init?: ResponseInit) {
       "Cache-Control": "private, no-store",
     },
   });
+}
+
+function parseTrainingSessionAccessContext(value: unknown): TrainingSessionAccessContext | null {
+  if (!value || typeof value !== "object") return null;
+  const row = value as Record<string, unknown>;
+
+  return {
+    exists: row.exists === true,
+    canAccess: row.canAccess === true,
+    isCoordinator: row.isCoordinator === true,
+    status: typeof row.status === "string" ? row.status : null,
+    teamId: typeof row.teamId === "string" ? row.teamId : null,
+    ageGroupId: typeof row.ageGroupId === "string" ? row.ageGroupId : null,
+    clubId: typeof row.clubId === "string" ? row.clubId : null,
+    sessionDate: typeof row.sessionDate === "string" ? row.sessionDate : null,
+    startTime: typeof row.startTime === "string" ? row.startTime : null,
+    endTime: typeof row.endTime === "string" ? row.endTime : null,
+  };
 }
 
 export async function GET(request: Request) {
@@ -238,40 +269,38 @@ export async function POST(request: Request) {
       db = supabase;
     }
 
-    const { data: sessionRow, error: sessionError } = await db
-      .from("training_sessions")
-      .select("id, club_id, age_group_id, team_id, session_date, start_time, end_time, status")
-      .eq("id", sessionId)
-      .maybeSingle();
+    const sessionAccessRpc = await supabase.rpc("rpc_training_session_access_context", {
+      p_training_session_id: sessionId,
+    });
 
-    if (sessionError) {
+    if (sessionAccessRpc.error) {
       return NextResponse.json(
         { error: "Erro ao validar a sessão de treino." },
         { status: 500 },
       );
     }
 
-    const session =
-      sessionRow && typeof sessionRow === "object"
-        ? (sessionRow as AttendanceGetSession)
-        : null;
-
-    if (!session?.id) {
+    const sessionAccess = parseTrainingSessionAccessContext(sessionAccessRpc.data);
+    if (!sessionAccess?.exists) {
       return NextResponse.json({ error: "Sessão não encontrada." }, { status: 404 });
     }
 
-    const sessionAgeGroupId =
-      typeof (sessionRow as Record<string, unknown>)?.age_group_id === "string"
-        ? ((sessionRow as Record<string, unknown>).age_group_id as string)
-        : null;
-    const sessionTeamId =
-      typeof (sessionRow as Record<string, unknown>)?.team_id === "string"
-        ? ((sessionRow as Record<string, unknown>).team_id as string)
-        : null;
-    const sessionClubId =
-      typeof (sessionRow as Record<string, unknown>)?.club_id === "string"
-        ? ((sessionRow as Record<string, unknown>).club_id as string)
-        : null;
+    if (!sessionAccess.canAccess) {
+      return NextResponse.json(
+        { error: "Sem permissões para marcar presenças nesta sessão." },
+        { status: 403 },
+      );
+    }
+
+    const session: AttendanceGetSession = {
+      id: sessionId,
+      status: sessionAccess.status,
+      session_date: sessionAccess.sessionDate,
+      start_time: sessionAccess.startTime,
+      end_time: sessionAccess.endTime,
+    };
+    const sessionAgeGroupId = sessionAccess.ageGroupId;
+    const sessionTeamId = sessionAccess.teamId;
 
     if (!sessionAgeGroupId) {
       return NextResponse.json(
@@ -280,41 +309,7 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!sessionClubId) {
-      return NextResponse.json(
-        { error: "Sessão de treino sem clube associado." },
-        { status: 500 },
-      );
-    }
-
-    let isCoordinator = false;
-    if (sessionAgeGroupId) {
-      const { data: ageGroupRow } = await db
-        .from("age_groups")
-        .select("id")
-        .eq("id", sessionAgeGroupId)
-        .eq("coordinator_id", user.id)
-        .maybeSingle();
-      isCoordinator = Boolean(ageGroupRow?.id);
-    }
-
-    let isTeamStaff = false;
-    if (sessionTeamId) {
-      const { data: teamStaffRow } = await db
-        .from("team_staff")
-        .select("id")
-        .eq("team_id", sessionTeamId)
-        .eq("profile_id", user.id)
-        .maybeSingle();
-      isTeamStaff = Boolean(teamStaffRow?.id);
-    }
-
-    if (!isCoordinator && !isTeamStaff) {
-      return NextResponse.json(
-        { error: "Sem permissões para marcar presenças nesta sessão." },
-        { status: 403 },
-      );
-    }
+    const isCoordinator = sessionAccess.isCoordinator;
 
     if (session.status === "completed" && !isCoordinator) {
       return NextResponse.json(
@@ -363,7 +358,6 @@ export async function POST(request: Request) {
 
     const markedAt = new Date().toISOString();
     const rowsToSave = entries.map(([playerId, status]) => ({
-      club_id: sessionClubId,
       training_session_id: sessionId,
       player_id: playerId,
       status,
@@ -426,7 +420,7 @@ export async function POST(request: Request) {
           type: "attendance_closed",
           entityId: sessionId,
           title: "Presenças confirmadas",
-          body: `${sessionRow && typeof sessionRow === "object" && "session_date" in sessionRow ? String((sessionRow as Record<string, unknown>).session_date || "") : ""}${session?.start_time ? ` · ${session.start_time}` : ""}`,
+          body: `${session.session_date || ""}${session.start_time ? ` · ${session.start_time}` : ""}`,
           linkPath: "/attendance",
           excludeActor: true,
         });

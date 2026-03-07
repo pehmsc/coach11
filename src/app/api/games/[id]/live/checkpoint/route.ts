@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
+import { fetchGameAccessContext } from "@/lib/games/access";
 import { createNotificationForTeamOnce } from "@/lib/notifications/service";
 import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -45,11 +46,10 @@ function isMissingCheckpointTableError(errorMessage: string | null | undefined) 
 async function assertGameAccess(
   db: SupabaseClient,
   gameId: string,
-  userId: string,
 ) {
   const { data: game, error: gameError } = await db
     .from("games")
-    .select("id, team_id, age_group_id, status, title, opponent_name")
+    .select("id, status, title, opponent_name")
     .eq("id", gameId)
     .maybeSingle();
 
@@ -67,48 +67,22 @@ async function assertGameAccess(
     };
   }
 
-  let hasAccess = false;
-  let isCoordinator = false;
-  let teamId: string | null = (game as unknown as { team_id?: string }).team_id ?? null;
-  const ageGroupId = (game as unknown as { age_group_id?: string }).age_group_id ?? null;
   const gameStatus = (game as unknown as { status?: string }).status ?? null;
   const gameTitle = (game as unknown as { title?: string | null }).title ?? null;
   const opponentName =
     (game as unknown as { opponent_name?: string | null }).opponent_name ?? null;
 
-  if (ageGroupId) {
-    const { data: ageGroupOwner } = await db
-      .from("age_groups")
-      .select("id")
-      .eq("id", ageGroupId)
-      .eq("coordinator_id", userId)
-      .maybeSingle();
-    hasAccess = !!ageGroupOwner;
-    isCoordinator = !!ageGroupOwner;
+  let access = null;
+  try {
+    access = await fetchGameAccessContext(db, gameId);
+  } catch {
+    return {
+      ok: false as const,
+      response: NextResponse.json({ error: "Erro ao validar jogo." }, { status: 500 }),
+    };
   }
 
-  if (!teamId && ageGroupId) {
-    const { data: fallbackTeam } = await db
-      .from("teams")
-      .select("id")
-      .eq("age_group_id", ageGroupId)
-      .order("created_at", { ascending: true })
-      .limit(1)
-      .maybeSingle();
-    teamId = (fallbackTeam as unknown as { id?: string } | null)?.id ?? null;
-  }
-
-  if (!hasAccess && teamId) {
-    const { data: staffLink } = await db
-      .from("team_staff")
-      .select("id")
-      .eq("team_id", teamId)
-      .eq("profile_id", userId)
-      .maybeSingle();
-    hasAccess = !!staffLink;
-  }
-
-  if (!hasAccess) {
+  if (!access?.exists || !access.canAccess) {
     return {
       ok: false as const,
       response: NextResponse.json({ error: "Sem permissões." }, { status: 403 }),
@@ -117,10 +91,10 @@ async function assertGameAccess(
 
   return {
     ok: true as const,
-    isCoordinator,
+    isCoordinator: access.isCoordinator,
     gameStatus,
-    teamId,
-    ageGroupId,
+    teamId: access.teamId,
+    ageGroupId: access.ageGroupId,
     gameTitle,
     opponentName,
   };
@@ -139,7 +113,7 @@ export async function GET(_: Request, { params }: RouteContext) {
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
 
-    const access = await assertGameAccess(supabase, gameId, user.id);
+    const access = await assertGameAccess(supabase, gameId);
     if (!access.ok) return access.response;
     if (access.gameStatus === "completed" && !access.isCoordinator) {
       return NextResponse.json(
@@ -218,7 +192,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       );
     }
 
-    const access = await assertGameAccess(supabase, gameId, user.id);
+    const access = await assertGameAccess(supabase, gameId);
     if (!access.ok) return access.response;
 
     const runningSinceMs = isRunningPhase(phase) ? runningSinceMsRaw : null;

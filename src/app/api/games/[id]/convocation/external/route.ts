@@ -88,11 +88,11 @@ export async function POST(request: Request, { params }: RouteContext) {
 
     const { data: game, error: gameError } = await supabase
       .from("games")
-      .select("id, club_id")
+      .select("id")
       .eq("id", gameId)
       .maybeSingle();
 
-    if (gameError || !game?.id || !game?.club_id) {
+    if (gameError || !game?.id) {
       return NextResponse.json(
         { error: "Erro ao validar o jogo para jogador externo." },
         { status: 500 },
@@ -143,7 +143,6 @@ export async function POST(request: Request, { params }: RouteContext) {
       .from("external_player_convocations")
       .insert({
         game_id: gameId,
-        club_id: game.club_id,
         name,
         jersey_number: jerseyNumber,
         position,

@@ -126,8 +126,9 @@ export async function POST() {
             { status: 403 },
           );
         case "cross_club_forbidden":
+        case "cross_age_group_forbidden":
           return NextResponse.json(
-            { error: "Este convite pertence a outro clube." },
+            { error: "Esta conta já está associada a outro escalão." },
             { status: 403 },
           );
         case "age_group_not_found":
