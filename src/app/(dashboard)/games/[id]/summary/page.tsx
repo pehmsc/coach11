@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import { pt } from "date-fns/locale";
-import { ArrowLeft, Star, AlertCircle, Loader2, RotateCcw } from "lucide-react";
+import { Star, AlertCircle, Loader2, RotateCcw } from "lucide-react";
+import { StickyBackLink } from "@/components/navigation/StickyBackLink";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { resolveFixtureScoreboardShortNames } from "@/lib/games/display";
@@ -260,12 +261,11 @@ export default function GameSummaryPage() {
 
   return (
     <div className="p-4 md:p-8 max-w-3xl mx-auto pb-16">
-      <button
-        onClick={() => router.push("/games")}
-        className="flex items-center gap-2 text-slate-500 hover:text-slate-700 text-sm mb-4"
-      >
-        <ArrowLeft size={16} /> Jogos
-      </button>
+      <StickyBackLink
+        href="/games"
+        label="Voltar aos jogos"
+        wrapperClassName="-mx-4 mb-4 bg-slate-50/95 px-4 py-2 md:-mx-8 md:px-8"
+      />
 
       {actionError && (
         <div className="mb-4 rounded-lg border border-red-200 bg-red-50 text-red-700 text-sm px-3 py-2">

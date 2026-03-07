@@ -1,8 +1,9 @@
-import { AlertCircle, ArrowLeft } from "lucide-react";
+import { AlertCircle } from "lucide-react";
+import { StickyBackLink } from "@/components/navigation/StickyBackLink";
 import { Skeleton } from "@/components/ui/skeleton";
 
 type LockedStateProps = {
-  onBack: () => void;
+  backHref: string;
 };
 
 type ErrorStateProps = {
@@ -30,15 +31,14 @@ export function LiveErrorState({ message }: ErrorStateProps) {
   );
 }
 
-export function LiveLockedState({ onBack }: LockedStateProps) {
+export function LiveLockedState({ backHref }: LockedStateProps) {
   return (
     <div className="p-4 md:p-8 max-w-2xl mx-auto">
-      <button
-        onClick={onBack}
-        className="flex items-center gap-2 text-slate-500 hover:text-slate-700 text-sm mb-4"
-      >
-        <ArrowLeft size={16} /> Voltar
-      </button>
+      <StickyBackLink
+        href={backHref}
+        label="Voltar"
+        wrapperClassName="-mx-4 mb-4 bg-slate-50/95 px-4 py-2 md:-mx-8 md:px-8"
+      />
       <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-800">
         O live deste jogo só fica disponível 10 minutos antes do início.
       </div>

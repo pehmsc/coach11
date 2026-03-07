@@ -4,7 +4,6 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
-  ArrowLeft,
   Plus,
   Minus,
   X,
@@ -16,6 +15,7 @@ import {
 } from "lucide-react";
 import { LiveErrorState, LiveLoadingState, LiveLockedState } from "@/components/games/live/LiveScreenStates";
 import { LiveScoreboardCard } from "@/components/games/live/LiveScoreboardCard";
+import { StickyBackLink } from "@/components/navigation/StickyBackLink";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useGameLiveController } from "@/lib/hooks/useGameLiveController";
@@ -1733,18 +1733,16 @@ export default function LiveGamePage() {
   }
 
   if (!isFinalized && !liveUnlocked) {
-    return <LiveLockedState onBack={() => router.back()} />;
+    return <LiveLockedState backHref={`/games/${id}`} />;
   }
 
   return (
     <div className="p-4 md:p-8 max-w-2xl mx-auto pb-24">
-      {/* Back */}
-      <button
-        onClick={() => router.back()}
-        className="flex items-center gap-2 text-slate-500 hover:text-slate-700 text-sm mb-4"
-      >
-        <ArrowLeft size={16} /> Voltar
-      </button>
+      <StickyBackLink
+        href={`/games/${id}`}
+        label="Voltar"
+        wrapperClassName="-mx-4 mb-4 bg-slate-50/95 px-4 py-2 md:-mx-8 md:px-8"
+      />
 
       <LiveScoreboardCard
         matchMetaLabel={matchMetaLabel}

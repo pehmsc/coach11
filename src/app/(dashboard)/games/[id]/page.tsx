@@ -5,7 +5,6 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { differenceInMinutes, format, parseISO, subMinutes } from "date-fns";
 import { pt } from "date-fns/locale";
 import {
-  ArrowLeft,
   Users,
   MapPin,
   Clock,
@@ -18,6 +17,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import { StickyBackLink } from "@/components/navigation/StickyBackLink";
 import { Button } from "@/components/ui/button";
 import { EMPTY_LOCATION_FIELDS, resolveLocationLabel } from "@/lib/location";
 import { LocationFields } from "@/components/maps/LocationFields";
@@ -1038,13 +1038,11 @@ export default function GameDetailPage() {
 
   return (
     <div className="p-4 md:p-8 max-w-2xl mx-auto">
-      {/* Back */}
-      <button
+      <StickyBackLink
+        label="Voltar"
         onClick={() => router.back()}
-        className="flex items-center gap-2 text-slate-500 hover:text-slate-700 text-sm mb-4 transition-colors"
-      >
-        <ArrowLeft size={16} /> Voltar
-      </button>
+        wrapperClassName="-mx-4 mb-4 bg-slate-50/95 px-4 py-2 md:-mx-8 md:px-8"
+      />
 
       {/* Game header */}
       <div className="rounded-2xl bg-blue-600 text-white p-5 mb-5 relative">
