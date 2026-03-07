@@ -20,6 +20,11 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useGameLiveController } from "@/lib/hooks/useGameLiveController";
 import { getLiveKickoffState } from "@/lib/games/live-kickoff";
+import { filterPersistentLiveStatsPlayers } from "@/lib/games/live-persistence";
+import {
+  getExternalConvocationIdFromLivePlayerId,
+  toExternalLivePlayerId,
+} from "@/lib/games/live-player-ids";
 import { exportMatchReportPDF } from "@/lib/pdf/matchReport";
 import type { Game, Player, GameEvent, GameEventType } from "@/types/database";
 
@@ -660,19 +665,55 @@ export default function LiveGamePage() {
         .order("created_at", { ascending: false })
         .order("id", { ascending: false });
 
-      let convPlayers: Player[] = [];
+      let convPlayers: LivePlayer[] = [];
       const latestConvocationId = convRows?.[0]?.id ?? null;
       if (latestConvocationId) {
-        const { data: cp } = await supabase
-          .from("convocation_players")
-          .select("player_id, players(*)")
-          .eq("convocation_id", latestConvocationId);
+        const [{ data: cp }, { data: externalRows }] = await Promise.all([
+          supabase
+            .from("convocation_players")
+            .select("player_id, players(*)")
+            .eq("convocation_id", latestConvocationId),
+          supabase
+            .from("external_player_convocations")
+            .select("id, name, jersey_number, position, lineup_status, created_at")
+            .eq("game_id", id)
+            .order("created_at", { ascending: true }),
+        ]);
 
-        const byPlayerId = new Map<string, Player>();
+        const byPlayerId = new Map<string, LivePlayer>();
         (cp || []).forEach((row) => {
           const player = row.players as unknown as Player;
           if (!player?.id) return;
-          byPlayerId.set(player.id, player);
+          byPlayerId.set(player.id, {
+            ...player,
+            isExternal: false,
+            externalConvocationId: null,
+            isOnField: false,
+            isInitialBench: false,
+          });
+        });
+        (externalRows || []).forEach((row) => {
+          if (typeof row.id !== "string") return;
+          const externalPlayerId = toExternalLivePlayerId(row.id);
+          byPlayerId.set(externalPlayerId, {
+            id: externalPlayerId,
+            age_group_id: gameData.age_group_id ?? "",
+            first_name: row.name || "Outro",
+            last_name: "",
+            jersey_number:
+              typeof row.jersey_number === "number" ? row.jersey_number : undefined,
+            preferred_position:
+              typeof row.position === "string" ? row.position : undefined,
+            status: "active",
+            created_at:
+              typeof row.created_at === "string"
+                ? row.created_at
+                : new Date().toISOString(),
+            isExternal: true,
+            externalConvocationId: row.id,
+            isOnField: row.lineup_status === "on_field",
+            isInitialBench: row.lineup_status !== "on_field",
+          });
         });
 
         convPlayers = Array.from(byPlayerId.values()).sort(
@@ -693,21 +734,31 @@ export default function LiveGamePage() {
         start_minute: row.start_minute,
       }));
 
-      const onFieldIds = new Set(
+      const onFieldIds = new Set<string>(
         normalizedStats
           .filter((s) => s.status === "on_field")
           .map((s) => s.player_id),
       );
-      const benchIds = new Set(
+      const benchIds = new Set<string>(
         normalizedStats
           .filter((s) => s.status === "substitute" || s.status === "substituted")
           .map((s) => s.player_id),
       );
-      const starterIdsFromLive = new Set(
+      const starterIdsFromLive = new Set<string>(
         normalizedStats
           .filter((s) => s.start_minute === 0)
           .map((s) => s.player_id),
       );
+
+      convPlayers.forEach((player) => {
+        if (!player.isExternal || !player.externalConvocationId) return;
+        if (player.isOnField) {
+          onFieldIds.add(player.id);
+          starterIdsFromLive.add(player.id);
+          return;
+        }
+        benchIds.add(player.id);
+      });
 
       enriched = convPlayers.map((player) => ({
         ...player,
@@ -922,9 +973,30 @@ export default function LiveGamePage() {
     ) => {
       const player = convocatedPlayers.find((entry) => entry.id === playerId);
       if (player?.isExternal) {
-        throw new Error(
-          'A live interna ainda não suporta jogadores "Outro" em campo.',
-        );
+        const externalConvocationId =
+          player.externalConvocationId ??
+          getExternalConvocationIdFromLivePlayerId(playerId);
+        if (!externalConvocationId) {
+          throw new Error("Jogador externo inválido para atualizar live.");
+        }
+
+        const lineupStatus = status === "on_field" ? "on_field" : "substitute";
+        const res = await fetch(`/api/games/${id}/convocation/external/lineup`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            externalConvocationId,
+            lineupStatus,
+          }),
+        });
+        if (!res.ok) {
+          const payload = await res.json().catch(() => null);
+          throw new Error(
+            (payload as { error?: string } | null)?.error ||
+              "live_external_player_status_save_failed",
+          );
+        }
+        return;
       }
 
       const updatePayload: {
@@ -1058,10 +1130,6 @@ export default function LiveGamePage() {
         map.set(player.id, { label: "Expulso", selectable: false });
         return;
       }
-      if (player.isExternal) {
-        map.set(player.id, { label: "Banco", selectable: false });
-        return;
-      }
       map.set(player.id, {
         label: player.isOnField ? "Em campo" : "Banco",
         selectable: true,
@@ -1130,6 +1198,10 @@ export default function LiveGamePage() {
     () => convocatedPlayers.filter((p) => (computedMinutes.get(p.id) ?? 0) > 0),
     [convocatedPlayers, computedMinutes],
   );
+  const playersWhoNeedPersistentStats = useMemo(
+    () => filterPersistentLiveStatsPlayers(playersWhoPlayed),
+    [playersWhoPlayed],
+  );
 
   const concededGoalsByPlayer = useMemo(() => {
     const byPlayer = new Map<string, number>();
@@ -1143,8 +1215,11 @@ export default function LiveGamePage() {
   }, [events]);
 
   const allRatingsFilled = useMemo(
-    () => playersWhoPlayed.every((p) => playerRatings[p.id] !== undefined),
-    [playersWhoPlayed, playerRatings],
+    () =>
+      playersWhoNeedPersistentStats.every(
+        (player) => playerRatings[player.id] !== undefined,
+      ),
+    [playerRatings, playersWhoNeedPersistentStats],
   );
 
   const persistInitialLineupSnapshot = useCallback(
@@ -1430,18 +1505,6 @@ export default function LiveGamePage() {
   async function confirmSubstitution() {
     if (!selectedSubInId || !selectedSubOutId) return;
 
-    const selectedSubInPlayer =
-      convocatedPlayers.find((player) => player.id === selectedSubInId) ?? null;
-    const selectedSubOutPlayer =
-      convocatedPlayers.find((player) => player.id === selectedSubOutId) ?? null;
-
-    if (selectedSubInPlayer?.isExternal || selectedSubOutPlayer?.isExternal) {
-      toast.error(
-        'A live interna só suporta substituições com jogadores do plantel.',
-      );
-      return;
-    }
-
     const outAvailability = getPlayerAvailability(selectedSubOutId);
     if (!outAvailability.selectable || outAvailability.label !== "Em campo") {
       toast.error("Jogador de saída tem de estar em campo e elegível.");
@@ -1519,14 +1582,6 @@ export default function LiveGamePage() {
 
     const newIsOnField = !player.isOnField;
     const newStatus = newIsOnField ? "on_field" : "substitute";
-
-    if (player.isExternal && newIsOnField) {
-      const message =
-        'Os jogadores "Outro" não podem arrancar a live como titulares. Mantém-nos no banco ou ajusta a convocatória antes de iniciar.';
-      setKickoffError(message);
-      toast.error(message);
-      return;
-    }
 
     if (player.isExternal && !player.externalConvocationId) {
       toast.error("Jogador externo inválido para atualizar lineup.");
@@ -1626,7 +1681,7 @@ export default function LiveGamePage() {
       normalizedFinalMinute,
     );
 
-    return convocatedPlayers.map((player) => {
+    return filterPersistentLiveStatsPlayers(convocatedPlayers).map((player) => {
       const minutesPlayed = Math.max(
         0,
         Math.min(normalizedFinalMinute, minutesMap.get(player.id) ?? 0),
@@ -1698,10 +1753,6 @@ export default function LiveGamePage() {
     try {
       const finalMinute = Math.max(1, Math.floor(currentMinute));
       const finalStatsPayload = buildFinalStatsPayload(finalMinute);
-
-      if (finalStatsPayload.length === 0) {
-        throw new Error("Sem jogadores convocados para fechar o jogo.");
-      }
 
       console.info("[live.finalize] sending payload", {
         gameId: id,
@@ -1862,9 +1913,8 @@ export default function LiveGamePage() {
         <>
           {hasExternalConvocatedPlayers && (
             <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
-              Os jogadores &quot;Outro&quot; continuam visíveis na convocatória, mas a live interna só
-              suporta entradas em campo e estatísticas individuais para jogadores do plantel.
-              Mantém-nos no banco ou ajusta a convocatória antes de iniciar.
+              Os jogadores &quot;Outro&quot; entram normalmente na live e nos eventos do jogo, mas
+              não geram estatísticas individuais persistentes no escalão.
             </div>
           )}
           <div className="mb-5 rounded-xl border border-slate-200 bg-white overflow-hidden">
@@ -2136,18 +2186,18 @@ export default function LiveGamePage() {
       )}
 
       {/* ── REVIEW: Ratings + MVP ── */}
-      {phase === "review" && playersWhoPlayed.length > 0 && (
+      {phase === "review" && playersWhoNeedPersistentStats.length > 0 && (
         <>
           {/* Notas */}
           <div className="mb-5 rounded-xl border border-slate-200 overflow-hidden">
             <div className="px-4 py-3 bg-slate-50 border-b border-slate-100">
               <p className="font-bold text-slate-900 text-sm">Notas dos jogadores</p>
               <p className="text-xs text-slate-500">
-                Obrigatório para todos que participaram · {playersWhoPlayed.filter(p => playerRatings[p.id] !== undefined).length}/{playersWhoPlayed.length} preenchidos
+                Obrigatório para os jogadores do plantel que participaram · {playersWhoNeedPersistentStats.filter(p => playerRatings[p.id] !== undefined).length}/{playersWhoNeedPersistentStats.length} preenchidos
               </p>
             </div>
             <div className="divide-y divide-slate-50">
-              {playersWhoPlayed.map((p) => (
+              {playersWhoNeedPersistentStats.map((p) => (
                 <div key={p.id} className="flex items-center gap-3 px-4 py-3">
                   <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-500 flex-shrink-0">
                     {p.jersey_number || "—"}
@@ -2195,10 +2245,12 @@ export default function LiveGamePage() {
           <div className="mb-5 rounded-xl border border-slate-200 overflow-hidden">
             <div className="px-4 py-3 bg-slate-50 border-b border-slate-100">
               <p className="font-bold text-slate-900 text-sm">MVP do jogo</p>
-              <p className="text-xs text-slate-500">Seleciona o melhor jogador</p>
+              <p className="text-xs text-slate-500">
+                Seleciona o melhor jogador do plantel
+              </p>
             </div>
             <div className="divide-y divide-slate-50">
-              {playersWhoPlayed.map((p) => (
+              {playersWhoNeedPersistentStats.map((p) => (
                 <button
                   key={p.id}
                   onClick={() => setMvpPlayerId((prev) => (prev === p.id ? null : p.id))}
@@ -2230,6 +2282,13 @@ export default function LiveGamePage() {
         </>
       )}
 
+      {phase === "review" && playersWhoNeedPersistentStats.length === 0 && (
+        <div className="mb-5 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          Este jogo só teve jogadores &quot;Outro&quot;. Os eventos e o resultado vão ser
+          guardados normalmente, sem estatísticas individuais persistentes.
+        </div>
+      )}
+
       {/* ── Finalize button ── */}
       {!isFinalized && (
         <Button
@@ -2245,7 +2304,7 @@ export default function LiveGamePage() {
           {phase !== "review"
             ? "Termina a 2ª parte para finalizar"
             : !allRatingsFilled
-              ? `Faltam notas (${playersWhoPlayed.length - playersWhoPlayed.filter(p => playerRatings[p.id] !== undefined).length} em falta)`
+              ? `Faltam notas (${playersWhoNeedPersistentStats.length - playersWhoNeedPersistentStats.filter(p => playerRatings[p.id] !== undefined).length} em falta)`
               : `Finalizar jogo (${score.home}–${score.away})`}
         </Button>
       )}

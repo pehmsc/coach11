@@ -90,9 +90,6 @@ export async function POST(request: Request, { params }: RouteContext) {
     }
 
     const finalStats = Array.isArray(body.finalStats) ? body.finalStats : [];
-    if (finalStats.length === 0) {
-      return NextResponse.json({ error: "Sem estatísticas finais para guardar." }, { status: 400 });
-    }
     if (!finalStats.every((row) => isValidFinalStat(row))) {
       return NextResponse.json({ error: "Formato de estatísticas finais inválido." }, { status: 400 });
     }

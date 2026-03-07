@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
+import { isExternalLivePlayerId } from "@/lib/games/live-player-ids";
 import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -104,10 +105,6 @@ function isValidUpdate(value: unknown): value is PlayerLiveUpdate {
   return true;
 }
 
-function isExternalPlayerId(value: string | null | undefined) {
-  return typeof value === "string" && value.startsWith("external:");
-}
-
 function computeSentOffPlayerIds(events: Array<{
   event_type?: string | null;
   player_id?: string | null;
@@ -158,11 +155,11 @@ export async function POST(request: Request, { params }: RouteContext) {
     }
 
     const updates = updatesRaw as PlayerLiveUpdate[];
-    if (updates.some((row) => isExternalPlayerId(row.playerId))) {
+    if (updates.some((row) => isExternalLivePlayerId(row.playerId))) {
       return NextResponse.json(
         {
           error:
-            'A live interna ainda não suporta jogadores "Outro" em campo. Mantém-nos no banco ou ajusta a convocatória antes de iniciar.',
+            'Os jogadores "Outro" são geridos na convocatória externa; este endpoint mantém apenas o estado live dos jogadores do plantel.',
         },
         { status: 400 },
       );

@@ -1718,13 +1718,13 @@ export default function GameDetailPage() {
       </div>
 
       {/* Convocatória */}
-      <div className="flex items-center justify-between mb-3">
+      <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-center gap-2">
           <Shield size={18} className="text-slate-600" />
           <h2 className="font-bold text-slate-900">Convocatória</h2>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="text-right">
+        <div className="flex flex-col items-start gap-2 sm:items-end">
+          <div className="text-left sm:text-right">
             <span className="text-sm text-slate-500 block">
               {convocatedCount} convocado{convocatedCount !== 1 ? "s" : ""}
             </span>
@@ -1750,6 +1750,7 @@ export default function GameDetailPage() {
             <Button
               type="button"
               variant="outline"
+              className="h-10 w-full sm:w-auto"
               size="sm"
               onClick={() => {
                 setError(null);
@@ -1761,13 +1762,6 @@ export default function GameDetailPage() {
           )}
         </div>
       </div>
-
-      {canReopenConfirmedConvocation && (
-        <div className="mb-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-          Convocatória guardada. Podes reabri-la para adicionar, remover, trocar jogadores
-          e voltar a definir titulares antes do jogo entrar em live.
-        </div>
-      )}
 
       {error && (
         <div className="bg-red-50 text-red-700 text-sm p-3 rounded-lg mb-3 border border-red-200">
@@ -1953,31 +1947,8 @@ export default function GameDetailPage() {
         </>
       )}
 
-      <div className="sticky bottom-[calc(var(--mobile-footer-height)+env(safe-area-inset-bottom)+0.5rem)] z-20 mt-5 md:bottom-4">
-        {isConvocationConfirmed ? (
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3 shadow-sm">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm font-semibold text-emerald-700">
-                ✓ {game.status === "completed"
-                  ? "Correção da convocatória guardada."
-                  : "Convocatória guardada."}
-              </p>
-              {canReopenConfirmedConvocation && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800"
-                  onClick={() => {
-                    setError(null);
-                    setIsEditingConfirmedConvocation(true);
-                  }}
-                >
-                  Editar convocatória
-                </Button>
-              )}
-            </div>
-          </div>
-        ) : (
+      {!isConvocationConfirmed && (
+        <div className="sticky bottom-[calc(var(--mobile-footer-height)+env(safe-area-inset-bottom)+0.5rem)] z-20 mt-5 md:bottom-4">
           <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-lg">
             <Button
               type="button"
@@ -2000,8 +1971,8 @@ export default function GameDetailPage() {
                   : "Guardar convocatória"}
             </Button>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

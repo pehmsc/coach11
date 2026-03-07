@@ -1,5 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
+import {
+  getExternalConvocationIdFromLivePlayerId,
+  isExternalLivePlayerId,
+  toExternalLivePlayerId,
+} from "@/lib/games/live-player-ids";
 import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -174,11 +179,22 @@ export async function GET(_request: Request, { params }: RouteContext) {
       { id: string; first_name: string; last_name: string; jersey_number: number | null; preferred_position: string | null }
     > = {};
 
-    if (playerIds.size > 0) {
+    const internalPlayerIds = Array.from(playerIds).filter(
+      (playerId) => !isExternalLivePlayerId(playerId),
+    );
+    const externalPlayerIds = Array.from(
+      new Set(
+        Array.from(playerIds)
+          .map((playerId) => getExternalConvocationIdFromLivePlayerId(playerId))
+          .filter((playerId): playerId is string => typeof playerId === "string"),
+      ),
+    );
+
+    if (internalPlayerIds.length > 0) {
       const { data: playerRows, error: playersError } = await supabase
         .from("players")
         .select("id, first_name, last_name, jersey_number, preferred_position")
-        .in("id", Array.from(playerIds));
+        .in("id", internalPlayerIds);
 
       if (playersError) {
         return NextResponse.json({ error: "Erro ao carregar jogadores do sumário." }, { status: 500 });
@@ -191,6 +207,35 @@ export async function GET(_request: Request, { params }: RouteContext) {
           last_name: player.last_name,
           jersey_number: player.jersey_number ?? null,
           preferred_position: player.preferred_position ?? null,
+        };
+      });
+    }
+
+    if (externalPlayerIds.length > 0) {
+      const { data: externalPlayers, error: externalPlayersError } = await supabase
+        .from("external_player_convocations")
+        .select("id, name, jersey_number, position")
+        .in("id", externalPlayerIds);
+
+      if (
+        externalPlayersError &&
+        !externalPlayersError.message?.includes("external_player_convocations")
+      ) {
+        return NextResponse.json(
+          { error: "Erro ao carregar jogadores externos do sumário." },
+          { status: 500 },
+        );
+      }
+
+      (externalPlayers || []).forEach((player) => {
+        const playerId = toExternalLivePlayerId(player.id);
+        playersById[playerId] = {
+          id: playerId,
+          first_name: player.name || "Outro",
+          last_name: "",
+          jersey_number: player.jersey_number ?? null,
+          preferred_position:
+            typeof player.position === "string" ? player.position : null,
         };
       });
     }

@@ -13,13 +13,14 @@ describe("live-kickoff", () => {
     });
   });
 
-  it("blocks kickoff with a clear reason when an external starter is selected", () => {
+  it('allows kickoff when the starters are only players "Outro"', () => {
     expect(
       getLiveKickoffState({
         starters: [{ isExternal: true }],
       }),
-    ).toMatchObject({
-      canStart: false,
+    ).toEqual({
+      canStart: true,
+      reason: null,
     });
   });
 });

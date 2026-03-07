@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
+import { toExternalLivePlayerId } from "@/lib/games/live-player-ids";
 import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -107,10 +108,6 @@ function isValidEventInput(value: unknown): value is EventInput {
   return true;
 }
 
-function isExternalPlayerId(value: string | null | undefined) {
-  return typeof value === "string" && value.startsWith("external:");
-}
-
 function isDbOnFieldStatus(value: string | null | undefined) {
   if (!value) return false;
   return value === "starter" || value === "playing" || value === "on_field" || value === "titular";
@@ -204,21 +201,6 @@ export async function POST(request: Request, { params }: RouteContext) {
     }
 
     const rows = rowsRaw as EventInput[];
-    if (
-      rows.some(
-        (row) =>
-          isExternalPlayerId(row.player_id ?? null) ||
-          isExternalPlayerId(row.related_player_id ?? null),
-      )
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            'A live interna ainda não suporta eventos individuais para jogadores "Outro". Ajusta a convocatória antes de iniciar.',
-        },
-        { status: 400 },
-      );
-    }
 
     const access = await assertGameAccess(supabase, gameId);
     if (!access.ok) return access.response;
@@ -229,9 +211,17 @@ export async function POST(request: Request, { params }: RouteContext) {
       );
     }
 
-    const [{ data: liveRows, error: liveRowsError }, { data: existingEvents, error: existingEventsError }] =
+    const [
+      { data: liveRows, error: liveRowsError },
+      { data: externalRows, error: externalRowsError },
+      { data: existingEvents, error: existingEventsError },
+    ] =
       await Promise.all([
         supabase.from("game_stats_live").select("player_id, status").eq("game_id", gameId),
+        supabase
+          .from("external_player_convocations")
+          .select("id, lineup_status")
+          .eq("game_id", gameId),
         supabase
           .from("game_events")
           .select("event_type, player_id, is_opponent_event, minute, created_at")
@@ -240,7 +230,7 @@ export async function POST(request: Request, { params }: RouteContext) {
           .order("created_at", { ascending: true }),
       ]);
 
-    if (liveRowsError || existingEventsError) {
+    if (liveRowsError || externalRowsError || existingEventsError) {
       return NextResponse.json(
         { error: "Erro ao validar disponibilidade dos jogadores." },
         { status: 500 },
@@ -253,6 +243,12 @@ export async function POST(request: Request, { params }: RouteContext) {
       if (!playerId) return;
       if (isDbOnFieldStatus(typeof row.status === "string" ? row.status : null)) {
         onFieldPlayerIds.add(playerId);
+      }
+    });
+    (externalRows || []).forEach((row) => {
+      if (typeof row.id !== "string") return;
+      if (row.lineup_status === "on_field") {
+        onFieldPlayerIds.add(toExternalLivePlayerId(row.id));
       }
     });
 
