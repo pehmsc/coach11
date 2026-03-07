@@ -1,5 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
+import {
+  GAME_EVENT_SELECT_COLUMNS,
+  normalizeStoredGameEventRowsForClient,
+} from "@/lib/games/live-event-participants";
 import { NextResponse } from "next/server";
 
 type RouteContext = {
@@ -309,7 +313,7 @@ export async function POST(request: Request, { params }: RouteContext) {
     const [eventsRes, liveStatsRes, finalStatsRes, checkpointRes] = await Promise.all([
       supabase
         .from("game_events")
-        .select("id, event_type, player_id, related_player_id, minute, is_opponent_event, created_at")
+        .select(GAME_EVENT_SELECT_COLUMNS)
         .eq("game_id", gameId)
         .order("minute", { ascending: true })
         .order("created_at", { ascending: true }),
@@ -341,7 +345,18 @@ export async function POST(request: Request, { params }: RouteContext) {
       return NextResponse.json({ error: "Erro ao carregar estatísticas atuais." }, { status: 500 });
     }
 
-    const events = (eventsRes.data || []) as GameEventRow[];
+    const events = normalizeStoredGameEventRowsForClient(
+      (eventsRes.data || []) as Array<{
+        id?: string;
+        player_id?: string | null;
+        related_player_id?: string | null;
+        external_player_convocation_id?: string | null;
+        external_related_player_convocation_id?: string | null;
+        minute?: number | null;
+        is_opponent_event?: boolean | null;
+        created_at?: string | null;
+      }>,
+    ) as GameEventRow[];
     const liveRows = liveStatsRes.data || [];
     const currentFinalStats = finalStatsRes.data || [];
 

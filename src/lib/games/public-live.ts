@@ -1,4 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  GAME_EVENT_SELECT_COLUMNS,
+  normalizeStoredGameEventRowsForClient,
+  type StoredGameEventParticipantFields,
+} from "./live-event-participants";
 
 export type PublicGameLivePhase =
   | "pre_match"
@@ -52,6 +57,8 @@ type GameEventRow = {
   event_type: string | null;
   player_id: string | null;
   related_player_id: string | null;
+  external_player_convocation_id?: string | null;
+  external_related_player_convocation_id?: string | null;
   minute: number | null;
   is_opponent_event: boolean | null;
   created_at: string | null;
@@ -119,7 +126,9 @@ function normalizePublicGameEventType(
 }
 
 export function filterPublicLiveEvents(rows: GameEventRow[]): PublicGameLiveEvent[] {
-  const eligibleRows = rows
+  const eligibleRows = normalizeStoredGameEventRowsForClient(
+    rows as Array<GameEventRow & StoredGameEventParticipantFields>,
+  )
     .filter(
       (row) =>
         typeof row.id === "string" &&
@@ -254,7 +263,7 @@ export async function getPublicGameLiveSnapshot(
         .maybeSingle(),
       db
         .from("game_events")
-        .select("id, event_type, player_id, related_player_id, minute, is_opponent_event, created_at")
+        .select(GAME_EVENT_SELECT_COLUMNS)
         .eq("game_id", game.id)
         .order("minute", { ascending: true })
         .order("created_at", { ascending: true }),

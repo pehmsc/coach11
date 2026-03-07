@@ -86,6 +86,30 @@ describe("public-live", () => {
     });
   });
 
+  it('keeps eventos de jogadores "Outro" in the public timeline payload', () => {
+    const events = filterPublicLiveEvents([
+      {
+        id: "goal-external",
+        event_type: "goal",
+        player_id: null,
+        related_player_id: null,
+        external_player_convocation_id: "ext-9",
+        external_related_player_convocation_id: null,
+        minute: 12,
+        is_opponent_event: false,
+        created_at: "2026-03-06T18:12:00.000Z",
+      },
+    ]);
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      id: "goal-external",
+      eventType: "goal",
+      playerLabel: "external:ext-9",
+      relatedPlayerLabel: null,
+    });
+  });
+
   it("treats live status or persisted live data as enough to replace the public cover", () => {
     expect(
       hasPublicGameLiveData({

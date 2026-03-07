@@ -1,6 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 import {
+  GAME_EVENT_SELECT_COLUMNS,
+  normalizeStoredGameEventRowsForClient,
+} from "@/lib/games/live-event-participants";
+import {
   getExternalConvocationIdFromLivePlayerId,
   isExternalLivePlayerId,
   toExternalLivePlayerId,
@@ -122,7 +126,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
       await Promise.all([
         supabase
           .from("game_events")
-          .select("id, game_id, event_type, player_id, related_player_id, minute, is_opponent_event, created_at")
+          .select(GAME_EVENT_SELECT_COLUMNS)
           .eq("game_id", gameId)
           .order("minute", { ascending: true })
           .order("created_at", { ascending: true }),
@@ -165,8 +169,19 @@ export async function GET(_request: Request, { params }: RouteContext) {
       return NextResponse.json({ error: "Erro ao carregar estatísticas finais." }, { status: 500 });
     }
 
+    const normalizedEvents = normalizeStoredGameEventRowsForClient(
+      (events || []) as Array<{
+        id?: string;
+        game_id?: string;
+        player_id?: string | null;
+        related_player_id?: string | null;
+        external_player_convocation_id?: string | null;
+        external_related_player_convocation_id?: string | null;
+      }>,
+    );
+
     const playerIds = new Set<string>();
-    (events || []).forEach((event) => {
+    normalizedEvents.forEach((event) => {
       if (event.player_id) playerIds.add(event.player_id);
       if (event.related_player_id) playerIds.add(event.related_player_id);
     });
@@ -262,7 +277,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
         success: true,
         game,
         isCoordinator: access.isCoordinator,
-        events: events || [],
+        events: normalizedEvents,
         finalStats: finalStats || [],
         playersById,
         totalMinutes,

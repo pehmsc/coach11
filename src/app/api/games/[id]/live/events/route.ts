@@ -1,5 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
+import {
+  buildStoredGameEventParticipantFields,
+  GAME_EVENT_SELECT_COLUMNS,
+  normalizeStoredGameEventRowsForClient,
+} from "@/lib/games/live-event-participants";
 import { toExternalLivePlayerId } from "@/lib/games/live-player-ids";
 import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -157,7 +162,7 @@ export async function GET(_: Request, { params }: RouteContext) {
 
     const { data, error } = await supabase
       .from("game_events")
-      .select("*")
+      .select(GAME_EVENT_SELECT_COLUMNS)
       .eq("game_id", gameId)
       .order("minute", { ascending: true })
       .order("created_at", { ascending: true });
@@ -166,7 +171,15 @@ export async function GET(_: Request, { params }: RouteContext) {
       return NextResponse.json({ error: "Erro ao carregar eventos live." }, { status: 500 });
     }
 
-    return NextResponse.json({ events: data || [] });
+    return NextResponse.json({
+      events: normalizeStoredGameEventRowsForClient((data || []) as Array<{
+        id?: string;
+        player_id?: string | null;
+        related_player_id?: string | null;
+        external_player_convocation_id?: string | null;
+        external_related_player_convocation_id?: string | null;
+      }>),
+    });
   } catch (error) {
     return respondInternalError("api.games.id.live.events.get", error);
   }
@@ -224,7 +237,9 @@ export async function POST(request: Request, { params }: RouteContext) {
           .eq("game_id", gameId),
         supabase
           .from("game_events")
-          .select("event_type, player_id, is_opponent_event, minute, created_at")
+          .select(
+            "event_type, player_id, related_player_id, external_player_convocation_id, external_related_player_convocation_id, is_opponent_event, minute, created_at",
+          )
           .eq("game_id", gameId)
           .order("minute", { ascending: true })
           .order("created_at", { ascending: true }),
@@ -252,8 +267,19 @@ export async function POST(request: Request, { params }: RouteContext) {
       }
     });
 
-    const { sentOff: sentOffPlayerIds, yellowByPlayer } = computeSentOffPlayers(
+    const normalizedExistingEvents = normalizeStoredGameEventRowsForClient(
       (existingEvents || []) as Array<{
+        event_type?: string | null;
+        player_id?: string | null;
+        related_player_id?: string | null;
+        external_player_convocation_id?: string | null;
+        external_related_player_convocation_id?: string | null;
+        is_opponent_event?: boolean | null;
+      }>,
+    );
+
+    const { sentOff: sentOffPlayerIds, yellowByPlayer } = computeSentOffPlayers(
+      normalizedExistingEvents as Array<{
         event_type?: string | null;
         player_id?: string | null;
         is_opponent_event?: boolean | null;
@@ -346,8 +372,10 @@ export async function POST(request: Request, { params }: RouteContext) {
     const payload = rows.map((row) => ({
       game_id: gameId,
       event_type: row.event_type,
-      player_id: row.player_id ?? null,
-      related_player_id: row.related_player_id ?? null,
+      ...buildStoredGameEventParticipantFields({
+        playerId: row.player_id ?? null,
+        relatedPlayerId: row.related_player_id ?? null,
+      }),
       minute: Math.floor(row.minute),
       is_opponent_event: row.is_opponent_event,
     }));
@@ -355,7 +383,7 @@ export async function POST(request: Request, { params }: RouteContext) {
     const { data, error } = await supabase
       .from("game_events")
       .insert(payload)
-      .select("*")
+      .select(GAME_EVENT_SELECT_COLUMNS)
       .order("created_at", { ascending: true });
 
     if (error) {
@@ -363,7 +391,16 @@ export async function POST(request: Request, { params }: RouteContext) {
       return NextResponse.json({ error: "Erro ao guardar eventos." }, { status: 500 });
     }
 
-    return NextResponse.json({ success: true, events: data || [] });
+    return NextResponse.json({
+      success: true,
+      events: normalizeStoredGameEventRowsForClient((data || []) as Array<{
+        id?: string;
+        player_id?: string | null;
+        related_player_id?: string | null;
+        external_player_convocation_id?: string | null;
+        external_related_player_convocation_id?: string | null;
+      }>),
+    });
   } catch (error) {
     return respondInternalError("api.games.id.live.events.post", error);
   }

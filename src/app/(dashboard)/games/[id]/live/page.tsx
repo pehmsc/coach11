@@ -21,6 +21,10 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useGameLiveController } from "@/lib/hooks/useGameLiveController";
 import { getLiveKickoffState } from "@/lib/games/live-kickoff";
+import {
+  GAME_EVENT_SELECT_COLUMNS,
+  normalizeStoredGameEventRowsForClient,
+} from "@/lib/games/live-event-participants";
 import { filterPersistentLiveStatsPlayers } from "@/lib/games/live-persistence";
 import {
   getExternalConvocationIdFromLivePlayerId,
@@ -782,10 +786,19 @@ export default function LiveGamePage() {
     } catch {
       const { data: evts } = await supabase
         .from("game_events")
-        .select("*")
+        .select(GAME_EVENT_SELECT_COLUMNS)
         .eq("game_id", id)
-        .order("minute", { ascending: true });
-      orderedEvents = evts || [];
+        .order("minute", { ascending: true })
+        .order("created_at", { ascending: true });
+      orderedEvents = normalizeStoredGameEventRowsForClient(
+        (evts || []) as Array<{
+          id?: string;
+          player_id?: string | null;
+          related_player_id?: string | null;
+          external_player_convocation_id?: string | null;
+          external_related_player_convocation_id?: string | null;
+        }>,
+      ) as GameEvent[];
     }
     setEvents(orderedEvents);
     const backendPersisted = await backendCheckpointPromise;
@@ -1416,8 +1429,12 @@ export default function LiveGamePage() {
       ]);
       setEvents((prev) => mergeEvents(prev, inserted));
       toast.success(`${EVENT_LABELS[eventType] ?? eventType} — min. ${currentMinute}`);
-    } catch {
-      toast.error("Erro ao registar golo.");
+    } catch (error) {
+      toast.error(
+        error instanceof Error && error.message !== "live_events_insert_failed"
+          ? error.message
+          : "Erro ao registar golo.",
+      );
     }
     setSavingEvent(false);
     closeModal();
@@ -1496,8 +1513,12 @@ export default function LiveGamePage() {
           toast.info("2º amarelo: vermelho automático aplicado.");
         }
       }
-    } catch {
-      toast.error("Erro ao registar cartão.");
+    } catch (error) {
+      toast.error(
+        error instanceof Error && error.message !== "live_events_insert_failed"
+          ? error.message
+          : "Erro ao registar cartão.",
+      );
     }
     setSavingEvent(false);
     closeModal();
@@ -1538,8 +1559,12 @@ export default function LiveGamePage() {
           is_opponent_event: false,
         },
       ]);
-    } catch {
-      toast.error("Erro ao registar substituição.");
+    } catch (error) {
+      toast.error(
+        error instanceof Error && error.message !== "live_events_insert_failed"
+          ? error.message
+          : "Erro ao registar substituição.",
+      );
       setSavingEvent(false);
       return;
     }
