@@ -4,11 +4,11 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 type StickyBackLinkBaseProps = {
-  href: string;
   label: string;
   children?: ReactNode;
   wrapperClassName?: string;
   contentClassName?: string;
+  sticky?: boolean;
 };
 
 type StickyBackLinkHrefProps = StickyBackLinkBaseProps & {
@@ -31,6 +31,7 @@ export function StickyBackLink({
   children,
   wrapperClassName,
   contentClassName,
+  sticky = true,
   ...navigationProps
 }: StickyBackLinkProps) {
   const interactiveClassName =
@@ -39,7 +40,9 @@ export function StickyBackLink({
   return (
     <div
       className={cn(
-        "sticky top-0 z-[80] isolate backdrop-blur supports-[backdrop-filter]:bg-slate-50/90",
+        sticky
+          ? "sticky top-0 z-[80] isolate backdrop-blur supports-[backdrop-filter]:bg-slate-50/90"
+          : "isolate",
         wrapperClassName || DEFAULT_WRAPPER_CLASS_NAME,
       )}
       style={{ ["WebkitAppRegion" as string]: "no-drag" }}

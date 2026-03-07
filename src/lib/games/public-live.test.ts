@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   computePublicLiveScore,
   filterPublicLiveEvents,
+  hasPublicGameLiveData,
   type PublicGameLiveEvent,
 } from "./public-live";
 
@@ -83,5 +84,27 @@ describe("public-live", () => {
       playerLabel: "player-out",
       relatedPlayerLabel: "player-in",
     });
+  });
+
+  it("treats live status or persisted live data as enough to replace the public cover", () => {
+    expect(
+      hasPublicGameLiveData({
+        status: "live",
+        scoreHome: 0,
+        scoreAway: 0,
+        checkpoint: null,
+        events: [],
+      }),
+    ).toBe(true);
+
+    expect(
+      hasPublicGameLiveData({
+        status: "scheduled",
+        scoreHome: 0,
+        scoreAway: 0,
+        checkpoint: null,
+        events: [],
+      }),
+    ).toBe(false);
   });
 });

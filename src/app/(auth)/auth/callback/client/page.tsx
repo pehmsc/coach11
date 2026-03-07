@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { Suspense, useEffect, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import type { EmailOtpType } from "@supabase/supabase-js";
+import { StickyBackLink } from "@/components/navigation/StickyBackLink";
 import { createClient } from "@/lib/supabase/client";
 import { sanitizeNextPath } from "@/lib/auth/sanitize-next";
 import { markIOSInstallPromptAfterLogin } from "@/lib/pwa/install-state";
@@ -202,9 +202,12 @@ function OAuthCallbackClientContent() {
     <main className="mx-auto max-w-md p-6">
       <h1 className="text-xl font-semibold">Falha no login</h1>
       <p className="mt-2 text-sm text-slate-600">Dados de autenticação em falta.</p>
-      <Link className="mt-4 inline-block underline" href="/login">
-        Voltar ao login
-      </Link>
+      <StickyBackLink
+        href="/login"
+        label="Voltar ao login"
+        sticky={false}
+        wrapperClassName="mt-4 bg-transparent px-0 py-0"
+      />
     </main>
   );
 }

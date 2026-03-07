@@ -236,9 +236,14 @@ export default function GameSummaryPage() {
       <div className="p-4 md:p-8 max-w-3xl mx-auto text-center py-16">
         <AlertCircle size={40} className="text-red-400 mx-auto mb-3" />
         <p className="text-slate-700">{loadError || "Erro ao carregar sumário."}</p>
-        <Button variant="outline" className="mt-4" onClick={() => router.back()}>
-          Voltar
-        </Button>
+        <div className="mt-4 flex justify-center">
+          <StickyBackLink
+            href="/games"
+            label="Voltar aos jogos"
+            sticky={false}
+            wrapperClassName="bg-transparent px-0 py-0"
+          />
+        </div>
       </div>
     );
   }

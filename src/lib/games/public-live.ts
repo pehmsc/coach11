@@ -219,6 +219,14 @@ export function computePublicLiveScore(params: {
   return { scoreHome, scoreAway };
 }
 
+export function hasPublicGameLiveData(snapshot: PublicGameLiveSnapshot) {
+  return (
+    snapshot.status === "live" ||
+    snapshot.checkpoint !== null ||
+    snapshot.events.length > 0
+  );
+}
+
 function formatPlayerLabel(name: string | null | undefined, jerseyNumber?: number | null) {
   const normalizedName = typeof name === "string" ? name.trim() : "";
   if (!normalizedName) return null;

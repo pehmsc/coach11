@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { Activity, ArrowRightLeft, ShieldAlert, ShieldMinus, Target } from "lucide-react";
 import { LiveScoreboardCard } from "@/components/games/live/LiveScoreboardCard";
@@ -10,6 +11,7 @@ import type {
   PublicGameLivePhase,
   PublicGameLiveSnapshot,
 } from "@/lib/games/public-live";
+import { hasPublicGameLiveData } from "@/lib/games/public-live";
 
 type PublicGameLivePanelProps = {
   apiPath: string;
@@ -20,6 +22,8 @@ type PublicGameLivePanelProps = {
   homeClubName: string | null;
   homeClubShortName: string | null;
   initialSnapshot: PublicGameLiveSnapshot;
+  coverImageUrl?: string | null;
+  coverImageAlt?: string | null;
 };
 
 function isRunningPhase(phase: PublicGameLivePhase | null | undefined) {
@@ -121,6 +125,8 @@ export function PublicGameLivePanel({
   homeClubName,
   homeClubShortName,
   initialSnapshot,
+  coverImageUrl,
+  coverImageAlt,
 }: PublicGameLivePanelProps) {
   const [snapshot, setSnapshot] = useState(initialSnapshot);
   const [now, setNow] = useState(() => new Date());
@@ -147,10 +153,7 @@ export function PublicGameLivePanel({
     homeClubShortName,
   });
 
-  const hasLiveData =
-    snapshot.status === "live" ||
-    snapshot.checkpoint !== null ||
-    snapshot.events.length > 0;
+  const hasLiveData = hasPublicGameLiveData(snapshot);
   const shouldPoll =
     hasLiveData ||
     (controller.gameStartAt
@@ -217,46 +220,86 @@ export function PublicGameLivePanel({
       : snapshot.status === "live"
         ? "Ao vivo"
         : "Pré-jogo";
+  const isLiveActive = snapshot.status === "live";
 
   if (!hasLiveData) {
-    return null;
+    if (!coverImageUrl) {
+      return null;
+    }
+
+    return (
+      <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white">
+        <div className="relative h-56 w-full sm:h-72">
+          <Image
+            src={coverImageUrl}
+            alt={coverImageAlt || "Imagem do jogo"}
+            fill
+            className="object-cover"
+            sizes="(max-width: 768px) 100vw, 768px"
+          />
+        </div>
+      </section>
+    );
   }
 
   return (
-    <section className="space-y-4">
-      <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
-        <Activity size={14} />
-        Acompanhamento público do jogo
-      </div>
-
-      <LiveScoreboardCard
-        matchMetaLabel={controller.matchMetaLabel}
-        homeShortName={controller.homeShortName}
-        awayShortName={controller.awayShortName}
-        scoreHome={snapshot.scoreHome}
-        scoreAway={snapshot.scoreAway}
-        clockSeconds={clockSeconds}
-        currentMinute={currentMinute}
-        isFinalized={snapshot.status === "completed"}
-        formatClock={formatClock}
-      />
-
-      <div className="rounded-2xl border border-slate-200 bg-white p-4">
+    <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white">
+      <div className="border-b border-slate-100 bg-slate-50 px-4 py-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-              Estado Live
-            </p>
-            <p className="mt-1 text-sm font-semibold text-slate-900">
+          <div className="flex flex-wrap items-center gap-2">
+            <div
+              className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${
+                isLiveActive
+                  ? "bg-red-50 text-red-700"
+                  : "bg-slate-100 text-slate-700"
+              }`}
+            >
+              {isLiveActive ? (
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
+                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500" />
+                </span>
+              ) : (
+                <Activity size={14} />
+              )}
+              {isLiveActive ? "Ao vivo" : "Acompanhamento do jogo"}
+            </div>
+            <div className="rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-600">
               {currentPhaseLabel}
-            </p>
+            </div>
           </div>
-          <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+          <div className="rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-500">
             Atualização automática
           </div>
         </div>
+      </div>
 
-        <div className="mt-4 space-y-2">
+      <div className="p-4 pb-0">
+        <LiveScoreboardCard
+          matchMetaLabel={controller.matchMetaLabel}
+          homeShortName={controller.homeShortName}
+          awayShortName={controller.awayShortName}
+          scoreHome={snapshot.scoreHome}
+          scoreAway={snapshot.scoreAway}
+          clockSeconds={clockSeconds}
+          currentMinute={currentMinute}
+          isFinalized={snapshot.status === "completed"}
+          formatClock={formatClock}
+          className="mb-0"
+        />
+      </div>
+
+      <div className="border-t border-slate-100 px-4 py-4">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+            Eventos do jogo
+          </p>
+          <p className="text-xs text-slate-400">
+            Feed com atualização automática
+          </p>
+        </div>
+
+        <div className="max-h-[22rem] space-y-2 overflow-y-auto pr-1">
           {snapshot.events.length === 0 ? (
             <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
               Ainda não existem eventos públicos registados para este jogo.

@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import { pt } from "date-fns/locale";
 import { CalendarDays, Clock3, Dumbbell, MapPin, ShieldCheck, Swords } from "lucide-react";
+import { hasPublicConvocationContent } from "@/lib/games/public-convocation";
 import { buildDateTimeFromDateAndTime } from "@/lib/events/time";
 import { resolveLocationLabel } from "@/lib/location";
 import { PublicRateLimitedState } from "@/components/public/PublicRateLimitedState";
@@ -103,6 +104,22 @@ function gameStatusLabel(status: string | null | undefined) {
   }
 }
 
+function gameStatusBadgeProps(status: string | null | undefined) {
+  if (status === "live") {
+    return {
+      label: "Ao vivo",
+      className: "bg-red-100 text-red-700 ring-1 ring-red-200",
+      showPulse: true,
+    };
+  }
+
+  return {
+    label: gameStatusLabel(status),
+    className: "bg-white/80 text-blue-700",
+    showPulse: false,
+  };
+}
+
 function trainingStatusLabel(status: string | null | undefined) {
   switch (status) {
     case "completed":
@@ -116,12 +133,18 @@ function trainingStatusLabel(status: string | null | undefined) {
   }
 }
 
+function trainingStatusBadgeProps(status: string | null | undefined) {
+  return {
+    label: trainingStatusLabel(status),
+    className: "bg-white/80 text-emerald-700",
+  };
+}
+
 function eventToneClasses(kind: "game" | "training") {
   if (kind === "game") {
     return {
       card: "border-blue-200 bg-blue-50 hover:border-blue-300",
       typeBadge: "bg-blue-100 text-blue-700",
-      statusBadge: "bg-white/80 text-blue-700",
       infoBadge: "bg-emerald-100 text-emerald-700",
     };
   }
@@ -129,7 +152,6 @@ function eventToneClasses(kind: "game" | "training") {
   return {
     card: "border-emerald-200 bg-emerald-50 hover:border-emerald-300",
     typeBadge: "bg-emerald-100 text-emerald-700",
-    statusBadge: "bg-white/80 text-emerald-700",
     infoBadge: "bg-white/80 text-emerald-700",
   };
 }
@@ -170,7 +192,7 @@ async function getPublicConvocationAvailabilityByGameId(
 
   const { data: convocationRows, error: convocationError } = await admin
     .from("convocations")
-    .select("id, game_id, created_at")
+    .select("id, game_id, created_at, notes")
     .in("game_id", uniqueGameIds)
     .order("created_at", { ascending: false })
     .order("id", { ascending: false });
@@ -179,14 +201,23 @@ async function getPublicConvocationAvailabilityByGameId(
     return availabilityByGameId;
   }
 
-  const latestConvocationIdByGameId = new Map<string, string>();
+  const latestConvocationByGameId = new Map<
+    string,
+    { id: string; notes: string | null }
+  >();
   (convocationRows || []).forEach((row) => {
-    if (row.game_id && row.id && !latestConvocationIdByGameId.has(row.game_id)) {
-      latestConvocationIdByGameId.set(row.game_id, row.id);
+    if (row.game_id && row.id && !latestConvocationByGameId.has(row.game_id)) {
+      latestConvocationByGameId.set(row.game_id, {
+        id: row.id,
+        notes: typeof row.notes === "string" ? row.notes : null,
+      });
     }
   });
 
-  const latestConvocationIds = Array.from(latestConvocationIdByGameId.values());
+  const latestConvocationIds = Array.from(
+    latestConvocationByGameId.values(),
+    (row) => row.id,
+  );
 
   const [{ data: convocationPlayers }, externalPlayersRes] = await Promise.all([
     latestConvocationIds.length > 0
@@ -219,11 +250,15 @@ async function getPublicConvocationAvailabilityByGameId(
             .filter((value): value is string => typeof value === "string")),
         );
 
-  latestConvocationIdByGameId.forEach((convocationId, gameId) => {
+  latestConvocationByGameId.forEach((convocation, gameId) => {
     availabilityByGameId.set(
       gameId,
-      convocationIdsWithPlayers.has(convocationId) ||
-        gameIdsWithExternalPlayers.has(gameId),
+      hasPublicConvocationContent({
+        playerCount:
+          (convocationIdsWithPlayers.has(convocation.id) ? 1 : 0) +
+          (gameIdsWithExternalPlayers.has(gameId) ? 1 : 0),
+        notes: convocation.notes,
+      }),
     );
   });
 
@@ -234,9 +269,11 @@ const getPublicCalendarPayload = unstable_cache(
   async (ageGroupId: string) => {
     const admin = createAdminClient();
     const todayIsoDate = new Date().toISOString().slice(0, 10);
+    const nowIso = new Date().toISOString();
 
     const [
       { data: ageGroup },
+      liveGamesRes,
       upcomingGamesRes,
       upcomingTrainingsRes,
       recentRes,
@@ -252,7 +289,17 @@ const getPublicCalendarPayload = unstable_cache(
           "id, game_datetime, opponent_name, opponent_short_name, location, location_address, formatted_address, is_home, status, score_home, score_away",
         )
         .eq("age_group_id", ageGroupId)
-        .gte("game_datetime", new Date().toISOString())
+        .eq("status", "live")
+        .order("game_datetime", { ascending: true })
+        .limit(4),
+      admin
+        .from("games")
+        .select(
+          "id, game_datetime, opponent_name, opponent_short_name, location, location_address, formatted_address, is_home, status, score_home, score_away",
+        )
+        .eq("age_group_id", ageGroupId)
+        .gte("game_datetime", nowIso)
+        .neq("status", "live")
         .order("game_datetime", { ascending: true })
         .limit(12),
       admin
@@ -271,20 +318,29 @@ const getPublicCalendarPayload = unstable_cache(
           "id, game_datetime, opponent_name, opponent_short_name, location, location_address, formatted_address, is_home, status, score_home, score_away",
         )
         .eq("age_group_id", ageGroupId)
-        .lt("game_datetime", new Date().toISOString())
+        .lt("game_datetime", nowIso)
+        .neq("status", "live")
         .order("game_datetime", { ascending: false })
         .limit(6),
     ]);
 
+    const liveGames = (liveGamesRes.data || []) as PublicGameRow[];
+    const upcomingGames = (upcomingGamesRes.data || []) as PublicGameRow[];
+    const mergedUpcomingGames = Array.from(
+      new Map(
+        [...liveGames, ...upcomingGames].map((game) => [game.id, game]),
+      ).values(),
+    );
+
     const convocationAvailabilityByGameId =
       await getPublicConvocationAvailabilityByGameId(admin, [
-        ...((upcomingGamesRes.data || []) as PublicGameRow[]).map((game) => game.id),
+        ...mergedUpcomingGames.map((game) => game.id),
         ...((recentRes.data || []) as PublicGameRow[]).map((game) => game.id),
       ]);
 
     return {
       ageGroup,
-      upcomingGames: ((upcomingGamesRes.data || []) as PublicGameRow[]).map((game) => ({
+      upcomingGames: mergedUpcomingGames.map((game) => ({
         ...game,
         hasPublicConvocation: convocationAvailabilityByGameId.get(game.id) === true,
       })),
@@ -295,7 +351,7 @@ const getPublicCalendarPayload = unstable_cache(
       })),
     };
   },
-  ["public-calendar-page-v1"],
+  ["public-calendar-page-v2"],
   { revalidate: 30 },
 );
 
@@ -352,7 +408,15 @@ export default async function PublicCalendarPage({ params }: PublicPageParams) {
       };
     }),
   ]
-    .sort((a, b) => a.startsAt.localeCompare(b.startsAt))
+    .sort((a, b) => {
+      const aIsLive = a.kind === "game" && a.status === "live";
+      const bIsLive = b.kind === "game" && b.status === "live";
+      if (aIsLive !== bIsLive) {
+        return aIsLive ? -1 : 1;
+      }
+
+      return a.startsAt.localeCompare(b.startsAt);
+    })
     .slice(0, 16) as PublicCalendarItem[];
 
   return (
@@ -381,6 +445,10 @@ export default async function PublicCalendarPage({ params }: PublicPageParams) {
           ) : (
             upcomingEvents.map((event) => {
               const tone = eventToneClasses(event.kind);
+              const statusBadge =
+                event.kind === "game"
+                  ? gameStatusBadgeProps(event.status)
+                  : trainingStatusBadgeProps(event.status);
               const content = (
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="space-y-2">
@@ -393,10 +461,14 @@ export default async function PublicCalendarPage({ params }: PublicPageParams) {
                         )}
                         {event.kind === "game" ? "Jogo" : "Treino"}
                       </span>
-                      <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${tone.statusBadge}`}>
-                        {event.kind === "game"
-                          ? gameStatusLabel(event.status)
-                          : trainingStatusLabel(event.status)}
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${statusBadge.className}`}>
+                        {"showPulse" in statusBadge && statusBadge.showPulse ? (
+                          <span className="relative flex h-2 w-2">
+                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
+                            <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
+                          </span>
+                        ) : null}
+                        {statusBadge.label}
                       </span>
                       {event.kind === "game" && event.hasPublicConvocation ? (
                         <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${tone.infoBadge}`}>

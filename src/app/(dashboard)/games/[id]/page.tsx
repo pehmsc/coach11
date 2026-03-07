@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { differenceInMinutes, format, parseISO, subMinutes } from "date-fns";
 import { pt } from "date-fns/locale";
@@ -178,6 +178,7 @@ export default function GameDetailPage() {
   const [externalPlayerNumber, setExternalPlayerNumber] = useState("");
   const [externalPlayerPosition, setExternalPlayerPosition] = useState("");
   const [savingExternalPlayer, setSavingExternalPlayer] = useState(false);
+  const confirmConvocationLockRef = useRef(false);
 
   // Game edit state
   const [editingGame, setEditingGame] = useState(false);
@@ -665,12 +666,18 @@ export default function GameDetailPage() {
   }
 
   async function handleConfirmConvocation() {
+    if (confirmConvocationLockRef.current || convocationStatus === "confirmed") {
+      return;
+    }
+
     setConfirmingConvocation(true);
+    confirmConvocationLockRef.current = true;
     setError(null);
 
     const payload = buildConvocationPayload({});
     if (!payload) {
       setConfirmingConvocation(false);
+      confirmConvocationLockRef.current = false;
       return;
     }
 
@@ -688,10 +695,16 @@ export default function GameDetailPage() {
       }
 
       setConvocationStatus("confirmed");
+      toast.success(
+        game?.status === "completed"
+          ? "Correção da convocatória guardada."
+          : "Convocatória guardada.",
+      );
     } catch {
       setError("Erro de ligação ao guardar convocatória.");
     } finally {
       setConfirmingConvocation(false);
+      confirmConvocationLockRef.current = false;
     }
   }
 
@@ -995,14 +1008,14 @@ export default function GameDetailPage() {
       <div className="p-4 md:p-8 text-center py-16">
         <AlertCircle size={40} className="text-red-400 mx-auto mb-3" />
         <p className="text-slate-700 font-semibold">{error}</p>
-        <Button
-          variant="outline"
-          size="sm"
-          className="mt-4"
-          onClick={() => router.back()}
-        >
-          Voltar
-        </Button>
+        <div className="mt-4 flex justify-center">
+          <StickyBackLink
+            href="/games"
+            label="Voltar aos jogos"
+            sticky={false}
+            wrapperClassName="bg-transparent px-0 py-0"
+          />
+        </div>
       </div>
     );
   }
@@ -1030,6 +1043,13 @@ export default function GameDetailPage() {
       correctionMode &&
       canEditCompleted &&
       correctionReason.trim().length > 0);
+  const isConvocationConfirmed = convocationStatus === "confirmed";
+  const canConfirmConvocation =
+    !confirmingConvocation &&
+    convocatedCount > 0 &&
+    convocationStatus !== "closed" &&
+    !isConvocationConfirmed &&
+    convocationEditable;
   const gameLocationLabel = resolveLocationLabel(
     game.location,
     game.formatted_address,
@@ -1039,8 +1059,8 @@ export default function GameDetailPage() {
   return (
     <div className="p-4 md:p-8 max-w-2xl mx-auto">
       <StickyBackLink
-        label="Voltar"
-        onClick={() => router.back()}
+        href="/games"
+        label="Voltar aos jogos"
         wrapperClassName="-mx-4 mb-4 bg-slate-50/95 px-4 py-2 md:-mx-8 md:px-8"
       />
 
@@ -1139,14 +1159,12 @@ export default function GameDetailPage() {
                 Indica o motivo da correção. Todas as alterações ficam auditadas.
               </p>
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => router.replace(`/games/${id}/summary`)}
-            >
-              Voltar ao sumário
-            </Button>
+            <StickyBackLink
+              href={`/games/${id}/summary`}
+              label="Voltar ao sumário"
+              sticky={false}
+              wrapperClassName="bg-transparent px-0 py-0"
+            />
           </div>
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-amber-900">
@@ -1893,23 +1911,38 @@ export default function GameDetailPage() {
         </>
       )}
 
-      <Button
-        onClick={handleConfirmConvocation}
-        disabled={
-          confirmingConvocation ||
-          convocatedCount === 0 ||
-          convocationStatus === "closed" ||
-          !convocationEditable
-        }
-        className="w-full mt-5 bg-slate-900 hover:bg-slate-800"
-      >
-        {confirmingConvocation ? (
-          <Loader2 size={16} className="mr-2 animate-spin" />
+      <div className="sticky bottom-[calc(var(--mobile-footer-height)+env(safe-area-inset-bottom)+0.5rem)] z-20 mt-5 md:bottom-4">
+        {isConvocationConfirmed ? (
+          <div className="rounded-2xl border-2 border-emerald-200 bg-emerald-50 px-4 py-3 text-center text-sm font-semibold text-emerald-700 shadow-sm">
+            ✓ {game.status === "completed"
+              ? "Correção da convocatória guardada."
+              : "Convocatória guardada."}
+          </div>
         ) : (
-          <Check size={16} className="mr-2" />
+          <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-lg">
+            <Button
+              type="button"
+              onClick={handleConfirmConvocation}
+              disabled={!canConfirmConvocation}
+              aria-busy={confirmingConvocation}
+              className="h-12 w-full text-base font-semibold bg-slate-900 hover:bg-slate-800"
+            >
+              {confirmingConvocation ? (
+                <Loader2 size={18} className="mr-2 animate-spin" />
+              ) : (
+                <Check size={18} className="mr-2" />
+              )}
+              {confirmingConvocation
+                ? game.status === "completed"
+                  ? "A guardar correção..."
+                  : "A guardar convocatória..."
+                : game.status === "completed"
+                  ? "Guardar correção"
+                  : "Guardar convocatória"}
+            </Button>
+          </div>
         )}
-        {game.status === "completed" ? "Guardar correção" : "Guardar convocatória"}
-      </Button>
+      </div>
     </div>
   );
 }

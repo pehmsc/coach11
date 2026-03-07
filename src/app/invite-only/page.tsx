@@ -2,9 +2,9 @@
 
 import { Suspense, useEffect, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ShieldAlert } from "lucide-react";
+import { StickyBackLink } from "@/components/navigation/StickyBackLink";
 import { createClient } from "@/lib/supabase/client";
 import { clearClientCaches } from "@/lib/query/cache-clear";
 
@@ -39,12 +39,14 @@ function InviteOnlyContent() {
           <p className="text-slate-500">
             Se recebeste convite, entra com esse mesmo email ou usa o link enviado.
           </p>
-          <Link
-            href="/login"
-            className="inline-flex w-full items-center justify-center rounded-xl bg-emerald-600 px-4 py-2.5 font-semibold text-white hover:bg-emerald-700"
-          >
-            Voltar ao login
-          </Link>
+          <div className="flex justify-center">
+            <StickyBackLink
+              href="/login"
+              label="Voltar ao login"
+              sticky={false}
+              wrapperClassName="bg-transparent px-0 py-0"
+            />
+          </div>
         </div>
       </div>
     </main>

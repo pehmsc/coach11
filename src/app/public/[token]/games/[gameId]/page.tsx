@@ -1,4 +1,3 @@
-import Image from "next/image";
 import { unstable_cache } from "next/cache";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
@@ -58,6 +57,14 @@ function gameStatusLabel(status: string | null | undefined) {
     default:
       return "Agendado";
   }
+}
+
+function gameStatusBadgeClassName(status: string | null | undefined) {
+  if (status === "live") {
+    return "bg-red-500/15 text-red-50 ring-1 ring-red-300/40";
+  }
+
+  return "bg-white/10 text-white";
 }
 
 function isMissingRelationError(
@@ -299,7 +306,13 @@ export default async function PublicGameDetailPage({
                 {gameLocationLabel}
               </span>
             )}
-            <span className="rounded-full bg-white/10 px-2.5 py-1 text-xs font-medium text-white">
+            <span className={`inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-medium ${gameStatusBadgeClassName(game.status)}`}>
+              {game.status === "live" ? (
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-300 opacity-75" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-red-200" />
+                </span>
+              ) : null}
               {gameStatusLabel(game.status)}
             </span>
           </div>
@@ -335,23 +348,11 @@ export default async function PublicGameDetailPage({
           homeClubName={ageGroup?.club_name ?? null}
           homeClubShortName={ageGroup?.club_short_name ?? null}
           initialSnapshot={initialLiveSnapshot}
+          coverImageUrl={game.image_url ?? null}
+          coverImageAlt={game.title?.trim() || game.opponent_name || "Imagem do jogo"}
         />
 
-        {game.image_url && (
-          <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white">
-            <div className="relative h-56 w-full sm:h-72">
-              <Image
-                src={game.image_url}
-                alt={game.title?.trim() || game.opponent_name || "Imagem do jogo"}
-                fill
-                className="object-cover"
-                sizes="(max-width: 768px) 100vw, 768px"
-              />
-            </div>
-          </section>
-        )}
-
-        <section className="grid gap-4 md:grid-cols-2">
+        <section>
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
               Informação
@@ -382,27 +383,6 @@ export default async function PublicGameDetailPage({
                   {game.score_away ?? "-"}
                 </p>
               )}
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-              Acesso público
-            </p>
-            <div className="mt-3 space-y-2 text-sm text-slate-700">
-              <p>
-                <strong>Convocatória:</strong>{" "}
-                {hasPublicConvocation ? "Disponível" : "Sem publicação"}
-              </p>
-              <p>
-                <strong>Live estatística:</strong>{" "}
-                {initialLiveSnapshot.checkpoint || initialLiveSnapshot.events.length > 0
-                  ? "Disponível neste momento"
-                  : "Mostrada quando o jogo entrar em live"}
-              </p>
-              <p className="text-slate-500">
-                Este link mostra apenas informação pública do jogo.
-              </p>
             </div>
           </div>
         </section>
