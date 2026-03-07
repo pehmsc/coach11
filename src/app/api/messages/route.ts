@@ -3,11 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveUserTeamContext } from "@/lib/auth/team-context";
-import {
-  createNotificationsForTeam,
-  createNotificationsForUsers,
-} from "@/lib/notifications/service";
-import { bulkApplyNotificationAction } from "@/lib/notifications/store";
+import { markTeamMessagesRead } from "@/lib/messages/unread";
 import { getTeamMembersDetailed } from "@/lib/team/members";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 
@@ -46,17 +42,6 @@ function normalizeLimit(value: string | null) {
 function normalizeContent(value: unknown) {
   if (typeof value !== "string") return "";
   return value.trim();
-}
-
-function normalizeMentionUserIds(value: unknown) {
-  if (!Array.isArray(value)) return [] as string[];
-  return Array.from(
-    new Set(
-      value
-        .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
-        .filter((entry) => entry.length > 0),
-    ),
-  );
 }
 
 function normalizeDisplayName(value: unknown) {
@@ -234,19 +219,21 @@ export async function GET(request: Request) {
       role: member.role,
     }));
 
-    const nowIso = new Date().toISOString();
     try {
-      await bulkApplyNotificationAction(createAdminClient(), {
+      const lastVisibleMessageAt =
+        messages.length > 0
+          ? messages[messages.length - 1]?.created_at || null
+          : new Date().toISOString();
+
+      await markTeamMessagesRead(admin ?? supabase, {
         userId: user.id,
-        type: "message",
-        onlyUnread: true,
-        action: "mark_read",
-        nowIso,
+        teamId: context.teamId,
+        readAt: lastVisibleMessageAt,
       });
-    } catch (notificationReadError) {
+    } catch (messageReadError) {
       console.error(
-        "Erro ao atualizar estado das notificações de mensagem:",
-        notificationReadError,
+        "Erro ao atualizar estado de leitura das mensagens:",
+        messageReadError,
       );
     }
 
@@ -293,7 +280,6 @@ export async function POST(request: Request) {
 
     const body = await request.json().catch(() => null);
     const content = normalizeContent(body?.content);
-    const mentionUserIds = normalizeMentionUserIds(body?.mentionUserIds);
     if (!content) {
       return NextResponse.json(
         { error: "A mensagem não pode estar vazia." },
@@ -314,17 +300,6 @@ export async function POST(request: Request) {
         { status: 403 },
       );
     }
-
-    const memberContext = await getTeamMembersDetailed(db, {
-      teamId: context.teamId,
-      ageGroupId: context.ageGroup.id,
-    });
-    const validMemberIds = new Set(
-      memberContext.members.map((member) => member.profileId),
-    );
-    const mentionRecipientIds = mentionUserIds.filter(
-      (memberId) => validMemberIds.has(memberId) && memberId !== user.id,
-    );
 
     const { data: inserted, error: insertError } = await db
       .from("team_messages")
@@ -359,50 +334,22 @@ export async function POST(request: Request) {
       }
     }
 
-    try {
-      await createNotificationsForTeam(db, {
-        teamId: context.teamId,
-        ageGroupId: context.ageGroup.id,
-        actorId: user.id,
-        type: "message",
-        entityId: inserted.id,
-        title: "Nova mensagem da equipa técnica",
-        body: (senderDisplayName || "Um membro da equipa") + ": " + content.slice(0, 120),
-        linkPath: "/messages",
-        excludeActor: true,
-      });
-    } catch (notificationError) {
-      console.error("Erro ao gerar notificações de mensagem:", notificationError);
-    }
-
-    if (mentionRecipientIds.length > 0) {
-      try {
-        await createNotificationsForUsers(db, {
-          recipientIds: mentionRecipientIds,
-          actorId: user.id,
-          ageGroupId: context.ageGroup.id,
-          teamId: context.teamId,
-          type: "message",
-          entityId: inserted.id,
-          title: "Foste mencionado numa mensagem",
-          body: `${senderDisplayName || "Um membro da equipa"} mencionou-te no chat`,
-          linkPath: "/messages",
-          excludeActor: true,
-        });
-      } catch (mentionNotificationError) {
-        console.error(
-          "Erro ao gerar notificações de menção:",
-          mentionNotificationError,
-        );
-      }
-    }
-
     const profileMap = new Map<string, ProfileRow>();
     profileMap.set(user.id, {
       id: user.id,
       full_name: senderDisplayName,
       avatar_url: senderProfile?.avatar_url || null,
     });
+
+    try {
+      await markTeamMessagesRead(db, {
+        userId: user.id,
+        teamId: context.teamId,
+        readAt: (inserted as TeamMessageRow).created_at,
+      });
+    } catch (messageReadError) {
+      console.error("Erro ao sincronizar leitura do autor da mensagem:", messageReadError);
+    }
 
     return NextResponse.json({
       success: true,

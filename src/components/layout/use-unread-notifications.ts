@@ -6,12 +6,12 @@ import {
   subscribeToUnreadCountPatch,
   type UnreadCountPatch,
 } from "@/lib/notifications/unread-sync";
-import { syncAppBadge } from "@/lib/pwa/badges";
 
 type NotificationsResponse = {
   success?: boolean;
   linked?: boolean;
   unreadCount?: number;
+  teamId?: string | null;
   error?: string;
 };
 
@@ -23,28 +23,30 @@ export function useUnreadNotifications(
 ) {
   const supabase = useMemo(() => createClient(), []);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [messageTeamId, setMessageTeamId] = useState<string | null>(null);
   const typeFilter = options?.type?.trim() || null;
+  const isMessageScope = typeFilter === "message";
   const pollingIntervalMs = typeFilter === "message" ? 15000 : 45000;
 
   const refreshCount = useCallback(async () => {
     if (!profileId) {
       setUnreadCount(0);
+      setMessageTeamId(null);
       return;
     }
 
     try {
-      const params = new URLSearchParams({ limit: "1" });
-      if (typeFilter) {
-        params.set("type", typeFilter);
-      }
-
-      const res = await fetch(`/api/notifications?${params.toString()}`, {
-        cache: "no-store",
-      });
+      const requestPath = isMessageScope
+        ? "/api/messages/unread"
+        : `/api/notifications?${new URLSearchParams({ limit: "1" }).toString()}`;
+      const res = await fetch(requestPath, { cache: "no-store" });
       const payload = (await res.json().catch(() => null)) as NotificationsResponse | null;
 
       if (res.status === 401 || res.status === 403) {
         setUnreadCount(0);
+        if (isMessageScope) {
+          setMessageTeamId(null);
+        }
         return;
       }
 
@@ -58,14 +60,20 @@ export function useUnreadNotifications(
 
       if (payload.linked === false) {
         setUnreadCount(0);
+        if (isMessageScope) {
+          setMessageTeamId(payload.teamId || null);
+        }
         return;
       }
 
+      if (isMessageScope) {
+        setMessageTeamId(payload?.teamId || null);
+      }
       setUnreadCount(payload.unreadCount || 0);
     } catch (error) {
       console.error("Erro de rede ao atualizar badge de notificações.", error);
     }
-  }, [profileId, typeFilter]);
+  }, [isMessageScope, profileId]);
 
   useEffect(() => {
     if (!profileId) return;
@@ -84,6 +92,53 @@ export function useUnreadNotifications(
     };
     window.addEventListener("focus", handleFocusRefresh);
     document.addEventListener("visibilitychange", handleFocusRefresh);
+
+    if (isMessageScope) {
+      if (!messageTeamId) {
+        return () => {
+          window.cancelAnimationFrame(raf);
+          window.clearInterval(interval);
+          window.removeEventListener("focus", handleFocusRefresh);
+          document.removeEventListener("visibilitychange", handleFocusRefresh);
+        };
+      }
+
+      const messagesChannel = supabase
+        .channel(`messages:badge:${profileId}:${messageTeamId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "team_messages",
+            filter: `team_id=eq.${messageTeamId}`,
+          },
+          () => {
+            void refreshCount();
+          },
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "team_message_reads",
+            filter: `user_id=eq.${profileId}`,
+          },
+          () => {
+            void refreshCount();
+          },
+        )
+        .subscribe();
+
+      return () => {
+        window.cancelAnimationFrame(raf);
+        window.clearInterval(interval);
+        window.removeEventListener("focus", handleFocusRefresh);
+        document.removeEventListener("visibilitychange", handleFocusRefresh);
+        void supabase.removeChannel(messagesChannel);
+      };
+    }
 
     const channel = supabase
       .channel(`notifications:${profileId}`)
@@ -108,12 +163,7 @@ export function useUnreadNotifications(
       document.removeEventListener("visibilitychange", handleFocusRefresh);
       void supabase.removeChannel(channel);
     };
-  }, [pollingIntervalMs, profileId, refreshCount, supabase]);
-
-  useEffect(() => {
-    if (typeFilter) return;
-    void syncAppBadge(unreadCount);
-  }, [typeFilter, unreadCount]);
+  }, [isMessageScope, messageTeamId, pollingIntervalMs, profileId, refreshCount, supabase]);
 
   useEffect(() => {
     const unsubscribe = subscribeToUnreadCountPatch((detail: UnreadCountPatch) => {

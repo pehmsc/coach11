@@ -7,7 +7,6 @@ import { usePathname, useRouter } from "next/navigation";
 import { LogOut, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { clearClientCaches } from "@/lib/query/cache-clear";
-import { useUnreadNotifications } from "@/components/layout/use-unread-notifications";
 import { InstallPWAButton } from "@/components/pwa/InstallPWAButton";
 import {
   getMobileAppNavSections,
@@ -33,18 +32,19 @@ export function MobileSideNavDrawer({
   onClose,
   profile,
   avatarUrl,
+  unreadMessagesCount,
+  unreadNotificationsCount,
 }: {
   open: boolean;
   onClose: () => void;
   profile: NavProfile;
   avatarUrl?: string | null;
+  unreadMessagesCount: number;
+  unreadNotificationsCount: number;
 }) {
   const pathname = usePathname();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const unreadMessagesCount = useUnreadNotifications(profile?.id ?? null, {
-    type: "message",
-  });
   const titleId = useId();
   const drawerRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -215,7 +215,9 @@ export function MobileSideNavDrawer({
               const badgeCount =
                 item.badgeKey === "messages"
                   ? unreadMessagesCount
-                  : 0;
+                  : item.badgeKey === "notifications"
+                    ? unreadNotificationsCount
+                    : 0;
               return (
                 <Link
                   key={item.id}

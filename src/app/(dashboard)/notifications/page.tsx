@@ -9,11 +9,10 @@ import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { dispatchUnreadCountPatch } from "@/lib/notifications/unread-sync";
-import { syncAppBadge } from "@/lib/pwa/badges";
 
 type NotificationItem = {
   id: string;
-  type: "new_game" | "new_training" | "message";
+  type: string;
   title: string;
   body?: string | null;
   created_at: string;
@@ -30,25 +29,17 @@ type NotificationsResponse = {
   error?: string;
 };
 
-const TYPE_LABELS: Record<NotificationItem["type"], string> = {
+const TYPE_LABELS: Record<string, string> = {
   new_game: "Novo jogo",
   new_training: "Novo treino",
-  message: "Mensagem",
+  attendance_pending: "Presenças por marcar",
+  attendance_closed: "Presenças fechadas",
+  convocation_confirmed: "Convocatória confirmada",
+  game_live_started: "Jogo em live",
 };
 
 function countUnread(items: NotificationItem[]) {
-  return items.reduce(
-    (acc, item) => {
-      if (!item.read_at) {
-        acc.notifications += 1;
-        if (item.type === "message") {
-          acc.messages += 1;
-        }
-      }
-      return acc;
-    },
-    { notifications: 0, messages: 0 },
-  );
+  return items.reduce((acc, item) => acc + (item.read_at ? 0 : 1), 0);
 }
 
 export default function NotificationsPage() {
@@ -86,7 +77,7 @@ export default function NotificationsPage() {
       setNotifications([]);
       setUnreadCount(0);
       setCurrentUserId(payload.currentUserId || null);
-      dispatchUnreadCountPatch({ notifications: 0, messages: 0 });
+      dispatchUnreadCountPatch({ notifications: 0 });
       if (showLoading) {
         setLoading(false);
       }
@@ -99,11 +90,7 @@ export default function NotificationsPage() {
     const nextNotifications = Array.isArray(payload.notifications) ? payload.notifications : [];
     setNotifications(nextNotifications);
     setUnreadCount(payload.unreadCount || 0);
-    const unreadCounts = countUnread(nextNotifications);
-    dispatchUnreadCountPatch({
-      notifications: payload.unreadCount || 0,
-      messages: unreadCounts.messages,
-    });
+    dispatchUnreadCountPatch({ notifications: payload.unreadCount || 0 });
     if (showLoading) {
       setLoading(false);
     }
@@ -140,10 +127,6 @@ export default function NotificationsPage() {
     };
   }, [currentUserId, loadNotifications, supabase]);
 
-  useEffect(() => {
-    void syncAppBadge(unreadCount);
-  }, [unreadCount]);
-
   async function updateNotificationReadState(id: string, markAsRead: boolean) {
     setUpdatingId(id);
     const previousNotifications = notifications;
@@ -157,8 +140,8 @@ export default function NotificationsPage() {
     );
     const unreadCounts = countUnread(nextNotifications);
     setNotifications(nextNotifications);
-    setUnreadCount(unreadCounts.notifications);
-    dispatchUnreadCountPatch(unreadCounts);
+    setUnreadCount(unreadCounts);
+    dispatchUnreadCountPatch({ notifications: unreadCounts });
 
     const res = await fetch(`/api/notifications/${id}`, {
       method: "PATCH",
@@ -169,8 +152,8 @@ export default function NotificationsPage() {
     if (!res?.ok) {
       const rollbackCounts = countUnread(previousNotifications);
       setNotifications(previousNotifications);
-      setUnreadCount(rollbackCounts.notifications);
-      dispatchUnreadCountPatch(rollbackCounts);
+      setUnreadCount(rollbackCounts);
+      dispatchUnreadCountPatch({ notifications: rollbackCounts });
     } else {
       void loadNotifications(false);
     }
@@ -184,8 +167,8 @@ export default function NotificationsPage() {
     const nextNotifications = notifications.filter((item) => item.id !== id);
     const unreadCounts = countUnread(nextNotifications);
     setNotifications(nextNotifications);
-    setUnreadCount(unreadCounts.notifications);
-    dispatchUnreadCountPatch(unreadCounts);
+    setUnreadCount(unreadCounts);
+    dispatchUnreadCountPatch({ notifications: unreadCounts });
 
     const res = await fetch(`/api/notifications/${id}`, {
       method: "DELETE",
@@ -194,8 +177,8 @@ export default function NotificationsPage() {
     if (!res?.ok) {
       const rollbackCounts = countUnread(previousNotifications);
       setNotifications(previousNotifications);
-      setUnreadCount(rollbackCounts.notifications);
-      dispatchUnreadCountPatch(rollbackCounts);
+      setUnreadCount(rollbackCounts);
+      dispatchUnreadCountPatch({ notifications: rollbackCounts });
     } else {
       void loadNotifications(false);
     }
@@ -211,7 +194,7 @@ export default function NotificationsPage() {
     }));
     setNotifications(nextNotifications);
     setUnreadCount(0);
-    dispatchUnreadCountPatch({ notifications: 0, messages: 0 });
+    dispatchUnreadCountPatch({ notifications: 0 });
 
     const res = await fetch("/api/notifications", {
       method: "POST",
@@ -221,8 +204,8 @@ export default function NotificationsPage() {
     if (!res.ok) {
       const rollbackCounts = countUnread(previousNotifications);
       setNotifications(previousNotifications);
-      setUnreadCount(rollbackCounts.notifications);
-      dispatchUnreadCountPatch(rollbackCounts);
+      setUnreadCount(rollbackCounts);
+      dispatchUnreadCountPatch({ notifications: rollbackCounts });
     } else {
       void loadNotifications(false);
     }
@@ -238,8 +221,8 @@ export default function NotificationsPage() {
     }));
     const unreadCounts = countUnread(nextNotifications);
     setNotifications(nextNotifications);
-    setUnreadCount(unreadCounts.notifications);
-    dispatchUnreadCountPatch(unreadCounts);
+    setUnreadCount(unreadCounts);
+    dispatchUnreadCountPatch({ notifications: unreadCounts });
 
     const res = await fetch("/api/notifications", {
       method: "POST",
@@ -249,8 +232,8 @@ export default function NotificationsPage() {
     if (!res.ok) {
       const rollbackCounts = countUnread(previousNotifications);
       setNotifications(previousNotifications);
-      setUnreadCount(rollbackCounts.notifications);
-      dispatchUnreadCountPatch(rollbackCounts);
+      setUnreadCount(rollbackCounts);
+      dispatchUnreadCountPatch({ notifications: rollbackCounts });
     } else {
       void loadNotifications(false);
     }
@@ -262,7 +245,7 @@ export default function NotificationsPage() {
     const previousNotifications = notifications;
     setNotifications([]);
     setUnreadCount(0);
-    dispatchUnreadCountPatch({ notifications: 0, messages: 0 });
+    dispatchUnreadCountPatch({ notifications: 0 });
 
     const res = await fetch("/api/notifications", {
       method: "POST",
@@ -272,8 +255,8 @@ export default function NotificationsPage() {
     if (!res.ok) {
       const rollbackCounts = countUnread(previousNotifications);
       setNotifications(previousNotifications);
-      setUnreadCount(rollbackCounts.notifications);
-      dispatchUnreadCountPatch(rollbackCounts);
+      setUnreadCount(rollbackCounts);
+      dispatchUnreadCountPatch({ notifications: rollbackCounts });
     } else {
       void loadNotifications(false);
     }
@@ -388,7 +371,7 @@ export default function NotificationsPage() {
                 >
                   <div className="flex items-center justify-between gap-3">
                     <p className="text-xs uppercase tracking-wide text-slate-500 font-semibold">
-                      {TYPE_LABELS[notification.type]}
+                      {TYPE_LABELS[notification.type] || "Notificação"}
                     </p>
                     {!notification.read_at ? (
                       <span className="text-[10px] text-blue-700 font-semibold">

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
+import { createNotificationForTeamOnce } from "@/lib/notifications/service";
 import {
   getPresencePromptState,
   shouldShowPresencePrompt,
@@ -137,6 +138,41 @@ export async function GET(request: Request) {
           session: null,
           presencePromptState: "hidden",
         });
+      }
+
+      if (
+        session?.id &&
+        (presencePromptState === "mark" || presencePromptState === "close")
+      ) {
+        const { data: sessionMeta } = await supabase
+          .from("training_sessions")
+          .select("id, title, age_group_id, team_id, session_date, start_time")
+          .eq("id", session.id)
+          .maybeSingle();
+
+        if (sessionMeta?.team_id && sessionMeta?.age_group_id) {
+          try {
+            await createNotificationForTeamOnce(supabase, {
+              teamId: sessionMeta.team_id,
+              ageGroupId: sessionMeta.age_group_id,
+              actorId: user.id,
+              type: "attendance_pending",
+              entityId: sessionMeta.id,
+              title:
+                presencePromptState === "close"
+                  ? "Fechar presenças do treino"
+                  : "Presenças por marcar",
+              body: `${sessionMeta.title || "Treino"} · ${sessionMeta.session_date || date}${sessionMeta.start_time ? ` às ${sessionMeta.start_time}` : ""}`,
+              linkPath: "/attendance",
+              excludeActor: false,
+            });
+          } catch (notificationError) {
+            console.error(
+              "Erro ao gerar notificação operacional de presenças pendentes:",
+              notificationError,
+            );
+          }
+        }
       }
 
       return jsonNoStore({
@@ -379,6 +415,27 @@ export async function POST(request: Request) {
       }
 
       sessionStatus = "completed";
+    }
+
+    if (finalize && sessionTeamId && sessionAgeGroupId) {
+      try {
+        await createNotificationForTeamOnce(db, {
+          teamId: sessionTeamId,
+          ageGroupId: sessionAgeGroupId,
+          actorId: user.id,
+          type: "attendance_closed",
+          entityId: sessionId,
+          title: "Presenças confirmadas",
+          body: `${sessionRow && typeof sessionRow === "object" && "session_date" in sessionRow ? String((sessionRow as Record<string, unknown>).session_date || "") : ""}${session?.start_time ? ` · ${session.start_time}` : ""}`,
+          linkPath: "/attendance",
+          excludeActor: true,
+        });
+      } catch (notificationError) {
+        console.error(
+          "Erro ao gerar notificação operacional de presenças confirmadas:",
+          notificationError,
+        );
+      }
     }
 
     return NextResponse.json({

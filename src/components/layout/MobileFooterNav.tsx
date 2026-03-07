@@ -24,6 +24,7 @@ export function MobileFooterNav({
   const unreadMessagesCount = useUnreadNotifications(profile?.id ?? null, {
     type: "message",
   });
+  const unreadNotificationsCount = useUnreadNotifications(profile?.id ?? null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   return (
@@ -33,6 +34,8 @@ export function MobileFooterNav({
         onClose={() => setIsDrawerOpen(false)}
         profile={profile}
         avatarUrl={avatarUrl}
+        unreadMessagesCount={unreadMessagesCount}
+        unreadNotificationsCount={unreadNotificationsCount}
       />
 
       <nav
@@ -75,7 +78,9 @@ export function MobileFooterNav({
             const badgeCount =
               item.badgeKey === "messages"
                 ? unreadMessagesCount
-                : 0;
+                : item.badgeKey === "notifications"
+                  ? unreadNotificationsCount
+                  : 0;
 
             return (
               <Link

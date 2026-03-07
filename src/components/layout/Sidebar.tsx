@@ -27,6 +27,7 @@ export function Sidebar({ profile, avatarUrl }: SidebarProps) {
   const unreadMessagesCount = useUnreadNotifications(profile?.id ?? null, {
     type: "message",
   });
+  const unreadNotificationsCount = useUnreadNotifications(profile?.id ?? null);
   const navSections = getAppNavSections();
   const mainSection = navSections.find((section) => section.id === "main");
   const settingsSection = navSections.find((section) => section.id === "settings");
@@ -76,7 +77,9 @@ export function Sidebar({ profile, avatarUrl }: SidebarProps) {
             const badgeCount =
               item.badgeKey === "messages"
                 ? unreadMessagesCount
-                : 0;
+                : item.badgeKey === "notifications"
+                  ? unreadNotificationsCount
+                  : 0;
 
             return (
               <Link

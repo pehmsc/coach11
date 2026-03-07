@@ -19,7 +19,6 @@ import {
   isSessionExpiringSoon,
   waitForSessionPersistence,
 } from "@/lib/supabase/browser-session";
-import { syncAppBadge } from "@/lib/pwa/badges";
 import {
   consumeIOSInstallPromptAfterLogin,
   dismissIOSInstallPromptPermanently,
@@ -244,7 +243,6 @@ export function PWAProvider({
 
       if (typeof data.badgeCount === "number") {
         dispatchUnreadCountPatch({ notifications: data.badgeCount });
-        void syncAppBadge(data.badgeCount);
       }
 
       if (typeof data.messageBadgeCount === "number") {

@@ -4,6 +4,7 @@ import {
   insertConvocationAuditLog,
 } from "@/lib/games/convocation-guard";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
+import { createNotificationForTeamOnce } from "@/lib/notifications/service";
 import { NextResponse } from "next/server";
 
 type RouteContext = {
@@ -179,6 +180,33 @@ export async function POST(_request: Request, { params }: RouteContext) {
         action: "convocation_confirmed_after_completed",
         correctionReason: writeGuard.correctionReason,
       });
+    }
+
+    const { data: gameRow } = await supabase
+      .from("games")
+      .select("id, title, opponent_name, team_id, age_group_id")
+      .eq("id", gameId)
+      .maybeSingle();
+
+    if (gameRow?.team_id && gameRow?.age_group_id) {
+      try {
+        await createNotificationForTeamOnce(supabase, {
+          teamId: gameRow.team_id,
+          ageGroupId: gameRow.age_group_id,
+          actorId: user.id,
+          type: "convocation_confirmed",
+          entityId: gameId,
+          title: "Convocatória confirmada",
+          body: gameRow.title || gameRow.opponent_name || "Jogo atualizado",
+          linkPath: `/games/${gameId}`,
+          excludeActor: true,
+        });
+      } catch (notificationError) {
+        console.error(
+          "Erro ao gerar notificação operacional da convocatória:",
+          notificationError,
+        );
+      }
     }
 
     return NextResponse.json({

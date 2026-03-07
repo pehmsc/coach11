@@ -6,6 +6,7 @@ import { pt } from "date-fns/locale";
 import { Loader2, MessageSquare, Send, AtSign } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
+import { dispatchUnreadCountPatch } from "@/lib/notifications/unread-sync";
 import { getStaffRoleLabel } from "@/lib/team/staff-role";
 
 type MessageItem = {
@@ -112,6 +113,7 @@ export default function MessagesPage() {
         setMembers([]);
         setTeamId(null);
         setCurrentUserId(payload.currentUserId || null);
+        dispatchUnreadCountPatch({ messages: 0 });
         setLoading(false);
         return;
       }
@@ -122,6 +124,7 @@ export default function MessagesPage() {
       setCurrentUserId(payload.currentUserId || null);
       setMembers(Array.isArray(payload.members) ? payload.members : []);
       setMessages(Array.isArray(payload.messages) ? payload.messages : []);
+      dispatchUnreadCountPatch({ messages: 0 });
       setLoading(false);
 
       requestAnimationFrame(() => {
@@ -280,7 +283,7 @@ export default function MessagesPage() {
           Mensagens da Equipa Técnica
         </h1>
         <p className="text-xs text-slate-500 mt-0.5">
-          Usa <span className="font-semibold">@</span> para mencionar colegas e gerar alerta específico.
+          Usa <span className="font-semibold">@</span> para mencionar colegas no chat.
         </p>
       </div>
 

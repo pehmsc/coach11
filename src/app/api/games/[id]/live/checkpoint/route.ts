@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
+import { createNotificationForTeamOnce } from "@/lib/notifications/service";
 import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -48,7 +49,7 @@ async function assertGameAccess(
 ) {
   const { data: game, error: gameError } = await db
     .from("games")
-    .select("id, team_id, age_group_id, status")
+    .select("id, team_id, age_group_id, status, title, opponent_name")
     .eq("id", gameId)
     .maybeSingle();
 
@@ -71,6 +72,9 @@ async function assertGameAccess(
   let teamId: string | null = (game as unknown as { team_id?: string }).team_id ?? null;
   const ageGroupId = (game as unknown as { age_group_id?: string }).age_group_id ?? null;
   const gameStatus = (game as unknown as { status?: string }).status ?? null;
+  const gameTitle = (game as unknown as { title?: string | null }).title ?? null;
+  const opponentName =
+    (game as unknown as { opponent_name?: string | null }).opponent_name ?? null;
 
   if (ageGroupId) {
     const { data: ageGroupOwner } = await db
@@ -115,6 +119,10 @@ async function assertGameAccess(
     ok: true as const,
     isCoordinator,
     gameStatus,
+    teamId,
+    ageGroupId,
+    gameTitle,
+    opponentName,
   };
 }
 
@@ -246,6 +254,32 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     if (currentStatus !== "completed" && currentStatus !== "cancelled") {
       const nextStatus = isRunningPhase(phase) ? "live" : "scheduled";
       await supabase.from("games").update({ status: nextStatus }).eq("id", gameId);
+
+      if (
+        currentStatus !== "live" &&
+        nextStatus === "live" &&
+        access.teamId &&
+        access.ageGroupId
+      ) {
+        try {
+          await createNotificationForTeamOnce(supabase, {
+            teamId: access.teamId,
+            ageGroupId: access.ageGroupId,
+            actorId: user.id,
+            type: "game_live_started",
+            entityId: gameId,
+            title: "Jogo entrou em live",
+            body: access.gameTitle || access.opponentName || "O live do jogo foi iniciado.",
+            linkPath: `/games/${gameId}/live`,
+            excludeActor: true,
+          });
+        } catch (notificationError) {
+          console.error(
+            "Erro ao gerar notificação operacional de início de live:",
+            notificationError,
+          );
+        }
+      }
     }
 
     return NextResponse.json({ success: true });

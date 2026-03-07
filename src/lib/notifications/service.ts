@@ -10,7 +10,13 @@ import {
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
-export type AppNotificationType = "new_game" | "new_training" | "message";
+export type AppNotificationType =
+  | "new_game"
+  | "new_training"
+  | "attendance_pending"
+  | "attendance_closed"
+  | "convocation_confirmed"
+  | "game_live_started";
 
 export type CreateTeamNotificationInput = {
   teamId: string;
@@ -67,7 +73,55 @@ function resolvePushUrl(
   if (input.type === "new_training") {
     return "/calendar";
   }
-  return "/messages";
+  if (input.type === "attendance_pending" || input.type === "attendance_closed") {
+    return "/attendance";
+  }
+  if (input.type === "game_live_started" && input.entityId) {
+    return `/games/${input.entityId}/live`;
+  }
+  if (input.type === "convocation_confirmed" && input.entityId) {
+    return `/games/${input.entityId}`;
+  }
+  return "/notifications";
+}
+
+async function findExistingNotificationId(
+  admin: AdminClient,
+  input: {
+    ageGroupId: string;
+    teamId?: string | null;
+    type: AppNotificationType;
+    entityId?: string | null;
+  },
+) {
+  let query = admin
+    .from("notifications")
+    .select("id")
+    .eq("age_group_id", input.ageGroupId)
+    .eq("type", input.type);
+
+  if (input.teamId) {
+    query = query.eq("team_id", input.teamId);
+  } else {
+    query = query.is("team_id", null);
+  }
+
+  if (input.entityId) {
+    query = query.eq("entity_id", input.entityId);
+  } else {
+    query = query.is("entity_id", null);
+  }
+
+  const { data, error } = await query
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  return data?.id ?? null;
 }
 
 async function insertNotificationBroadcast(
@@ -169,6 +223,50 @@ export async function createNotificationsForTeam(
 
   if (recipients.length === 0) {
     return { inserted: 0 };
+  }
+
+  return insertNotificationBroadcast(
+    admin,
+    {
+      ageGroupId,
+      teamId: input.teamId,
+      actorId: input.actorId,
+      type: input.type,
+      entityId: input.entityId ?? null,
+      title: input.title,
+      body: input.body ?? null,
+      linkPath: input.linkPath ?? null,
+    },
+    recipients,
+  );
+}
+
+export async function createNotificationForTeamOnce(
+  _: SupabaseClient,
+  input: CreateTeamNotificationInput,
+) {
+  const admin = createAdminClient();
+  const teamMembership = await getTeamMemberProfileIds(admin, input.teamId);
+  const ageGroupId = input.ageGroupId ?? teamMembership.ageGroupId;
+  if (!ageGroupId) return { inserted: 0, notificationId: null };
+
+  const existingNotificationId = await findExistingNotificationId(admin, {
+    ageGroupId,
+    teamId: input.teamId,
+    type: input.type,
+    entityId: input.entityId ?? null,
+  });
+
+  if (existingNotificationId) {
+    return { inserted: 0, notificationId: existingNotificationId };
+  }
+
+  const recipients = (teamMembership.memberIds || []).filter((memberId) =>
+    input.excludeActor === false ? true : memberId !== input.actorId,
+  );
+
+  if (recipients.length === 0) {
+    return { inserted: 0, notificationId: null };
   }
 
   return insertNotificationBroadcast(

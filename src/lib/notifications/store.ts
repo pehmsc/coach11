@@ -51,7 +51,16 @@ function normalizeLinkPath(row: NotificationInboxRow) {
   }
   if (row.type === "new_game" && row.entity_id) return `/games/${row.entity_id}`;
   if (row.type === "new_training") return "/calendar";
-  return "/messages";
+  if (row.type === "attendance_pending" || row.type === "attendance_closed") {
+    return "/attendance";
+  }
+  if (row.type === "game_live_started" && row.entity_id) {
+    return `/games/${row.entity_id}/live`;
+  }
+  if (row.type === "convocation_confirmed" && row.entity_id) {
+    return `/games/${row.entity_id}`;
+  }
+  return "/notifications";
 }
 
 function mapNotificationRow(row: NotificationInboxRow): NotificationListItem {
@@ -84,6 +93,8 @@ async function fetchScopedNotificationIds(
   }
   if (filter.type) {
     query = query.eq("type", filter.type);
+  } else {
+    query = query.neq("type", "message");
   }
   if (filter.onlyRead) {
     query = query.not("read_at", "is", null);
@@ -160,6 +171,9 @@ export async function listUserNotifications(
   if (options.type) {
     listQuery = listQuery.eq("type", options.type);
     unreadQuery = unreadQuery.eq("type", options.type);
+  } else {
+    listQuery = listQuery.neq("type", "message");
+    unreadQuery = unreadQuery.neq("type", "message");
   }
 
   if (options.unreadOnly) {
@@ -202,6 +216,7 @@ export async function getUserNotification(
   if (options.includeCleared !== true) {
     query = query.is("cleared_at", null);
   }
+  query = query.neq("type", "message");
 
   const { data, error } = await query.maybeSingle();
   if (error) {

@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseAuthCookies } from "@/lib/supabase/auth-cookie";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { Sidebar } from "@/components/layout/Sidebar";
+import { UnreadBadgeRuntime } from "@/components/layout/UnreadBadgeRuntime";
 
 export default async function DashboardLayout({
   children,
@@ -47,6 +48,8 @@ export default async function DashboardLayout({
       className="min-h-screen bg-slate-50"
       style={{ ["--coach11-top-inset" as string]: topInset }}
     >
+      <UnreadBadgeRuntime profileId={profile?.id ?? null} />
+
       {/* Sidebar — visível apenas em desktop */}
       <Sidebar profile={profile} avatarUrl={avatarUrl} />
 
