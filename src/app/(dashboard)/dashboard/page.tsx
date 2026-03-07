@@ -98,14 +98,16 @@ export default async function DashboardPage() {
   // Conta de staff convidado (não coordenador) — single query com join (era N+1)
   if (!firstTeamId) {
     const { data: staffEntry } = await (admin ?? supabase)
-      .from("team_staff")
-      .select("team_id, teams(id, age_group_id, age_groups(id, club_name, name, club_logo_url))")
+      .from("age_group_staff")
+      .select(
+        "linked_team_id, age_group_id, age_groups(id, club_name, name, club_logo_url)",
+      )
       .eq("profile_id", user.id)
       .order("created_at", { ascending: true })
       .limit(1)
       .maybeSingle();
 
-    firstTeamId = staffEntry?.team_id ?? null;
+    firstTeamId = staffEntry?.linked_team_id ?? null;
 
     type StaffAgeGroupJoin = {
       id: string;
@@ -113,20 +115,18 @@ export default async function DashboardPage() {
       name: string;
       club_logo_url: string | null;
     };
-    const joinedTeam = (staffEntry?.teams as unknown) as
-      | { id: string; age_group_id: string; age_groups: StaffAgeGroupJoin | null }
-      | null;
-    if (joinedTeam?.age_groups) {
-      activeAgeGroup = joinedTeam.age_groups;
+    const joinedAgeGroup = (staffEntry?.age_groups as unknown) as StaffAgeGroupJoin | null;
+    if (joinedAgeGroup) {
+      activeAgeGroup = joinedAgeGroup;
     }
   }
 
   const { data: staffTeamRows } = await (admin ?? supabase)
-    .from("team_staff")
-    .select("team_id")
+    .from("age_group_staff")
+    .select("linked_team_id")
     .eq("profile_id", user.id);
   const staffTeamIds = (staffTeamRows || [])
-    .map((row) => row.team_id)
+    .map((row) => row.linked_team_id)
     .filter((teamId): teamId is string => typeof teamId === "string");
 
   const accessibleTeamIds = Array.from(

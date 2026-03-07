@@ -6,6 +6,7 @@ import { pt } from "date-fns/locale";
 import { Loader2, MessageSquare, Send, AtSign } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
+import { getStaffRoleLabel } from "@/lib/team/staff-role";
 
 type MessageItem = {
   id: string;
@@ -41,14 +42,6 @@ type MentionToken = {
 type SelectedMention = {
   id: string;
   full_name: string;
-};
-
-const ROLE_LABELS: Record<string, string> = {
-  coordinator: "Coordenador",
-  head_coach: "Treinador Principal",
-  coach: "Treinador",
-  assistant_coach: "Treinador Adjunto",
-  staff: "Equipa técnica",
 };
 
 function getMentionToken(text: string, caretPosition: number): MentionToken | null {
@@ -356,7 +349,7 @@ export default function MessagesPage() {
                     @{member.full_name}
                   </p>
                   <p className="text-xs text-slate-500">
-                    {ROLE_LABELS[member.role] || member.role}
+                    {getStaffRoleLabel(member.role)}
                   </p>
                 </button>
               ))}

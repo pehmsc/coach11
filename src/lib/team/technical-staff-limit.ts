@@ -1,12 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { AGE_GROUP_STAFF_ROLES } from "@/lib/team/staff-role";
 
 export const TECHNICAL_STAFF_LIMIT = 1;
 export const TECHNICAL_STAFF_LIMIT_ERROR_CODE = "technical_staff_limit_reached";
 export const TECHNICAL_STAFF_LIMIT_ERROR_MESSAGE =
   "Este escalão já atingiu o limite atual de 1 membro de equipa técnica convidado.";
 
-const TECHNICAL_TEAM_STAFF_ROLES = ["coach", "head_coach", "assistant_coach"];
-const TECHNICAL_INVITE_ROLES = ["coach", "assistant_coach"];
+const TECHNICAL_INVITE_ROLES = [...AGE_GROUP_STAFF_ROLES];
 
 export type AgeGroupTechnicalStaffUsage = {
   coordinatorId: string | null;
@@ -34,28 +34,15 @@ export async function getAgeGroupTechnicalStaffUsage(
   admin: SupabaseClient,
   ageGroupId: string,
 ): Promise<AgeGroupTechnicalStaffUsage> {
-  const [{ data: ageGroup, error: ageGroupError }, { data: teams, error: teamsError }] =
-    await Promise.all([
-      admin
-        .from("age_groups")
-        .select("id, coordinator_id")
-        .eq("id", ageGroupId)
-        .maybeSingle(),
-      admin
-        .from("teams")
-        .select("id")
-        .eq("age_group_id", ageGroupId),
-    ]);
+  const { data: ageGroup, error: ageGroupError } = await admin
+    .from("age_groups")
+    .select("id, coordinator_id")
+    .eq("id", ageGroupId)
+    .maybeSingle();
 
   if (ageGroupError) {
     throw new Error(
       `technical_staff_usage_age_group_failed:${ageGroupError.message || "falha desconhecida"}`,
-    );
-  }
-
-  if (teamsError) {
-    throw new Error(
-      `technical_staff_usage_teams_failed:${teamsError.message || "falha desconhecida"}`,
     );
   }
 
@@ -64,18 +51,12 @@ export async function getAgeGroupTechnicalStaffUsage(
       ? ageGroup.coordinator_id
       : null;
 
-  const teamIds = (teams || [])
-    .map((team) => (typeof team.id === "string" ? team.id : null))
-    .filter((teamId): teamId is string => !!teamId);
-
   const [staffMembersRes, pendingInvitesRes] = await Promise.all([
-    teamIds.length > 0
-      ? admin
-          .from("team_staff")
-          .select("id, profile_id, role")
-          .in("team_id", teamIds)
-          .in("role", TECHNICAL_TEAM_STAFF_ROLES)
-      : Promise.resolve({ data: [], error: null }),
+    admin
+      .from("age_group_staff")
+      .select("id, profile_id, role")
+      .eq("age_group_id", ageGroupId)
+      .in("role", AGE_GROUP_STAFF_ROLES),
     admin
       .from("staff_invites")
       .select("id, role")
@@ -86,7 +67,7 @@ export async function getAgeGroupTechnicalStaffUsage(
 
   if (staffMembersRes.error) {
     throw new Error(
-      `technical_staff_usage_team_staff_failed:${staffMembersRes.error.message || "falha desconhecida"}`,
+      `technical_staff_usage_age_group_staff_failed:${staffMembersRes.error.message || "falha desconhecida"}`,
     );
   }
 

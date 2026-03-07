@@ -26,6 +26,11 @@ import {
   ChevronUp,
 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  AGE_GROUP_STAFF_ROLE_LABELS,
+  getStaffRoleLabel,
+  normalizeAgeGroupStaffRole,
+} from "@/lib/team/staff-role";
 
 const INVITE_ROLE_OPTIONS = [
   { value: "coach", label: "Treinador Principal" },
@@ -33,20 +38,15 @@ const INVITE_ROLE_OPTIONS = [
 ];
 
 const STAFF_ROLE_OPTIONS = [
-  { value: "head_coach", label: "Treinador Principal" },
-  { value: "assistant_coach", label: "Treinador Adjunto" },
+  { value: "coach", label: AGE_GROUP_STAFF_ROLE_LABELS.coach },
+  {
+    value: "assistant_coach",
+    label: AGE_GROUP_STAFF_ROLE_LABELS.assistant_coach,
+  },
 ];
 
-const ROLE_LABELS: Record<string, string> = {
-  coach: "Treinador Principal",
-  head_coach: "Treinador Principal",
-  assistant_coach: "Treinador Adjunto",
-  coordinator: "Coordenador",
-  staff: "Equipa Técnica",
-};
-
 interface StaffMember {
-  id: string; // team_staff.id
+  id: string; // age_group_staff.id
   profile_id: string;
   role: string;
   full_name: string;
@@ -242,12 +242,7 @@ export default function StaffPage() {
 
   function openEditMember(member: StaffMember) {
     if (!canManageStaff || member.is_coordinator) return;
-    const normalizedRole =
-      member.role === "coach"
-        ? "head_coach"
-        : STAFF_ROLE_OPTIONS.some((option) => option.value === member.role)
-          ? member.role
-          : "assistant_coach";
+    const normalizedRole = normalizeAgeGroupStaffRole(member.role) || "assistant_coach";
     setEditingMember(member);
     setEditForm({
       role: normalizedRole,
@@ -455,7 +450,7 @@ export default function StaffPage() {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-slate-800 truncate">{member.full_name}</p>
                   <p className="text-xs text-slate-500">
-                    {ROLE_LABELS[member.role] || member.role}
+                    {getStaffRoleLabel(member.role)}
                     {member.is_coordinator ? " · Coordenador do escalão" : ""}
                   </p>
                   {(member.email || member.phone) && (
@@ -585,7 +580,7 @@ export default function StaffPage() {
                           {invite.first_name} {invite.last_name}
                         </p>
                         <p className="text-xs text-slate-500">
-                          {invite.email} · {ROLE_LABELS[invite.role] || invite.role}
+                          {invite.email} · {getStaffRoleLabel(invite.role)}
                         </p>
                         <div className="mt-1">{statusBadge}</div>
                       </div>

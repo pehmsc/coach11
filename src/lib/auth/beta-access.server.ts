@@ -109,7 +109,7 @@ export async function isLegacyUser(
         .limit(1)
         .maybeSingle(),
       db
-        .from("team_staff")
+        .from("age_group_staff")
         .select("profile_id")
         .eq("profile_id", normalizedProfileId)
         .limit(1)

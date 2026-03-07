@@ -55,19 +55,11 @@ export async function DELETE(_request: Request, { params }: RouteContext) {
     }
 
     if (invite.accepted_by) {
-      const { data: teams } = await supabase
-        .from("teams")
-        .select("id")
-        .eq("age_group_id", invite.age_group_id);
-
-      const teamIds = (teams || []).map((team) => team.id);
-      if (teamIds.length > 0) {
-        await supabase
-          .from("team_staff")
-          .delete()
-          .in("team_id", teamIds)
-          .eq("profile_id", invite.accepted_by);
-      }
+      await supabase
+        .from("age_group_staff")
+        .delete()
+        .eq("age_group_id", invite.age_group_id)
+        .eq("profile_id", invite.accepted_by);
     }
 
     const { error: deleteInviteError } = await supabase

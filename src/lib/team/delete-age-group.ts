@@ -195,7 +195,7 @@ async function cleanupClubMembershipsAfterAgeGroupDelete(
   for (const profileId of candidateProfileIds) {
     if (retained.has(profileId)) continue;
 
-    const [managedAgeGroupRes, teamStaffRes] = await Promise.all([
+    const [managedAgeGroupRes, ageGroupStaffRes] = await Promise.all([
       admin
         .from("age_groups")
         .select("id")
@@ -204,7 +204,7 @@ async function cleanupClubMembershipsAfterAgeGroupDelete(
         .limit(1)
         .maybeSingle(),
       admin
-        .from("team_staff")
+        .from("age_group_staff")
         .select("id")
         .eq("club_id", clubId)
         .eq("profile_id", profileId)
@@ -215,8 +215,8 @@ async function cleanupClubMembershipsAfterAgeGroupDelete(
     const firstError =
       managedAgeGroupRes.error && !isSchemaCompatibilityError(managedAgeGroupRes.error)
         ? managedAgeGroupRes.error
-        : teamStaffRes.error && !isSchemaCompatibilityError(teamStaffRes.error)
-          ? teamStaffRes.error
+        : ageGroupStaffRes.error && !isSchemaCompatibilityError(ageGroupStaffRes.error)
+          ? ageGroupStaffRes.error
           : null;
 
     if (firstError) {
@@ -227,7 +227,7 @@ async function cleanupClubMembershipsAfterAgeGroupDelete(
       );
     }
 
-    if (managedAgeGroupRes.data || teamStaffRes.data) {
+    if (managedAgeGroupRes.data || ageGroupStaffRes.data) {
       continue;
     }
 
@@ -294,18 +294,15 @@ export async function deleteAgeGroupCascade(
     .map((team) => (typeof team.id === "string" ? team.id : null))
     .filter((teamId): teamId is string => !!teamId);
 
-  const teamStaffRowsRes =
-    teamIds.length > 0
-      ? await admin
-          .from("team_staff")
-          .select("profile_id")
-          .in("team_id", teamIds)
-      : { data: [], error: null };
+  const ageGroupStaffRowsRes = await admin
+    .from("age_group_staff")
+    .select("profile_id")
+    .eq("age_group_id", ageGroupId);
 
-  if (teamStaffRowsRes.error && !isSchemaCompatibilityError(teamStaffRowsRes.error)) {
+  if (ageGroupStaffRowsRes.error && !isSchemaCompatibilityError(ageGroupStaffRowsRes.error)) {
     throw new Error(
       `Erro ao carregar perfis da equipa técnica: ${
-        teamStaffRowsRes.error.message || "falha desconhecida"
+        ageGroupStaffRowsRes.error.message || "falha desconhecida"
       }`,
     );
   }
@@ -314,7 +311,7 @@ export async function deleteAgeGroupCascade(
     new Set(
       [
         typeof ageGroup.coordinator_id === "string" ? ageGroup.coordinator_id : null,
-        ...((teamStaffRowsRes.data || []) as Array<{ profile_id: string | null }>)
+        ...((ageGroupStaffRowsRes.data || []) as Array<{ profile_id: string | null }>)
           .map((row) => row.profile_id),
       ].filter((profileId): profileId is string => !!profileId),
     ),
@@ -423,6 +420,8 @@ export async function deleteAgeGroupCascade(
   await optionalDeleteByEq(admin, "beta_invites", "target_age_group_id", ageGroupId);
   await optionalDeleteByEq(admin, "staff_invites", "age_group_id", ageGroupId);
   await optionalDeleteByEq(admin, "teams", "age_group_id", ageGroupId);
+
+  await optionalDeleteByEq(admin, "age_group_staff", "age_group_id", ageGroupId);
 
   const { error: deleteAgeGroupError } = await admin
     .from("age_groups")

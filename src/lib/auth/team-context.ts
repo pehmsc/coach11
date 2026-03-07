@@ -14,7 +14,8 @@ export type TeamContextTeam = {
 };
 
 type StaffLinkRow = {
-  team_id: string | null;
+  age_group_id: string | null;
+  linked_team_id: string | null;
   role: string | null;
 };
 
@@ -76,8 +77,8 @@ export async function resolveUserTeamContext(
       .order("created_at", { ascending: true })
       .limit(20),
     admin
-      .from("team_staff")
-      .select("team_id, role, created_at")
+      .from("age_group_staff")
+      .select("age_group_id, linked_team_id, role, created_at")
       .eq("profile_id", userId)
       .order("created_at", { ascending: false })
       .limit(20),
@@ -98,7 +99,14 @@ export async function resolveUserTeamContext(
   const orderedStaffTeamIds = Array.from(
     new Set(
       staffLinks
-        .map((row) => row.team_id)
+        .map((row) => row.linked_team_id)
+        .filter((value): value is string => typeof value === "string"),
+    ),
+  );
+  const orderedStaffAgeGroupIds = Array.from(
+    new Set(
+      staffLinks
+        .map((row) => row.age_group_id)
         .filter((value): value is string => typeof value === "string"),
     ),
   );
@@ -141,10 +149,7 @@ export async function resolveUserTeamContext(
     }
   });
 
-  const staffAgeGroupIds = staffTeams
-    .map((row) => row.age_group_id)
-    .filter((value): value is string => typeof value === "string");
-  const missingAgeGroupIds = staffAgeGroupIds.filter((id) => !managedAgeGroupMap.has(id));
+  const missingAgeGroupIds = orderedStaffAgeGroupIds.filter((id) => !managedAgeGroupMap.has(id));
   if (missingAgeGroupIds.length > 0) {
     const missingAgeGroupsRes = await admin
       .from("age_groups")
@@ -223,7 +228,9 @@ export async function resolveUserTeamContext(
     }
 
     const resolvedRole =
-      staffLinks.find((row) => row.team_id === resolvedTeam?.id)?.role ?? null;
+      staffLinks.find((row) => row.linked_team_id === resolvedTeam?.id)?.role ??
+      staffLinks.find((row) => row.age_group_id === resolvedAgeGroup?.id)?.role ??
+      null;
 
     return {
       source: "staff",

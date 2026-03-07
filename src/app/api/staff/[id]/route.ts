@@ -1,30 +1,22 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
+import { normalizeAgeGroupStaffRole } from "@/lib/team/staff-role";
 import { NextResponse } from "next/server";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
 };
 
-const ALLOWED_TEAM_STAFF_ROLES = new Set([
-  "head_coach",
-  "assistant_coach",
-]);
-
-type TeamStaffRow = {
+type AgeGroupStaffRow = {
   id: string;
-  team_id: string;
+  age_group_id: string;
   profile_id: string;
   role: string | null;
 };
 
 function normalizeRole(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const role = value.trim();
-  if (role === "coach") return "head_coach";
-  if (ALLOWED_TEAM_STAFF_ROLES.has(role)) return role;
-  return null;
+  return normalizeAgeGroupStaffRole(value);
 }
 
 function normalizeOptionalText(value: unknown) {
@@ -39,16 +31,16 @@ function isValidEmail(value: string) {
 
 async function assertCoordinatorCanManageStaff(
   admin: ReturnType<typeof createAdminClient>,
-  teamStaffId: string,
+  staffLinkId: string,
   requesterId: string,
 ) {
-  const { data: teamStaff, error: teamStaffError } = await admin
-    .from("team_staff")
-    .select("id, team_id, profile_id, role")
-    .eq("id", teamStaffId)
+  const { data: ageGroupStaff, error: ageGroupStaffError } = await admin
+    .from("age_group_staff")
+    .select("id, age_group_id, profile_id, role")
+    .eq("id", staffLinkId)
     .maybeSingle();
 
-  if (teamStaffError) {
+  if (ageGroupStaffError) {
     return {
       ok: false as const,
       response: NextResponse.json(
@@ -58,7 +50,7 @@ async function assertCoordinatorCanManageStaff(
     };
   }
 
-  if (!teamStaff) {
+  if (!ageGroupStaff) {
     return {
       ok: false as const,
       response: NextResponse.json(
@@ -68,28 +60,12 @@ async function assertCoordinatorCanManageStaff(
     };
   }
 
-  const row = teamStaff as TeamStaffRow;
-
-  const { data: team, error: teamError } = await admin
-    .from("teams")
-    .select("id, age_group_id")
-    .eq("id", row.team_id)
-    .maybeSingle();
-
-  if (teamError || !team?.age_group_id) {
-    return {
-      ok: false as const,
-      response: NextResponse.json(
-        { error: "Não foi possível validar a equipa deste membro." },
-        { status: 500 },
-      ),
-    };
-  }
+  const row = ageGroupStaff as AgeGroupStaffRow;
 
   const { data: managedAgeGroup } = await admin
     .from("age_groups")
     .select("id")
-    .eq("id", team.age_group_id)
+    .eq("id", row.age_group_id)
     .eq("coordinator_id", requesterId)
     .maybeSingle();
 
@@ -111,7 +87,7 @@ async function assertCoordinatorCanManageStaff(
 
 export async function PATCH(request: Request, { params }: RouteContext) {
   try {
-    const { id: teamStaffId } = await params;
+    const { id: staffLinkId } = await params;
 
     const supabase = await createClient();
     const {
@@ -153,19 +129,19 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     }
 
     const admin = createAdminClient();
-    const access = await assertCoordinatorCanManageStaff(admin, teamStaffId, user.id);
+    const access = await assertCoordinatorCanManageStaff(admin, staffLinkId, user.id);
     if (!access.ok) return access.response;
 
-    const teamStaffUpdates: Record<string, string> = {};
+    const staffUpdates: Record<string, string> = {};
     if (roleProvided && roleInput) {
-      teamStaffUpdates.role = roleInput;
+      staffUpdates.role = roleInput;
     }
 
-    if (Object.keys(teamStaffUpdates).length > 0) {
+    if (Object.keys(staffUpdates).length > 0) {
       const { error: updateStaffError } = await admin
-        .from("team_staff")
-        .update(teamStaffUpdates)
-        .eq("id", teamStaffId);
+        .from("age_group_staff")
+        .update(staffUpdates)
+        .eq("id", staffLinkId);
 
       if (updateStaffError) {
         return NextResponse.json(
@@ -243,9 +219,9 @@ export async function PATCH(request: Request, { params }: RouteContext) {
 
     const [{ data: updatedStaff }, { data: updatedProfile }] = await Promise.all([
       admin
-        .from("team_staff")
+        .from("age_group_staff")
         .select("id, profile_id, role")
-        .eq("id", teamStaffId)
+        .eq("id", staffLinkId)
         .maybeSingle(),
       admin
         .from("profiles")
@@ -257,7 +233,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     return NextResponse.json({
       success: true,
       staffMember: {
-        id: updatedStaff?.id ?? teamStaffId,
+        id: updatedStaff?.id ?? staffLinkId,
         profile_id: updatedStaff?.profile_id ?? access.row.profile_id,
         role: updatedStaff?.role ?? access.row.role ?? null,
         full_name: updatedProfile?.full_name ?? null,
@@ -276,7 +252,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
 
 export async function DELETE(_request: Request, { params }: RouteContext) {
   try {
-    const { id: teamStaffId } = await params;
+    const { id: staffLinkId } = await params;
 
     const supabase = await createClient();
     const {
@@ -288,13 +264,13 @@ export async function DELETE(_request: Request, { params }: RouteContext) {
     }
 
     const admin = createAdminClient();
-    const access = await assertCoordinatorCanManageStaff(admin, teamStaffId, user.id);
+    const access = await assertCoordinatorCanManageStaff(admin, staffLinkId, user.id);
     if (!access.ok) return access.response;
 
     const { error: deleteError } = await admin
-      .from("team_staff")
+      .from("age_group_staff")
       .delete()
-      .eq("id", teamStaffId);
+      .eq("id", staffLinkId);
 
     if (deleteError) {
       return NextResponse.json(

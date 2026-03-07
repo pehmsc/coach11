@@ -63,7 +63,7 @@ export async function POST() {
 
     if (!invite) {
       const { data: existingStaff, error: existingStaffError } = await supabase
-        .from("team_staff")
+        .from("age_group_staff")
         .select("id")
         .eq("profile_id", user.id)
         .limit(1)
@@ -71,13 +71,17 @@ export async function POST() {
 
       if (existingStaffError) {
         return respondInternalError(
-          "api.invite.sync.post.lookup_team_staff",
+          "api.invite.sync.post.lookup_age_group_staff",
           existingStaffError,
         );
       }
 
       if (existingStaff) {
-        return NextResponse.json({ success: true, linked: true, source: "team_staff" });
+        return NextResponse.json({
+          success: true,
+          linked: true,
+          source: "age_group_staff",
+        });
       }
 
       return NextResponse.json({ success: true, linked: false });
@@ -148,7 +152,7 @@ export async function POST() {
 
     if (result.already_linked) {
       const { data: staffLink, error: staffLinkError } = await supabase
-        .from("team_staff")
+        .from("age_group_staff")
         .select("id")
         .eq("profile_id", user.id)
         .limit(1)

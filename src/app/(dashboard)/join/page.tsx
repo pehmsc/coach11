@@ -127,7 +127,7 @@ export default function JoinPage() {
 
     // Já é staff? (profile_id = auth.uid)
     const { data: staff } = await supabase
-      .from("team_staff")
+      .from("age_group_staff")
       .select("id")
       .eq("profile_id", user.id)
       .limit(1)

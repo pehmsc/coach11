@@ -180,7 +180,7 @@ export async function GET() {
     }
 
     const staffMembers = staffContext.members.map((member) => ({
-      id: member.teamStaffId || `coordinator-${member.profileId}`,
+      id: member.staffLinkId || `coordinator-${member.profileId}`,
       profile_id: member.profileId,
       role: member.role,
       is_coordinator: member.isCoordinator,

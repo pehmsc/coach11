@@ -58,6 +58,17 @@ export interface Team {
   created_at: string;
 }
 
+export interface AgeGroupStaff {
+  id: string;
+  age_group_id: string;
+  club_id: string;
+  profile_id: string;
+  linked_team_id?: string | null;
+  role: "coach" | "assistant_coach";
+  created_at: string;
+  updated_at?: string;
+}
+
 export interface Player {
   id: string;
   age_group_id: string;

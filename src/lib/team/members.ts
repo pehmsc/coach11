@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 export type TeamMemberProfile = {
   profileId: string;
   role: string;
-  teamStaffId: string | null;
+  staffLinkId: string | null;
   isCoordinator: boolean;
   fullName: string | null;
   email: string | null;
@@ -21,7 +21,7 @@ type AgeGroupRow = {
   coordinator_id: string | null;
 };
 
-type TeamStaffRow = {
+type AgeGroupStaffRow = {
   id: string;
   profile_id: string;
   role: string | null;
@@ -37,10 +37,9 @@ type ProfileRow = {
 
 const ROLE_ORDER: Record<string, number> = {
   coordinator: 0,
-  head_coach: 1,
-  coach: 2,
-  assistant_coach: 3,
-  staff: 4,
+  coach: 1,
+  assistant_coach: 2,
+  staff: 3,
 };
 
 export async function getTeamMemberProfileIds(
@@ -69,9 +68,9 @@ export async function getTeamMemberProfileIds(
       .eq("id", teamRow.age_group_id)
       .maybeSingle(),
     admin
-      .from("team_staff")
+      .from("age_group_staff")
       .select("profile_id")
-      .eq("team_id", teamRow.id),
+      .eq("age_group_id", teamRow.age_group_id),
   ]);
 
   const ageGroup = (ageGroupRes.data as AgeGroupRow | null) || null;
@@ -99,7 +98,20 @@ export async function getTeamMembersDetailed(
   },
 ) {
   const { teamId, ageGroupId } = options;
-  if (!teamId || !ageGroupId) {
+  let resolvedAgeGroupId = ageGroupId;
+
+  if (!resolvedAgeGroupId && teamId) {
+    const { data: team } = await admin
+      .from("teams")
+      .select("age_group_id")
+      .eq("id", teamId)
+      .maybeSingle();
+
+    resolvedAgeGroupId =
+      team && typeof team.age_group_id === "string" ? team.age_group_id : null;
+  }
+
+  if (!resolvedAgeGroupId) {
     return {
       coordinatorId: null as string | null,
       members: [] as TeamMemberProfile[],
@@ -110,17 +122,17 @@ export async function getTeamMembersDetailed(
     admin
       .from("age_groups")
       .select("id, coordinator_id")
-      .eq("id", ageGroupId)
+      .eq("id", resolvedAgeGroupId)
       .maybeSingle(),
     admin
-      .from("team_staff")
+      .from("age_group_staff")
       .select("id, profile_id, role")
-      .eq("team_id", teamId),
+      .eq("age_group_id", resolvedAgeGroupId),
   ]);
 
   const ageGroup = (ageGroupRes.data as AgeGroupRow | null) || null;
   const coordinatorId = ageGroup?.coordinator_id ?? null;
-  const staffRows = (staffRes.data || []) as TeamStaffRow[];
+  const staffRows = (staffRes.data || []) as AgeGroupStaffRow[];
 
   const ids = Array.from(
     new Set([
@@ -156,7 +168,7 @@ export async function getTeamMembersDetailed(
       return {
         profileId,
         role,
-        teamStaffId: staff?.id || null,
+        staffLinkId: staff?.id || null,
         isCoordinator,
         fullName: profile?.full_name || null,
         email: profile?.email || null,
