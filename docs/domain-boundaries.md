@@ -53,21 +53,8 @@ Estas estruturas continuam a existir, mas não são fronteira funcional de autor
 
 - não são raiz paralela do domínio
 - não definem identidade/configuração base do escalão
-- `teams.tactical_system` é apenas shadow compatível de `age_groups.tactical_system`
-- código novo/runtime não deve ler nem escrever `teams.tactical_system`
-- no SQL/schema, funções e triggers que lhe tocam devem explicitar `shadow` no naming sempre que possível
-
-## Remoção futura de teams.tactical_system
-
-`teams.tactical_system` não deve ser removido enquanto ainda existir compatibilidade SQL/manual que dependa da shadow.
-
-Ordem segura:
-
-1. confirmar zero consumidores reais fora da compatibilidade explícita
-2. remover allowlists compatíveis já desnecessárias
-3. remover triggers/funções de shadow
-4. fazer migration final para drop da coluna
-5. endurecer novamente o guardrail para bloquear qualquer reintrodução
+- não têm campo tático próprio
+- o sistema tático do escalão vive apenas em `age_groups.tactical_system`
 
 ## Guardrails
 
@@ -84,7 +71,8 @@ O guardrail falha quando encontra:
 - filtros runtime por `club_id` como boundary funcional
 - novas migrations com helpers/policies centrados em `club`
 - leituras/escritas runtime de `teams.tactical_system`
-- novas migrations que tentem tratar `teams.tactical_system` como fonte funcional
+- novas migrations que tentem reintroduzir `teams.tactical_system`
+- novas functions/triggers shadow para tactical system em `teams`
 
 ## Exemplos rápidos
 
@@ -103,6 +91,8 @@ Falha:
 - migration nova com `create policy ... club_boundary ...`
 - `.from("teams").select("..., tactical_system")` no runtime
 - `.from("teams").update({ tactical_system: ... })` no runtime
+- `alter table public.teams add column tactical_system ...` numa migration nova
+- `create trigger ... tactical_system ...` para voltar a sincronizar uma shadow em `teams`
 
 Exceções técnicas têm de ser explícitas e estreitas no allowlist de:
 

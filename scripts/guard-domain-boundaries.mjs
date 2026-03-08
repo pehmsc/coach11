@@ -6,7 +6,7 @@ import path from "node:path";
 const ROOT = process.cwd();
 const SRC_ROOT = path.join(ROOT, "src");
 const MIGRATIONS_ROOT = path.join(ROOT, "supabase", "migrations");
-const MIGRATION_BASELINE = 20260308033000;
+const MIGRATION_BASELINE = 20260308060001;
 
 const SRC_ALLOWED_EXCEPTIONS = new Map([
   [
@@ -15,35 +15,20 @@ const SRC_ALLOWED_EXCEPTIONS = new Map([
   ],
 ]);
 
-const MIGRATION_ALLOWED_EXCEPTIONS = new Map([
-  [
-    "supabase/migrations/20260308033000_club_compat_consolidation.sql",
-    new Set(["sql-club-wrapper-definition", "sql-club-wrapper-usage"]),
-  ],
-  // Compatibilidade SQL explícita: introduz e endurece a shadow tática
-  // temporária em teams sem a voltar a promover a fonte funcional.
-  [
-    "supabase/migrations/20260308043000_age_group_tactical_system_source_of_truth.sql",
-    new Set(["sql-team-tactical-shadow"]),
-  ],
-  [
-    "supabase/migrations/20260308052000_tactical_system_shadow_sql_hardening.sql",
-    new Set(["sql-team-tactical-shadow"]),
-  ],
-]);
+const MIGRATION_ALLOWED_EXCEPTIONS = new Map();
 
 const SRC_RULES = [
   {
     id: "src-team-tactical-query",
     description:
-      "Não ler/escrever teams.tactical_system no runtime. Usa age_groups.tactical_system como fonte funcional.",
+      "teams.tactical_system já não existe. Usa age_groups.tactical_system como única fonte funcional.",
     regex:
       /\.from\(\s*["']teams["']\s*\)[\s\S]{0,500}?\.(?:select|update|insert|upsert)\([\s\S]{0,240}?\btactical_system\b/g,
   },
   {
     id: "src-team-tactical-type",
     description:
-      "Não expor teams.tactical_system em tipos runtime partilhados. A fonte funcional é age_groups.tactical_system.",
+      "Não reintroduzir teams.tactical_system em tipos runtime. A fonte funcional é age_groups.tactical_system.",
     regex: /\bexport\s+interface\s+Team\b[\s\S]{0,250}?\btactical_system\??\s*:/g,
   },
   {
@@ -74,10 +59,23 @@ const SRC_RULES = [
 
 const MIGRATION_RULES = [
   {
-    id: "sql-team-tactical-shadow",
+    id: "sql-team-tactical-column",
     description:
-      "Novas migrations não devem reintroduzir teams.tactical_system como fonte funcional sem exceção explícita.",
-    regex: /\bpublic\.teams\b[\s\S]{0,400}?\btactical_system\b/gi,
+      "Novas migrations não devem reintroduzir a coluna teams.tactical_system.",
+    regex: /\balter\s+table\s+public\.teams\b[\s\S]{0,200}?\btactical_system\b/gi,
+  },
+  {
+    id: "sql-team-tactical-shadow-function",
+    description:
+      "Novas migrations não devem recriar funções shadow para tactical_system em teams.",
+    regex:
+      /\bcreate\s+or\s+replace\s+function\s+public\.(?:sync_team_tactical_system|sync_age_group_tactical_system)[a-z_]*\s*\(/gi,
+  },
+  {
+    id: "sql-team-tactical-shadow-trigger",
+    description:
+      "Novas migrations não devem recriar triggers shadow de tactical_system para teams.",
+    regex: /\bcreate\s+trigger\s+\S*tactical_system\S*/gi,
   },
   {
     id: "sql-team-staff-write",
