@@ -20,8 +20,14 @@ const MIGRATION_ALLOWED_EXCEPTIONS = new Map([
     "supabase/migrations/20260308033000_club_compat_consolidation.sql",
     new Set(["sql-club-wrapper-definition", "sql-club-wrapper-usage"]),
   ],
+  // Compatibilidade SQL explícita: introduz e endurece a shadow tática
+  // temporária em teams sem a voltar a promover a fonte funcional.
   [
     "supabase/migrations/20260308043000_age_group_tactical_system_source_of_truth.sql",
+    new Set(["sql-team-tactical-shadow"]),
+  ],
+  [
+    "supabase/migrations/20260308052000_tactical_system_shadow_sql_hardening.sql",
     new Set(["sql-team-tactical-shadow"]),
   ],
 ]);

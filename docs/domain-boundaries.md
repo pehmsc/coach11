@@ -55,6 +55,19 @@ Estas estruturas continuam a existir, mas não são fronteira funcional de autor
 - não definem identidade/configuração base do escalão
 - `teams.tactical_system` é apenas shadow compatível de `age_groups.tactical_system`
 - código novo/runtime não deve ler nem escrever `teams.tactical_system`
+- no SQL/schema, funções e triggers que lhe tocam devem explicitar `shadow` no naming sempre que possível
+
+## Remoção futura de teams.tactical_system
+
+`teams.tactical_system` não deve ser removido enquanto ainda existir compatibilidade SQL/manual que dependa da shadow.
+
+Ordem segura:
+
+1. confirmar zero consumidores reais fora da compatibilidade explícita
+2. remover allowlists compatíveis já desnecessárias
+3. remover triggers/funções de shadow
+4. fazer migration final para drop da coluna
+5. endurecer novamente o guardrail para bloquear qualquer reintrodução
 
 ## Guardrails
 
