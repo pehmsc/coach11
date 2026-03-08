@@ -307,12 +307,20 @@ export async function getAdminObservabilityMetrics(
     };
   } catch (error) {
     console.error("[posthog.admin.metrics]", error);
+
+    const message =
+      error instanceof Error ? error.message : "posthog_query_failed";
+    const isUnauthorized =
+      message.includes("posthog_query_failed:401") &&
+      message.includes("not_authenticated");
+
     return {
       configured: false,
       reason: "query_failed",
       periodDays,
-      message:
-        "Não foi possível consultar o PostHog neste momento. Confirma o POSTHOG_PROJECT_ID, a Personal API Key e faz redeploy se alteraste envs no Vercel.",
+      message: isUnauthorized
+        ? "O PostHog respondeu 401 not_authenticated. As envs estão a ser lidas, mas a Personal API Key não está a autenticar na API do PostHog."
+        : "Não foi possível consultar o PostHog neste momento. Confirma o POSTHOG_PROJECT_ID, a Personal API Key e faz redeploy se alteraste envs no Vercel.",
     };
   }
 }
