@@ -30,6 +30,7 @@ export type AdminObservabilityMetrics =
       reason: "missing_config" | "query_failed";
       periodDays: number;
       message: string;
+      missingKeys?: string[];
     };
 
 function getPostHogApiHost() {
@@ -59,12 +60,21 @@ function getPostHogQueryConfig() {
   const apiHost = getPostHogApiHost();
   const projectId = process.env.POSTHOG_PROJECT_ID?.trim() || null;
   const personalApiKey = process.env.POSTHOG_PERSONAL_API_KEY?.trim() || null;
+  const missingKeys = [
+    ...(apiHost ? [] : ["POSTHOG_API_HOST (ou NEXT_PUBLIC_POSTHOG_HOST)"]),
+    ...(projectId ? [] : ["POSTHOG_PROJECT_ID"]),
+    ...(personalApiKey ? [] : ["POSTHOG_PERSONAL_API_KEY"]),
+  ];
 
-  if (!apiHost || !projectId || !personalApiKey) {
-    return null;
+  if (missingKeys.length > 0) {
+    return {
+      configured: false as const,
+      missingKeys,
+    };
   }
 
   return {
+    configured: true as const,
     apiHost,
     projectId,
     personalApiKey,
@@ -255,13 +265,14 @@ export async function getAdminObservabilityMetrics(
 ): Promise<AdminObservabilityMetrics> {
   noStore();
 
-  if (!getPostHogQueryConfig()) {
+  const config = getPostHogQueryConfig();
+  if (!config.configured) {
     return {
       configured: false,
       reason: "missing_config",
       periodDays,
-      message:
-        "Define POSTHOG_API_HOST, POSTHOG_PROJECT_ID e POSTHOG_PERSONAL_API_KEY para ativar métricas reais do PostHog.",
+      message: `Faltam variáveis no runtime: ${config.missingKeys.join(", ")}.`,
+      missingKeys: config.missingKeys,
     };
   }
 
@@ -301,7 +312,7 @@ export async function getAdminObservabilityMetrics(
       reason: "query_failed",
       periodDays,
       message:
-        "Não foi possível consultar o PostHog neste momento. A página admin continua operacional.",
+        "Não foi possível consultar o PostHog neste momento. Confirma o POSTHOG_PROJECT_ID, a Personal API Key e faz redeploy se alteraste envs no Vercel.",
     };
   }
 }

@@ -145,13 +145,13 @@ const BASE_MOBILE_APP_NAV_SECTIONS: AppNavSection[] = [
   {
     id: "main",
     items: [
-      NAV_ITEMS.notifications,
       NAV_ITEMS.players,
       NAV_ITEMS.competitions,
       NAV_ITEMS.games,
       NAV_ITEMS.trainings,
       NAV_ITEMS.team,
       NAV_ITEMS.staff,
+      NAV_ITEMS.notifications,
     ],
   },
   {
