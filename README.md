@@ -57,6 +57,15 @@ curl -X POST https://coach11.vercel.app/api/push/test \
   -d '{"title":"Teste Coach11","body":"Push de teste","url":"/notifications"}'
 ```
 
+## Domain Guardrails
+
+O domínio funcional é `age_group`-first. `clubs`, `club_memberships` e `team_staff`
+existem apenas como compatibilidade técnica.
+
+- referência curta: [docs/domain-boundaries.md](/Users/pedrocampos/Project_2026/coach11/docs/domain-boundaries.md)
+- guard automático: `pnpm run guard:architecture`
+- `pnpm lint` já inclui este guard
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

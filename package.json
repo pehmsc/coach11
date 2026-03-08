@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
+    "guard:architecture": "node scripts/guard-domain-boundaries.mjs",
+    "lint:eslint": "eslint .",
+    "lint": "pnpm run lint:eslint && pnpm run guard:architecture",
     "test": "vitest"
   },
   "dependencies": {

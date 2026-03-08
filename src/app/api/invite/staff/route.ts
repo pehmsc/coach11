@@ -135,6 +135,7 @@ export async function POST(request: Request) {
     const { data: createdInvite, error: dbError } = await admin
       .from("staff_invites")
       .insert({
+        // Compatibilidade técnica/FK apenas. O boundary funcional do convite é age_group_id.
         club_id: ageGroup.club_id,
         age_group_id: ageGroup.id,
         invited_by: user.id,

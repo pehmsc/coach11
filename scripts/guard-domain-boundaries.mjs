@@ -1,0 +1,224 @@
+#!/usr/bin/env node
+
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import path from "node:path";
+
+const ROOT = process.cwd();
+const SRC_ROOT = path.join(ROOT, "src");
+const MIGRATIONS_ROOT = path.join(ROOT, "supabase", "migrations");
+const MIGRATION_BASELINE = 20260308033000;
+
+const SRC_ALLOWED_EXCEPTIONS = new Map([
+  [
+    "src/lib/team/delete-age-group.ts",
+    new Set(["src-club-memberships-query", "src-club-id-filter"]),
+  ],
+]);
+
+const MIGRATION_ALLOWED_EXCEPTIONS = new Map([
+  [
+    "supabase/migrations/20260308033000_club_compat_consolidation.sql",
+    new Set(["sql-club-wrapper-definition", "sql-club-wrapper-usage"]),
+  ],
+]);
+
+const SRC_RULES = [
+  {
+    id: "src-team-staff-query",
+    description:
+      "Não usar team_staff diretamente no runtime. Usa age_group_staff / resolveUserTeamContext.",
+    regex: /\.from\(\s*["']team_staff["']\s*\)/g,
+  },
+  {
+    id: "src-club-memberships-query",
+    description:
+      "Não usar club_memberships como fonte de autorização no runtime. Só cleanup técnico explícito é permitido.",
+    regex: /\.from\(\s*["']club_memberships["']\s*\)/g,
+  },
+  {
+    id: "src-club-wrapper-call",
+    description:
+      "Não chamar helpers de boundary por club no domínio da app. Usa age_group/team helpers.",
+    regex: /\buser_can_(?:access|manage)_club\s*\(/g,
+  },
+  {
+    id: "src-club-id-filter",
+    description:
+      "Não filtrar runtime por club_id como boundary funcional. Usa age_group_id/team_id/game_id/training_session_id.",
+    regex: /\.(?:eq|neq|gt|gte|lt|lte|in|is|match)\(\s*["']club_id["']/g,
+  },
+];
+
+const MIGRATION_RULES = [
+  {
+    id: "sql-team-staff-write",
+    description:
+      "Novas migrations não devem voltar a tratar team_staff como fonte funcional de escrita.",
+    regex: /\b(?:insert\s+into|update|delete\s+from)\s+public\.team_staff\b/gi,
+  },
+  {
+    id: "sql-team-staff-source",
+    description:
+      "Novas migrations não devem usar team_staff como fonte de verdade funcional.",
+    regex: /\b(?:from|join)\s+public\.team_staff\b/gi,
+  },
+  {
+    id: "sql-club-wrapper-definition",
+    description:
+      "Novas migrations não devem criar/redefinir helpers funcionais de club sem revisão explícita.",
+    regex:
+      /create\s+or\s+replace\s+function\s+public\.(?:user_club_ids|user_can_access_club|user_can_manage_club)\s*\(/gi,
+  },
+  {
+    id: "sql-club-wrapper-usage",
+    description:
+      "Novas migrations não devem usar user_can_access_club/user_can_manage_club como boundary funcional.",
+    regex: /\buser_can_(?:access|manage)_club\s*\(/g,
+  },
+  {
+    id: "sql-club-memberships-auth",
+    description:
+      "Novas migrations não devem usar club_memberships como regra funcional de autorização.",
+    regex: /\b(?:from|join)\s+public\.club_memberships\b/gi,
+  },
+  {
+    id: "sql-club-boundary-policy",
+    description:
+      "Novas policies/helpers não devem reintroduzir naming ou boundary centrado em club.",
+    regex: /\bclub_boundary_v\d+\b/gi,
+  },
+  {
+    id: "sql-user-default-club",
+    description:
+      "Novas migrations não devem reintroduzir defaults/guards baseados em user_default_club_id().",
+    regex: /\buser_default_club_id\s*\(/g,
+  },
+];
+
+function listFilesRecursive(rootDir, predicate) {
+  const results = [];
+  const queue = [rootDir];
+
+  while (queue.length > 0) {
+    const current = queue.pop();
+    if (!current) continue;
+
+    for (const entry of readdirSync(current)) {
+      const fullPath = path.join(current, entry);
+      const stats = statSync(fullPath);
+      if (stats.isDirectory()) {
+        queue.push(fullPath);
+        continue;
+      }
+      if (predicate(fullPath)) {
+        results.push(fullPath);
+      }
+    }
+  }
+
+  return results.sort((a, b) => a.localeCompare(b));
+}
+
+function toRelative(fullPath) {
+  return path.relative(ROOT, fullPath).replaceAll(path.sep, "/");
+}
+
+function getMigrationVersion(relativePath) {
+  const match = relativePath.match(/supabase\/migrations\/(\d+)_/);
+  if (!match) return null;
+  return Number.parseInt(match[1], 10);
+}
+
+function findLineNumber(content, index) {
+  return content.slice(0, index).split("\n").length;
+}
+
+function normalizeMatch(match) {
+  return match.replace(/\s+/g, " ").trim();
+}
+
+function collectViolations(relativePath, content, rules, allowedExceptions) {
+  const allowed = allowedExceptions.get(relativePath) ?? new Set();
+  const violations = [];
+
+  for (const rule of rules) {
+    for (const match of content.matchAll(rule.regex)) {
+      if (allowed.has(rule.id)) continue;
+
+      violations.push({
+        file: relativePath,
+        line: findLineNumber(content, match.index ?? 0),
+        ruleId: rule.id,
+        description: rule.description,
+        match: normalizeMatch(match[0]),
+      });
+    }
+  }
+
+  return violations;
+}
+
+function formatViolation(violation) {
+  return [
+    `${violation.file}:${violation.line}`,
+    `  rule: ${violation.ruleId}`,
+    `  match: ${violation.match}`,
+    `  why: ${violation.description}`,
+  ].join("\n");
+}
+
+const srcFiles = listFilesRecursive(
+  SRC_ROOT,
+  (fullPath) => /\.(?:ts|tsx|js|jsx)$/.test(fullPath),
+);
+
+const migrationFiles = listFilesRecursive(
+  MIGRATIONS_ROOT,
+  (fullPath) => fullPath.endsWith(".sql"),
+).filter((fullPath) => {
+  const relativePath = toRelative(fullPath);
+  const version = getMigrationVersion(relativePath);
+  return typeof version === "number" && version >= MIGRATION_BASELINE;
+});
+
+const violations = [];
+
+for (const file of srcFiles) {
+  const relativePath = toRelative(file);
+  const content = readFileSync(file, "utf8");
+  violations.push(
+    ...collectViolations(relativePath, content, SRC_RULES, SRC_ALLOWED_EXCEPTIONS),
+  );
+}
+
+for (const file of migrationFiles) {
+  const relativePath = toRelative(file);
+  const content = readFileSync(file, "utf8");
+  violations.push(
+    ...collectViolations(
+      relativePath,
+      content,
+      MIGRATION_RULES,
+      MIGRATION_ALLOWED_EXCEPTIONS,
+    ),
+  );
+}
+
+if (violations.length > 0) {
+  console.error(
+    [
+      "Domain boundary guard failed.",
+      "club/club_memberships are technical compatibility only.",
+      "Use age_groups, age_group_staff and teams as the functional boundary.",
+      "",
+      ...violations.map(formatViolation),
+      "",
+      "If a technical compatibility exception is genuinely required, update the explicit allowlist in scripts/guard-domain-boundaries.mjs with a narrow justification.",
+    ].join("\n"),
+  );
+  process.exit(1);
+}
+
+console.log(
+  `Domain boundary guard passed (${srcFiles.length} src files, ${migrationFiles.length} guarded migrations).`,
+);
