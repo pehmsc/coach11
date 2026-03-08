@@ -1,8 +1,17 @@
+import { withSentryConfig } from "@sentry/nextjs";
 import type { NextConfig } from "next";
 
 const supabaseHost = process.env.NEXT_PUBLIC_SUPABASE_URL
   ? new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname
   : "hqlqgviiafqfefukodpe.supabase.co";
+const posthogOrigin = normalizeOrigin(process.env.NEXT_PUBLIC_POSTHOG_HOST);
+const sentryOrigin = normalizeOrigin(process.env.NEXT_PUBLIC_SENTRY_DSN);
+const connectSources = [
+  "'self'",
+  `https://${supabaseHost}`,
+  `wss://${supabaseHost}`,
+  ...new Set([posthogOrigin, sentryOrigin].filter((value): value is string => !!value)),
+];
 
 function normalizeOrigin(value: string | undefined | null) {
   if (!value) return null;
@@ -37,7 +46,7 @@ const csp = [
   "script-src 'self' 'unsafe-inline'",
   "style-src 'self' 'unsafe-inline'",
   `img-src 'self' data: blob: https://${supabaseHost} https://lh3.googleusercontent.com https://tile.openstreetmap.org`,
-  `connect-src 'self' https://${supabaseHost} wss://${supabaseHost}`,
+  `connect-src ${connectSources.join(" ")}`,
   "worker-src 'self'",
   "manifest-src 'self'",
   "font-src 'self'",
@@ -72,6 +81,8 @@ const reportOnlyConnectSources = [
     [
       reportOnlySupabaseOrigin,
       reportOnlySupabaseOrigin ? toSocketOrigin(reportOnlySupabaseOrigin) : null,
+      posthogOrigin,
+      sentryOrigin,
       ...parseOriginList(process.env.CSP_REPORT_ONLY_CONNECT_ORIGINS),
     ].filter((value): value is string => !!value),
   ),
@@ -203,4 +214,17 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default withSentryConfig(nextConfig, {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  silent: true,
+  sourcemaps: {
+    disable: !process.env.SENTRY_AUTH_TOKEN,
+  },
+  webpack: {
+    treeshake: {
+      removeDebugLogging: true,
+    },
+  },
+});

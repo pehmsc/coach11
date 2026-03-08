@@ -2,6 +2,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveUserTeamContext } from "@/lib/auth/team-context";
 import { PRIVATE_SWR_CACHE_CONTROL } from "@/lib/http/cache";
+import { respondInternalError } from "@/lib/http/respond-internal-error";
+import { captureServerProductEvent } from "@/lib/observability/posthog-server";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -72,14 +74,18 @@ function resolveTargetAgeGroupId(
 }
 
 export async function GET(request: Request) {
+  let userId: string | null = null;
+  let targetAgeGroupId: string | null = null;
+
   try {
     const routeContext = await getRouteContext();
     if ("error" in routeContext) return routeContext.error;
-    const { supabase, context } = routeContext;
+    const { supabase, context, userId: resolvedUserId } = routeContext;
+    userId = resolvedUserId;
 
     const { searchParams } = new URL(request.url);
     const requestedAgeGroupId = searchParams.get("ageGroupId");
-    const targetAgeGroupId = resolveTargetAgeGroupId(context, requestedAgeGroupId);
+    targetAgeGroupId = resolveTargetAgeGroupId(context, requestedAgeGroupId);
 
     if (!targetAgeGroupId) {
       return NextResponse.json({ error: "Escalão inválido." }, { status: 422 });
@@ -130,16 +136,23 @@ export async function GET(request: Request) {
       },
     );
   } catch (error) {
-    console.error("Erro em GET /api/players:", error);
-    return NextResponse.json({ error: "Erro interno do servidor." }, { status: 500 });
+    return respondInternalError("api.players.get", error, {
+      request,
+      userId,
+      ageGroupId: targetAgeGroupId,
+    });
   }
 }
 
 export async function POST(request: Request) {
+  let userId: string | null = null;
+  let targetAgeGroupId: string | null = null;
+
   try {
     const routeContext = await getRouteContext();
     if ("error" in routeContext) return routeContext.error;
-    const { supabase, context } = routeContext;
+    const { supabase, context, userId: resolvedUserId } = routeContext;
+    userId = resolvedUserId;
 
     const body = await request.json().catch(() => null);
     const parsed = PlayerCreateSchema.safeParse(body);
@@ -162,7 +175,7 @@ export async function POST(request: Request) {
       age_group_id: requestedAgeGroupId,
     } = parsed.data;
 
-    const targetAgeGroupId = resolveTargetAgeGroupId(context, requestedAgeGroupId);
+    targetAgeGroupId = resolveTargetAgeGroupId(context, requestedAgeGroupId);
 
     if (!targetAgeGroupId) {
       return NextResponse.json(
@@ -201,9 +214,22 @@ export async function POST(request: Request) {
       );
     }
 
+    await captureServerProductEvent({
+      distinctId: userId,
+      event: "player_added",
+      properties: {
+        age_group_id: targetAgeGroupId,
+        player_id: data.id,
+        player_status: data.status,
+      },
+    });
+
     return NextResponse.json({ success: true, player: data });
   } catch (error) {
-    console.error("Erro em POST /api/players:", error);
-    return NextResponse.json({ error: "Erro interno do servidor." }, { status: 500 });
+    return respondInternalError("api.players.post", error, {
+      request,
+      userId,
+      ageGroupId: targetAgeGroupId,
+    });
   }
 }

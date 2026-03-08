@@ -30,6 +30,7 @@ import {
   getExternalConvocationIdFromLivePlayerId,
   toExternalLivePlayerId,
 } from "@/lib/games/live-player-ids";
+import { captureClientProductEvent } from "@/lib/observability/posthog-client";
 import { exportMatchReportPDF } from "@/lib/pdf/matchReport";
 import type { Game, Player, GameEvent, GameEventType } from "@/types/database";
 
@@ -1871,6 +1872,13 @@ export default function LiveGamePage() {
             (e) => e.player_id === p.id && e.event_type === "red_card",
           ).length,
         })),
+      });
+
+      captureClientProductEvent("pdf_generated", {
+        game_id: game.id,
+        age_group_id: game.age_group_id ?? null,
+        team_id: game.team_id ?? null,
+        source: "match_report",
       });
     } catch {
       toast.error("Erro ao exportar PDF.");

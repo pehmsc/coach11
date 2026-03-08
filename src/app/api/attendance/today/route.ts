@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { createNotificationForTeamOnce } from "@/lib/notifications/service";
+import { captureServerProductEvent } from "@/lib/observability/posthog-server";
 import {
   getPresencePromptState,
   shouldShowPresencePrompt,
@@ -112,6 +113,8 @@ function parseTrainingSessionAccessContext(value: unknown): TrainingSessionAcces
 }
 
 export async function GET(request: Request) {
+  let userId: string | null = null;
+
   try {
     const supabase = await createClient();
     const {
@@ -121,6 +124,7 @@ export async function GET(request: Request) {
     if (!user) {
       return jsonNoStore({ error: "Não autenticado" }, { status: 401 });
     }
+    userId = user.id;
 
     const date = normalizeDateParam(new URL(request.url).searchParams.get("date"));
     const rpcRes = await supabase.rpc("rpc_attendance_today_get", {
@@ -217,11 +221,19 @@ export async function GET(request: Request) {
       { status: 500 },
     );
   } catch (error) {
-    return respondInternalError("api.attendance.today.get", error);
+    return respondInternalError("api.attendance.today.get", error, {
+      request,
+      userId,
+    });
   }
 }
 
 export async function POST(request: Request) {
+  let userId: string | null = null;
+  let sessionIdForError: string | null = null;
+  let sessionAgeGroupIdForError: string | null = null;
+  let sessionTeamIdForError: string | null = null;
+
   try {
     const supabase = await createClient();
     const {
@@ -231,12 +243,14 @@ export async function POST(request: Request) {
     if (!user) {
       return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
     }
+    userId = user.id;
 
     const body = await request.json().catch(() => null);
     const sessionId =
       body && typeof body === "object" && typeof body.sessionId === "string"
         ? body.sessionId
         : null;
+    sessionIdForError = sessionId;
     const attendanceInput =
       body && typeof body === "object" && typeof body.attendance === "object"
         ? (body.attendance as Record<string, unknown>)
@@ -301,6 +315,8 @@ export async function POST(request: Request) {
     };
     const sessionAgeGroupId = sessionAccess.ageGroupId;
     const sessionTeamId = sessionAccess.teamId;
+    sessionAgeGroupIdForError = sessionAgeGroupId;
+    sessionTeamIdForError = sessionTeamId;
 
     if (!sessionAgeGroupId) {
       return NextResponse.json(
@@ -432,6 +448,19 @@ export async function POST(request: Request) {
       }
     }
 
+    await captureServerProductEvent({
+      distinctId: user.id,
+      event: "attendance_marked",
+      properties: {
+        age_group_id: sessionAgeGroupId,
+        team_id: sessionTeamId,
+        training_session_id: sessionId,
+        saved_count: entries.length,
+        finalized: finalize,
+        session_status: sessionStatus,
+      },
+    });
+
     return NextResponse.json({
       success: true,
       sessionId,
@@ -440,6 +469,14 @@ export async function POST(request: Request) {
       sessionStatus,
     });
   } catch (error) {
-    return respondInternalError("api.attendance.today.post", error);
+    return respondInternalError("api.attendance.today.post", error, {
+      request,
+      userId,
+      ageGroupId: sessionAgeGroupIdForError,
+      teamId: sessionTeamIdForError,
+      extra: {
+        training_session_id: sessionIdForError,
+      },
+    });
   }
 }

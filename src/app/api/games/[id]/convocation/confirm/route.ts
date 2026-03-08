@@ -4,6 +4,7 @@ import {
   insertConvocationAuditLog,
 } from "@/lib/games/convocation-guard";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
+import { captureServerProductEvent } from "@/lib/observability/posthog-server";
 import { createNotificationForTeamOnce } from "@/lib/notifications/service";
 import { NextResponse } from "next/server";
 
@@ -12,8 +13,14 @@ type RouteContext = {
 };
 
 export async function POST(_request: Request, { params }: RouteContext) {
+  let userId: string | null = null;
+  let gameIdForError: string | null = null;
+  let ageGroupIdForError: string | null = null;
+  let teamIdForError: string | null = null;
+
   try {
     const { id: gameId } = await params;
+    gameIdForError = gameId;
 
     const supabase = await createClient();
     const {
@@ -23,6 +30,7 @@ export async function POST(_request: Request, { params }: RouteContext) {
     if (!user) {
       return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
     }
+    userId = user.id;
 
     const body = await _request.json().catch(() => null);
     const correctionReason =
@@ -187,8 +195,22 @@ export async function POST(_request: Request, { params }: RouteContext) {
       .select("id, title, opponent_name, team_id, age_group_id")
       .eq("id", gameId)
       .maybeSingle();
+    ageGroupIdForError = gameRow?.age_group_id ?? null;
+    teamIdForError = gameRow?.team_id ?? null;
 
     if (gameRow?.team_id && gameRow?.age_group_id) {
+      await captureServerProductEvent({
+        distinctId: user.id,
+        event: "convocation_created",
+        properties: {
+          game_id: gameId,
+          age_group_id: gameRow.age_group_id,
+          team_id: gameRow.team_id,
+          players_count: playersCount,
+          created_now: convocationRows?.length ? false : true,
+        },
+      });
+
       try {
         await createNotificationForTeamOnce(supabase, {
           teamId: gameRow.team_id,
@@ -215,7 +237,12 @@ export async function POST(_request: Request, { params }: RouteContext) {
       players: playersCount,
     });
   } catch (error) {
-    console.error("Erro ao confirmar convocatória:", error);
-    return respondInternalError("api.games.id.convocation.confirm.post", error);
+    return respondInternalError("api.games.id.convocation.confirm.post", error, {
+      request: _request,
+      userId,
+      gameId: gameIdForError,
+      ageGroupId: ageGroupIdForError,
+      teamId: teamIdForError,
+    });
   }
 }

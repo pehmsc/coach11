@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
+import { captureServerProductEvent } from "@/lib/observability/posthog-server";
 import { NextResponse } from "next/server";
 
 type RouteContext = {
@@ -72,8 +73,14 @@ function isValidFinalStat(row: unknown): row is FinalStatInput {
 }
 
 export async function POST(request: Request, { params }: RouteContext) {
+  let userId: string | null = null;
+  let gameIdForError: string | null = null;
+  let ageGroupIdForError: string | null = null;
+  let teamIdForError: string | null = null;
+
   try {
     const { id: gameId } = await params;
+    gameIdForError = gameId;
 
     const supabase = await createClient();
     const {
@@ -83,6 +90,7 @@ export async function POST(request: Request, { params }: RouteContext) {
     if (!user) {
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
+    userId = user.id;
 
     const body = (await request.json().catch(() => null)) as Partial<FinalizePayload> | null;
     if (!body) {
@@ -139,6 +147,14 @@ export async function POST(request: Request, { params }: RouteContext) {
       );
     }
 
+    const { data: gameMeta } = await supabase
+      .from("games")
+      .select("team_id, age_group_id")
+      .eq("id", gameId)
+      .maybeSingle();
+    ageGroupIdForError = gameMeta?.age_group_id ?? null;
+    teamIdForError = gameMeta?.team_id ?? null;
+
     const rowsToInsert = finalStats.map((row) => ({
       game_id: gameId,
       player_id: row.player_id,
@@ -193,12 +209,31 @@ export async function POST(request: Request, { params }: RouteContext) {
         ? (rpcResult.data as { insertedRows: number }).insertedRows
         : null;
 
+    await captureServerProductEvent({
+      distinctId: user.id,
+      event: "game_finalized",
+      properties: {
+        game_id: gameId,
+        age_group_id: gameMeta?.age_group_id ?? null,
+        team_id: gameMeta?.team_id ?? null,
+        inserted_rows: insertedRowsFromRpc ?? rowsToInsert.length,
+        score_home: scoreHome,
+        score_away: scoreAway,
+        player_count: rowsToInsert.length,
+      },
+    });
+
     return NextResponse.json({
       success: true,
       insertedRows: insertedRowsFromRpc ?? rowsToInsert.length,
     });
   } catch (error) {
-    console.error("Live finalize error:", error);
-    return respondInternalError("api.games.id.live.finalize.post", error);
+    return respondInternalError("api.games.id.live.finalize.post", error, {
+      request,
+      userId,
+      gameId: gameIdForError,
+      ageGroupId: ageGroupIdForError,
+      teamId: teamIdForError,
+    });
   }
 }

@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
+import { captureServerProductEvent } from "@/lib/observability/posthog-server";
 import {
   buildStoredGameEventParticipantFields,
   GAME_EVENT_SELECT_COLUMNS,
@@ -145,8 +146,12 @@ function computeSentOffPlayers(events: Array<{
 }
 
 export async function GET(_: Request, { params }: RouteContext) {
+  let userId: string | null = null;
+  let gameIdForError: string | null = null;
+
   try {
     const { id: gameId } = await params;
+    gameIdForError = gameId;
 
     const supabase = await createClient();
     const {
@@ -156,6 +161,7 @@ export async function GET(_: Request, { params }: RouteContext) {
     if (!user) {
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
+    userId = user.id;
 
     const access = await assertGameAccess(supabase, gameId);
     if (!access.ok) return access.response;
@@ -181,13 +187,22 @@ export async function GET(_: Request, { params }: RouteContext) {
       }>),
     });
   } catch (error) {
-    return respondInternalError("api.games.id.live.events.get", error);
+    return respondInternalError("api.games.id.live.events.get", error, {
+      userId,
+      gameId: gameIdForError,
+    });
   }
 }
 
 export async function POST(request: Request, { params }: RouteContext) {
+  let userId: string | null = null;
+  let gameIdForError: string | null = null;
+  let ageGroupIdForError: string | null = null;
+  let teamIdForError: string | null = null;
+
   try {
     const { id: gameId } = await params;
+    gameIdForError = gameId;
 
     const supabase = await createClient();
     const {
@@ -197,6 +212,7 @@ export async function POST(request: Request, { params }: RouteContext) {
     if (!user) {
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
+    userId = user.id;
 
     const body = await request.json().catch(() => null);
     const rowsRaw = Array.isArray(body?.events)
@@ -391,6 +407,26 @@ export async function POST(request: Request, { params }: RouteContext) {
       return NextResponse.json({ error: "Erro ao guardar eventos." }, { status: 500 });
     }
 
+    const { data: gameMeta } = await supabase
+      .from("games")
+      .select("team_id, age_group_id")
+      .eq("id", gameId)
+      .maybeSingle();
+    ageGroupIdForError = gameMeta?.age_group_id ?? null;
+    teamIdForError = gameMeta?.team_id ?? null;
+
+    await captureServerProductEvent({
+      distinctId: user.id,
+      event: "game_event_recorded",
+      properties: {
+        game_id: gameId,
+        age_group_id: gameMeta?.age_group_id ?? null,
+        team_id: gameMeta?.team_id ?? null,
+        events_count: rows.length,
+        has_opponent_events: rows.some((row) => row.is_opponent_event),
+      },
+    });
+
     return NextResponse.json({
       success: true,
       events: normalizeStoredGameEventRowsForClient((data || []) as Array<{
@@ -402,13 +438,23 @@ export async function POST(request: Request, { params }: RouteContext) {
       }>),
     });
   } catch (error) {
-    return respondInternalError("api.games.id.live.events.post", error);
+    return respondInternalError("api.games.id.live.events.post", error, {
+      request,
+      userId,
+      gameId: gameIdForError,
+      ageGroupId: ageGroupIdForError,
+      teamId: teamIdForError,
+    });
   }
 }
 
 export async function DELETE(request: Request, { params }: RouteContext) {
+  let userId: string | null = null;
+  let gameIdForError: string | null = null;
+
   try {
     const { id: gameId } = await params;
+    gameIdForError = gameId;
 
     const supabase = await createClient();
     const {
@@ -418,6 +464,7 @@ export async function DELETE(request: Request, { params }: RouteContext) {
     if (!user) {
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
+    userId = user.id;
 
     const body = await request.json().catch(() => null);
     const eventIds = Array.isArray(body?.eventIds)
@@ -449,6 +496,10 @@ export async function DELETE(request: Request, { params }: RouteContext) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    return respondInternalError("api.games.id.live.events.delete", error);
+    return respondInternalError("api.games.id.live.events.delete", error, {
+      request,
+      userId,
+      gameId: gameIdForError,
+    });
   }
 }

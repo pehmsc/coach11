@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
+import { captureServerProductEvent } from "@/lib/observability/posthog-server";
 import { fetchGameAccessContext } from "@/lib/games/access";
 import { createNotificationForTeamOnce } from "@/lib/notifications/service";
 import { NextResponse } from "next/server";
@@ -101,8 +102,12 @@ async function assertGameAccess(
 }
 
 export async function GET(_: Request, { params }: RouteContext) {
+  let userId: string | null = null;
+  let gameIdForError: string | null = null;
+
   try {
     const { id: gameId } = await params;
+    gameIdForError = gameId;
 
     const supabase = await createClient();
     const {
@@ -112,6 +117,7 @@ export async function GET(_: Request, { params }: RouteContext) {
     if (!user) {
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
+    userId = user.id;
 
     const access = await assertGameAccess(supabase, gameId);
     if (!access.ok) return access.response;
@@ -151,13 +157,22 @@ export async function GET(_: Request, { params }: RouteContext) {
 
     return NextResponse.json({ checkpoint });
   } catch (error) {
-    return respondInternalError("api.games.id.live.checkpoint.get", error);
+    return respondInternalError("api.games.id.live.checkpoint.get", error, {
+      userId,
+      gameId: gameIdForError,
+    });
   }
 }
 
 export async function PATCH(request: Request, { params }: RouteContext) {
+  let userId: string | null = null;
+  let gameIdForError: string | null = null;
+  let ageGroupIdForError: string | null = null;
+  let teamIdForError: string | null = null;
+
   try {
     const { id: gameId } = await params;
+    gameIdForError = gameId;
 
     const supabase = await createClient();
     const {
@@ -167,6 +182,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     if (!user) {
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
+    userId = user.id;
 
     const body = await request.json().catch(() => null);
     const phase = parsePhase(body?.phase);
@@ -194,6 +210,8 @@ export async function PATCH(request: Request, { params }: RouteContext) {
 
     const access = await assertGameAccess(supabase, gameId);
     if (!access.ok) return access.response;
+    ageGroupIdForError = access.ageGroupId;
+    teamIdForError = access.teamId;
 
     const runningSinceMs = isRunningPhase(phase) ? runningSinceMsRaw : null;
 
@@ -235,6 +253,17 @@ export async function PATCH(request: Request, { params }: RouteContext) {
         access.teamId &&
         access.ageGroupId
       ) {
+        await captureServerProductEvent({
+          distinctId: user.id,
+          event: "game_started",
+          properties: {
+            game_id: gameId,
+            age_group_id: access.ageGroupId,
+            team_id: access.teamId,
+            phase,
+          },
+        });
+
         try {
           await createNotificationForTeamOnce(supabase, {
             teamId: access.teamId,
@@ -258,6 +287,12 @@ export async function PATCH(request: Request, { params }: RouteContext) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    return respondInternalError("api.games.id.live.checkpoint.patch", error);
+    return respondInternalError("api.games.id.live.checkpoint.patch", error, {
+      request,
+      userId,
+      gameId: gameIdForError,
+      ageGroupId: ageGroupIdForError,
+      teamId: teamIdForError,
+    });
   }
 }

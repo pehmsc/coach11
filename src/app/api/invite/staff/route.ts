@@ -8,6 +8,7 @@ import { normalizeEmail } from "@/lib/auth/beta-access";
 import { ensureInviteAuthUser } from "@/lib/auth/invite-auth-user";
 import { getCanonicalAppUrl } from "@/lib/config/canonical-app-url";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
+import { captureServerProductEvent } from "@/lib/observability/posthog-server";
 import { resolveUserTeamContext } from "@/lib/auth/team-context";
 import {
   getAgeGroupTechnicalStaffUsage,
@@ -39,6 +40,9 @@ const roleLabel: Record<string, string> = {
 };
 
 export async function POST(request: Request) {
+  let userId: string | null = null;
+  let ageGroupId: string | null = null;
+
   try {
     const supabase = await createClient();
     const admin = createAdminClient();
@@ -51,6 +55,7 @@ export async function POST(request: Request) {
     if (!user) {
       return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
     }
+    userId = user.id;
 
     // 🚦 Rate limiting: máx 5 convites por utilizador em 15 minutos
     const rateLimitExceeded = await checkInviteSendLimit(supabase, user.id);
@@ -83,6 +88,7 @@ export async function POST(request: Request) {
         { status: 404 },
       );
     }
+    ageGroupId = ageGroup.id;
 
     try {
       const usage = await getAgeGroupTechnicalStaffUsage(admin, ageGroup.id);
@@ -198,6 +204,16 @@ export async function POST(request: Request) {
     // 📧 Configuração Resend
     if (!process.env.RESEND_API_KEY) {
       console.error("RESEND_API_KEY não definida.");
+      await captureServerProductEvent({
+        distinctId: user.id,
+        event: "staff_invited",
+        properties: {
+          age_group_id: ageGroup.id,
+          invite_role: role,
+          invite_id: createdInvite?.id ?? null,
+          email_sent: false,
+        },
+      });
       return NextResponse.json({
         success: true,
         inviteId: createdInvite?.id ?? null,
@@ -247,6 +263,16 @@ export async function POST(request: Request) {
 
     if (emailError) {
       console.error("Resend error:", emailError);
+      await captureServerProductEvent({
+        distinctId: user.id,
+        event: "staff_invited",
+        properties: {
+          age_group_id: ageGroup.id,
+          invite_role: role,
+          invite_id: createdInvite?.id ?? null,
+          email_sent: false,
+        },
+      });
       return NextResponse.json({
         success: true,
         inviteId: createdInvite?.id ?? null,
@@ -255,6 +281,16 @@ export async function POST(request: Request) {
         warning: "Convite criado mas email não enviado.",
       });
     }
+    await captureServerProductEvent({
+      distinctId: user.id,
+      event: "staff_invited",
+      properties: {
+        age_group_id: ageGroup.id,
+        invite_role: role,
+        invite_id: createdInvite?.id ?? null,
+        email_sent: true,
+      },
+    });
     return NextResponse.json({
       success: true,
       inviteId: createdInvite?.id ?? null,
@@ -262,6 +298,10 @@ export async function POST(request: Request) {
       emailSent: true,
     });
   } catch (error) {
-    return respondInternalError("api.invite.staff.post", error);
+    return respondInternalError("api.invite.staff.post", error, {
+      request,
+      userId,
+      ageGroupId,
+    });
   }
 }

@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { clearClientCaches } from "@/lib/query/cache-clear";
 import { invalidateMeContext } from "@/lib/query/invalidation";
+import { resetAuthenticatedObservabilityContext } from "@/lib/observability/user-context";
 
 export function QueryProvider({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -32,6 +33,7 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const { data } = supabase.auth.onAuthStateChange((event) => {
       if (event === "SIGNED_OUT") {
+        resetAuthenticatedObservabilityContext();
         clearClientCaches(queryClient);
         return;
       }
