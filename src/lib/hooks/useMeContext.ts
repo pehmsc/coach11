@@ -15,6 +15,11 @@ export type MeContextResponse = {
     id: string;
     name?: string;
     club_name?: string;
+    club_short_name?: string | null;
+    club_logo_url?: string | null;
+    football_format?: string | null;
+    tactical_system?: string | null;
+    season?: string | null;
   } | null;
   accessibleTeamIds?: string[];
   technicalStaffUsage?: {

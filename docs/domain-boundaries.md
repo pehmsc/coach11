@@ -7,6 +7,7 @@ O domínio funcional da app é `age_group`-first.
 - `age_groups` é a raiz funcional.
 - `age_groups.coordinator_id` define o coordenador do escalão.
 - `age_group_staff` define a equipa técnica efetiva do escalão.
+- `age_groups.tactical_system` define o sistema tático base do escalão.
 - `teams` são entidades filhas do escalão para contexto competitivo/calendário.
 - O subtree operacional deve derivar de `age_group` ou `team`.
 
@@ -45,6 +46,14 @@ Estas estruturas continuam a existir, mas não são fronteira funcional de autor
 - não deve receber writes diretos de novas funcionalidades
 - não deve ser usada por código novo como fonte principal de leitura/autorização
 - a responsabilidade funcional é de `age_group_staff`
+
+## teams
+
+`teams` continuam a existir para contexto competitivo/calendário.
+
+- não são raiz paralela do domínio
+- não definem identidade/configuração base do escalão
+- `teams.tactical_system` é apenas shadow compatível de `age_groups.tactical_system`
 
 ## Guardrails
 

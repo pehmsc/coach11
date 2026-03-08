@@ -44,6 +44,7 @@ export interface AgeGroup {
   public_access_count?: number;
   public_last_accessed_at?: string | null;
   football_format: FootballFormat;
+  tactical_system?: string | null;
   season: string;
   created_at: string;
 }
@@ -53,6 +54,7 @@ export interface Team {
   age_group_id: string;
   name: string;
   is_competitive: boolean;
+  /** Shadow compatível derivado de age_groups.tactical_system. */
   tactical_system?: string;
   home_ground_id?: string;
   created_at: string;

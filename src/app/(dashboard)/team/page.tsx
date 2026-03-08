@@ -206,6 +206,7 @@ export default function TeamPage() {
     setFootballFormat(ag.football_format);
     setSeason(ag.season);
     setLogoUrl(ag.club_logo_url || "");
+    setTacticalSystem(ag.tactical_system || "");
     setKitPieces((payload?.kits as KitPiece[]) || []);
 
     let tid = typeof payload?.teamId === "string" ? payload.teamId : null;
@@ -217,16 +218,9 @@ export default function TeamPage() {
           name: `${ag.club_name} ${ag.name}`,
           is_competitive: true,
         })
-        .select("id, tactical_system")
+        .select("id")
         .single();
       tid = newTeam?.id ?? null;
-    } else if (tid) {
-      const { data: team } = await supabase
-        .from("teams")
-        .select("tactical_system")
-        .eq("id", tid)
-        .maybeSingle();
-      setTacticalSystem(team?.tactical_system || "");
     }
     setTeamId(tid);
     setLoading(false);
@@ -264,6 +258,8 @@ export default function TeamPage() {
               club_name: clubName,
               club_short_name: normalizedClubShortName || undefined,
               name: ageGroupName,
+              football_format: footballFormat as AgeGroup["football_format"],
+              season,
             }
           : prev,
       );
@@ -273,16 +269,24 @@ export default function TeamPage() {
   }
 
   async function handleTacticalSave(system: string) {
-    if (!teamId || (!isSuperCoordinator && accountRole !== "coordinator")) return;
+    if (!existingAgeGroup || (!isSuperCoordinator && accountRole !== "coordinator")) return;
     setSavingTactical(true);
     const { error } = await supabase
-      .from("teams")
+      .from("age_groups")
       .update({ tactical_system: system || null })
-      .eq("id", teamId);
+      .eq("id", existingAgeGroup.id);
     if (error) {
       toast.error("Erro ao guardar sistema.");
     } else {
       setTacticalSystem(system);
+      setExistingAgeGroup((prev) =>
+        prev
+          ? {
+              ...prev,
+              tactical_system: system || null,
+            }
+          : prev,
+      );
       toast.success("Sistema táctico guardado");
     }
     setSavingTactical(false);
@@ -644,10 +648,10 @@ export default function TeamPage() {
       )}
 
       {/* Sistema Táctico */}
-      {existingAgeGroup && teamId && (
+      {existingAgeGroup && (
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Sistema Táctico</CardTitle>
+            <CardTitle className="text-base">Sistema Táctico do Escalão</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex gap-2 items-center">
@@ -678,7 +682,11 @@ export default function TeamPage() {
               <p className="mt-2 text-xs text-slate-400">
                 Só o coordenador pode alterar o sistema táctico.
               </p>
-            ) : null}
+            ) : (
+              <p className="mt-2 text-xs text-slate-400">
+                Esta configuração aplica-se a todas as equipas do escalão.
+              </p>
+            )}
           </CardContent>
         </Card>
       )}

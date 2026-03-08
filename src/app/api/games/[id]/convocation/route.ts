@@ -385,10 +385,11 @@ export async function GET(_request: Request, { params }: RouteContext) {
     let footballFormat: string | null = null;
     let homeClubName: string | null = null;
     let homeClubShortName: string | null = null;
+    let ageGroupTacticalSystem: string | null = null;
     if (game.age_group_id) {
       const { data: ag } = await supabase
         .from("age_groups")
-        .select("football_format, club_name, club_short_name")
+        .select("football_format, club_name, club_short_name, tactical_system")
         .eq("id", game.age_group_id)
         .maybeSingle();
       footballFormat =
@@ -396,6 +397,8 @@ export async function GET(_request: Request, { params }: RouteContext) {
       homeClubName = (ag as { club_name?: string } | null)?.club_name ?? null;
       homeClubShortName =
         (ag as { club_short_name?: string | null } | null)?.club_short_name ?? null;
+      ageGroupTacticalSystem =
+        (ag as { tactical_system?: string | null } | null)?.tactical_system ?? null;
     }
 
     // Lineup statuses from game_stats_live
@@ -490,7 +493,9 @@ export async function GET(_request: Request, { params }: RouteContext) {
       footballFormat,
       lineupStatuses,
       starterIds: Array.from(starterIdsSet),
-      tacticalSystem: (game as unknown as { additional_info?: string }).additional_info ?? null,
+      tacticalSystem:
+        (game as unknown as { additional_info?: string }).additional_info ??
+        ageGroupTacticalSystem,
       homeClubName,
       homeClubShortName,
       convocationStatus,
