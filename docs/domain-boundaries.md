@@ -54,6 +54,7 @@ Estas estruturas continuam a existir, mas não são fronteira funcional de autor
 - não são raiz paralela do domínio
 - não definem identidade/configuração base do escalão
 - `teams.tactical_system` é apenas shadow compatível de `age_groups.tactical_system`
+- código novo/runtime não deve ler nem escrever `teams.tactical_system`
 
 ## Guardrails
 
@@ -69,12 +70,15 @@ O guardrail falha quando encontra:
 - uso de `user_can_access_club(...)` / `user_can_manage_club(...)` no domínio da app
 - filtros runtime por `club_id` como boundary funcional
 - novas migrations com helpers/policies centrados em `club`
+- leituras/escritas runtime de `teams.tactical_system`
+- novas migrations que tentem tratar `teams.tactical_system` como fonte funcional
 
 ## Exemplos rápidos
 
 Passa:
 
 - `public.user_can_access_age_group_v2(age_group_id)`
+- `.from("age_groups").select("..., tactical_system")`
 - query runtime por `team_id`, `age_group_id`, `game_id` ou `training_session_id`
 - cleanup técnico explícito em [delete-age-group.ts](/Users/pedrocampos/Project_2026/coach11/src/lib/team/delete-age-group.ts)
 
@@ -84,6 +88,8 @@ Falha:
 - `.eq("club_id", ...)` como filtro funcional em `src`
 - `user_can_access_club(...)` numa rota/helper novo
 - migration nova com `create policy ... club_boundary ...`
+- `.from("teams").select("..., tactical_system")` no runtime
+- `.from("teams").update({ tactical_system: ... })` no runtime
 
 Exceções técnicas têm de ser explícitas e estreitas no allowlist de:
 

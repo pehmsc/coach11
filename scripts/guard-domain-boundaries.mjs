@@ -20,9 +20,26 @@ const MIGRATION_ALLOWED_EXCEPTIONS = new Map([
     "supabase/migrations/20260308033000_club_compat_consolidation.sql",
     new Set(["sql-club-wrapper-definition", "sql-club-wrapper-usage"]),
   ],
+  [
+    "supabase/migrations/20260308043000_age_group_tactical_system_source_of_truth.sql",
+    new Set(["sql-team-tactical-shadow"]),
+  ],
 ]);
 
 const SRC_RULES = [
+  {
+    id: "src-team-tactical-query",
+    description:
+      "Não ler/escrever teams.tactical_system no runtime. Usa age_groups.tactical_system como fonte funcional.",
+    regex:
+      /\.from\(\s*["']teams["']\s*\)[\s\S]{0,500}?\.(?:select|update|insert|upsert)\([\s\S]{0,240}?\btactical_system\b/g,
+  },
+  {
+    id: "src-team-tactical-type",
+    description:
+      "Não expor teams.tactical_system em tipos runtime partilhados. A fonte funcional é age_groups.tactical_system.",
+    regex: /\bexport\s+interface\s+Team\b[\s\S]{0,250}?\btactical_system\??\s*:/g,
+  },
   {
     id: "src-team-staff-query",
     description:
@@ -50,6 +67,12 @@ const SRC_RULES = [
 ];
 
 const MIGRATION_RULES = [
+  {
+    id: "sql-team-tactical-shadow",
+    description:
+      "Novas migrations não devem reintroduzir teams.tactical_system como fonte funcional sem exceção explícita.",
+    regex: /\bpublic\.teams\b[\s\S]{0,400}?\btactical_system\b/gi,
+  },
   {
     id: "sql-team-staff-write",
     description:
