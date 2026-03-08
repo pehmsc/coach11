@@ -47,7 +47,6 @@ export async function DELETE(request: Request) {
     }
 
     await optionalDeleteByEq(admin, "age_group_staff", "profile_id", user.id);
-    await optionalDeleteByEq(admin, "team_staff", "profile_id", user.id);
     await optionalDeleteByEq(admin, "staff_invites", "profile_id", user.id);
     await optionalDeleteByEq(admin, "staff_invites", "invited_by", user.id);
     await optionalDeleteByEq(admin, "staff_invites", "accepted_by", user.id);

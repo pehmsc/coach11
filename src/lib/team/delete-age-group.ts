@@ -188,6 +188,7 @@ async function cleanupClubMembershipsAfterAgeGroupDelete(
   candidateProfileIds: string[],
   retainedProfileIds: string[],
 ) {
+  // club_memberships remains only as technical compatibility metadata.
   if (!clubId || candidateProfileIds.length === 0) return;
 
   const retained = new Set(retainedProfileIds);
@@ -381,7 +382,6 @@ export async function deleteAgeGroupCascade(
 
     await optionalDeleteByEq(admin, "trainings", "team_id", teamId);
     await optionalDeleteByEq(admin, "team_messages", "team_id", teamId);
-    await optionalDeleteByEq(admin, "team_staff", "team_id", teamId);
     await optionalDeleteByEq(admin, "kit_pieces", "team_id", teamId);
   }
 

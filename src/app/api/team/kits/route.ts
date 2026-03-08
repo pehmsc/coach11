@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { resolveUserTeamContext } from "@/lib/auth/team-context";
 import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 
@@ -77,6 +79,12 @@ function toUiPiece<T extends Record<string, unknown>>(piece: T) {
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
+    let db = supabase;
+    try {
+      db = createAdminClient();
+    } catch {
+      db = supabase;
+    }
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -110,7 +118,9 @@ export async function POST(request: Request) {
       );
     }
 
-    const { data: team, error: teamError } = await supabase
+    const context = await resolveUserTeamContext(db, user.id);
+
+    const { data: team, error: teamError } = await db
       .from("teams")
       .select("id, age_group_id")
       .eq("id", teamId)
@@ -124,29 +134,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Equipa não encontrada." }, { status: 404 });
     }
 
-    let hasAccess = false;
-
-    if (team.age_group_id) {
-      const { data: ageGroup } = await supabase
-        .from("age_groups")
-        .select("id")
-        .eq("id", team.age_group_id)
-        .eq("coordinator_id", user.id)
-        .maybeSingle();
-      hasAccess = !!ageGroup;
-    }
-
-    if (!hasAccess) {
-      const { data: staffLink } = await supabase
-        .from("team_staff")
-        .select("id")
-        .eq("team_id", team.id)
-        .eq("profile_id", user.id)
-        .maybeSingle();
-      hasAccess = !!staffLink;
-    }
-
-    if (!hasAccess) {
+    if (!context.accessibleTeamIds.includes(team.id)) {
       return NextResponse.json(
         { error: "Sem permissões para editar os kits desta equipa." },
         { status: 403 },
@@ -157,7 +145,7 @@ export async function POST(request: Request) {
     const candidatePlayerTypes = playerTypeVariants(playerType);
     const candidatePieceTypes = pieceTypeVariants(pieceType);
 
-    const { data: existingPieces } = await supabase
+    const { data: existingPieces } = await db
       .from("kit_pieces")
       .select("*")
       .eq("team_id", team.id)
@@ -173,7 +161,7 @@ export async function POST(request: Request) {
       const playerTypesInDb = Array.from(
         new Set((existingPieces || []).map((piece) => piece.player_type)),
       );
-      const { data: updatedPieces, error: updateError } = await supabase
+      const { data: updatedPieces, error: updateError } = await db
         .from("kit_pieces")
         .update({ color_hex: colorHex, color_name: colorName })
         .eq("team_id", team.id)
@@ -215,7 +203,7 @@ export async function POST(request: Request) {
     }
 
     for (const candidate of insertCandidates) {
-      const insertResult = await supabase
+      const insertResult = await db
         .from("kit_pieces")
         .insert({ ...insertPayload, ...candidate })
         .select("*")

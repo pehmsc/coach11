@@ -100,7 +100,7 @@ export async function isLegacyUser(
   if (!normalizedProfileId) return false;
 
   const db = getAdminClient(admin);
-  const [ownedAgeGroupRes, staffMembershipRes, clubMembershipRes] =
+  const [ownedAgeGroupRes, staffMembershipRes] =
     await Promise.all([
       db
         .from("age_groups")
@@ -114,28 +114,15 @@ export async function isLegacyUser(
         .eq("profile_id", normalizedProfileId)
         .limit(1)
         .maybeSingle(),
-      db
-        .from("club_memberships")
-        .select("profile_id")
-        .eq("profile_id", normalizedProfileId)
-        .limit(1)
-        .maybeSingle(),
     ]);
 
-  const firstError =
-    ownedAgeGroupRes.error ??
-    staffMembershipRes.error ??
-    clubMembershipRes.error;
+  const firstError = ownedAgeGroupRes.error ?? staffMembershipRes.error;
 
   if (firstError) {
     throw new Error(`legacy_user_lookup_failed:${firstError.message}`);
   }
 
-  return !!(
-    ownedAgeGroupRes.data ||
-    staffMembershipRes.data ||
-    clubMembershipRes.data
-  );
+  return !!(ownedAgeGroupRes.data || staffMembershipRes.data);
 }
 
 export async function isBetaAllowed(

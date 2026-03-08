@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { resolveUserTeamContext } from "@/lib/auth/team-context";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 
 export const runtime = "nodejs";
@@ -133,6 +134,7 @@ export async function POST(request: Request) {
     }
 
     const admin = createAdminClient();
+    const context = await resolveUserTeamContext(admin, user.id);
 
     const { data: ageGroup, error: ageGroupError } = await admin
       .from("age_groups")
@@ -151,27 +153,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Escalão não encontrado." }, { status: 404 });
     }
 
-    let hasAccess = ageGroup.coordinator_id === user.id;
-
-    if (!hasAccess) {
-      const { data: teams } = await admin
-        .from("teams")
-        .select("id")
-        .eq("age_group_id", ageGroup.id);
-
-      const teamIds = (teams || []).map((team) => team.id);
-      if (teamIds.length > 0) {
-        const { data: staffLink } = await admin
-          .from("team_staff")
-          .select("id")
-          .in("team_id", teamIds)
-          .eq("profile_id", user.id)
-          .limit(1)
-          .maybeSingle();
-
-        hasAccess = !!staffLink;
-      }
-    }
+    const hasAccess =
+      ageGroup.coordinator_id === user.id ||
+      context.accessibleAgeGroupIds.includes(ageGroup.id);
 
     if (!hasAccess) {
       return NextResponse.json(
