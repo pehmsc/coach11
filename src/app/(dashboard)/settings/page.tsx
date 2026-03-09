@@ -532,32 +532,14 @@ export default function SettingsPage() {
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <p className="text-sm text-slate-500">
-                      Ferramentas internas movidas para dentro das configurações.
+                      Ferramentas internas concentradas na página principal de administração.
                     </p>
-                    <div className="grid gap-2 md:grid-cols-4">
+                    <div className="grid gap-2">
                       <Link
                         href="/admin"
                         className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 transition-colors hover:border-emerald-300 hover:text-emerald-700"
                       >
                         Admin Home
-                      </Link>
-                      <Link
-                        href="/admin/beta-invites"
-                        className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 transition-colors hover:border-emerald-300 hover:text-emerald-700"
-                      >
-                        Beta Invites
-                      </Link>
-                      <Link
-                        href="/admin/public-links"
-                        className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 transition-colors hover:border-emerald-300 hover:text-emerald-700"
-                      >
-                        Public Links
-                      </Link>
-                      <Link
-                        href="/admin/audit-logs"
-                        className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 transition-colors hover:border-emerald-300 hover:text-emerald-700"
-                      >
-                        Audit Logs
                       </Link>
                     </div>
                   </CardContent>
