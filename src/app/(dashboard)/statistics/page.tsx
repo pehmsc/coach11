@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
   BarChart2,
@@ -10,12 +10,20 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  Download,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Player } from "@/types/database";
 import { apiFetch } from "@/lib/http/apiFetch";
 import { useMeContext } from "@/lib/hooks/useMeContext";
+import { captureClientProductEvent } from "@/lib/observability/posthog-client";
+import {
+  exportAttendanceStatisticsPDF,
+  exportGameStatisticsPDF,
+} from "@/lib/pdf/statistics";
 import { queryKeys } from "@/lib/query/keys";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -169,8 +177,11 @@ export default function StatisticsPage() {
     key: GameSortKey;
     dir: SortDir;
   }>({ key: "player", dir: "asc" });
+  const [selectedPlayerIds, setSelectedPlayerIds] = useState<Set<string>>(new Set());
+  const [exportingPdf, setExportingPdf] = useState<Tab | null>(null);
   const meContextQuery = useMeContext();
   const ageGroupId = meContextQuery.data?.ageGroup?.id ?? null;
+  const ageGroupName = meContextQuery.data?.ageGroup?.name ?? "Escalão";
 
   const statisticsQuery = useQuery({
     queryKey: ageGroupId
@@ -453,6 +464,160 @@ export default function StatisticsPage() {
     [attendanceStats, attendanceSort],
   );
 
+  useEffect(() => {
+    const validIds = new Set(players.map((player) => player.id));
+    setSelectedPlayerIds((previous) => {
+      const next = new Set(
+        Array.from(previous).filter((playerId) => validIds.has(playerId)),
+      );
+      const unchanged =
+        next.size === previous.size &&
+        Array.from(next).every((playerId) => previous.has(playerId));
+      if (unchanged) return previous;
+      return next;
+    });
+  }, [players]);
+
+  const currentTabPlayerIds = useMemo(
+    () =>
+      activeTab === "attendance"
+        ? sortedAttendance.map((row) => row.player.id)
+        : sortedGameStats.map((row) => row.player.id),
+    [activeTab, sortedAttendance, sortedGameStats],
+  );
+
+  const currentTabSelectedCount = useMemo(
+    () =>
+      currentTabPlayerIds.filter((playerId) => selectedPlayerIds.has(playerId)).length,
+    [currentTabPlayerIds, selectedPlayerIds],
+  );
+
+  const allCurrentTabSelected =
+    currentTabPlayerIds.length > 0 &&
+    currentTabSelectedCount === currentTabPlayerIds.length;
+
+  function toggleSelectedPlayer(playerId: string) {
+    setSelectedPlayerIds((previous) => {
+      const next = new Set(previous);
+      if (next.has(playerId)) next.delete(playerId);
+      else next.add(playerId);
+      return next;
+    });
+  }
+
+  function toggleSelectAllCurrentTab() {
+    setSelectedPlayerIds((previous) => {
+      const next = new Set(previous);
+      if (allCurrentTabSelected) {
+        currentTabPlayerIds.forEach((playerId) => next.delete(playerId));
+      } else {
+        currentTabPlayerIds.forEach((playerId) => next.add(playerId));
+      }
+      return next;
+    });
+  }
+
+  function clearSelectedPlayers() {
+    setSelectedPlayerIds(new Set());
+  }
+
+  async function handleExportActiveTabPdf() {
+    const selectedIds =
+      selectedPlayerIds.size > 0
+        ? selectedPlayerIds
+        : new Set(currentTabPlayerIds);
+
+    if (activeTab === "attendance") {
+      const rows = sortedAttendance
+        .filter((row) => selectedIds.has(row.player.id))
+        .map((row) => ({
+          name: `${row.player.first_name} ${row.player.last_name}`.trim(),
+          position: row.player.preferred_position ?? null,
+          minutes: row.minutos,
+          presences: row.presencas,
+          late: row.atrasados,
+          absent: row.ausencias,
+          injured: row.lesionados,
+        }));
+
+      setExportingPdf("attendance");
+      try {
+        await exportAttendanceStatisticsPDF({
+          ageGroupName,
+          selectedCount: rows.length,
+          totalCount: sortedAttendance.length,
+          rows,
+        });
+        captureClientProductEvent("pdf_generated", {
+          age_group_id: ageGroupId,
+          source:
+            selectedPlayerIds.size > 0
+              ? "statistics_attendance_selected"
+              : "statistics_attendance_full",
+          players_count: rows.length,
+        });
+        toast.success("Mapa de presenças exportado em PDF.");
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Erro ao exportar mapa de presenças.";
+        toast.error(message);
+      } finally {
+        setExportingPdf(null);
+      }
+      return;
+    }
+
+    const rows = sortedGameStats
+      .filter((row) => selectedIds.has(row.player.id))
+      .map((row) => ({
+        name: `${row.player.first_name} ${row.player.last_name}`.trim(),
+        position: row.player.preferred_position ?? null,
+        goals: row.golos,
+        conceded: isGoalkeeper(row.player) ? row.gs : null,
+        assists: row.assistencias,
+        minutes: row.minutos,
+        starters: row.titular,
+        substitutes: row.suplente,
+        convocations: row.convocatorias,
+        mvp: row.mvp,
+        mvpRate: row.totalJogos > 0 ? (row.mvp / row.totalJogos) * 100 : null,
+        averageRating:
+          row.mediaNotaCount > 0 ? row.mediaNotaSum / row.mediaNotaCount : null,
+        averageMinutes: row.totalJogos > 0 ? row.minutos / row.totalJogos : null,
+        yellowCards: row.amarelos,
+        redCards: row.vermelhos,
+      }));
+
+    setExportingPdf("game");
+    try {
+      await exportGameStatisticsPDF({
+        ageGroupName,
+        selectedCount: rows.length,
+        totalCount: sortedGameStats.length,
+        rows,
+      });
+      captureClientProductEvent("pdf_generated", {
+        age_group_id: ageGroupId,
+        source:
+          selectedPlayerIds.size > 0
+            ? "statistics_game_selected"
+            : "statistics_game_full",
+        players_count: rows.length,
+      });
+      toast.success("Estatísticas de jogo exportadas em PDF.");
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Erro ao exportar estatísticas de jogo.";
+      toast.error(message);
+    } finally {
+      setExportingPdf(null);
+    }
+  }
+
   // ── Render ──
 
   if (loading) {
@@ -527,6 +692,51 @@ export default function StatisticsPage() {
         </button>
       </div>
 
+      <Card>
+        <CardContent className="pt-4 pb-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-slate-900">
+                Exportação PDF da vista atual
+              </p>
+              <p className="text-xs text-slate-500 mt-1">
+                Sem seleção exporta a informação geral. Se selecionares atletas,
+                exporta apenas os escolhidos.
+              </p>
+              <p className="text-xs text-slate-600 mt-2">
+                {selectedPlayerIds.size > 0
+                  ? `${selectedPlayerIds.size} atleta${
+                      selectedPlayerIds.size === 1 ? "" : "s"
+                    } selecionado${selectedPlayerIds.size === 1 ? "" : "s"}`
+                  : "Sem atletas selecionados"}
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {selectedPlayerIds.size > 0 && (
+                <Button type="button" variant="outline" onClick={clearSelectedPlayers}>
+                  Limpar seleção
+                </Button>
+              )}
+              <Button
+                type="button"
+                onClick={() => void handleExportActiveTabPdf()}
+                disabled={exportingPdf !== null || currentTabPlayerIds.length === 0}
+              >
+                {exportingPdf === activeTab ? (
+                  <ArrowUpDown size={16} className="mr-2 animate-spin" />
+                ) : (
+                  <Download size={16} className="mr-2" />
+                )}
+                {activeTab === "attendance"
+                  ? "Exportar mapa de presenças"
+                  : "Exportar estatísticas de jogo"}
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* ── TAB: MAPA DE PRESENÇAS ── */}
       {activeTab === "attendance" && (
         <Card>
@@ -539,6 +749,15 @@ export default function StatisticsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-xs text-slate-400 border-b border-slate-100">
+                  <th className="pb-2 pr-2 text-center font-medium">
+                    <input
+                      type="checkbox"
+                      checked={allCurrentTabSelected}
+                      onChange={toggleSelectAllCurrentTab}
+                      aria-label="Selecionar todos os atletas do mapa de presenças"
+                      className="h-4 w-4 rounded border-slate-300 text-slate-900"
+                    />
+                  </th>
                   <th className="text-left pb-2 font-medium">
                     <button
                       type="button"
@@ -622,6 +841,15 @@ export default function StatisticsPage() {
               <tbody>
                 {sortedAttendance.map((s) => (
                   <tr key={s.player.id} className="border-b border-slate-50 last:border-0">
+                    <td className="py-2 pr-2 text-center">
+                      <input
+                        type="checkbox"
+                        checked={selectedPlayerIds.has(s.player.id)}
+                        onChange={() => toggleSelectedPlayer(s.player.id)}
+                        aria-label={`Selecionar ${s.player.first_name} ${s.player.last_name}`}
+                        className="h-4 w-4 rounded border-slate-300 text-slate-900"
+                      />
+                    </td>
                     <td className="py-2 font-medium text-slate-800 truncate max-w-[130px]">
                       <span className="block truncate">
                         {s.player.first_name} {s.player.last_name}
@@ -695,6 +923,15 @@ export default function StatisticsPage() {
               <table className="w-full text-xs">
                 <thead>
                   <tr className="text-slate-400 border-b border-slate-100">
+                    <th className="pb-2 pr-2 text-center font-medium">
+                      <input
+                        type="checkbox"
+                        checked={allCurrentTabSelected}
+                        onChange={toggleSelectAllCurrentTab}
+                        aria-label="Selecionar todos os atletas das estatísticas de jogo"
+                        className="h-4 w-4 rounded border-slate-300 text-slate-900"
+                      />
+                    </th>
                     <th className="text-left pb-2 font-medium text-sm">
                       <button
                         type="button"
@@ -857,6 +1094,15 @@ export default function StatisticsPage() {
                         key={s.player.id}
                         className="border-b border-slate-50 last:border-0"
                       >
+                        <td className="py-2 pr-2 text-center">
+                          <input
+                            type="checkbox"
+                            checked={selectedPlayerIds.has(s.player.id)}
+                            onChange={() => toggleSelectedPlayer(s.player.id)}
+                            aria-label={`Selecionar ${s.player.first_name} ${s.player.last_name}`}
+                            className="h-4 w-4 rounded border-slate-300 text-slate-900"
+                          />
+                        </td>
                         <td className="py-2 font-medium text-slate-800 text-sm">
                           <span className="block truncate max-w-[100px]">
                             {s.player.first_name} {s.player.last_name}
