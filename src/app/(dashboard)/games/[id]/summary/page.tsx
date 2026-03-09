@@ -4,11 +4,27 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import { pt } from "date-fns/locale";
-import { Star, AlertCircle, Loader2, RotateCcw } from "lucide-react";
+import {
+  AlertCircle,
+  BarChart3,
+  Download,
+  FileText,
+  Loader2,
+  RotateCcw,
+  Star,
+  Users,
+} from "lucide-react";
 import { StickyBackLink } from "@/components/navigation/StickyBackLink";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { resolveFixtureScoreboardShortNames } from "@/lib/games/display";
+import { toast } from "sonner";
+import { captureClientProductEvent } from "@/lib/observability/posthog-client";
+import {
+  exportMatchAttendancePDF,
+  exportMatchReportPDF,
+  exportMatchStatisticsPDF,
+} from "@/lib/pdf/matchReport";
 import type { Game, GameEvent, GameFinalStats } from "@/types/database";
 
 type SummaryPlayer = {
@@ -30,6 +46,27 @@ type SummaryPayload = {
   homeClubShortName: string | null;
 };
 
+type ConvocationExportPlayer = {
+  id: string;
+  first_name: string;
+  last_name: string;
+  jersey_number: number | null;
+  isConvocated: boolean;
+  isExternal?: boolean;
+};
+
+type ConvocationExportPayload = {
+  game: Game;
+  players: ConvocationExportPlayer[];
+  lineupStatuses: Record<string, string>;
+  convocationSelections?: Record<
+    string,
+    { responseStatus: string | null; isPresent: boolean | null }
+  >;
+};
+
+type ExportKind = "report" | "attendance" | "statistics";
+
 const EVENT_LABELS: Record<string, string> = {
   goal: "Golo",
   penalty_goal: "Golo (penálti)",
@@ -47,6 +84,55 @@ function playerDisplayName(player: SummaryPlayer | null | undefined) {
   return `${jersey}${player.first_name} ${player.last_name}`.trim();
 }
 
+function playerFullName(player: SummaryPlayer | null | undefined) {
+  if (!player) return "Jogador";
+  return `${player.first_name} ${player.last_name}`.trim();
+}
+
+function convocationPlayerDisplayName(player: ConvocationExportPlayer) {
+  return `${player.first_name} ${player.last_name}`.trim();
+}
+
+function getGameStatusLabel(status: string | null | undefined) {
+  switch (status) {
+    case "completed":
+      return "Concluído";
+    case "live":
+      return "Ao vivo";
+    case "cancelled":
+      return "Cancelado";
+    default:
+      return "Agendado";
+  }
+}
+
+function getLineupLabel(status: string | null | undefined) {
+  if (status === "on_field") return "Titular";
+  if (status === "substitute") return "Suplente";
+  return "Convocado";
+}
+
+function getResponseStatusLabel(value: string | null | undefined) {
+  switch (value) {
+    case "confirmed":
+    case "accepted":
+      return "Confirmado";
+    case "declined":
+    case "rejected":
+      return "Indisponível";
+    case "pending":
+      return "Por confirmar";
+    default:
+      return "—";
+  }
+}
+
+function getPresenceLabel(value: boolean | null | undefined) {
+  if (value === true) return "Presente";
+  if (value === false) return "Ausente";
+  return "—";
+}
+
 export default function GameSummaryPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -62,6 +148,9 @@ export default function GameSummaryPage() {
   const [mvpDraft, setMvpDraft] = useState<string | null>(null);
   const [starterDraft, setStarterDraft] = useState<Set<string>>(new Set());
   const [finalMinuteDraft, setFinalMinuteDraft] = useState<string>("90");
+  const [exportingPdf, setExportingPdf] = useState<ExportKind | null>(null);
+  const [convocationExport, setConvocationExport] =
+    useState<ConvocationExportPayload | null>(null);
 
   const syncDraftsFromSummary = useCallback((payload: SummaryPayload) => {
     setRatingDraft(() => {
@@ -152,6 +241,36 @@ export default function GameSummaryPage() {
     });
   }, [summary]);
 
+  const loadConvocationExport = useCallback(async () => {
+    if (convocationExport) return convocationExport;
+
+    const res = await fetch(`/api/games/${id}/convocation`, { cache: "no-store" });
+    const payload = (await res.json().catch(() => null)) as
+      | (ConvocationExportPayload & { error?: string })
+      | null;
+
+    if (!res.ok || !payload?.game) {
+      throw new Error(payload?.error || "Erro ao carregar convocatória para exportação.");
+    }
+
+    setConvocationExport(payload);
+    return payload;
+  }, [convocationExport, id]);
+
+  const capturePdfGenerated = useCallback(
+    (source: string) => {
+      if (!summary) return;
+
+      captureClientProductEvent("pdf_generated", {
+        game_id: summary.game.id,
+        age_group_id: summary.game.age_group_id ?? null,
+        team_id: summary.game.team_id ?? null,
+        source,
+      });
+    },
+    [summary],
+  );
+
   function toggleStarter(playerId: string) {
     setStarterDraft((prev) => {
       const next = new Set(prev);
@@ -159,6 +278,172 @@ export default function GameSummaryPage() {
       else next.add(playerId);
       return next;
     });
+  }
+
+  async function handleExportReportPdf() {
+    if (!summary) return;
+
+    setExportingPdf("report");
+    try {
+      let squad:
+        | Array<{
+            jersey_number?: number;
+            name: string;
+            lineupLabel?: string;
+          }>
+        | undefined;
+
+      try {
+        const convocation = await loadConvocationExport();
+        squad = convocation.players
+          .filter((player) => player.isConvocated)
+          .map((player) => ({
+            jersey_number: player.jersey_number ?? undefined,
+            name: convocationPlayerDisplayName(player),
+            lineupLabel: getLineupLabel(convocation.lineupStatuses[player.id]),
+          }))
+          .sort((a, b) =>
+            a.name.localeCompare(b.name, "pt", { sensitivity: "base" }),
+          );
+      } catch {
+        squad = undefined;
+      }
+
+      await exportMatchReportPDF({
+        gameDatetime: summary.game.game_datetime,
+        opponentName: summary.game.opponent_name || "Adversário",
+        ourTeamName: summary.homeClubShortName || summary.homeClubName || "Nós",
+        isHome: summary.game.is_home,
+        scoreHome: summary.game.score_home ?? 0,
+        scoreAway: summary.game.score_away ?? 0,
+        location: summary.game.location,
+        title: summary.game.title,
+        statusLabel: getGameStatusLabel(summary.game.status),
+        events: timeline.map((event) => ({
+          minute: event.minute,
+          event_type: event.event_type,
+          playerName: event.player_id
+            ? playerFullName(summary.playersById[event.player_id])
+            : undefined,
+          relatedPlayerName: event.related_player_id
+            ? playerFullName(summary.playersById[event.related_player_id])
+            : undefined,
+          is_opponent_event: event.is_opponent_event,
+        })),
+        players: summary.finalStats.map((row) => ({
+          jersey_number: summary.playersById[row.player_id]?.jersey_number ?? undefined,
+          name: playerFullName(summary.playersById[row.player_id]),
+          lineupLabel: row.lineup_type === "starter" ? "Titular" : "Suplente",
+          minutes_played: row.minutes_played ?? undefined,
+          goals: row.goals ?? 0,
+          own_goals: row.own_goals ?? 0,
+          assists: row.assists ?? 0,
+          yellow_cards: row.yellow_cards ?? 0,
+          red_cards: row.red_cards ?? 0,
+        })),
+        squad,
+      });
+
+      capturePdfGenerated("match_report_post_game");
+      toast.success("Relatório de jogo exportado em PDF.");
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Erro ao exportar relatório do jogo.";
+      toast.error(message);
+    } finally {
+      setExportingPdf(null);
+    }
+  }
+
+  async function handleExportAttendancePdf() {
+    if (!summary) return;
+
+    setExportingPdf("attendance");
+    try {
+      const convocation = await loadConvocationExport();
+      const entries = convocation.players
+        .filter((player) => player.isConvocated)
+        .map((player) => ({
+          jersey_number: player.jersey_number ?? undefined,
+          name: convocationPlayerDisplayName(player),
+          lineupLabel: getLineupLabel(convocation.lineupStatuses[player.id]),
+          confirmationLabel: player.isExternal
+            ? "—"
+            : getResponseStatusLabel(
+                convocation.convocationSelections?.[player.id]?.responseStatus,
+              ),
+          presenceLabel: player.isExternal
+            ? "—"
+            : getPresenceLabel(convocation.convocationSelections?.[player.id]?.isPresent),
+        }))
+        .sort((a, b) => {
+          const aStarter = a.lineupLabel === "Titular";
+          const bStarter = b.lineupLabel === "Titular";
+          if (aStarter !== bStarter) return aStarter ? -1 : 1;
+          return a.name.localeCompare(b.name, "pt", { sensitivity: "base" });
+        });
+
+      await exportMatchAttendancePDF({
+        gameDatetime: summary.game.game_datetime,
+        opponentName: summary.game.opponent_name || "Adversário",
+        ourTeamName: summary.homeClubShortName || summary.homeClubName || "Nós",
+        isHome: summary.game.is_home,
+        scoreHome: summary.game.score_home ?? 0,
+        scoreAway: summary.game.score_away ?? 0,
+        location: summary.game.location,
+        title: summary.game.title,
+        statusLabel: getGameStatusLabel(summary.game.status),
+        entries,
+      });
+
+      capturePdfGenerated("attendance_map_post_game");
+      toast.success("Mapa de presenças exportado em PDF.");
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Erro ao exportar mapa de presenças.";
+      toast.error(message);
+    } finally {
+      setExportingPdf(null);
+    }
+  }
+
+  async function handleExportStatisticsPdf() {
+    if (!summary) return;
+
+    setExportingPdf("statistics");
+    try {
+      await exportMatchStatisticsPDF({
+        gameDatetime: summary.game.game_datetime,
+        opponentName: summary.game.opponent_name || "Adversário",
+        ourTeamName: summary.homeClubShortName || summary.homeClubName || "Nós",
+        isHome: summary.game.is_home,
+        scoreHome: summary.game.score_home ?? 0,
+        scoreAway: summary.game.score_away ?? 0,
+        location: summary.game.location,
+        title: summary.game.title,
+        statusLabel: getGameStatusLabel(summary.game.status),
+        players: summary.finalStats.map((row) => ({
+          jersey_number: summary.playersById[row.player_id]?.jersey_number ?? undefined,
+          name: playerFullName(summary.playersById[row.player_id]),
+          lineupLabel: row.lineup_type === "starter" ? "Titular" : "Suplente",
+          minutes_played: row.minutes_played ?? undefined,
+          goals: row.goals ?? 0,
+          own_goals: row.own_goals ?? 0,
+          assists: row.assists ?? 0,
+          yellow_cards: row.yellow_cards ?? 0,
+          red_cards: row.red_cards ?? 0,
+        })),
+      });
+
+      capturePdfGenerated("match_statistics_post_game");
+      toast.success("Estatísticas finais exportadas em PDF.");
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Erro ao exportar estatísticas finais.";
+      toast.error(message);
+    } finally {
+      setExportingPdf(null);
+    }
   }
 
   async function handleRecalculateStats() {
@@ -364,6 +649,73 @@ export default function GameSummaryPage() {
               {playerDisplayName(summary.playersById[mvp.player_id])}
             </span>
           )}
+        </div>
+      </div>
+
+      <div className="mb-5 rounded-xl border border-slate-200 bg-white p-4">
+        <div className="flex items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-700">
+            <Download size={18} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Exportações PDF
+            </p>
+            <h2 className="mt-1 text-base font-bold text-slate-900">
+              Documentos pós-jogo
+            </h2>
+            <p className="mt-1 text-sm text-slate-600">
+              Exporta o relatório final, o mapa de presenças e as estatísticas
+              reais deste jogo concluído.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 gap-2 md:grid-cols-3">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void handleExportReportPdf()}
+            disabled={exportingPdf !== null}
+            className="justify-start"
+          >
+            {exportingPdf === "report" ? (
+              <Loader2 size={16} className="mr-2 animate-spin" />
+            ) : (
+              <FileText size={16} className="mr-2" />
+            )}
+            Relatório do jogo
+          </Button>
+
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void handleExportAttendancePdf()}
+            disabled={exportingPdf !== null}
+            className="justify-start"
+          >
+            {exportingPdf === "attendance" ? (
+              <Loader2 size={16} className="mr-2 animate-spin" />
+            ) : (
+              <Users size={16} className="mr-2" />
+            )}
+            Mapa de presenças
+          </Button>
+
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void handleExportStatisticsPdf()}
+            disabled={exportingPdf !== null}
+            className="justify-start"
+          >
+            {exportingPdf === "statistics" ? (
+              <Loader2 size={16} className="mr-2 animate-spin" />
+            ) : (
+              <BarChart3 size={16} className="mr-2" />
+            )}
+            Estatísticas do jogo
+          </Button>
         </div>
       </div>
 

@@ -155,6 +155,10 @@ export async function GET(_request: Request, { params }: RouteContext) {
     const convocationIds = (convocations || []).map((c) => c.id);
     const convocationStatus = toConvocationStatus(convocations?.[0]?.status);
     const latestConvocation = convocations?.[0] || null;
+    const convocationSelections: Record<
+      string,
+      { responseStatus: string | null; isPresent: boolean | null }
+    > = {};
 
     const selectedIds = new Set<string>();
     if (convocationIds.length > 0) {
@@ -172,6 +176,30 @@ export async function GET(_request: Request, { params }: RouteContext) {
 
       (selectedRows || []).forEach((row) => {
         selectedIds.add(row.player_id);
+      });
+    }
+
+    if (latestConvocation?.id) {
+      const { data: latestSelectionRows, error: latestSelectionRowsError } = await supabase
+        .from("convocation_players")
+        .select("player_id, response_status, is_present")
+        .eq("convocation_id", latestConvocation.id);
+
+      if (latestSelectionRowsError) {
+        return NextResponse.json(
+          { error: "Erro ao carregar estados de presença da convocatória." },
+          { status: 500 },
+        );
+      }
+
+      (latestSelectionRows || []).forEach((row) => {
+        if (!row.player_id) return;
+        convocationSelections[row.player_id] = {
+          responseStatus:
+            typeof row.response_status === "string" ? row.response_status : null,
+          isPresent:
+            typeof row.is_present === "boolean" ? row.is_present : null,
+        };
       });
     }
 
@@ -501,6 +529,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
       convocationStatus,
       convocationId: convocations?.[0]?.id ?? null,
       convocationCount: convocationIds.length,
+      convocationSelections,
       liveCheckpoint,
       kitSelection: latestConvocation
         ? {
