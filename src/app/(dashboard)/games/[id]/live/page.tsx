@@ -1867,6 +1867,7 @@ export default function LiveGamePage() {
           assists: events.filter(
             (e) => e.related_player_id === p.id && isGoalEventType(e.event_type),
           ).length,
+          goals_conceded: concededGoalsByPlayer.get(p.id) ?? 0,
           yellow_cards: events.filter(
             (e) => e.player_id === p.id && e.event_type === "yellow_card",
           ).length,

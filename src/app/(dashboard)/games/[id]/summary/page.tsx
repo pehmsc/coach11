@@ -59,6 +59,7 @@ type ConvocationExportPayload = {
   game: Game;
   players: ConvocationExportPlayer[];
   lineupStatuses: Record<string, string>;
+  starterIds?: string[];
   convocationSelections?: Record<
     string,
     { responseStatus: string | null; isPresent: boolean | null }
@@ -305,12 +306,17 @@ export default function GameSummaryPage() {
 
       try {
         const convocation = await loadConvocationExport();
+        const starterIdSet = new Set(convocation.starterIds ?? []);
         squad = convocation.players
           .filter((player) => player.isConvocated)
           .map((player) => ({
             jersey_number: player.jersey_number ?? undefined,
             name: convocationPlayerDisplayName(player),
-            lineupLabel: getLineupLabel(convocation.lineupStatuses[player.id]),
+            lineupLabel: starterIdSet.has(player.id)
+              ? "Titular"
+              : convocation.lineupStatuses[player.id]
+                ? "Suplente"
+                : "Convocado",
           }))
           .sort((a, b) =>
             a.name.localeCompare(b.name, "pt", { sensitivity: "base" }),
@@ -318,6 +324,13 @@ export default function GameSummaryPage() {
       } catch {
         squad = undefined;
       }
+
+      const goalsConcededByPlayer = new Map<string, number>();
+      summary.events.forEach((event) => {
+        if (!event.player_id || !event.is_opponent_event) return;
+        if (event.event_type !== "goal" && event.event_type !== "penalty_goal") return;
+        goalsConcededByPlayer.set(event.player_id, (goalsConcededByPlayer.get(event.player_id) ?? 0) + 1);
+      });
 
       await exportMatchReportPDF({
         gameDatetime: summary.game.game_datetime,
@@ -348,6 +361,7 @@ export default function GameSummaryPage() {
           goals: row.goals ?? 0,
           own_goals: row.own_goals ?? 0,
           assists: row.assists ?? 0,
+          goals_conceded: goalsConcededByPlayer.get(row.player_id) ?? 0,
           yellow_cards: row.yellow_cards ?? 0,
           red_cards: row.red_cards ?? 0,
         })),
@@ -371,12 +385,17 @@ export default function GameSummaryPage() {
     setExportingPdf("attendance");
     try {
       const convocation = await loadConvocationExport();
+      const starterIdSet = new Set(convocation.starterIds ?? []);
       const entries = convocation.players
         .filter((player) => player.isConvocated)
         .map((player) => ({
           jersey_number: player.jersey_number ?? undefined,
           name: convocationPlayerDisplayName(player),
-          lineupLabel: getLineupLabel(convocation.lineupStatuses[player.id]),
+          lineupLabel: starterIdSet.has(player.id)
+            ? "Titular"
+            : convocation.lineupStatuses[player.id]
+              ? "Suplente"
+              : "Convocado",
           confirmationLabel: player.isExternal
             ? "—"
             : getResponseStatusLabel(
@@ -422,6 +441,13 @@ export default function GameSummaryPage() {
 
     setExportingPdf("statistics");
     try {
+      const statsConcededByPlayer = new Map<string, number>();
+      summary.events.forEach((event) => {
+        if (!event.player_id || !event.is_opponent_event) return;
+        if (event.event_type !== "goal" && event.event_type !== "penalty_goal") return;
+        statsConcededByPlayer.set(event.player_id, (statsConcededByPlayer.get(event.player_id) ?? 0) + 1);
+      });
+
       await exportMatchStatisticsPDF({
         gameDatetime: summary.game.game_datetime,
         opponentName: summary.game.opponent_name || "Adversário",
@@ -440,6 +466,7 @@ export default function GameSummaryPage() {
           goals: row.goals ?? 0,
           own_goals: row.own_goals ?? 0,
           assists: row.assists ?? 0,
+          goals_conceded: statsConcededByPlayer.get(row.player_id) ?? 0,
           yellow_cards: row.yellow_cards ?? 0,
           red_cards: row.red_cards ?? 0,
         })),

@@ -30,6 +30,7 @@ type MatchPdfPlayerStatsRow = {
   goals: number;
   own_goals?: number;
   assists: number;
+  goals_conceded?: number;
   yellow_cards: number;
   red_cards: number;
   minutes_played?: number;
@@ -115,6 +116,27 @@ async function createPdfDocument() {
   const { default: autoTable } = await import("jspdf-autotable");
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   return { doc, autoTable };
+}
+
+function renderStatsLegend(
+  doc: {
+    setFontSize: (size: number) => void;
+    setFont: (family: string, style: string) => void;
+    setTextColor: (r: number, g: number, b: number) => void;
+    text: (text: string, x: number, y: number) => void;
+  },
+  margin: number,
+  y: number,
+) {
+  doc.setFontSize(7);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(148, 163, 184);
+  doc.text(
+    "Min. — Minutos jogados  |  G — Golos  |  AG — Auto-golo  |  A — Assistência  |  GS — Golos sofridos  |  CA — Cartão amarelo  |  CV — Cartão vermelho",
+    margin,
+    y,
+  );
+  return y + 6;
 }
 
 function renderSectionTitle(doc: {
@@ -300,7 +322,7 @@ export async function exportMatchReportPDF(data: MatchReportData): Promise<void>
       y = margin;
     }
 
-    y = renderSectionTitle(doc, "Convocatória associada", margin, y);
+    y = renderSectionTitle(doc, "Convocatória", margin, y);
 
     autoTable(doc, {
       startY: y,
@@ -335,11 +357,11 @@ export async function exportMatchReportPDF(data: MatchReportData): Promise<void>
       y = margin;
     }
 
-    y = renderSectionTitle(doc, "Estatísticas finais", margin, y);
+    y = renderSectionTitle(doc, "Estatísticas", margin, y);
 
     autoTable(doc, {
       startY: y,
-      head: [["#", "Nome", "Min.", "⚽", "AG", "A", "CA", "CV"]],
+      head: [["#", "Nome", "Min.", "G", "AG", "A", "GS", "CA", "CV"]],
       body: data.players.map((player) => [
         player.jersey_number?.toString() || "—",
         player.name,
@@ -347,6 +369,7 @@ export async function exportMatchReportPDF(data: MatchReportData): Promise<void>
         player.goals || 0,
         player.own_goals || 0,
         player.assists || 0,
+        player.goals_conceded ?? "—",
         player.yellow_cards || 0,
         player.red_cards || 0,
       ]),
@@ -367,9 +390,13 @@ export async function exportMatchReportPDF(data: MatchReportData): Promise<void>
         5: { halign: "center", cellWidth: 10 },
         6: { halign: "center", cellWidth: 10 },
         7: { halign: "center", cellWidth: 10 },
+        8: { halign: "center", cellWidth: 10 },
       },
       margin: { left: margin, right: margin },
     });
+
+    y = getPdfAutoTableFinalY(doc, y) + 4;
+    renderStatsLegend(doc, margin, y);
   }
 
   renderFooter(doc);
@@ -437,11 +464,11 @@ export async function exportMatchStatisticsPDF(
     doc.setTextColor(100, 116, 139);
     doc.text("Este jogo não tem estatísticas finais persistidas.", margin, y);
   } else {
-    y = renderSectionTitle(doc, "Resumo estatístico", margin, y);
+    y = renderSectionTitle(doc, "Estatísticas", margin, y);
 
     autoTable(doc, {
       startY: y,
-      head: [["#", "Jogador", "Tipo", "Min.", "⚽", "AG", "A", "CA", "CV"]],
+      head: [["#", "Jogador", "Tipo", "Min.", "G", "AG", "A", "GS", "CA", "CV"]],
       body: data.players.map((player) => [
         player.jersey_number?.toString() || "—",
         player.name,
@@ -450,6 +477,7 @@ export async function exportMatchStatisticsPDF(
         player.goals || 0,
         player.own_goals || 0,
         player.assists || 0,
+        player.goals_conceded ?? "—",
         player.yellow_cards || 0,
         player.red_cards || 0,
       ]),
@@ -471,9 +499,13 @@ export async function exportMatchStatisticsPDF(
         6: { halign: "center", cellWidth: 10 },
         7: { halign: "center", cellWidth: 10 },
         8: { halign: "center", cellWidth: 10 },
+        9: { halign: "center", cellWidth: 10 },
       },
       margin: { left: margin, right: margin },
     });
+
+    y = getPdfAutoTableFinalY(doc, y) + 4;
+    renderStatsLegend(doc, margin, y);
   }
 
   renderFooter(doc);
