@@ -64,8 +64,8 @@ const EVENT_PT: Record<string, string> = {
   own_goal: "Autogolo",
   yellow_card: "Cartão amarelo",
   red_card: "Cartão vermelho",
-  substitution_in: "Substituição (entra)",
-  substitution_out: "Substituição (sai)",
+  substitution_in: "Substituição",
+  substitution_out: "Substituição",
 };
 
 function getMatchDateLabel(gameDatetime: string) {
@@ -236,14 +236,16 @@ function buildReportEventPlayerLabel(event: MatchPdfEvent) {
   }
 
   if (event.event_type === "substitution_out") {
+    // player_id = leaving, relatedPlayerName = entering
     return event.relatedPlayerName?.trim()
-      ? `${baseName} → entra ${event.relatedPlayerName}`
+      ? `${event.relatedPlayerName} ➜ ${baseName}`
       : baseName;
   }
 
   if (event.event_type === "substitution_in") {
+    // player_id = entering, relatedPlayerName = leaving
     return event.relatedPlayerName?.trim()
-      ? `${baseName} ← sai ${event.relatedPlayerName}`
+      ? `${baseName} ➜ ${event.relatedPlayerName}`
       : baseName;
   }
 

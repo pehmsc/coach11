@@ -17,7 +17,11 @@
       "Bash(grep -l \"public_share\\\\|public_slug\\\\|public_access\" /Users/pedrocampos/Project_2026/coach11/supabase/migrations/*.sql)",
       "Bash(npx vitest run src/__tests__/security-fixes.test.ts)",
       "Bash(npx vitest run)",
-      "Bash(npx next build)"
+      "Bash(npx next build)",
+      "Bash(wc -l /Users/pedrocampos/Project_2026/coach11/supabase/migrations/*.sql)",
+      "Bash(ls -la /Users/pedrocampos/Project_2026/coach11/src/app/\\\\\\(dashboard\\\\\\)/games/)",
+      "Bash(grep -n \"timeline\\\\|eventTimeline\\\\|events.map\\\\|eventLabel\\\\|EVENT_LABELS\" /Users/pedrocampos/Project_2026/coach11/src/app/\\\\\\(dashboard\\\\\\)/games/[id]/live/page.tsx)",
+      "Bash(grep -n \"substitution\\\\|EVENT_LABELS\\\\|events.map\" /Users/pedrocampos/Project_2026/coach11/src/app/\\\\\\(dashboard\\\\\\)/games/[id]/summary/page.tsx)"
     ]
   }
 }

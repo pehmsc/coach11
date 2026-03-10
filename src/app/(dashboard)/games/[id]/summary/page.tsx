@@ -74,8 +74,8 @@ const EVENT_LABELS: Record<string, string> = {
   assist: "Assistência",
   yellow_card: "Cartão amarelo",
   red_card: "Cartão vermelho",
-  substitution_in: "Substituição (entra)",
-  substitution_out: "Substituição (sai)",
+  substitution_in: "Substituição",
+  substitution_out: "Substituição",
 };
 
 function playerDisplayName(player: SummaryPlayer | null | undefined) {
@@ -235,9 +235,19 @@ export default function GameSummaryPage() {
 
   const timeline = useMemo(() => {
     if (!summary) return [];
-    return [...summary.events].sort((a, b) => {
+    const sorted = [...summary.events].sort((a, b) => {
       if (a.minute !== b.minute) return a.minute - b.minute;
       return (a.created_at || "").localeCompare(b.created_at || "");
+    });
+    return sorted.filter((event) => {
+      if (event.event_type !== "substitution_in") return true;
+      return !sorted.some(
+        (other) =>
+          other.event_type === "substitution_out" &&
+          other.minute === event.minute &&
+          other.player_id === event.related_player_id &&
+          other.related_player_id === event.player_id,
+      );
     });
   }, [summary]);
 
@@ -736,12 +746,14 @@ export default function GameSummaryPage() {
                 ? player
                   ? `Adversário (associado: ${playerDisplayName(player)})`
                   : "Adversário"
-                : playerDisplayName(player);
+                : event.event_type === "substitution_out"
+                  ? playerDisplayName(related)
+                  : playerDisplayName(player);
               const relationLabel =
-                event.event_type === "substitution_out" && related
-                  ? ` → entra ${playerDisplayName(related)}`
+                event.event_type === "substitution_out" && player
+                  ? ` ➜ ${playerDisplayName(player)}`
                   : event.event_type === "substitution_in" && related
-                    ? ` ← sai ${playerDisplayName(related)}`
+                    ? ` ➜ ${playerDisplayName(related)}`
                     : event.event_type === "goal" && related
                       ? ` (assistência: ${playerDisplayName(related)})`
                       : "";

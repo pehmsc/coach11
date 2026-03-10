@@ -75,8 +75,8 @@ const EVENT_LABELS: Record<string, string> = {
   own_goal: "⚽ Autogolo",
   yellow_card: "🟨 Cartão Amarelo",
   red_card: "🟥 Cartão Vermelho",
-  substitution_in: "🔄 Substituição (entra)",
-  substitution_out: "🔄 Substituição (sai)",
+  substitution_in: "🔄 Substituição",
+  substitution_out: "🔄 Substituição",
 };
 
 type LiveStatus = "on_field" | "substitute" | "substituted";
@@ -1849,10 +1849,12 @@ export default function LiveGamePage() {
         location: game.location,
         events: displayEvents.map((e) => {
           const pl = convocatedPlayers.find((p) => p.id === e.player_id);
+          const rel = convocatedPlayers.find((p) => p.id === e.related_player_id);
           return {
             minute: e.minute,
             event_type: e.event_type,
             playerName: pl ? `${pl.first_name} ${pl.last_name}` : undefined,
+            relatedPlayerName: rel ? `${rel.first_name} ${rel.last_name}` : undefined,
             is_opponent_event: e.is_opponent_event,
           };
         }),
@@ -2193,16 +2195,28 @@ export default function LiveGamePage() {
                   </span>
                   <span className="text-sm flex-1">
                     {EVENT_LABELS[ev.event_type] || ev.event_type}
-                    {ev.is_opponent_event
-                      ? pl
-                        ? ` — Adversário (sofreu: ${pl.first_name} ${pl.last_name})`
-                        : " — Adversário"
-                      : pl
-                        ? ` — ${pl.first_name} ${pl.last_name}`
-                        : ""}
+                    {ev.event_type === "substitution_out" || ev.event_type === "substitution_in"
+                      ? ev.is_opponent_event
+                        ? " — Adversário"
+                        : ev.event_type === "substitution_out"
+                          ? assist && pl
+                            ? ` — ${assist.first_name} ${assist.last_name} ➜ ${pl.first_name} ${pl.last_name}`
+                            : pl
+                              ? ` ➜ ${pl.first_name} ${pl.last_name}`
+                              : ""
+                          : pl && assist
+                            ? ` — ${pl.first_name} ${pl.last_name} ➜ ${assist.first_name} ${assist.last_name}`
+                            : pl
+                              ? ` — ${pl.first_name} ${pl.last_name}`
+                              : ""
+                      : ev.is_opponent_event
+                        ? pl
+                          ? ` — Adversário (sofreu: ${pl.first_name} ${pl.last_name})`
+                          : " — Adversário"
+                        : pl
+                          ? ` — ${pl.first_name} ${pl.last_name}`
+                          : ""}
                     {assist && ev.event_type === "goal" ? ` (🅰️ ${assist.first_name} ${assist.last_name})` : ""}
-                    {ev.event_type === "substitution_out" && assist ? ` → ${assist.first_name} ${assist.last_name}` : ""}
-                    {ev.event_type === "substitution_in" && assist ? ` ← ${assist.first_name} ${assist.last_name}` : ""}
                   </span>
                   {!isFinalized && (
                     <button
