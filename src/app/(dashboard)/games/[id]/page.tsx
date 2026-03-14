@@ -215,37 +215,39 @@ export default function GameDetailPage() {
         getKitOptions={kit.getKitOptions}
       />
 
-      <ConvocationSection
-        players={players}
-        lineupStatuses={lineupStatuses}
-        footballFormat={footballFormat}
-        tacticalSystem={tacticalSystem}
-        saving={saving}
-        savingLineupPlayer={savingLineupPlayer}
-        savingTactical={savingTactical}
-        convocatedCount={convocatedCount}
-        effectiveConvocationStatus={ces.effectiveStatus}
-        isEditingConfirmedConvocation={isEditingConfirmedConvocation}
-        canEditConvocationContent={canEditConvocationContent}
-        canReopenConfirmedConvocation={ces.canReopenConfirmed && !isLiveInProgress}
-        convocationEditable={ces.baseEditable}
-        isCompetition={isCompetition}
-        error={error}
-        onTogglePlayer={convocation.togglePlayer}
-        onToggleLineup={(playerId) => void convocation.handleLineupToggle(playerId)}
-        onTacticalChange={(f) => void convocation.handleTacticalChange(f)}
-        onReopenConvocation={() => { setError(null); setIsEditingConfirmedConvocation(true); }}
-        onShowExternalPlayerModal={() => editor.setShowExternalPlayerModal(true)}
-      />
-
-      {!ces.isConfirmed && (
-        <ConfirmConvocationBar
-          confirmingConvocation={confirmingConvocation}
-          canConfirmConvocation={canConfirmConvocation}
-          isCompleted={game.status === "completed"}
-          onConfirm={convocation.handleConfirmConvocation}
+      <div className={!ces.isConfirmed ? "pb-28 md:pb-0" : ""}>
+        <ConvocationSection
+          players={players}
+          lineupStatuses={lineupStatuses}
+          footballFormat={footballFormat}
+          tacticalSystem={tacticalSystem}
+          saving={saving}
+          savingLineupPlayer={savingLineupPlayer}
+          savingTactical={savingTactical}
+          convocatedCount={convocatedCount}
+          effectiveConvocationStatus={ces.effectiveStatus}
+          isEditingConfirmedConvocation={isEditingConfirmedConvocation}
+          canEditConvocationContent={canEditConvocationContent}
+          canReopenConfirmedConvocation={ces.canReopenConfirmed && !isLiveInProgress}
+          convocationEditable={ces.baseEditable}
+          isCompetition={isCompetition}
+          error={error}
+          onTogglePlayer={convocation.togglePlayer}
+          onToggleLineup={(playerId) => void convocation.handleLineupToggle(playerId)}
+          onTacticalChange={(f) => void convocation.handleTacticalChange(f)}
+          onReopenConvocation={() => { setError(null); setIsEditingConfirmedConvocation(true); }}
+          onShowExternalPlayerModal={() => editor.setShowExternalPlayerModal(true)}
         />
-      )}
+
+        {!ces.isConfirmed && (
+          <ConfirmConvocationBar
+            confirmingConvocation={confirmingConvocation}
+            canConfirmConvocation={canConfirmConvocation}
+            isCompleted={game.status === "completed"}
+            onConfirm={convocation.handleConfirmConvocation}
+          />
+        )}
+      </div>
     </div>
   );
 }

@@ -35,7 +35,10 @@
       "Bash(grep -rn mobile-footer-height src/ --include=*.css public/)",
       "Bash(grep -n mobile-footer-height.*: src/components/layout/MobileFooterNav.tsx)",
       "Bash(grep -n --mobile-footer-height src/app/globals.css)",
-      "Bash(grep -n \"z-10 md:bottom-4\\\\|z-20 mt-5 md:bottom-4\" src/app/\\\\\\(dashboard\\\\\\)/attendance/page.tsx src/app/\\\\\\(dashboard\\\\\\)/games/[id]/page.tsx)"
+      "Bash(grep -n \"z-10 md:bottom-4\\\\|z-20 mt-5 md:bottom-4\" src/app/\\\\\\(dashboard\\\\\\)/attendance/page.tsx src/app/\\\\\\(dashboard\\\\\\)/games/[id]/page.tsx)",
+      "Bash(git checkout:*)",
+      "Bash(git pull:*)",
+      "Bash(grep -n \"ConfirmConvocationBar\\\\|ConvocationSection\\\\|pb-\\\\|mb-\\\\|space-y\" src/app/\\\\\\(dashboard\\\\\\)/games/[id]/page.tsx)"
     ]
   }
 }
