@@ -212,6 +212,41 @@ export function PublicGameLivePanel({
     return Math.max(0, snapshot.checkpoint.baseSeconds + extraSeconds);
   }, [now, snapshot.checkpoint]);
 
+  const eventsContent = useMemo(() => {
+    if (snapshot.events.length === 0) {
+      return (
+        <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+          Ainda não existem eventos públicos registados para este jogo.
+        </div>
+      );
+    }
+
+    return snapshot.events.map((event) => {
+      const tone = eventTone(event.eventType);
+      return (
+        <div
+          key={event.id}
+          className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 px-4 py-3"
+        >
+          <div className="w-10 flex-shrink-0 text-right text-sm font-semibold text-slate-400">
+            {event.minute}&apos;
+          </div>
+          <div className={`inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full ${tone.chip}`}>
+            {tone.icon}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-slate-900">
+              {eventLabel(event)}
+            </p>
+            <p className="truncate text-sm text-slate-500">
+              {eventDescription(event)}
+            </p>
+          </div>
+        </div>
+      );
+    });
+  }, [snapshot.events]);
+
   const currentMinute = clockSeconds > 0 ? Math.floor(clockSeconds / 60) + 1 : 1;
   const currentPhaseLabel = snapshot.checkpoint
     ? phaseLabel(snapshot.checkpoint.phase)
@@ -300,36 +335,7 @@ export function PublicGameLivePanel({
         </div>
 
         <div className="max-h-[22rem] space-y-2 overflow-y-auto pr-1">
-          {snapshot.events.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
-              Ainda não existem eventos públicos registados para este jogo.
-            </div>
-          ) : (
-            snapshot.events.map((event) => {
-              const tone = eventTone(event.eventType);
-              return (
-                <div
-                  key={event.id}
-                  className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 px-4 py-3"
-                >
-                  <div className="w-10 flex-shrink-0 text-right text-sm font-semibold text-slate-400">
-                    {event.minute}&apos;
-                  </div>
-                  <div className={`inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full ${tone.chip}`}>
-                    {tone.icon}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-slate-900">
-                      {eventLabel(event)}
-                    </p>
-                    <p className="truncate text-sm text-slate-500">
-                      {eventDescription(event)}
-                    </p>
-                  </div>
-                </div>
-              );
-            })
-          )}
+          {eventsContent}
         </div>
       </div>
     </section>

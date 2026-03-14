@@ -300,7 +300,7 @@ export function PWAProvider({
 
         handleVisibilityChange = () => {
           if (document.visibilityState === "visible") {
-            void registration.update();
+            void registration.update().catch(() => null);
           }
         };
 

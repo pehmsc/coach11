@@ -31,7 +31,7 @@ export function LiveScoreboardCard({
       <div className="text-3xl md:text-4xl font-black tracking-tight">
         {homeShortName} {scoreHome} – {scoreAway} {awayShortName}
       </div>
-      <p className="text-slate-300 text-sm mt-2">
+      <p className="text-slate-300 text-sm mt-2" suppressHydrationWarning>
         {formatClock(clockSeconds)} · {currentMinute}&apos;
       </p>
       {isFinalized && (

@@ -22,7 +22,8 @@
       "Bash(ls -la /Users/pedrocampos/Project_2026/coach11/src/app/\\\\\\(dashboard\\\\\\)/games/)",
       "Bash(grep -n \"timeline\\\\|eventTimeline\\\\|events.map\\\\|eventLabel\\\\|EVENT_LABELS\" /Users/pedrocampos/Project_2026/coach11/src/app/\\\\\\(dashboard\\\\\\)/games/[id]/live/page.tsx)",
       "Bash(grep -n \"substitution\\\\|EVENT_LABELS\\\\|events.map\" /Users/pedrocampos/Project_2026/coach11/src/app/\\\\\\(dashboard\\\\\\)/games/[id]/summary/page.tsx)",
-      "Bash(grep -n \"squad\" /Users/pedrocampos/Project_2026/coach11/src/app/\\\\\\(dashboard\\\\\\)/games/[id]/live/page.tsx)"
+      "Bash(grep -n \"squad\" /Users/pedrocampos/Project_2026/coach11/src/app/\\\\\\(dashboard\\\\\\)/games/[id]/live/page.tsx)",
+      "Bash(node -e \"const s = require\\(''''./node_modules/@sentry/nextjs/build/npm/cjs/config/types.js''''\\); console.log\\(Object.keys\\(s\\)\\)\")"
     ]
   }
 }
