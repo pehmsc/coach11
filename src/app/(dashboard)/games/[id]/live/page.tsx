@@ -996,7 +996,9 @@ export default function LiveGamePage() {
         }
 
         const lineupStatus = status === "on_field" ? "on_field" : "substitute";
-        const res = await fetch(`/api/games/${id}/convocation/external/lineup`, {
+        // Usa o endpoint live (sem convocation write guard) para permitir
+        // actualizações durante o jogo (status "live").
+        const res = await fetch(`/api/games/${id}/live/external-players`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

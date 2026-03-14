@@ -1,15 +1,3 @@
-// Coach11 Landing Page
-// Ficheiro destino: src/app/(public)/page.tsx
-// Ou se preferires separar: src/app/(landing)/page.tsx
-//
-// NOTA: Este componente usa apenas Tailwind utility classes (core, sem compilador custom)
-// e lucide-react icons (já no projecto). Sem dependências externas.
-//
-// Para integrar no Next.js App Router:
-// 1. Criar route group (public) ou (landing) sem layout autenticado
-// 2. Copiar este ficheiro como page.tsx
-// 3. Criar layout.tsx minimal (sem sidebar/navbar da app)
-
 "use client";
 
 import { useState, useEffect } from "react";
@@ -168,6 +156,12 @@ export default function LandingPage() {
               Comparar
             </a>
             <a
+              href="/login"
+              className="text-sm text-white/60 transition hover:text-white"
+            >
+              Entrar
+            </a>
+            <a
               href="#cta"
               className="rounded-lg bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-400"
             >
@@ -196,6 +190,13 @@ export default function LandingPage() {
               </a>
               <a href="#comparison" className="text-sm text-white/60" onClick={() => setMobileMenu(false)}>
                 Comparar
+              </a>
+              <a
+                href="/login"
+                className="text-sm text-white/60"
+                onClick={() => setMobileMenu(false)}
+              >
+                Entrar
               </a>
               <a
                 href="#cta"
@@ -236,8 +237,8 @@ export default function LandingPage() {
 
             {/* Subhead */}
             <p className="mx-auto mb-10 max-w-xl text-lg leading-relaxed text-white/50 md:text-xl">
-              Plataforma de gestao desportiva para futebol de formacao. 
-              Regista no campo com o telemovel. Consulta tudo no dashboard 
+              Plataforma de gestao desportiva para futebol de formacao.
+              Regista no campo com o telemovel. Consulta tudo no dashboard
               sem inserir dados duas vezes.
             </p>
 
@@ -257,6 +258,14 @@ export default function LandingPage() {
                 Como funciona
               </a>
             </div>
+
+            {/* Login link */}
+            <p className="mt-6 text-sm text-white/30">
+              Já tens conta?{" "}
+              <a href="/login" className="text-white/60 underline underline-offset-2 hover:text-white transition">
+                Entrar
+              </a>
+            </p>
 
             {/* Stats bar */}
             <div className="mx-auto mt-16 grid max-w-lg grid-cols-3 gap-8 border-t border-white/5 pt-8">
@@ -287,7 +296,7 @@ export default function LandingPage() {
               O problema que todos os treinadores conhecem
             </h2>
             <p className="text-white/50">
-              131 treinos agendados. Apenas 1 com presencas registadas. 
+              131 treinos agendados. Apenas 1 com presencas registadas.
               Nao porque o treinador nao quer — porque a ferramenta nao deixa.
             </p>
           </div>
@@ -296,21 +305,21 @@ export default function LandingPage() {
             <div className="rounded-xl border border-red-500/10 bg-red-500/5 p-6">
               <div className="mb-3 text-2xl font-bold text-red-400/80">Desktop</div>
               <p className="text-sm text-white/40">
-                Plataformas pensadas para o escritorio. No campo, com frio e luvas, 
+                Plataformas pensadas para o escritorio. No campo, com frio e luvas,
                 ninguem abre um laptop para marcar presencas.
               </p>
             </div>
             <div className="rounded-xl border border-red-500/10 bg-red-500/5 p-6">
               <div className="mb-3 text-2xl font-bold text-red-400/80">Manual</div>
               <p className="text-sm text-white/40">
-                Dados inseridos duas vezes. O treinador regista e depois 
+                Dados inseridos duas vezes. O treinador regista e depois
                 o admin volta a preencher. Duplicacao constante.
               </p>
             </div>
             <div className="rounded-xl border border-red-500/10 bg-red-500/5 p-6">
               <div className="mb-3 text-2xl font-bold text-red-400/80">120×</div>
               <p className="text-sm text-white/40">
-                120 treinos por epoca criados um a um. Sem duplicacao semanal. 
+                120 treinos por epoca criados um a um. Sem duplicacao semanal.
                 Sem auto-incremento. Trabalho repetitivo que ninguem quer fazer.
               </p>
             </div>
@@ -326,7 +335,7 @@ export default function LandingPage() {
               Tudo o que precisas. Nada do que nao precisas.
             </h2>
             <p className="text-white/50">
-              Desenhado por treinadores, para treinadores. Cada funcionalidade 
+              Desenhado por treinadores, para treinadores. Cada funcionalidade
               foi pensada para o contexto real: campo, banco, viagem.
             </p>
           </div>
@@ -392,7 +401,7 @@ export default function LandingPage() {
               Campo → Sistema → Dashboard
             </h2>
             <p className="text-white/50">
-              Os dados nascem no campo e fluem automaticamente. 
+              Os dados nascem no campo e fluem automaticamente.
               Ninguem insere nada duas vezes.
             </p>
           </div>
@@ -405,7 +414,7 @@ export default function LandingPage() {
               </div>
               <h3 className="mb-2 text-lg font-semibold">O treinador regista no campo</h3>
               <p className="text-sm text-white/50">
-                Presencas, eventos de jogo, avaliacoes pos-jogo, notas de treino. 
+                Presencas, eventos de jogo, avaliacoes pos-jogo, notas de treino.
                 Tudo no telemovel, rapido, com uma mao.
               </p>
               <div className="mt-4 flex flex-wrap gap-2">
@@ -429,8 +438,8 @@ export default function LandingPage() {
               </div>
               <h3 className="mb-2 text-lg font-semibold">O sistema processa</h3>
               <p className="text-sm text-white/50">
-                Agrega estatisticas, calcula minutos, gera rankings, 
-                detecta alertas (3 amarelos, faltas consecutivas), 
+                Agrega estatisticas, calcula minutos, gera rankings,
+                detecta alertas (3 amarelos, faltas consecutivas),
                 prepara relatorios.
               </p>
               <div className="mt-4 flex flex-wrap gap-2">
@@ -453,7 +462,7 @@ export default function LandingPage() {
               </div>
               <h3 className="mb-2 text-lg font-semibold">O coordenador consulta</h3>
               <p className="text-sm text-white/50">
-                Dashboard com insights, dossier de treino pronto, 
+                Dashboard com insights, dossier de treino pronto,
                 relatorios exportaveis. Sem inserir um unico dado manualmente.
               </p>
               <div className="mt-4 flex flex-wrap gap-2">
@@ -477,7 +486,7 @@ export default function LandingPage() {
               A diferenca no dia-a-dia
             </h2>
             <p className="text-white/50">
-              Nao se trata de mais funcionalidades. Trata-se de melhor execucao 
+              Nao se trata de mais funcionalidades. Trata-se de melhor execucao
               nos momentos que importam.
             </p>
           </div>
@@ -543,8 +552,8 @@ export default function LandingPage() {
               </div>
               <h3 className="mb-2 text-xl font-semibold">Clubes certificados FPF</h3>
               <p className="mb-4 text-sm text-white/50">
-                Dossier de treino completo, UTs estruturadas, biblioteca de exercicios, 
-                avaliacoes — tudo o que a certificacao exige, gerado automaticamente 
+                Dossier de treino completo, UTs estruturadas, biblioteca de exercicios,
+                avaliacoes — tudo o que a certificacao exige, gerado automaticamente
                 a partir do trabalho no campo.
               </p>
               <ul className="space-y-2">
@@ -569,7 +578,7 @@ export default function LandingPage() {
               </div>
               <h3 className="mb-2 text-xl font-semibold">Escolas de futebol e clubes pequenos</h3>
               <p className="mb-4 text-sm text-white/50">
-                Comecar a usar em minutos. Sem configuracao complexa, sem obrigacoes 
+                Comecar a usar em minutos. Sem configuracao complexa, sem obrigacoes
                 administrativas. Foco no que importa: treinar e gerir a equipa.
               </p>
               <ul className="space-y-2">
@@ -602,7 +611,7 @@ export default function LandingPage() {
             Pronto para deixar o papel no banco?
           </h2>
           <p className="mb-8 text-white/50">
-            Deixa o teu email e entramos em contacto. 
+            Deixa o teu email e entramos em contacto.
             Acesso gratuito durante a fase beta.
           </p>
 

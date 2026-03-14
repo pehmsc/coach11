@@ -1948,7 +1948,7 @@ export default function GameDetailPage() {
       )}
 
       {!isConvocationConfirmed && (
-        <div className="sticky bottom-[calc(var(--mobile-footer-height)+env(safe-area-inset-bottom)+0.5rem)] z-20 mt-5 md:bottom-4">
+        <div className="sticky bottom-[calc(var(--mobile-footer-height)+env(safe-area-inset-bottom)+0.5rem)] z-40 mt-5 md:bottom-4">
           <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-lg">
             <Button
               type="button"
