@@ -26,7 +26,11 @@ export function initPostHogBrowser() {
     autocapture: false,
     capture_pageview: false,
     capture_pageleave: false,
-    disable_session_recording: true,
+    disable_session_recording: false,
+    session_recording: {
+      maskAllInputs: true,
+      maskTextSelector: "[data-mask]",
+    },
     person_profiles: "identified_only",
   });
 

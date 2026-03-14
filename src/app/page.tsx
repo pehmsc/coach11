@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { AuthRecoveryGate } from "@/components/auth/AuthRecoveryGate";
 import { hasSupabaseAuthCookies } from "@/lib/supabase/auth-cookie";
 import { createClient } from "@/lib/supabase/server";
+import LandingPage from "@/components/public/LandingPage";
 
 export default async function Home() {
   const supabase = await createClient();
@@ -19,5 +20,5 @@ export default async function Home() {
     return <AuthRecoveryGate />;
   }
 
-  redirect("/login");
+  return <LandingPage />;
 }

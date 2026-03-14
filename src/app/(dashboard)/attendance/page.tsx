@@ -492,7 +492,7 @@ export default function AttendancePage() {
         })}
       </div>
 
-      <div className="sticky bottom-[calc(var(--mobile-footer-height)+env(safe-area-inset-bottom)+0.5rem)] z-10 md:bottom-4">
+      <div className="sticky bottom-[calc(var(--mobile-footer-height)+env(safe-area-inset-bottom)+0.5rem)] z-40 md:bottom-4">
         {saved && (
           <div className="bg-emerald-50 border-2 border-emerald-200 text-emerald-700 p-3 rounded-xl text-center font-semibold text-sm mb-2">
             ✓ {sessionClosed ? "Atualizado" : "Presenças guardadas"}! ({counts.present} presentes · {counts.late} atrasados · {counts.absent} ausentes ·{" "}
