@@ -117,7 +117,7 @@ function UpdateSnackbar({
       )}
       aria-hidden={!open}
     >
-      <div className="pointer-events-auto flex w-full max-w-md items-center gap-3 rounded-2xl border border-slate-200 bg-white/98 px-4 py-3 shadow-2xl backdrop-blur">
+      <div className={cn("flex w-full max-w-md items-center gap-3 rounded-2xl border border-slate-200 bg-white/98 px-4 py-3 shadow-2xl backdrop-blur", open ? "pointer-events-auto" : "pointer-events-none")}>
         <div className="flex size-10 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
           <RefreshCcw size={18} />
         </div>
