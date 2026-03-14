@@ -62,7 +62,7 @@ export default function GameDetailPage() {
     kitDraftSelection, setKitDraftSelection,
     kitEditorOpen, setKitEditorOpen,
     savingKitSelection, setSavingKitSelection,
-    setError, buildConvocationPayload, markConvocationDirty,
+    setError, buildConvocationPayload,
   });
 
   const editor = useGameEditor({
@@ -120,6 +120,7 @@ export default function GameDetailPage() {
     hasPlayers: convocatedCount > 0, confirming: confirmingConvocation,
   });
   const canEditConvocationContent = ces.canEditContent && !isLiveInProgress;
+  const canEditKit = ces.baseEditable && !isLiveInProgress;
   const canConfirmConvocation = ces.canConfirm && !isLiveInProgress;
   const gameLocationLabel = resolveLocationLabel(game.location, game.formatted_address, game.location_address);
 
@@ -207,7 +208,7 @@ export default function GameDetailPage() {
         kitById={kit.kitById}
         savingKitSelection={savingKitSelection}
         hasKitDraftChanges={kit.hasKitDraftChanges}
-        canEditConvocationContent={canEditConvocationContent}
+        canEditKit={canEditKit}
         onOpenEditor={() => { setKitDraftSelection(kitSelection); setKitEditorOpen(true); }}
         onCloseEditor={kit.closeKitEditor}
         onDraftChange={kit.handleKitDraftChange}

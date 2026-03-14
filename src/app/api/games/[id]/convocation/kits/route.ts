@@ -241,7 +241,7 @@ export async function POST(request: Request, { params }: RouteContext) {
         .from("convocations")
         .update({
           ...selection,
-          status: latestConvocation.status === "closed" ? "closed" : "draft",
+          status: latestConvocation.status,
         })
         .in("id", updateIds);
 

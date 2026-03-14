@@ -26,7 +26,6 @@ interface UseKitEditorDeps {
   buildConvocationPayload: (
     base: Record<string, unknown>,
   ) => Record<string, unknown> | null;
-  markConvocationDirty: () => void;
 }
 
 export function useKitEditor(deps: UseKitEditorDeps) {
@@ -41,7 +40,6 @@ export function useKitEditor(deps: UseKitEditorDeps) {
     setSavingKitSelection,
     setError,
     buildConvocationPayload,
-    markConvocationDirty,
   } = deps;
 
   const kitById = useMemo(
@@ -150,7 +148,6 @@ export function useKitEditor(deps: UseKitEditorDeps) {
       setKitSelection(savedSelection);
       setKitDraftSelection(savedSelection);
       setKitEditorOpen(false);
-      markConvocationDirty();
     } catch {
       setError("Erro de ligação ao guardar equipamentos da convocatória.");
     } finally {

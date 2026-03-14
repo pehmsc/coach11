@@ -24,7 +24,7 @@ interface KitEditorSectionProps {
   kitById: Map<string, KitPieceRow>;
   savingKitSelection: boolean;
   hasKitDraftChanges: boolean;
-  canEditConvocationContent: boolean;
+  canEditKit: boolean;
   onOpenEditor: () => void;
   onCloseEditor: () => void;
   onDraftChange: (field: keyof KitSelection, value: string) => void;
@@ -43,7 +43,7 @@ export function KitEditorSection({
   kitById,
   savingKitSelection,
   hasKitDraftChanges,
-  canEditConvocationContent,
+  canEditKit,
   onOpenEditor,
   onCloseEditor,
   onDraftChange,
@@ -75,7 +75,7 @@ export function KitEditorSection({
             variant="outline"
             size="sm"
             onClick={onOpenEditor}
-            disabled={!canEditConvocationContent}
+            disabled={!canEditKit}
           >
             Editar kit
           </Button>
