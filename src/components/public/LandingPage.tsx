@@ -12,7 +12,6 @@ import {
   Trophy,
   ChevronRight,
   CheckCircle2,
-  Clock,
   Bell,
   FileText,
   Copy,
@@ -99,11 +98,6 @@ export default function LandingPage() {
   const [email, setEmail] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [mobileMenu, setMobileMenu] = useState(false);
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    setVisible(true);
-  }, []);
 
   const handleSubmit = async (e: { preventDefault(): void }) => {
     e.preventDefault();
@@ -126,8 +120,8 @@ export default function LandingPage() {
   };
 
   const stats = {
-    seconds: useCounter(20, 1500, visible),
-    touches: useCounter(2, 1000, visible),
+    seconds: useCounter(20, 1500),
+    touches: useCounter(2, 1000),
   };
 
   return (
