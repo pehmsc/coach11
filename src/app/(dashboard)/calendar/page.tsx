@@ -29,7 +29,6 @@ export default function CalendarPage() {
 
   const {
     modalMode,
-    modalScreen,
     setModalScreen,
     selectedEvent,
     form,
