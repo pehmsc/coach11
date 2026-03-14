@@ -232,7 +232,7 @@ export default function AttendancePage() {
       await queryClient.invalidateQueries({
         queryKey: queryKeys.attendance.today(selectedDate),
       });
-      router.refresh(); // Invalidar cache RSC do dashboard
+      router.push("/dashboard"); // Invalidar cache RSC do dashboard
     } catch (mutationError) {
       const message =
         mutationError instanceof ApiFetchError
