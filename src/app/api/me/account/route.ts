@@ -54,9 +54,6 @@ export async function DELETE(request: Request) {
     await optionalUpdateByEq(admin, "training_attendance", "marked_by", user.id, {
       marked_by: null,
     });
-    await optionalUpdateByEq(admin, "attendance_records", "marked_by", user.id, {
-      marked_by: null,
-    });
     await optionalUpdateByEq(admin, "grounds", "created_by", user.id, { created_by: null });
     await optionalUpdateByEq(admin, "game_live_checkpoints", "updated_by", user.id, {
       updated_by: null,

@@ -82,16 +82,6 @@ export async function deleteTrainingSessionCascade(
 ) {
   // Todas as tabelas de presença são opcionais (schema pode variar) — paralelizar
   await Promise.all([
-    deleteRows(admin, "attendance_records", {
-      type: "eq",
-      column: "training_session_id",
-      value: trainingSessionId,
-    }, { optional: true }),
-    deleteRows(admin, "attendance_records", {
-      type: "eq",
-      column: "session_id",
-      value: trainingSessionId,
-    }, { optional: true }),
     deleteRows(admin, "training_attendance", {
       type: "eq",
       column: "training_session_id",
@@ -188,11 +178,6 @@ export async function deletePlayerCascade(
       value: playerId,
     }, { optional: true }),
     deleteRows(admin, "training_attendance", {
-      type: "eq",
-      column: "player_id",
-      value: playerId,
-    }, { optional: true }),
-    deleteRows(admin, "attendance_records", {
       type: "eq",
       column: "player_id",
       value: playerId,
