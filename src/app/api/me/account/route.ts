@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
+import { parseBody } from "@/lib/http/validate";
 import {
   deleteUserAvatarStorage,
   listManagedAgeGroups,
@@ -9,9 +11,9 @@ import {
   optionalUpdateByEq,
 } from "@/lib/team/delete-age-group";
 
-type DeleteAccountPayload = {
-  confirmation?: string;
-};
+const DeleteAccountSchema = z.object({
+  confirmation: z.literal("DELETE_ACCOUNT", "Confirmação inválida para apagar conta."),
+});
 
 export async function DELETE(request: Request) {
   try {
@@ -24,13 +26,8 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
 
-    const body = (await request.json().catch(() => null)) as DeleteAccountPayload | null;
-    if (body?.confirmation !== "DELETE_ACCOUNT") {
-      return NextResponse.json(
-        { error: "Confirmação inválida para apagar conta." },
-        { status: 400 },
-      );
-    }
+    const parsed = await parseBody(request, DeleteAccountSchema);
+    if (parsed.error) return parsed.error;
 
     const admin = createAdminClient();
     const managedAgeGroups = await listManagedAgeGroups(admin, user.id);

@@ -1,5 +1,7 @@
+import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
+import { parseBody } from "@/lib/http/validate";
 import { captureServerProductEvent } from "@/lib/observability/posthog-server";
 import {
   buildStoredGameEventParticipantFields,
@@ -39,6 +41,26 @@ const ALLOWED_EVENT_TYPES = new Set([
   "substitution_out",
   "penalty_goal",
 ]);
+
+const EventInputSchema = z.object({
+  event_type: z.string().refine((v) => ALLOWED_EVENT_TYPES.has(v), "Tipo de evento inválido."),
+  player_id: z.string().nullable().optional(),
+  related_player_id: z.string().nullable().optional(),
+  minute: z.number().int().min(1, "O minuto deve ser >= 1."),
+  is_opponent_event: z.boolean(),
+});
+
+const EventsPostSchema = z.object({
+  events: z.array(EventInputSchema).min(1, "Sem eventos para guardar.").optional(),
+  event: EventInputSchema.optional(),
+}).refine(
+  (data) => (data.events && data.events.length > 0) || data.event,
+  "Sem eventos para guardar.",
+);
+
+const EventsDeleteSchema = z.object({
+  eventIds: z.array(z.string()).min(1, "Sem IDs para apagar."),
+});
 
 function parseGameAccessContext(value: unknown): GameAccessContext | null {
   if (!value || typeof value !== "object") return null;
@@ -89,29 +111,6 @@ async function assertGameAccess(
     isCoordinator: access.isCoordinator,
     gameStatus: access.status,
   };
-}
-
-function isValidEventInput(value: unknown): value is EventInput {
-  if (!value || typeof value !== "object") return false;
-  const row = value as Partial<EventInput>;
-
-  if (typeof row.event_type !== "string" || !ALLOWED_EVENT_TYPES.has(row.event_type)) {
-    return false;
-  }
-  if (typeof row.minute !== "number" || !Number.isFinite(row.minute)) return false;
-  if (Math.floor(row.minute) < 1) return false;
-  if (typeof row.is_opponent_event !== "boolean") return false;
-  if (row.player_id !== undefined && row.player_id !== null && typeof row.player_id !== "string") {
-    return false;
-  }
-  if (
-    row.related_player_id !== undefined &&
-    row.related_player_id !== null &&
-    typeof row.related_player_id !== "string"
-  ) {
-    return false;
-  }
-  return true;
 }
 
 function isDbOnFieldStatus(value: string | null | undefined) {
@@ -214,22 +213,9 @@ export async function POST(request: Request, { params }: RouteContext) {
     }
     userId = user.id;
 
-    const body = await request.json().catch(() => null);
-    const rowsRaw = Array.isArray(body?.events)
-      ? body.events
-      : body?.event
-        ? [body.event]
-        : [];
-
-    if (!Array.isArray(rowsRaw) || rowsRaw.length === 0) {
-      return NextResponse.json({ error: "Sem eventos para guardar." }, { status: 400 });
-    }
-
-    if (!rowsRaw.every((row) => isValidEventInput(row))) {
-      return NextResponse.json({ error: "Formato de evento inválido." }, { status: 400 });
-    }
-
-    const rows = rowsRaw as EventInput[];
+    const parsed = await parseBody(request, EventsPostSchema);
+    if (parsed.error) return parsed.error;
+    const rows: EventInput[] = parsed.data.events ?? (parsed.data.event ? [parsed.data.event] : []);
 
     const access = await assertGameAccess(supabase, gameId);
     if (!access.ok) return access.response;
@@ -466,14 +452,9 @@ export async function DELETE(request: Request, { params }: RouteContext) {
     }
     userId = user.id;
 
-    const body = await request.json().catch(() => null);
-    const eventIds = Array.isArray(body?.eventIds)
-      ? body.eventIds.filter((row: unknown) => typeof row === "string")
-      : [];
-
-    if (eventIds.length === 0) {
-      return NextResponse.json({ error: "Sem IDs para apagar." }, { status: 400 });
-    }
+    const parsed = await parseBody(request, EventsDeleteSchema);
+    if (parsed.error) return parsed.error;
+    const { eventIds } = parsed.data;
 
     const access = await assertGameAccess(supabase, gameId);
     if (!access.ok) return access.response;

@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
+import { parseBody } from "@/lib/http/validate";
 import { createNotificationForTeamOnce } from "@/lib/notifications/service";
 import { captureServerProductEvent } from "@/lib/observability/posthog-server";
 import {
@@ -52,23 +54,18 @@ type TrainingSessionAccessContext = {
   endTime: string | null;
 };
 
-const VALID_STATUSES = new Set<AttendanceStatus>(["present", "late", "absent", "injured"]);
-
-function isValidStatus(value: unknown): value is AttendanceStatus {
-  return typeof value === "string" && VALID_STATUSES.has(value as AttendanceStatus);
-}
+const AttendancePostSchema = z.object({
+  sessionId: z.string().min(1, "ID da sessão obrigatório."),
+  attendance: z.record(z.string(), z.enum(["present", "late", "absent", "injured"])).refine(
+    (obj) => Object.keys(obj).length > 0,
+    "Sem presenças válidas para guardar.",
+  ),
+  finalize: z.boolean().optional().default(false),
+});
 
 function normalizeDateParam(raw: string | null): string {
   if (raw && /^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
   return new Date().toISOString().slice(0, 10);
-}
-
-function toValidatedAttendance(input: Record<string, unknown>) {
-  return Object.fromEntries(
-    Object.entries(input).filter(
-      ([playerId, status]) => typeof playerId === "string" && isValidStatus(status),
-    ),
-  ) as Record<string, AttendanceStatus>;
 }
 
 function getAttendanceWriteErrorMessage(error: unknown): string {
@@ -245,36 +242,11 @@ export async function POST(request: Request) {
     }
     userId = user.id;
 
-    const body = await request.json().catch(() => null);
-    const sessionId =
-      body && typeof body === "object" && typeof body.sessionId === "string"
-        ? body.sessionId
-        : null;
+    const parsed = await parseBody(request, AttendancePostSchema);
+    if (parsed.error) return parsed.error;
+    const { sessionId, attendance: attendancePayload, finalize } = parsed.data;
     sessionIdForError = sessionId;
-    const attendanceInput =
-      body && typeof body === "object" && typeof body.attendance === "object"
-        ? (body.attendance as Record<string, unknown>)
-        : null;
-    const finalize =
-      body && typeof body === "object" && typeof body.finalize === "boolean"
-        ? body.finalize
-        : false;
-
-    if (!sessionId || !attendanceInput) {
-      return NextResponse.json(
-        { error: "Dados inválidos para guardar presenças." },
-        { status: 400 },
-      );
-    }
-
-    const attendancePayload = toValidatedAttendance(attendanceInput);
     const entries = Object.entries(attendancePayload);
-    if (entries.length === 0) {
-      return NextResponse.json(
-        { error: "Sem presenças válidas para guardar." },
-        { status: 400 },
-      );
-    }
 
     let db = supabase;
     try {

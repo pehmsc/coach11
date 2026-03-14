@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { resolveUserTeamContext } from "@/lib/auth/team-context";
+import { parseBody } from "@/lib/http/validate";
 import { deleteGameCascade, deleteTrainingSessionCascade } from "@/lib/events/delete-cascade";
 import {
   isValidManualShortName,
@@ -32,8 +34,6 @@ import {
 } from "@/lib/repositories/calendar-events.repository";
 import { createClient } from "@/lib/supabase/server";
 
-type CalendarEventType = "training" | "game";
-
 type CalendarPayload = {
   title?: string | null;
   date?: string | null;
@@ -59,6 +59,45 @@ type RouteContextData = {
   db: SupabaseClient;
   context: Awaited<ReturnType<typeof resolveUserTeamContext>>;
 };
+
+const CalendarLocationSchema = z.object({
+  location: z.string().nullable().optional(),
+  location_address: z.string().nullable().optional(),
+  formatted_address: z.string().nullable().optional(),
+  latitude: z.number().nullable().optional(),
+  longitude: z.number().nullable().optional(),
+  osm_place_id: z.string().nullable().optional(),
+  location_source: z.string().nullable().optional(),
+});
+
+const CalendarPayloadSchema = CalendarLocationSchema.extend({
+  title: z.string().nullable().optional(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida.").nullable().optional(),
+  start_time: z.string().nullable().optional(),
+  end_time: z.string().nullable().optional(),
+  opponent_name: z.string().nullable().optional(),
+  opponent_short_name: z.string().nullable().optional(),
+  competition_id: z.string().nullable().optional(),
+  is_home: z.boolean().optional(),
+  notes: z.string().nullable().optional(),
+  image_url: z.string().nullable().optional(),
+});
+
+const CalendarCreateSchema = z.object({
+  type: z.enum(["training", "game"]),
+  payload: CalendarPayloadSchema,
+  ageGroupId: z.string().optional(),
+  teamId: z.string().optional(),
+});
+
+const CalendarUpdateSchema = CalendarCreateSchema.extend({
+  id: z.string().min(1, "ID do evento obrigatório."),
+});
+
+const CalendarDeleteSchema = z.object({
+  id: z.string().min(1, "ID do evento obrigatório."),
+  type: z.enum(["training", "game"]),
+});
 
 function normalizeOptionalText(value: unknown) {
   if (typeof value !== "string") return null;
@@ -103,11 +142,6 @@ function inferLocationSource(
     return "google";
   }
   return "osm";
-}
-
-function normalizeEventType(value: unknown): CalendarEventType | null {
-  if (value === "training" || value === "game") return value;
-  return null;
 }
 
 function normalizePayload(value: unknown): CalendarPayload {
@@ -369,13 +403,11 @@ export async function handleCalendarEventsPost(request: Request) {
     if (routeContext instanceof NextResponse) return routeContext;
 
     const { userId, db, context } = routeContext;
-    const body = await request.json().catch(() => null);
-    const eventType = normalizeEventType(body?.type);
-    const payload = normalizeLocationPayload(normalizePayload(body?.payload));
-
-    if (!eventType || !payload.date) {
-      return NextResponse.json({ error: "Dados inválidos para criar evento." }, { status: 400 });
-    }
+    const parsed = await parseBody(request, CalendarCreateSchema);
+    if (parsed.error) return parsed.error;
+    const body = parsed.data;
+    const eventType = body.type;
+    const payload = normalizeLocationPayload(normalizePayload(body.payload));
     if (eventType === "game" && !isValidManualShortName(payload.opponent_short_name, 2, 5)) {
       return NextResponse.json(
         { error: "A sigla do adversário deve ter entre 2 e 5 caracteres." },
@@ -412,7 +444,7 @@ export async function handleCalendarEventsPost(request: Request) {
         age_group_id: targetAgeGroupId,
         team_id: targetTeamId,
         title: payload.title || "Treino",
-        session_date: payload.date,
+        session_date: payload.date!,
         start_time: payload.start_time || "00:00",
         end_time: payload.end_time,
         location: payload.location,
@@ -515,17 +547,12 @@ export async function handleCalendarEventsPatch(request: Request) {
     if (routeContext instanceof NextResponse) return routeContext;
 
     const { userId, db, context } = routeContext;
-    const body = await request.json().catch(() => null);
-    const id = typeof body?.id === "string" ? body.id : null;
-    const eventType = normalizeEventType(body?.type);
-    const payload = normalizeLocationPayload(normalizePayload(body?.payload));
-
-    if (!id || !eventType || !payload.date) {
-      return NextResponse.json(
-        { error: "Dados inválidos para editar evento." },
-        { status: 400 },
-      );
-    }
+    const parsed = await parseBody(request, CalendarUpdateSchema);
+    if (parsed.error) return parsed.error;
+    const body = parsed.data;
+    const id = body.id;
+    const eventType = body.type;
+    const payload = normalizeLocationPayload(normalizePayload(body.payload));
     if (eventType === "game" && !isValidManualShortName(payload.opponent_short_name, 2, 5)) {
       return NextResponse.json(
         { error: "A sigla do adversário deve ter entre 2 e 5 caracteres." },
@@ -578,7 +605,7 @@ export async function handleCalendarEventsPatch(request: Request) {
         age_group_id: targetAgeGroupId,
         team_id: targetTeamId,
         title: payload.title || "Treino",
-        session_date: payload.date,
+        session_date: payload.date!,
         start_time: payload.start_time || "00:00",
         end_time: payload.end_time,
         location: payload.location,
@@ -679,16 +706,9 @@ export async function handleCalendarEventsDelete(request: Request) {
     if (routeContext instanceof NextResponse) return routeContext;
 
     const { userId, db, context } = routeContext;
-    const body = await request.json().catch(() => null);
-    const id = typeof body?.id === "string" ? body.id : null;
-    const eventType = normalizeEventType(body?.type);
-
-    if (!id || !eventType) {
-      return NextResponse.json(
-        { error: "Dados inválidos para apagar evento." },
-        { status: 400 },
-      );
-    }
+    const parsed = await parseBody(request, CalendarDeleteSchema);
+    if (parsed.error) return parsed.error;
+    const { id, type: eventType } = parsed.data;
 
     if (eventType === "training") {
       const { data: existing } = await getTrainingSessionAccessRow(db, id);
