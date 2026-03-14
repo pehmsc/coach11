@@ -35,7 +35,7 @@ export function GameHeader({
             <Pencil size={14} />
           </button>
         )}
-        {game.status !== "completed" && canEditCompleted && (
+        {canEditCompleted && (
           <button
             onClick={onDelete}
             className="p-1.5 rounded-full bg-red-500/80 hover:bg-red-500 transition-colors"

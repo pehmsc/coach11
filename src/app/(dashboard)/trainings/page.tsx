@@ -1,16 +1,17 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Loader2, Dumbbell, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTrainingsData } from "@/lib/hooks/useTrainingsData";
 import { useTrainingForm } from "@/lib/hooks/useTrainingForm";
 import { TrainingSessionList } from "@/components/trainings/TrainingSessionList";
 import { TrainingCreateModal } from "@/components/trainings/TrainingCreateModal";
-import { TrainingDetailModal } from "@/components/trainings/TrainingDetailModal";
 import type { TrainingRow } from "@/components/trainings/types";
 
 export default function TrainingsPage() {
+  const router = useRouter();
   const data = useTrainingsData();
   const createForm = useTrainingForm();
 
@@ -20,17 +21,12 @@ export default function TrainingsPage() {
   function openCreateTrainingModal() {
     createForm.resetToDefaults();
     setCreateMode("create");
-    data.setEditingSelectedSession(false);
     setCreateModalOpen(true);
   }
 
   function openDuplicateTraining(source: TrainingRow) {
     setCreateMode("duplicate");
     createForm.populateFromSource(source, "duplicate");
-    data.setDetailError(null);
-    data.setShowDeleteConfirm(false);
-    data.setSelectedSession(null);
-    data.clearOpenSessionQuery();
     setCreateModalOpen(true);
   }
 
@@ -59,8 +55,6 @@ export default function TrainingsPage() {
     );
   }
 
-  void data.ageGroupId; // suppress unused var warning
-
   return (
     <>
       <div className="p-4 md:p-8 max-w-2xl mx-auto">
@@ -78,7 +72,7 @@ export default function TrainingsPage() {
         <TrainingSessionList
           sessions={data.sessions}
           getSummary={data.getSummary}
-          onSessionClick={(session) => void data.handleSessionClick(session)}
+          onSessionClick={(session) => router.push(`/trainings/${session.id}`)}
           onDuplicate={openDuplicateTraining}
         />
       </div>
@@ -93,27 +87,6 @@ export default function TrainingsPage() {
         />
       )}
 
-      {data.selectedSession && (
-        <TrainingDetailModal
-          selectedSession={data.selectedSession}
-          loadingDetail={data.loadingDetail}
-          canDeleteTrainings={data.canDeleteTrainings}
-          editingSelectedSession={data.editingSelectedSession}
-          detailError={data.detailError}
-          deletingTraining={data.deletingTraining}
-          showDeleteConfirm={data.showDeleteConfirm}
-          ageGroupId={data.ageGroupId}
-          onClose={data.closeSelectedSessionModal}
-          onDelete={data.handleDeleteSelectedSession}
-          onShowDeleteConfirm={() => data.setShowDeleteConfirm(true)}
-          onHideDeleteConfirm={() => data.setShowDeleteConfirm(false)}
-          onDuplicate={openDuplicateTraining}
-          onAttendanceCorrection={data.openAttendanceCorrection}
-          onStartEdit={() => data.setEditingSelectedSession(true)}
-          onCancelEdit={() => data.setEditingSelectedSession(false)}
-          onSave={data.handleSaveSelectedSession}
-        />
-      )}
     </>
   );
 }
