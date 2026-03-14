@@ -105,7 +105,8 @@ export async function GET(request: Request) {
           })
         : supabase
             .from("age_groups")
-            .select("*")
+            // Perf: campos específicos — exclui campos internos não usados pelo plantel.
+            .select("id, coordinator_id, name, club_name, club_id, club_logo_url, football_format, tactical_system, season")
             .eq("id", targetAgeGroupId)
             .maybeSingle(),
     ]);

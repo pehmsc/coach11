@@ -160,7 +160,8 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       .from("players")
       .update(updates)
       .eq("id", id)
-      .select("*")
+      // Perf: campos específicos — mesmo conjunto que PLAYER_FIELDS em /api/players.
+      .select("id, age_group_id, first_name, last_name, preferred_position, birth_date, phone, email, jersey_number, status, avatar_url, invite_code, invite_method, invite_sent_at, profile_id")
       .single();
 
     if (error || !data) {

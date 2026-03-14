@@ -154,12 +154,16 @@ export async function GET(request: Request) {
         new Set(attendanceRows.map((row) => row.player_id)),
       );
 
+      // Perf: campos específicos idênticos ao PLAYER_FIELDS de /api/players.
+      const PLAYER_ATTENDANCE_FIELDS =
+        "id, age_group_id, first_name, last_name, preferred_position, birth_date, phone, email, jersey_number, status, avatar_url, invite_code, invite_method, invite_sent_at, profile_id";
+
       let playerRows: Player[] = [];
       if (isCompletedSession) {
         if (recordedPlayerIds.length > 0) {
           const { data: playersData, error: playersError } = await db
             .from("players")
-            .select("*")
+            .select(PLAYER_ATTENDANCE_FIELDS)
             .in("id", recordedPlayerIds)
             .order("first_name")
             .order("last_name");
@@ -173,7 +177,8 @@ export async function GET(request: Request) {
       } else {
         const { data: playersData, error: playersError } = await db
           .from("players")
-          .select("*")
+          // Perf: campos específicos — mesmo conjunto que o branch acima.
+          .select(PLAYER_ATTENDANCE_FIELDS)
           .eq("age_group_id", context.ageGroup.id)
           .eq("status", "active")
           .order("first_name")

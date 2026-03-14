@@ -52,6 +52,16 @@ export async function getAgeGroupLabelById(
     .maybeSingle();
 }
 
+// Perf: campos específicos — evitar transferir club_id, updated_at e outros
+// campos internos não usados pela UI do calendário.
+const TRAINING_SESSION_CALENDAR_FIELDS =
+  "id, age_group_id, team_id, title, session_date, start_time, end_time, location, location_address, formatted_address, latitude, longitude, osm_place_id, location_source, notes, image_url, status, created_at";
+
+// Perf: campos específicos — evitar transferir club_id e outros campos
+// internos não usados pela UI do calendário.
+const GAME_CALENDAR_FIELDS =
+  "id, age_group_id, team_id, competition_id, title, game_datetime, end_time, opponent_name, opponent_short_name, location, location_address, formatted_address, latitude, longitude, osm_place_id, location_source, is_home, notes, image_url, status, score_home, score_away, created_at";
+
 export async function listTrainingSessionsInRange(
   db: CalendarDbClient,
   ageGroupId: string,
@@ -60,7 +70,7 @@ export async function listTrainingSessionsInRange(
 ) {
   return db
     .from("training_sessions")
-    .select("*")
+    .select(TRAINING_SESSION_CALENDAR_FIELDS)
     .eq("age_group_id", ageGroupId)
     .gte("session_date", from)
     .lte("session_date", to)
@@ -77,7 +87,7 @@ export async function listGamesInRange(
 ) {
   return db
     .from("games")
-    .select("*")
+    .select(GAME_CALENDAR_FIELDS)
     .eq("age_group_id", ageGroupId)
     .gte("game_datetime", `${from}T00:00:00`)
     .lte("game_datetime", `${to}T23:59:59`)
@@ -132,7 +142,8 @@ export async function insertTrainingSession(
       ...payload,
       status: "scheduled",
     })
-    .select("*")
+    // Perf: campos específicos — mesma projecção que listTrainingSessionsInRange.
+    .select(TRAINING_SESSION_CALENDAR_FIELDS)
     .single();
 }
 
@@ -147,7 +158,8 @@ export async function insertGame(
       status: "scheduled",
       game_type: "league",
     })
-    .select("*")
+    // Perf: campos específicos — mesma projecção que listGamesInRange.
+    .select(GAME_CALENDAR_FIELDS)
     .single();
 }
 
@@ -171,7 +183,8 @@ export async function updateTrainingSession(
     .from("training_sessions")
     .update(payload)
     .eq("id", id)
-    .select("*")
+    // Perf: campos específicos — mesma projecção que listTrainingSessionsInRange.
+    .select(TRAINING_SESSION_CALENDAR_FIELDS)
     .single();
 }
 
@@ -195,6 +208,7 @@ export async function updateGame(
     .from("games")
     .update(payload)
     .eq("id", id)
-    .select("*")
+    // Perf: campos específicos — mesma projecção que listGamesInRange.
+    .select(GAME_CALENDAR_FIELDS)
     .single();
 }

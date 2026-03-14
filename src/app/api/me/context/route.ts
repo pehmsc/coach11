@@ -114,7 +114,9 @@ export async function GET() {
       context.teamId
         ? db
             .from("kit_pieces")
-            .select("*")
+            // Perf: campos específicos — exclui club_id, updated_at e outros
+            // campos internos que a UI não consome directamente.
+            .select("id, team_id, club_id, kit_number, player_type, piece_type, color_hex, color_name, image_url, created_at")
             .eq("team_id", context.teamId)
             .order("kit_number")
             .order("player_type")
@@ -123,7 +125,8 @@ export async function GET() {
       canManageStaff
         ? db
             .from("staff_invites")
-            .select("*")
+            // Perf: campos específicos — exclui campos internos não usados pela UI.
+            .select("id, age_group_id, club_id, email, invited_by, status, created_at")
             .eq("age_group_id", context.ageGroup.id)
             .order("created_at", { ascending: false })
         : Promise.resolve({ data: [], error: null }),

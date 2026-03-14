@@ -147,7 +147,9 @@ export async function POST(request: Request) {
 
     const { data: existingPieces } = await db
       .from("kit_pieces")
-      .select("*")
+      // Perf: campos específicos — só os campos usados para verificar
+      // duplicados e normalizar player_type/piece_type.
+      .select("id, team_id, kit_number, player_type, piece_type, color_hex, color_name, image_url, created_at")
       .eq("team_id", team.id)
       .eq("kit_number", kitNumber)
       .in("player_type", candidatePlayerTypes)
@@ -168,7 +170,8 @@ export async function POST(request: Request) {
         .eq("kit_number", kitNumber)
         .in("player_type", playerTypesInDb)
         .in("piece_type", pieceTypesInDb)
-        .select("*");
+        // Perf: campos específicos — toUiPiece só necessita destes campos.
+        .select("id, team_id, kit_number, player_type, piece_type, color_hex, color_name, image_url, created_at");
 
       if (updateError || !updatedPieces || updatedPieces.length === 0) {
         return NextResponse.json(
@@ -206,7 +209,8 @@ export async function POST(request: Request) {
       const insertResult = await db
         .from("kit_pieces")
         .insert({ ...insertPayload, ...candidate })
-        .select("*")
+        // Perf: campos específicos — toUiPiece só necessita destes campos.
+        .select("id, team_id, kit_number, player_type, piece_type, color_hex, color_name, image_url, created_at")
         .single();
 
       insertedPiece = insertResult.data as Record<string, unknown> | null;

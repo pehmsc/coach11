@@ -26,7 +26,10 @@ export function useUnreadNotifications(
   const [messageTeamId, setMessageTeamId] = useState<string | null>(null);
   const typeFilter = options?.type?.trim() || null;
   const isMessageScope = typeFilter === "message";
-  const pollingIntervalMs = typeFilter === "message" ? 15000 : 45000;
+  // Perf: intervalos aumentados para reduzir invocações serverless.
+  // Mensagens: 15s → 60s. Notificações: 45s → 120s.
+  // Re-fetch imediato ao ganhar foco (handleFocusRefresh) mantém UX responsiva.
+  const pollingIntervalMs = typeFilter === "message" ? 60000 : 120000;
 
   const refreshCount = useCallback(async () => {
     if (!profileId) {
@@ -82,6 +85,9 @@ export function useUnreadNotifications(
       void refreshCount();
     });
     const interval = window.setInterval(() => {
+      // Perf: não fazer fetch quando o tab não está visível — o re-fetch
+      // acontece automaticamente via handleFocusRefresh ao regressar.
+      if (document.visibilityState !== "visible") return;
       void refreshCount();
     }, pollingIntervalMs);
 
