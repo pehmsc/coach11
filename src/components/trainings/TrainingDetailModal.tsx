@@ -342,7 +342,7 @@ export function TrainingDetailModal({
 
       {showDeleteConfirm && (
         <div
-          className="fixed inset-0 bg-black/55 z-[60] flex items-end md:items-center justify-center p-4"
+          className="fixed inset-0 bg-black/55 z-[100] flex items-end md:items-center justify-center p-4"
           onClick={() => {
             if (deletingTraining) return;
             onHideDeleteConfirm();
