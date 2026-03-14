@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveUserTeamContext } from "@/lib/auth/team-context";
 import { markTeamMessagesRead } from "@/lib/messages/unread";
 import { getTeamMembersDetailed } from "@/lib/team/members";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
+import { parseBody } from "@/lib/http/validate";
 
 type TeamMessageRow = {
   id: string;
@@ -33,15 +35,14 @@ type AuthUserLike = {
   user_metadata?: Record<string, unknown> | null;
 };
 
+const MessageCreateSchema = z.object({
+  content: z.string().trim().min(1, "A mensagem não pode estar vazia.").max(1200, "A mensagem excede o limite de 1200 caracteres."),
+});
+
 function normalizeLimit(value: string | null) {
   const parsed = Number.parseInt(value || "", 10);
   if (!Number.isFinite(parsed)) return 80;
   return Math.max(20, Math.min(200, parsed));
-}
-
-function normalizeContent(value: unknown) {
-  if (typeof value !== "string") return "";
-  return value.trim();
 }
 
 function normalizeDisplayName(value: unknown) {
@@ -278,20 +279,9 @@ export async function POST(request: Request) {
       db = supabase;
     }
 
-    const body = await request.json().catch(() => null);
-    const content = normalizeContent(body?.content);
-    if (!content) {
-      return NextResponse.json(
-        { error: "A mensagem não pode estar vazia." },
-        { status: 400 },
-      );
-    }
-    if (content.length > 1200) {
-      return NextResponse.json(
-        { error: "A mensagem excede o limite de 1200 caracteres." },
-        { status: 400 },
-      );
-    }
+    const parsed = await parseBody(request, MessageCreateSchema);
+    if (parsed.error) return parsed.error;
+    const { content } = parsed.data;
 
     const context = await resolveUserTeamContext(db, user.id);
     if (!context.teamId || !context.ageGroup) {

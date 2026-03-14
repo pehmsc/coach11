@@ -1,27 +1,33 @@
+import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveUserTeamContext } from "@/lib/auth/team-context";
 import { deletePlayerCascade } from "@/lib/events/delete-cascade";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
+import { parseBody } from "@/lib/http/validate";
 import { NextResponse } from "next/server";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
 };
 
-function normalizeOptionalText(value: unknown) {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
-
-function normalizeOptionalInt(value: unknown) {
-  if (value === null || value === undefined || value === "") return null;
-  const parsed = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(parsed)) return null;
-  const intValue = Math.floor(parsed);
-  return intValue >= 0 ? intValue : null;
-}
+const PlayerUpdateSchema = z.object({
+  first_name: z.string().trim().min(2, "O primeiro nome deve ter pelo menos 2 caracteres.").max(100).optional(),
+  last_name: z.string().trim().min(2, "O apelido deve ter pelo menos 2 caracteres.").max(100).optional(),
+  preferred_position: z.string().max(10).nullable().optional(),
+  birth_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  phone: z.string().max(20).nullable().optional(),
+  email: z.string().email().max(254).nullable().optional(),
+  jersey_number: z.number().int().min(0).max(99).nullable().optional(),
+  status: z.enum(["active", "injured", "suspended", "inactive"]).optional(),
+  invite_code: z.string().nullable().optional(),
+  invite_method: z.string().nullable().optional(),
+  invite_sent_at: z.string().nullable().optional(),
+  invite_accepted_at: z.string().nullable().optional(),
+}).refine(
+  (data) => Object.keys(data).length > 0,
+  "Sem campos para atualizar.",
+);
 
 async function getRouteContext() {
   const supabase = await createClient();
@@ -89,72 +95,9 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       );
     }
 
-    const body = await request.json().catch(() => null);
-    if (!body || typeof body !== "object") {
-      return NextResponse.json({ error: "Dados inválidos." }, { status: 400 });
-    }
-
-    const updates: Record<string, unknown> = {};
-    const row = body as Record<string, unknown>;
-
-    if ("first_name" in row) {
-      const value = normalizeOptionalText(row.first_name);
-      if (!value) {
-        return NextResponse.json({ error: "Primeiro nome inválido." }, { status: 400 });
-      }
-      updates.first_name = value;
-    }
-    if ("last_name" in row) {
-      const value = normalizeOptionalText(row.last_name);
-      if (!value) {
-        return NextResponse.json({ error: "Apelido inválido." }, { status: 400 });
-      }
-      updates.last_name = value;
-    }
-    if ("preferred_position" in row) {
-      updates.preferred_position = normalizeOptionalText(row.preferred_position);
-    }
-    if ("birth_date" in row) {
-      updates.birth_date = normalizeOptionalText(row.birth_date);
-    }
-    if ("phone" in row) {
-      updates.phone = normalizeOptionalText(row.phone);
-    }
-    if ("email" in row) {
-      updates.email = normalizeOptionalText(row.email);
-    }
-    if ("jersey_number" in row) {
-      updates.jersey_number = normalizeOptionalInt(row.jersey_number);
-    }
-    if ("status" in row) {
-      const status = normalizeOptionalText(row.status);
-      if (
-        status &&
-        !["active", "injured", "suspended", "inactive"].includes(status)
-      ) {
-        return NextResponse.json({ error: "Estado inválido." }, { status: 400 });
-      }
-      updates.status = status;
-    }
-    if ("invite_code" in row) {
-      updates.invite_code = normalizeOptionalText(row.invite_code);
-    }
-    if ("invite_method" in row) {
-      updates.invite_method = normalizeOptionalText(row.invite_method);
-    }
-    if ("invite_sent_at" in row) {
-      updates.invite_sent_at = normalizeOptionalText(row.invite_sent_at);
-    }
-    if ("invite_accepted_at" in row) {
-      updates.invite_accepted_at = normalizeOptionalText(row.invite_accepted_at);
-    }
-
-    if (Object.keys(updates).length === 0) {
-      return NextResponse.json(
-        { error: "Sem campos para atualizar." },
-        { status: 400 },
-      );
-    }
+    const parsed = await parseBody(request, PlayerUpdateSchema);
+    if (parsed.error) return parsed.error;
+    const updates = parsed.data;
 
     const { data, error } = await supabase
       .from("players")

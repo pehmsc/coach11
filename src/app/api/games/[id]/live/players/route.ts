@@ -1,5 +1,7 @@
+import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
+import { parseBody } from "@/lib/http/validate";
 import { isExternalLivePlayerId } from "@/lib/games/live-player-ids";
 import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -10,19 +12,23 @@ type RouteContext = {
 
 type LiveStatus = "on_field" | "substitute" | "substituted";
 
-type PlayerLiveUpdate = {
-  playerId: string;
-  status: LiveStatus;
-  startMinute?: number | null;
-  endMinute?: number | null;
-};
-
 type GameAccessContext = {
   exists: boolean;
   canWrite: boolean;
   isCoordinator: boolean;
   status: string | null;
 };
+
+const PlayerLiveUpdateSchema = z.object({
+  playerId: z.string().min(1),
+  status: z.enum(["on_field", "substitute", "substituted"]),
+  startMinute: z.number().int().min(0).nullable().optional(),
+  endMinute: z.number().int().min(0).nullable().optional(),
+});
+
+const PlayersPostSchema = z.object({
+  updates: z.array(PlayerLiveUpdateSchema).min(1, "Sem updates para guardar."),
+});
 
 function toDbLiveStatus(status: LiveStatus, startMinute: number | null | undefined) {
   if (status === "substituted") return "substituted_out";
@@ -81,30 +87,6 @@ async function assertGameAccess(
   };
 }
 
-function isValidUpdate(value: unknown): value is PlayerLiveUpdate {
-  if (!value || typeof value !== "object") return false;
-  const row = value as Partial<PlayerLiveUpdate>;
-  if (typeof row.playerId !== "string" || row.playerId.length === 0) return false;
-  if (row.status !== "on_field" && row.status !== "substitute" && row.status !== "substituted") {
-    return false;
-  }
-  if (
-    row.startMinute !== undefined &&
-    row.startMinute !== null &&
-    (!Number.isFinite(row.startMinute) || Math.floor(row.startMinute) < 0)
-  ) {
-    return false;
-  }
-  if (
-    row.endMinute !== undefined &&
-    row.endMinute !== null &&
-    (!Number.isFinite(row.endMinute) || Math.floor(row.endMinute) < 0)
-  ) {
-    return false;
-  }
-  return true;
-}
-
 function computeSentOffPlayerIds(events: Array<{
   event_type?: string | null;
   player_id?: string | null;
@@ -144,17 +126,9 @@ export async function POST(request: Request, { params }: RouteContext) {
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
 
-    const body = await request.json().catch(() => null);
-    const updatesRaw = Array.isArray(body?.updates) ? body.updates : [];
-
-    if (updatesRaw.length === 0) {
-      return NextResponse.json({ error: "Sem updates para guardar." }, { status: 400 });
-    }
-    if (!updatesRaw.every((row: unknown) => isValidUpdate(row))) {
-      return NextResponse.json({ error: "Formato de update inválido." }, { status: 400 });
-    }
-
-    const updates = updatesRaw as PlayerLiveUpdate[];
+    const parsed = await parseBody(request, PlayersPostSchema);
+    if (parsed.error) return parsed.error;
+    const { updates } = parsed.data;
     if (updates.some((row) => isExternalLivePlayerId(row.playerId))) {
       return NextResponse.json(
         {

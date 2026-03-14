@@ -1,12 +1,18 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
+import { parseBody } from "@/lib/http/validate";
 import {
   clearNotificationForUser,
   getUserNotification,
   setNotificationReadState,
 } from "@/lib/notifications/store";
+
+const NotificationPatchSchema = z.object({
+  action: z.enum(["mark_read", "mark_unread"]).default("mark_read"),
+});
 
 export async function PATCH(
   request: Request,
@@ -32,13 +38,9 @@ export async function PATCH(
 
     const admin = createAdminClient();
 
-    const body = await request.json().catch(() => null);
-    const action =
-      typeof body?.action === "string" ? body.action : "mark_read";
-
-    if (!["mark_read", "mark_unread"].includes(action)) {
-      return NextResponse.json({ error: "Ação inválida." }, { status: 400 });
-    }
+    const parsed = await parseBody(request, NotificationPatchSchema);
+    if (parsed.error) return parsed.error;
+    const { action } = parsed.data;
 
     const updatedId = await setNotificationReadState(admin, {
       userId: user.id,

@@ -1,5 +1,7 @@
+import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
+import { parseBody } from "@/lib/http/validate";
 import { captureServerProductEvent } from "@/lib/observability/posthog-server";
 import { fetchGameAccessContext } from "@/lib/games/access";
 import { createNotificationForTeamOnce } from "@/lib/notifications/service";
@@ -26,6 +28,12 @@ const VALID_PHASES = new Set<MatchPhase>([
   "review",
   "completed",
 ]);
+
+const CheckpointPatchSchema = z.object({
+  phase: z.enum(["pre_match", "first_half", "halftime", "second_half", "review", "completed"]),
+  baseSeconds: z.number().int().min(0),
+  runningSinceMs: z.number().int().min(0).nullable(),
+});
 
 function parsePhase(value: unknown): MatchPhase | null {
   if (typeof value !== "string") return null;
@@ -184,29 +192,9 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     }
     userId = user.id;
 
-    const body = await request.json().catch(() => null);
-    const phase = parsePhase(body?.phase);
-    const baseSeconds =
-      typeof body?.baseSeconds === "number" && Number.isFinite(body.baseSeconds)
-        ? Math.max(0, Math.floor(body.baseSeconds))
-        : null;
-    const runningSinceMsRaw =
-      typeof body?.runningSinceMs === "number" && Number.isFinite(body.runningSinceMs)
-        ? Math.floor(body.runningSinceMs)
-        : body?.runningSinceMs === null
-          ? null
-          : undefined;
-
-    if (!phase || baseSeconds === null || runningSinceMsRaw === undefined) {
-      return NextResponse.json({ error: "Dados inválidos para checkpoint." }, { status: 400 });
-    }
-
-    if (runningSinceMsRaw !== null && runningSinceMsRaw < 0) {
-      return NextResponse.json(
-        { error: "runningSinceMs deve ser null ou >= 0." },
-        { status: 400 },
-      );
-    }
+    const parsed = await parseBody(request, CheckpointPatchSchema);
+    if (parsed.error) return parsed.error;
+    const { phase, baseSeconds, runningSinceMs: runningSinceMsRaw } = parsed.data;
 
     const access = await assertGameAccess(supabase, gameId);
     if (!access.ok) return access.response;
