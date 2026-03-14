@@ -318,23 +318,23 @@ export function useTrainingsData() {
     }
   }
 
-  // Auto-open session from URL
+  // Redirecionar URLs com ?open=<id> para a página de detalhe /trainings/<id>
   useEffect(() => {
     const requestedSessionId = searchParams.get("open");
-    if (!requestedSessionId || loading || loadingDetail || selectedSession) {
+    if (!requestedSessionId || loading) {
       return;
     }
 
     const targetSession = sessions.find((session) => session.id === requestedSessionId);
     if (targetSession) {
-      void handleSessionClick(targetSession);
+      router.replace(`/trainings/${requestedSessionId}`);
       return;
     }
 
     if (sessions.length > 0) {
       router.replace("/trainings", { scroll: false });
     }
-  }, [loading, loadingDetail, router, searchParams, selectedSession, sessions]);
+  }, [loading, router, searchParams, sessions]);
 
   return {
     loading,
