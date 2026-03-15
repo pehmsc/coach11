@@ -69,6 +69,7 @@ interface StaffMember {
   role: string;
   full_name?: string | null;
   email?: string | null;
+  phone?: string | null;
   avatar_url?: string | null;
 }
 
@@ -331,7 +332,7 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
       const profileIds = staffLinks.map((s) => s.profile_id);
       const { data: profilesData } = await supabase
         .from("profiles")
-        .select("id, full_name, email, avatar_url")
+        .select("id, full_name, email, phone, avatar_url")
         .in("id", profileIds);
       const profileMap = new Map((profilesData ?? []).map((p) => [p.id, p]));
       setStaff(
@@ -341,6 +342,7 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
           role: s.role,
           full_name: profileMap.get(s.profile_id)?.full_name ?? null,
           email: profileMap.get(s.profile_id)?.email ?? null,
+          phone: profileMap.get(s.profile_id)?.phone ?? null,
           avatar_url: profileMap.get(s.profile_id)?.avatar_url ?? null,
         })),
       );
@@ -894,25 +896,25 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
                       <>
                         <InteractivePieChart slices={gameSlices} />
 
-                        {/* Forma recente */}
-                        {recentForm.length > 0 && (
-                          <div className="mt-3 flex items-center gap-1.5">
-                            <span className="text-xs text-slate-500 mr-1">Forma:</span>
-                            {recentForm.map((r, i) => (
-                              <span
-                                key={i}
-                                className={`inline-flex h-6 w-6 items-center justify-center rounded text-[11px] font-bold text-white flex-shrink-0 ${
-                                  r === "W" ? "bg-emerald-500" : r === "D" ? "bg-slate-400" : "bg-red-500"
-                                }`}
-                              >
-                                {r === "W" ? "V" : r === "D" ? "E" : "D"}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-
-                        {/* Métricas */}
+                        {/* Métricas — Forma como primeira linha */}
                         <div className="mt-3 space-y-1 text-xs text-slate-600">
+                          {recentForm.length > 0 && (
+                            <div className="flex items-center justify-between">
+                              <span>Forma</span>
+                              <div className="flex items-center gap-1 flex-shrink-0">
+                                {recentForm.map((r, i) => (
+                                  <span
+                                    key={i}
+                                    className={`inline-flex h-6 w-6 items-center justify-center rounded text-[11px] font-bold text-white flex-shrink-0 ${
+                                      r === "W" ? "bg-emerald-500" : r === "D" ? "bg-slate-400" : "bg-red-500"
+                                    }`}
+                                  >
+                                    {r === "W" ? "V" : r === "D" ? "E" : "D"}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                           <div className="flex justify-between">
                             <span>Golos marcados</span>
                             <span className="font-semibold text-slate-800">
@@ -1088,6 +1090,9 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
                           {s.full_name ?? "—"}
                         </p>
                         <p className="text-xs text-slate-400 truncate">{s.email ?? ""}</p>
+                        {s.phone && (
+                          <p className="text-xs text-slate-400">{s.phone}</p>
+                        )}
                       </div>
                       <div className="flex items-center gap-2 flex-wrap justify-end">
                         <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-medium">
