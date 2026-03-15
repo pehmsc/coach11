@@ -62,7 +62,8 @@ function createMockAdmin(seed: TableSeed = {}) {
     const filters: Array<{ column: string; value: unknown }> = [];
 
     const builder = {
-      select(_columns?: string) {
+      select(columns?: string) {
+        void columns;
         return builder;
       },
       eq(column: string, value: unknown) {
@@ -189,10 +190,10 @@ async function loadCheckPermissionModule(options: {
     hasPermission,
   }));
 
-  const module = await import("../lib/auth/require-permission");
+  const permissionModule = await import("../lib/auth/require-permission");
 
   return {
-    ...module,
+    ...permissionModule,
     admin,
     authGetUser,
     createAdminClient,
@@ -238,10 +239,10 @@ async function loadPermissionsRouteModule(options: {
     respondInternalError,
   }));
 
-  const module = await import("../app/api/permissions/[staffId]/route");
+  const routeModule = await import("../app/api/permissions/[staffId]/route");
 
   return {
-    ...module,
+    ...routeModule,
     authGetUser,
     createAdminClient,
     createClient,
