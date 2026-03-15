@@ -409,7 +409,7 @@ export default async function DashboardPage() {
               <p className="text-emerald-700 text-sm mb-4">
                 Cria o escalão, equipas e adiciona os atletas.
               </p>
-              <Link href="/team/setup">
+              <Link href="/onboarding">
                 <Button
                   className="bg-emerald-600 hover:bg-emerald-700"
                   size="sm"
