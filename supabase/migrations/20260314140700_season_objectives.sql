@@ -52,77 +52,37 @@ on public.season_objectives
 as restrictive
 for all
 to authenticated
-using (public.user_can_access_age_group(age_group_id))
-with check (
-  public.user_can_manage_age_group_v2(age_group_id)
-  and exists (
-    select 1
-    from public.age_groups ag
-    where ag.id = season_objectives.age_group_id
-      and ag.club_id = season_objectives.club_id
-  )
-);
+using (public.user_can_read_club_scope(club_id))
+with check (public.user_can_write_age_group_scope(age_group_id, club_id));
 
 drop policy if exists season_objectives_select_v1 on public.season_objectives;
 create policy season_objectives_select_v1
 on public.season_objectives
 for select
 to authenticated
-using (public.user_can_access_age_group(age_group_id));
+using (public.user_can_read_club_scope(club_id));
 
 drop policy if exists season_objectives_insert_v1 on public.season_objectives;
 create policy season_objectives_insert_v1
 on public.season_objectives
 for insert
 to authenticated
-with check (
-  public.user_can_manage_age_group_v2(age_group_id)
-  and exists (
-    select 1
-    from public.age_groups ag
-    where ag.id = season_objectives.age_group_id
-      and ag.club_id = season_objectives.club_id
-  )
-);
+with check (public.user_can_write_age_group_scope(age_group_id, club_id));
 
 drop policy if exists season_objectives_update_v1 on public.season_objectives;
 create policy season_objectives_update_v1
 on public.season_objectives
 for update
 to authenticated
-using (
-  public.user_can_manage_age_group_v2(age_group_id)
-  and exists (
-    select 1
-    from public.age_groups ag
-    where ag.id = season_objectives.age_group_id
-      and ag.club_id = season_objectives.club_id
-  )
-)
-with check (
-  public.user_can_manage_age_group_v2(age_group_id)
-  and exists (
-    select 1
-    from public.age_groups ag
-    where ag.id = season_objectives.age_group_id
-      and ag.club_id = season_objectives.club_id
-  )
-);
+using (public.user_can_write_age_group_scope(age_group_id, club_id))
+with check (public.user_can_write_age_group_scope(age_group_id, club_id));
 
 drop policy if exists season_objectives_delete_v1 on public.season_objectives;
 create policy season_objectives_delete_v1
 on public.season_objectives
 for delete
 to authenticated
-using (
-  public.user_can_manage_age_group_v2(age_group_id)
-  and exists (
-    select 1
-    from public.age_groups ag
-    where ag.id = season_objectives.age_group_id
-      and ag.club_id = season_objectives.club_id
-  )
-);
+using (public.user_can_write_age_group_scope(age_group_id, club_id));
 
 drop trigger if exists trg_season_objectives_set_updated_at on public.season_objectives;
 create trigger trg_season_objectives_set_updated_at

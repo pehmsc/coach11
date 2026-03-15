@@ -14,6 +14,62 @@ $$;
 comment on function public.set_updated_at() is
   'Atualiza automaticamente a coluna updated_at para now().';
 
+create or replace function public.user_can_read_club_scope(p_club_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select p_club_id is not null
+    and (
+      public.user_is_super_coordinator()
+      or exists (
+        select 1
+        from public.age_groups ag
+        where ag.club_id = p_club_id
+          and ag.coordinator_id = auth.uid()
+      )
+      or exists (
+        select 1
+        from public.age_group_staff ags
+        where ags.club_id = p_club_id
+          and ags.profile_id = auth.uid()
+      )
+    );
+$$;
+
+create or replace function public.user_can_write_age_group_scope(
+  p_age_group_id uuid,
+  p_club_id uuid
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select p_age_group_id is not null
+    and p_club_id is not null
+    and (
+      public.user_is_super_coordinator()
+      or exists (
+        select 1
+        from public.age_groups ag
+        where ag.id = p_age_group_id
+          and ag.club_id = p_club_id
+          and ag.coordinator_id = auth.uid()
+      )
+      or exists (
+        select 1
+        from public.age_group_staff ags
+        where ags.age_group_id = p_age_group_id
+          and ags.club_id = p_club_id
+          and ags.profile_id = auth.uid()
+      )
+    );
+$$;
+
 create table if not exists public.staff_permissions (
   id uuid primary key default gen_random_uuid(),
   staff_id uuid not null references public.age_group_staff(id) on delete cascade,
@@ -82,24 +138,17 @@ on public.staff_permissions
 as restrictive
 for all
 to authenticated
-using (
-  exists (
-    select 1
-    from public.age_group_staff ags
-    where ags.id = staff_permissions.staff_id
-      and (
-        ags.profile_id = auth.uid()
-        or public.user_can_manage_age_group_v2(ags.age_group_id)
-      )
-  )
-)
+using (public.user_can_read_club_scope(club_id))
 with check (
   exists (
     select 1
-    from public.age_group_staff ags
-    where ags.id = staff_permissions.staff_id
-      and ags.club_id = staff_permissions.club_id
-      and public.user_can_manage_age_group_v2(ags.age_group_id)
+    from public.age_group_staff target_ags
+    where target_ags.id = staff_permissions.staff_id
+      and target_ags.club_id = staff_permissions.club_id
+      and public.user_can_write_age_group_scope(
+        target_ags.age_group_id,
+        staff_permissions.club_id
+      )
   )
 );
 
@@ -108,17 +157,7 @@ create policy staff_permissions_select_v1
 on public.staff_permissions
 for select
 to authenticated
-using (
-  exists (
-    select 1
-    from public.age_group_staff ags
-    where ags.id = staff_permissions.staff_id
-      and (
-        ags.profile_id = auth.uid()
-        or public.user_can_manage_age_group_v2(ags.age_group_id)
-      )
-  )
-);
+using (public.user_can_read_club_scope(club_id));
 
 drop policy if exists staff_permissions_insert_v1 on public.staff_permissions;
 create policy staff_permissions_insert_v1
@@ -128,10 +167,13 @@ to authenticated
 with check (
   exists (
     select 1
-    from public.age_group_staff ags
-    where ags.id = staff_permissions.staff_id
-      and ags.club_id = staff_permissions.club_id
-      and public.user_can_manage_age_group_v2(ags.age_group_id)
+    from public.age_group_staff target_ags
+    where target_ags.id = staff_permissions.staff_id
+      and target_ags.club_id = staff_permissions.club_id
+      and public.user_can_write_age_group_scope(
+        target_ags.age_group_id,
+        staff_permissions.club_id
+      )
   )
 );
 
@@ -143,19 +185,25 @@ to authenticated
 using (
   exists (
     select 1
-    from public.age_group_staff ags
-    where ags.id = staff_permissions.staff_id
-      and ags.club_id = staff_permissions.club_id
-      and public.user_can_manage_age_group_v2(ags.age_group_id)
+    from public.age_group_staff target_ags
+    where target_ags.id = staff_permissions.staff_id
+      and target_ags.club_id = staff_permissions.club_id
+      and public.user_can_write_age_group_scope(
+        target_ags.age_group_id,
+        staff_permissions.club_id
+      )
   )
 )
 with check (
   exists (
     select 1
-    from public.age_group_staff ags
-    where ags.id = staff_permissions.staff_id
-      and ags.club_id = staff_permissions.club_id
-      and public.user_can_manage_age_group_v2(ags.age_group_id)
+    from public.age_group_staff target_ags
+    where target_ags.id = staff_permissions.staff_id
+      and target_ags.club_id = staff_permissions.club_id
+      and public.user_can_write_age_group_scope(
+        target_ags.age_group_id,
+        staff_permissions.club_id
+      )
   )
 );
 
@@ -167,10 +215,13 @@ to authenticated
 using (
   exists (
     select 1
-    from public.age_group_staff ags
-    where ags.id = staff_permissions.staff_id
-      and ags.club_id = staff_permissions.club_id
-      and public.user_can_manage_age_group_v2(ags.age_group_id)
+    from public.age_group_staff target_ags
+    where target_ags.id = staff_permissions.staff_id
+      and target_ags.club_id = staff_permissions.club_id
+      and public.user_can_write_age_group_scope(
+        target_ags.age_group_id,
+        staff_permissions.club_id
+      )
   )
 );
 

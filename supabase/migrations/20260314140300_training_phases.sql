@@ -54,14 +54,19 @@ on public.training_phases
 as restrictive
 for all
 to authenticated
-using (public.user_can_access_training_session_v2(training_session_id))
+using (public.user_can_read_club_scope(club_id))
 with check (
-  public.user_is_training_session_coordinator(training_session_id)
-  and exists (
+  exists (
     select 1
     from public.training_sessions ts
+    left join public.teams t
+      on t.id = ts.team_id
     where ts.id = training_phases.training_session_id
       and ts.club_id = training_phases.club_id
+      and public.user_can_write_age_group_scope(
+        coalesce(ts.age_group_id, t.age_group_id),
+        training_phases.club_id
+      )
   )
 );
 
@@ -70,7 +75,7 @@ create policy training_phases_select_v1
 on public.training_phases
 for select
 to authenticated
-using (public.user_can_access_training_session_v2(training_session_id));
+using (public.user_can_read_club_scope(club_id));
 
 drop policy if exists training_phases_insert_v1 on public.training_phases;
 create policy training_phases_insert_v1
@@ -78,12 +83,17 @@ on public.training_phases
 for insert
 to authenticated
 with check (
-  public.user_is_training_session_coordinator(training_session_id)
-  and exists (
+  exists (
     select 1
     from public.training_sessions ts
+    left join public.teams t
+      on t.id = ts.team_id
     where ts.id = training_phases.training_session_id
       and ts.club_id = training_phases.club_id
+      and public.user_can_write_age_group_scope(
+        coalesce(ts.age_group_id, t.age_group_id),
+        training_phases.club_id
+      )
   )
 );
 
@@ -93,21 +103,31 @@ on public.training_phases
 for update
 to authenticated
 using (
-  public.user_is_training_session_coordinator(training_session_id)
-  and exists (
+  exists (
     select 1
     from public.training_sessions ts
+    left join public.teams t
+      on t.id = ts.team_id
     where ts.id = training_phases.training_session_id
       and ts.club_id = training_phases.club_id
+      and public.user_can_write_age_group_scope(
+        coalesce(ts.age_group_id, t.age_group_id),
+        training_phases.club_id
+      )
   )
 )
 with check (
-  public.user_is_training_session_coordinator(training_session_id)
-  and exists (
+  exists (
     select 1
     from public.training_sessions ts
+    left join public.teams t
+      on t.id = ts.team_id
     where ts.id = training_phases.training_session_id
       and ts.club_id = training_phases.club_id
+      and public.user_can_write_age_group_scope(
+        coalesce(ts.age_group_id, t.age_group_id),
+        training_phases.club_id
+      )
   )
 );
 
@@ -117,12 +137,17 @@ on public.training_phases
 for delete
 to authenticated
 using (
-  public.user_is_training_session_coordinator(training_session_id)
-  and exists (
+  exists (
     select 1
     from public.training_sessions ts
+    left join public.teams t
+      on t.id = ts.team_id
     where ts.id = training_phases.training_session_id
       and ts.club_id = training_phases.club_id
+      and public.user_can_write_age_group_scope(
+        coalesce(ts.age_group_id, t.age_group_id),
+        training_phases.club_id
+      )
   )
 );
 
