@@ -13,7 +13,7 @@ export default function RedeemInviteGate() {
   const syncAttemptedRef = useRef(false);
 
   const redeemInvite = useCallback(
-    async (code: string) => {
+    async (code: string, codeIsFromUrl: boolean) => {
       setRunning(true);
       setError(null);
 
@@ -52,6 +52,22 @@ export default function RedeemInviteGate() {
             localStorage.removeItem("inviteEmail");
             router.replace("/dashboard");
             router.refresh();
+            return;
+          }
+
+          // Bug fix: código não encontrado (já redeemed pelo invite/sync no
+          // auth callback, ou código antigo em localStorage de sessão anterior).
+          // Se o código veio apenas do localStorage (não do URL), limpar
+          // silenciosamente — o utilizador já está ou estará associado.
+          if (res.status === 404) {
+            localStorage.removeItem("inviteCode");
+            localStorage.removeItem("inviteEmail");
+            if (!codeIsFromUrl) {
+              // Código stale em localStorage — silencioso, não bloquear o utilizador
+              return;
+            }
+            // Código do URL → mostrar erro (convite inválido ou já utilizado)
+            setError(payload?.error || "Código inválido ou já utilizado.");
             return;
           }
 
@@ -98,7 +114,7 @@ export default function RedeemInviteGate() {
     if (lastProcessedCodeRef.current === code) return;
 
     lastProcessedCodeRef.current = code;
-    void redeemInvite(code);
+    void redeemInvite(code, !!codeFromUrl);
   }, [redeemInvite, sp]);
 
   useEffect(() => {
