@@ -54,12 +54,98 @@ execute function public.player_documents_assign_club_id();
 
 alter table public.player_documents enable row level security;
 
-drop policy if exists player_documents_club_access on public.player_documents;
-create policy player_documents_club_access
+drop policy if exists pd_club_access on public.player_documents;
+drop policy if exists player_documents_domain_boundary_v2 on public.player_documents;
+create policy player_documents_domain_boundary_v2
 on public.player_documents
+as restrictive
 for all
-using (public.user_can_access_club(club_id))
-with check (public.user_can_access_club(club_id));
+to authenticated
+using (
+  exists (
+    select 1
+    from public.players p
+    where p.id = player_documents.player_id
+      and public.user_can_access_age_group(p.age_group_id)
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.players p
+    where p.id = player_documents.player_id
+      and p.club_id = player_documents.club_id
+      and public.user_can_manage_age_group_v2(p.age_group_id)
+  )
+);
+
+drop policy if exists player_documents_select_v1 on public.player_documents;
+create policy player_documents_select_v1
+on public.player_documents
+for select
+to authenticated
+using (
+  exists (
+    select 1
+    from public.players p
+    where p.id = player_documents.player_id
+      and public.user_can_access_age_group(p.age_group_id)
+  )
+);
+
+drop policy if exists player_documents_insert_v1 on public.player_documents;
+create policy player_documents_insert_v1
+on public.player_documents
+for insert
+to authenticated
+with check (
+  exists (
+    select 1
+    from public.players p
+    where p.id = player_documents.player_id
+      and p.club_id = player_documents.club_id
+      and public.user_can_manage_age_group_v2(p.age_group_id)
+  )
+);
+
+drop policy if exists player_documents_update_v1 on public.player_documents;
+create policy player_documents_update_v1
+on public.player_documents
+for update
+to authenticated
+using (
+  exists (
+    select 1
+    from public.players p
+    where p.id = player_documents.player_id
+      and p.club_id = player_documents.club_id
+      and public.user_can_manage_age_group_v2(p.age_group_id)
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.players p
+    where p.id = player_documents.player_id
+      and p.club_id = player_documents.club_id
+      and public.user_can_manage_age_group_v2(p.age_group_id)
+  )
+);
+
+drop policy if exists player_documents_delete_v1 on public.player_documents;
+create policy player_documents_delete_v1
+on public.player_documents
+for delete
+to authenticated
+using (
+  exists (
+    select 1
+    from public.players p
+    where p.id = player_documents.player_id
+      and p.club_id = player_documents.club_id
+      and public.user_can_manage_age_group_v2(p.age_group_id)
+  )
+);
 
 drop trigger if exists trg_player_documents_set_updated_at on public.player_documents;
 create trigger trg_player_documents_set_updated_at

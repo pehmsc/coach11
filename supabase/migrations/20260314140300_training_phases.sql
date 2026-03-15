@@ -48,11 +48,83 @@ execute function public.training_phases_assign_club_id();
 alter table public.training_phases enable row level security;
 
 drop policy if exists training_phases_club_access on public.training_phases;
-create policy training_phases_club_access
+drop policy if exists training_phases_domain_boundary_v2 on public.training_phases;
+create policy training_phases_domain_boundary_v2
 on public.training_phases
+as restrictive
 for all
-using (public.user_can_access_club(club_id))
-with check (public.user_can_access_club(club_id));
+to authenticated
+using (public.user_can_access_training_session_v2(training_session_id))
+with check (
+  public.user_is_training_session_coordinator(training_session_id)
+  and exists (
+    select 1
+    from public.training_sessions ts
+    where ts.id = training_phases.training_session_id
+      and ts.club_id = training_phases.club_id
+  )
+);
+
+drop policy if exists training_phases_select_v1 on public.training_phases;
+create policy training_phases_select_v1
+on public.training_phases
+for select
+to authenticated
+using (public.user_can_access_training_session_v2(training_session_id));
+
+drop policy if exists training_phases_insert_v1 on public.training_phases;
+create policy training_phases_insert_v1
+on public.training_phases
+for insert
+to authenticated
+with check (
+  public.user_is_training_session_coordinator(training_session_id)
+  and exists (
+    select 1
+    from public.training_sessions ts
+    where ts.id = training_phases.training_session_id
+      and ts.club_id = training_phases.club_id
+  )
+);
+
+drop policy if exists training_phases_update_v1 on public.training_phases;
+create policy training_phases_update_v1
+on public.training_phases
+for update
+to authenticated
+using (
+  public.user_is_training_session_coordinator(training_session_id)
+  and exists (
+    select 1
+    from public.training_sessions ts
+    where ts.id = training_phases.training_session_id
+      and ts.club_id = training_phases.club_id
+  )
+)
+with check (
+  public.user_is_training_session_coordinator(training_session_id)
+  and exists (
+    select 1
+    from public.training_sessions ts
+    where ts.id = training_phases.training_session_id
+      and ts.club_id = training_phases.club_id
+  )
+);
+
+drop policy if exists training_phases_delete_v1 on public.training_phases;
+create policy training_phases_delete_v1
+on public.training_phases
+for delete
+to authenticated
+using (
+  public.user_is_training_session_coordinator(training_session_id)
+  and exists (
+    select 1
+    from public.training_sessions ts
+    where ts.id = training_phases.training_session_id
+      and ts.club_id = training_phases.club_id
+  )
+);
 
 drop trigger if exists trg_training_phases_set_updated_at on public.training_phases;
 create trigger trg_training_phases_set_updated_at

@@ -16,7 +16,7 @@ comment on function public.set_updated_at() is
 
 create table if not exists public.staff_permissions (
   id uuid primary key default gen_random_uuid(),
-  staff_id uuid not null references public.team_staff(id) on delete cascade,
+  staff_id uuid not null references public.age_group_staff(id) on delete cascade,
   club_id uuid not null references public.clubs(id) on delete cascade,
 
   area text not null check (area in (
@@ -52,10 +52,10 @@ as $$
 declare
   v_club_id uuid;
 begin
-  select ts.club_id
+  select ags.club_id
     into v_club_id
-  from public.team_staff ts
-  where ts.id = new.staff_id;
+  from public.age_group_staff ags
+  where ags.id = new.staff_id;
 
   if v_club_id is null then
     raise exception 'staff_permissions.staff_id invalido';
@@ -76,11 +76,103 @@ execute function public.staff_permissions_assign_club_id();
 alter table public.staff_permissions enable row level security;
 
 drop policy if exists staff_permissions_club_access on public.staff_permissions;
-create policy staff_permissions_club_access
+drop policy if exists staff_permissions_domain_boundary_v2 on public.staff_permissions;
+create policy staff_permissions_domain_boundary_v2
 on public.staff_permissions
+as restrictive
 for all
-using (public.user_can_access_club(club_id))
-with check (public.user_can_access_club(club_id));
+to authenticated
+using (
+  exists (
+    select 1
+    from public.age_group_staff ags
+    where ags.id = staff_permissions.staff_id
+      and (
+        ags.profile_id = auth.uid()
+        or public.user_can_manage_age_group_v2(ags.age_group_id)
+      )
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.age_group_staff ags
+    where ags.id = staff_permissions.staff_id
+      and ags.club_id = staff_permissions.club_id
+      and public.user_can_manage_age_group_v2(ags.age_group_id)
+  )
+);
+
+drop policy if exists staff_permissions_select_v1 on public.staff_permissions;
+create policy staff_permissions_select_v1
+on public.staff_permissions
+for select
+to authenticated
+using (
+  exists (
+    select 1
+    from public.age_group_staff ags
+    where ags.id = staff_permissions.staff_id
+      and (
+        ags.profile_id = auth.uid()
+        or public.user_can_manage_age_group_v2(ags.age_group_id)
+      )
+  )
+);
+
+drop policy if exists staff_permissions_insert_v1 on public.staff_permissions;
+create policy staff_permissions_insert_v1
+on public.staff_permissions
+for insert
+to authenticated
+with check (
+  exists (
+    select 1
+    from public.age_group_staff ags
+    where ags.id = staff_permissions.staff_id
+      and ags.club_id = staff_permissions.club_id
+      and public.user_can_manage_age_group_v2(ags.age_group_id)
+  )
+);
+
+drop policy if exists staff_permissions_update_v1 on public.staff_permissions;
+create policy staff_permissions_update_v1
+on public.staff_permissions
+for update
+to authenticated
+using (
+  exists (
+    select 1
+    from public.age_group_staff ags
+    where ags.id = staff_permissions.staff_id
+      and ags.club_id = staff_permissions.club_id
+      and public.user_can_manage_age_group_v2(ags.age_group_id)
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.age_group_staff ags
+    where ags.id = staff_permissions.staff_id
+      and ags.club_id = staff_permissions.club_id
+      and public.user_can_manage_age_group_v2(ags.age_group_id)
+  )
+);
+
+drop policy if exists staff_permissions_delete_v1 on public.staff_permissions;
+create policy staff_permissions_delete_v1
+on public.staff_permissions
+for delete
+to authenticated
+using (
+  exists (
+    select 1
+    from public.age_group_staff ags
+    where ags.id = staff_permissions.staff_id
+      and ags.club_id = staff_permissions.club_id
+      and public.user_can_manage_age_group_v2(ags.age_group_id)
+  )
+);
 
 drop trigger if exists trg_staff_permissions_set_updated_at on public.staff_permissions;
 create trigger trg_staff_permissions_set_updated_at

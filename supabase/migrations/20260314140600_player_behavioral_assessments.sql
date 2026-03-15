@@ -43,12 +43,98 @@ execute function public.player_behavioral_assessments_assign_club_id();
 
 alter table public.player_behavioral_assessments enable row level security;
 
-drop policy if exists player_behavioral_assessments_club_access on public.player_behavioral_assessments;
-create policy player_behavioral_assessments_club_access
+drop policy if exists pba_club_access on public.player_behavioral_assessments;
+drop policy if exists player_behavioral_assessments_domain_boundary_v2 on public.player_behavioral_assessments;
+create policy player_behavioral_assessments_domain_boundary_v2
 on public.player_behavioral_assessments
+as restrictive
 for all
-using (public.user_can_access_club(club_id))
-with check (public.user_can_access_club(club_id));
+to authenticated
+using (
+  exists (
+    select 1
+    from public.players p
+    where p.id = player_behavioral_assessments.player_id
+      and public.user_can_access_age_group(p.age_group_id)
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.players p
+    where p.id = player_behavioral_assessments.player_id
+      and p.club_id = player_behavioral_assessments.club_id
+      and public.user_can_manage_age_group_v2(p.age_group_id)
+  )
+);
+
+drop policy if exists player_behavioral_assessments_select_v1 on public.player_behavioral_assessments;
+create policy player_behavioral_assessments_select_v1
+on public.player_behavioral_assessments
+for select
+to authenticated
+using (
+  exists (
+    select 1
+    from public.players p
+    where p.id = player_behavioral_assessments.player_id
+      and public.user_can_access_age_group(p.age_group_id)
+  )
+);
+
+drop policy if exists player_behavioral_assessments_insert_v1 on public.player_behavioral_assessments;
+create policy player_behavioral_assessments_insert_v1
+on public.player_behavioral_assessments
+for insert
+to authenticated
+with check (
+  exists (
+    select 1
+    from public.players p
+    where p.id = player_behavioral_assessments.player_id
+      and p.club_id = player_behavioral_assessments.club_id
+      and public.user_can_manage_age_group_v2(p.age_group_id)
+  )
+);
+
+drop policy if exists player_behavioral_assessments_update_v1 on public.player_behavioral_assessments;
+create policy player_behavioral_assessments_update_v1
+on public.player_behavioral_assessments
+for update
+to authenticated
+using (
+  exists (
+    select 1
+    from public.players p
+    where p.id = player_behavioral_assessments.player_id
+      and p.club_id = player_behavioral_assessments.club_id
+      and public.user_can_manage_age_group_v2(p.age_group_id)
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.players p
+    where p.id = player_behavioral_assessments.player_id
+      and p.club_id = player_behavioral_assessments.club_id
+      and public.user_can_manage_age_group_v2(p.age_group_id)
+  )
+);
+
+drop policy if exists player_behavioral_assessments_delete_v1 on public.player_behavioral_assessments;
+create policy player_behavioral_assessments_delete_v1
+on public.player_behavioral_assessments
+for delete
+to authenticated
+using (
+  exists (
+    select 1
+    from public.players p
+    where p.id = player_behavioral_assessments.player_id
+      and p.club_id = player_behavioral_assessments.club_id
+      and public.user_can_manage_age_group_v2(p.age_group_id)
+  )
+);
 
 drop trigger if exists trg_player_behavioral_assessments_set_updated_at on public.player_behavioral_assessments;
 create trigger trg_player_behavioral_assessments_set_updated_at

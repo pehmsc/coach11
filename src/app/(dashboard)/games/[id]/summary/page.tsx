@@ -107,12 +107,6 @@ function getGameStatusLabel(status: string | null | undefined) {
   }
 }
 
-function getLineupLabel(status: string | null | undefined) {
-  if (status === "on_field") return "Titular";
-  if (status === "substitute") return "Suplente";
-  return "Convocado";
-}
-
 function getResponseStatusLabel(value: string | null | undefined) {
   switch (value) {
     case "confirmed":

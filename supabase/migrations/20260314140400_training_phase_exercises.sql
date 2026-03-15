@@ -75,12 +75,113 @@ execute function public.training_phase_exercises_assign_validate_club_id();
 
 alter table public.training_phase_exercises enable row level security;
 
-drop policy if exists training_phase_exercises_club_access on public.training_phase_exercises;
-create policy training_phase_exercises_club_access
+drop policy if exists tpe_club_access on public.training_phase_exercises;
+drop policy if exists training_phase_exercises_domain_boundary_v2 on public.training_phase_exercises;
+create policy training_phase_exercises_domain_boundary_v2
 on public.training_phase_exercises
+as restrictive
 for all
-using (public.user_can_access_club(club_id))
-with check (public.user_can_access_club(club_id));
+to authenticated
+using (
+  exists (
+    select 1
+    from public.training_phases tp
+    where tp.id = training_phase_exercises.phase_id
+      and public.user_can_access_training_session_v2(tp.training_session_id)
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.training_phases tp
+    join public.training_sessions ts
+      on ts.id = tp.training_session_id
+    where tp.id = training_phase_exercises.phase_id
+      and tp.club_id = training_phase_exercises.club_id
+      and ts.club_id = training_phase_exercises.club_id
+      and public.user_is_training_session_coordinator(tp.training_session_id)
+  )
+);
+
+drop policy if exists training_phase_exercises_select_v1 on public.training_phase_exercises;
+create policy training_phase_exercises_select_v1
+on public.training_phase_exercises
+for select
+to authenticated
+using (
+  exists (
+    select 1
+    from public.training_phases tp
+    where tp.id = training_phase_exercises.phase_id
+      and public.user_can_access_training_session_v2(tp.training_session_id)
+  )
+);
+
+drop policy if exists training_phase_exercises_insert_v1 on public.training_phase_exercises;
+create policy training_phase_exercises_insert_v1
+on public.training_phase_exercises
+for insert
+to authenticated
+with check (
+  exists (
+    select 1
+    from public.training_phases tp
+    join public.training_sessions ts
+      on ts.id = tp.training_session_id
+    where tp.id = training_phase_exercises.phase_id
+      and tp.club_id = training_phase_exercises.club_id
+      and ts.club_id = training_phase_exercises.club_id
+      and public.user_is_training_session_coordinator(tp.training_session_id)
+  )
+);
+
+drop policy if exists training_phase_exercises_update_v1 on public.training_phase_exercises;
+create policy training_phase_exercises_update_v1
+on public.training_phase_exercises
+for update
+to authenticated
+using (
+  exists (
+    select 1
+    from public.training_phases tp
+    join public.training_sessions ts
+      on ts.id = tp.training_session_id
+    where tp.id = training_phase_exercises.phase_id
+      and tp.club_id = training_phase_exercises.club_id
+      and ts.club_id = training_phase_exercises.club_id
+      and public.user_is_training_session_coordinator(tp.training_session_id)
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.training_phases tp
+    join public.training_sessions ts
+      on ts.id = tp.training_session_id
+    where tp.id = training_phase_exercises.phase_id
+      and tp.club_id = training_phase_exercises.club_id
+      and ts.club_id = training_phase_exercises.club_id
+      and public.user_is_training_session_coordinator(tp.training_session_id)
+  )
+);
+
+drop policy if exists training_phase_exercises_delete_v1 on public.training_phase_exercises;
+create policy training_phase_exercises_delete_v1
+on public.training_phase_exercises
+for delete
+to authenticated
+using (
+  exists (
+    select 1
+    from public.training_phases tp
+    join public.training_sessions ts
+      on ts.id = tp.training_session_id
+    where tp.id = training_phase_exercises.phase_id
+      and tp.club_id = training_phase_exercises.club_id
+      and ts.club_id = training_phase_exercises.club_id
+      and public.user_is_training_session_coordinator(tp.training_session_id)
+  )
+);
 
 create index if not exists training_phase_exercises_phase_id_idx
   on public.training_phase_exercises(phase_id);

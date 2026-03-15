@@ -44,11 +44,92 @@ create table if not exists public.exercises (
 alter table public.exercises enable row level security;
 
 drop policy if exists exercises_club_access on public.exercises;
-create policy exercises_club_access
+drop policy if exists exercises_domain_boundary_v2 on public.exercises;
+create policy exercises_domain_boundary_v2
 on public.exercises
+as restrictive
 for all
-using (public.user_can_access_club(club_id))
-with check (public.user_can_access_club(club_id));
+to authenticated
+using (
+  exists (
+    select 1
+    from public.age_groups ag
+    where ag.club_id = exercises.club_id
+      and public.user_can_access_age_group(ag.id)
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.age_groups ag
+    where ag.club_id = exercises.club_id
+      and public.user_can_manage_age_group_v2(ag.id)
+  )
+);
+
+drop policy if exists exercises_select_v1 on public.exercises;
+create policy exercises_select_v1
+on public.exercises
+for select
+to authenticated
+using (
+  exists (
+    select 1
+    from public.age_groups ag
+    where ag.club_id = exercises.club_id
+      and public.user_can_access_age_group(ag.id)
+  )
+);
+
+drop policy if exists exercises_insert_v1 on public.exercises;
+create policy exercises_insert_v1
+on public.exercises
+for insert
+to authenticated
+with check (
+  exists (
+    select 1
+    from public.age_groups ag
+    where ag.club_id = exercises.club_id
+      and public.user_can_manage_age_group_v2(ag.id)
+  )
+);
+
+drop policy if exists exercises_update_v1 on public.exercises;
+create policy exercises_update_v1
+on public.exercises
+for update
+to authenticated
+using (
+  exists (
+    select 1
+    from public.age_groups ag
+    where ag.club_id = exercises.club_id
+      and public.user_can_manage_age_group_v2(ag.id)
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.age_groups ag
+    where ag.club_id = exercises.club_id
+      and public.user_can_manage_age_group_v2(ag.id)
+  )
+);
+
+drop policy if exists exercises_delete_v1 on public.exercises;
+create policy exercises_delete_v1
+on public.exercises
+for delete
+to authenticated
+using (
+  exists (
+    select 1
+    from public.age_groups ag
+    where ag.club_id = exercises.club_id
+      and public.user_can_manage_age_group_v2(ag.id)
+  )
+);
 
 drop trigger if exists trg_exercises_set_updated_at on public.exercises;
 create trigger trg_exercises_set_updated_at

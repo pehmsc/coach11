@@ -67,12 +67,125 @@ execute function public.player_registrations_assign_validate_club_id();
 
 alter table public.player_registrations enable row level security;
 
-drop policy if exists player_registrations_club_access on public.player_registrations;
-create policy player_registrations_club_access
+drop policy if exists pr_club_access on public.player_registrations;
+drop policy if exists player_registrations_domain_boundary_v2 on public.player_registrations;
+create policy player_registrations_domain_boundary_v2
 on public.player_registrations
+as restrictive
 for all
-using (public.user_can_access_club(club_id))
-with check (public.user_can_access_club(club_id));
+to authenticated
+using (
+  exists (
+    select 1
+    from public.players p
+    where p.id = player_registrations.player_id
+      and public.user_can_access_age_group(p.age_group_id)
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.players p
+    where p.id = player_registrations.player_id
+      and p.club_id = player_registrations.club_id
+      and public.user_can_manage_age_group_v2(p.age_group_id)
+  )
+  and (
+    player_registrations.team_id is null
+    or exists (
+      select 1
+      from public.teams t
+      where t.id = player_registrations.team_id
+        and t.club_id = player_registrations.club_id
+    )
+  )
+);
+
+drop policy if exists player_registrations_select_v1 on public.player_registrations;
+create policy player_registrations_select_v1
+on public.player_registrations
+for select
+to authenticated
+using (
+  exists (
+    select 1
+    from public.players p
+    where p.id = player_registrations.player_id
+      and public.user_can_access_age_group(p.age_group_id)
+  )
+);
+
+drop policy if exists player_registrations_insert_v1 on public.player_registrations;
+create policy player_registrations_insert_v1
+on public.player_registrations
+for insert
+to authenticated
+with check (
+  exists (
+    select 1
+    from public.players p
+    where p.id = player_registrations.player_id
+      and p.club_id = player_registrations.club_id
+      and public.user_can_manage_age_group_v2(p.age_group_id)
+  )
+  and (
+    player_registrations.team_id is null
+    or exists (
+      select 1
+      from public.teams t
+      where t.id = player_registrations.team_id
+        and t.club_id = player_registrations.club_id
+    )
+  )
+);
+
+drop policy if exists player_registrations_update_v1 on public.player_registrations;
+create policy player_registrations_update_v1
+on public.player_registrations
+for update
+to authenticated
+using (
+  exists (
+    select 1
+    from public.players p
+    where p.id = player_registrations.player_id
+      and p.club_id = player_registrations.club_id
+      and public.user_can_manage_age_group_v2(p.age_group_id)
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.players p
+    where p.id = player_registrations.player_id
+      and p.club_id = player_registrations.club_id
+      and public.user_can_manage_age_group_v2(p.age_group_id)
+  )
+  and (
+    player_registrations.team_id is null
+    or exists (
+      select 1
+      from public.teams t
+      where t.id = player_registrations.team_id
+        and t.club_id = player_registrations.club_id
+    )
+  )
+);
+
+drop policy if exists player_registrations_delete_v1 on public.player_registrations;
+create policy player_registrations_delete_v1
+on public.player_registrations
+for delete
+to authenticated
+using (
+  exists (
+    select 1
+    from public.players p
+    where p.id = player_registrations.player_id
+      and p.club_id = player_registrations.club_id
+      and public.user_can_manage_age_group_v2(p.age_group_id)
+  )
+);
 
 drop trigger if exists trg_player_registrations_set_updated_at on public.player_registrations;
 create trigger trg_player_registrations_set_updated_at
