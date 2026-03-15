@@ -61,21 +61,17 @@ on public.player_documents
 as restrictive
 for all
 to authenticated
-using (
-  exists (
-    select 1
-    from public.players p
-    where p.id = player_documents.player_id
-      and public.user_can_access_age_group(p.age_group_id)
-  )
-)
+using (public.user_can_read_club_scope(club_id))
 with check (
   exists (
     select 1
     from public.players p
     where p.id = player_documents.player_id
       and p.club_id = player_documents.club_id
-      and public.user_can_manage_age_group_v2(p.age_group_id)
+      and public.user_can_write_age_group_scope(
+        p.age_group_id,
+        player_documents.club_id
+      )
   )
 );
 
@@ -84,14 +80,7 @@ create policy player_documents_select_v1
 on public.player_documents
 for select
 to authenticated
-using (
-  exists (
-    select 1
-    from public.players p
-    where p.id = player_documents.player_id
-      and public.user_can_access_age_group(p.age_group_id)
-  )
-);
+using (public.user_can_read_club_scope(club_id));
 
 drop policy if exists player_documents_insert_v1 on public.player_documents;
 create policy player_documents_insert_v1
@@ -104,7 +93,10 @@ with check (
     from public.players p
     where p.id = player_documents.player_id
       and p.club_id = player_documents.club_id
-      and public.user_can_manage_age_group_v2(p.age_group_id)
+      and public.user_can_write_age_group_scope(
+        p.age_group_id,
+        player_documents.club_id
+      )
   )
 );
 
@@ -119,7 +111,10 @@ using (
     from public.players p
     where p.id = player_documents.player_id
       and p.club_id = player_documents.club_id
-      and public.user_can_manage_age_group_v2(p.age_group_id)
+      and public.user_can_write_age_group_scope(
+        p.age_group_id,
+        player_documents.club_id
+      )
   )
 )
 with check (
@@ -128,7 +123,10 @@ with check (
     from public.players p
     where p.id = player_documents.player_id
       and p.club_id = player_documents.club_id
-      and public.user_can_manage_age_group_v2(p.age_group_id)
+      and public.user_can_write_age_group_scope(
+        p.age_group_id,
+        player_documents.club_id
+      )
   )
 );
 
@@ -143,7 +141,10 @@ using (
     from public.players p
     where p.id = player_documents.player_id
       and p.club_id = player_documents.club_id
-      and public.user_can_manage_age_group_v2(p.age_group_id)
+      and public.user_can_write_age_group_scope(
+        p.age_group_id,
+        player_documents.club_id
+      )
   )
 );
 

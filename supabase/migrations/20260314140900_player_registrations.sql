@@ -74,21 +74,17 @@ on public.player_registrations
 as restrictive
 for all
 to authenticated
-using (
-  exists (
-    select 1
-    from public.players p
-    where p.id = player_registrations.player_id
-      and public.user_can_access_age_group(p.age_group_id)
-  )
-)
+using (public.user_can_read_club_scope(club_id))
 with check (
   exists (
     select 1
     from public.players p
     where p.id = player_registrations.player_id
       and p.club_id = player_registrations.club_id
-      and public.user_can_manage_age_group_v2(p.age_group_id)
+      and public.user_can_write_age_group_scope(
+        p.age_group_id,
+        player_registrations.club_id
+      )
   )
   and (
     player_registrations.team_id is null
@@ -106,14 +102,7 @@ create policy player_registrations_select_v1
 on public.player_registrations
 for select
 to authenticated
-using (
-  exists (
-    select 1
-    from public.players p
-    where p.id = player_registrations.player_id
-      and public.user_can_access_age_group(p.age_group_id)
-  )
-);
+using (public.user_can_read_club_scope(club_id));
 
 drop policy if exists player_registrations_insert_v1 on public.player_registrations;
 create policy player_registrations_insert_v1
@@ -126,7 +115,10 @@ with check (
     from public.players p
     where p.id = player_registrations.player_id
       and p.club_id = player_registrations.club_id
-      and public.user_can_manage_age_group_v2(p.age_group_id)
+      and public.user_can_write_age_group_scope(
+        p.age_group_id,
+        player_registrations.club_id
+      )
   )
   and (
     player_registrations.team_id is null
@@ -150,7 +142,10 @@ using (
     from public.players p
     where p.id = player_registrations.player_id
       and p.club_id = player_registrations.club_id
-      and public.user_can_manage_age_group_v2(p.age_group_id)
+      and public.user_can_write_age_group_scope(
+        p.age_group_id,
+        player_registrations.club_id
+      )
   )
 )
 with check (
@@ -159,7 +154,10 @@ with check (
     from public.players p
     where p.id = player_registrations.player_id
       and p.club_id = player_registrations.club_id
-      and public.user_can_manage_age_group_v2(p.age_group_id)
+      and public.user_can_write_age_group_scope(
+        p.age_group_id,
+        player_registrations.club_id
+      )
   )
   and (
     player_registrations.team_id is null
@@ -183,7 +181,10 @@ using (
     from public.players p
     where p.id = player_registrations.player_id
       and p.club_id = player_registrations.club_id
-      and public.user_can_manage_age_group_v2(p.age_group_id)
+      and public.user_can_write_age_group_scope(
+        p.age_group_id,
+        player_registrations.club_id
+      )
   )
 );
 

@@ -82,24 +82,22 @@ on public.training_phase_exercises
 as restrictive
 for all
 to authenticated
-using (
-  exists (
-    select 1
-    from public.training_phases tp
-    where tp.id = training_phase_exercises.phase_id
-      and public.user_can_access_training_session_v2(tp.training_session_id)
-  )
-)
+using (public.user_can_read_club_scope(club_id))
 with check (
   exists (
     select 1
     from public.training_phases tp
     join public.training_sessions ts
       on ts.id = tp.training_session_id
+    left join public.teams t
+      on t.id = ts.team_id
     where tp.id = training_phase_exercises.phase_id
       and tp.club_id = training_phase_exercises.club_id
       and ts.club_id = training_phase_exercises.club_id
-      and public.user_is_training_session_coordinator(tp.training_session_id)
+      and public.user_can_write_age_group_scope(
+        coalesce(ts.age_group_id, t.age_group_id),
+        training_phase_exercises.club_id
+      )
   )
 );
 
@@ -108,14 +106,7 @@ create policy training_phase_exercises_select_v1
 on public.training_phase_exercises
 for select
 to authenticated
-using (
-  exists (
-    select 1
-    from public.training_phases tp
-    where tp.id = training_phase_exercises.phase_id
-      and public.user_can_access_training_session_v2(tp.training_session_id)
-  )
-);
+using (public.user_can_read_club_scope(club_id));
 
 drop policy if exists training_phase_exercises_insert_v1 on public.training_phase_exercises;
 create policy training_phase_exercises_insert_v1
@@ -128,10 +119,15 @@ with check (
     from public.training_phases tp
     join public.training_sessions ts
       on ts.id = tp.training_session_id
+    left join public.teams t
+      on t.id = ts.team_id
     where tp.id = training_phase_exercises.phase_id
       and tp.club_id = training_phase_exercises.club_id
       and ts.club_id = training_phase_exercises.club_id
-      and public.user_is_training_session_coordinator(tp.training_session_id)
+      and public.user_can_write_age_group_scope(
+        coalesce(ts.age_group_id, t.age_group_id),
+        training_phase_exercises.club_id
+      )
   )
 );
 
@@ -146,10 +142,15 @@ using (
     from public.training_phases tp
     join public.training_sessions ts
       on ts.id = tp.training_session_id
+    left join public.teams t
+      on t.id = ts.team_id
     where tp.id = training_phase_exercises.phase_id
       and tp.club_id = training_phase_exercises.club_id
       and ts.club_id = training_phase_exercises.club_id
-      and public.user_is_training_session_coordinator(tp.training_session_id)
+      and public.user_can_write_age_group_scope(
+        coalesce(ts.age_group_id, t.age_group_id),
+        training_phase_exercises.club_id
+      )
   )
 )
 with check (
@@ -158,10 +159,15 @@ with check (
     from public.training_phases tp
     join public.training_sessions ts
       on ts.id = tp.training_session_id
+    left join public.teams t
+      on t.id = ts.team_id
     where tp.id = training_phase_exercises.phase_id
       and tp.club_id = training_phase_exercises.club_id
       and ts.club_id = training_phase_exercises.club_id
-      and public.user_is_training_session_coordinator(tp.training_session_id)
+      and public.user_can_write_age_group_scope(
+        coalesce(ts.age_group_id, t.age_group_id),
+        training_phase_exercises.club_id
+      )
   )
 );
 
@@ -176,10 +182,15 @@ using (
     from public.training_phases tp
     join public.training_sessions ts
       on ts.id = tp.training_session_id
+    left join public.teams t
+      on t.id = ts.team_id
     where tp.id = training_phase_exercises.phase_id
       and tp.club_id = training_phase_exercises.club_id
       and ts.club_id = training_phase_exercises.club_id
-      and public.user_is_training_session_coordinator(tp.training_session_id)
+      and public.user_can_write_age_group_scope(
+        coalesce(ts.age_group_id, t.age_group_id),
+        training_phase_exercises.club_id
+      )
   )
 );
 
