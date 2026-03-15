@@ -1,0 +1,74 @@
+create table if not exists public.player_documents (
+  id uuid primary key default gen_random_uuid(),
+  player_id uuid not null references public.players(id) on delete cascade,
+  club_id uuid not null references public.clubs(id) on delete cascade,
+  doc_type text not null check (doc_type in (
+    'id_card',
+    'birth_certificate',
+    'sports_insurance',
+    'medical_exam',
+    'authorization',
+    'photo',
+    'other'
+  )),
+  file_url text not null,
+  file_name text,
+  valid_from date,
+  valid_until date,
+  status text not null default 'valid' check (status in ('valid', 'expiring', 'expired', 'missing')),
+  notes text,
+  uploaded_by uuid not null references auth.users(id),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create or replace function public.player_documents_assign_club_id()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_club_id uuid;
+begin
+  select p.club_id
+    into v_club_id
+  from public.players p
+  where p.id = new.player_id;
+
+  if v_club_id is null then
+    raise exception 'player_documents.player_id invalido';
+  end if;
+
+  new.club_id := v_club_id;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_player_documents_assign_club_id on public.player_documents;
+create trigger trg_player_documents_assign_club_id
+before insert or update of player_id, club_id
+on public.player_documents
+for each row
+execute function public.player_documents_assign_club_id();
+
+alter table public.player_documents enable row level security;
+
+drop policy if exists player_documents_club_access on public.player_documents;
+create policy player_documents_club_access
+on public.player_documents
+for all
+using (public.user_can_access_club(club_id))
+with check (public.user_can_access_club(club_id));
+
+drop trigger if exists trg_player_documents_set_updated_at on public.player_documents;
+create trigger trg_player_documents_set_updated_at
+before update on public.player_documents
+for each row
+execute function public.set_updated_at();
+
+create index if not exists player_documents_player_id_idx
+  on public.player_documents(player_id);
+
+create index if not exists player_documents_club_id_status_idx
+  on public.player_documents(club_id, status);
