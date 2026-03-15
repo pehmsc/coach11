@@ -182,7 +182,7 @@ export async function POST() {
       reason: betaAccess.reason,
       inviteType: activeBetaInvite?.invite_type ?? null,
       requiresOnboarding: onboarding.requiresOnboarding,
-      redirectTo: onboarding.requiresOnboarding ? "/team/setup" : "/dashboard",
+      redirectTo: onboarding.requiresOnboarding ? "/onboarding" : "/dashboard",
     });
   } catch (error) {
     if (isSuperCoordinatorEmail(normalizedEmail)) {
