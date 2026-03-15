@@ -1,5 +1,17 @@
 import "server-only";
 
+/**
+ * Camada TypeScript de permissões granulares.
+ *
+ * Mirrors the DB-level RLS helpers defined in migrations:
+ *   - public.user_can_read_club_scope(club_id)       → coordinator or staff of club
+ *   - public.user_can_write_age_group_scope(age_group_id, club_id) → coordinator or staff of age_group
+ *
+ * As funções SQL usam security definer + auth.uid() e aplicam-se ao cliente
+ * anónimo/autenticado via RLS. Este ficheiro usa o admin client (service role)
+ * para verificações antecipadas em API routes — sem necessidade de RPC.
+ */
+
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { isSuperCoordinatorEmail } from "@/lib/auth/beta-access";
 
