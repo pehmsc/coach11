@@ -18,6 +18,7 @@ import {
 import {
   Loader2,
   AlertTriangle,
+  Pencil,
   Trash2,
   ChevronLeft,
   ChevronRight,
@@ -29,7 +30,9 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { PublicSharePanel } from "@/components/team/PublicSharePanel";
-import type { AgeGroup, Player } from "@/types/database";
+import type { AgeGroup, Player, FootballFormat } from "@/types/database";
+
+// ─── Constantes ──────────────────────────────────────────────────────────────
 
 const TACTICAL_SYSTEMS = [
   "4-3-3", "4-4-2", "4-2-3-1", "4-1-4-1", "4-5-1",
@@ -37,6 +40,26 @@ const TACTICAL_SYSTEMS = [
   "3-2-3 (Fut9)", "3-3-2 (Fut9)", "3-4-1 (Fut9)", "2-5-1 (Fut9)", "2-4-2 (Fut9)", "4-3-1 (Fut9)",
   "1-4-1 (Fut7)", "2-3-1 (Fut7)", "3-1-2 (Fut7)",
 ];
+
+const AGE_GROUPS = [
+  "Sub-7", "Sub-8", "Sub-9", "Sub-10", "Sub-11", "Sub-12",
+  "Sub-13", "Sub-14", "Sub-15", "Sub-16", "Sub-17", "Sub-18",
+  "Sub-19", "Sub-23", "Sénior",
+];
+
+const FOOTBALL_FORMATS = [
+  { value: "5", label: "5x5 (Futebol 5)" },
+  { value: "7", label: "7x7 (Futebol 7)" },
+  { value: "9", label: "9x9 (Futebol 9)" },
+  { value: "11", label: "11x11 (Futebol 11)" },
+];
+
+/** Bug 4 — substituir "F9" por "9x9" em toda a UI */
+const FORMAT_LABELS: Record<string, string> = {
+  "5": "5x5", "7": "7x7", "9": "9x9", "11": "11x11",
+};
+
+// ─── Tipos ────────────────────────────────────────────────────────────────────
 
 type Tab = "geral" | "atletas" | "staff" | "planeamento" | "configuracoes";
 
@@ -47,14 +70,17 @@ interface StaffMember {
   profiles: { full_name: string; email?: string | null } | null;
 }
 
+/** Bug 5/6 — campo correcto é game_datetime, não scheduled_at */
 interface GameRow {
   id: string;
-  scheduled_at?: string | null;
+  game_datetime?: string | null;
   opponent_name?: string | null;
   is_home?: boolean | null;
   status: string;
   competition_id?: string | null;
   title?: string | null;
+  score_home?: number | null;
+  score_away?: number | null;
 }
 
 interface TrainingRow {
@@ -66,12 +92,9 @@ interface TrainingRow {
   status: string;
 }
 
-interface AttendanceStat {
-  status: string;
-  count: number;
-}
-
 type PageParams = { ageGroupId: string };
+
+// ─── Gráfico pizza SVG (sem dependências externas) ────────────────────────────
 
 function PieChart({
   slices,
@@ -112,6 +135,8 @@ function PieChart({
   );
 }
 
+// ─── Calendário semanal ───────────────────────────────────────────────────────
+
 function getWeekDates(referenceDate: Date): Date[] {
   const monday = new Date(referenceDate);
   const day = monday.getDay();
@@ -126,6 +151,8 @@ function getWeekDates(referenceDate: Date): Date[] {
 
 const DAY_LABELS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 
+// ─── Componente principal ─────────────────────────────────────────────────────
+
 export default function TeamDetailPage({ params }: { params: Promise<PageParams> }) {
   const { ageGroupId } = use(params);
   const router = useRouter();
@@ -136,14 +163,13 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
 
   // Data
   const [ageGroup, setAgeGroup] = useState<AgeGroup | null>(null);
-  const [, setTeamId] = useState<string | null>(null);
   const [canManage, setCanManage] = useState(false);
   const [players, setPlayers] = useState<Player[]>([]);
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [weekTrainings, setWeekTrainings] = useState<TrainingRow[]>([]);
   const [weekGames, setWeekGames] = useState<GameRow[]>([]);
   const [upcomingGames, setUpcomingGames] = useState<GameRow[]>([]);
-  const [attendanceStats, setAttendanceStats] = useState<AttendanceStat[]>([]);
+  const [attendanceStats, setAttendanceStats] = useState<Record<string, number>>({});
   const [gameResults, setGameResults] = useState({ wins: 0, draws: 0, losses: 0, total: 0 });
 
   // Week navigation
@@ -155,15 +181,25 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
     return getWeekDates(ref);
   }, [today, weekOffset]);
 
-  // Configurações tab state
+  // Configurações tab — tactical
   const [tacticalSystem, setTacticalSystem] = useState("");
   const [savingTactical, setSavingTactical] = useState(false);
+
+  // Configurações tab — edit info (Bug 1 + Bug 2)
+  const [editingInfo, setEditingInfo] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editAgeLevel, setEditAgeLevel] = useState("");
+  const [editFormat, setEditFormat] = useState("11");
+  const [editSeason, setEditSeason] = useState("");
+  const [savingInfo, setSavingInfo] = useState(false);
+
+  // Configurações tab — delete
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [deleting, setDeleting] = useState(false);
 
-  // User's other age groups for dropdown
-  const [allTeams, setAllTeams] = useState<Array<{ id: string; name: string; club_name: string }>>([]);
+  // Header — all user teams for dropdown
+  const [allTeams, setAllTeams] = useState<Array<{ id: string; name: string; age_level?: string | null; club_name: string }>>([]);
 
   useEffect(() => {
     void loadAll();
@@ -177,9 +213,7 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
 
   async function loadAll() {
     setLoading(true);
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setLoading(false); return; }
 
     // Profile & permissions
@@ -189,7 +223,7 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
       .eq("id", user.id)
       .maybeSingle();
 
-    // Age group
+    // Age group (Bug 2: select age_level too)
     const { data: ag } = await supabase
       .from("age_groups")
       .select("*")
@@ -197,9 +231,17 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
       .maybeSingle();
 
     if (!ag) { setLoading(false); return; }
-    setAgeGroup(ag as AgeGroup);
+    const ageGroupData = ag as AgeGroup;
+    setAgeGroup(ageGroupData);
     setTacticalSystem(ag.tactical_system || "");
 
+    // Populate edit form fields
+    setEditName(ag.name ?? "");
+    setEditAgeLevel(ag.age_level ?? ag.name ?? "");
+    setEditFormat(ag.football_format ?? "11");
+    setEditSeason(ag.season ?? "");
+
+    // Permissions
     const isCoord = profile?.role === "coordinator" || profile?.is_super_coordinator;
     const isOwnAg = ag.coordinator_id === user.id;
     const { data: staffLink } = await supabase
@@ -208,18 +250,8 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
       .eq("age_group_id", ageGroupId)
       .eq("profile_id", user.id)
       .maybeSingle();
-
     const isPrincipal = staffLink?.role === "coach";
     setCanManage(isCoord || isOwnAg || isPrincipal || !!profile?.is_super_coordinator);
-
-    // Team id
-    const { data: teamRow } = await supabase
-      .from("teams")
-      .select("id")
-      .eq("age_group_id", ageGroupId)
-      .limit(1)
-      .maybeSingle();
-    setTeamId(teamRow?.id ?? null);
 
     // Players
     const { data: playersData } = await supabase
@@ -236,76 +268,67 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
       .eq("age_group_id", ageGroupId);
     setStaff((staffData ?? []) as unknown as StaffMember[]);
 
-    // Upcoming games (next 5)
+    // Bug 6 — Próximos jogos: usar game_datetime (não scheduled_at)
     const { data: upGames } = await supabase
       .from("games")
-      .select("id, scheduled_at, opponent_name, is_home, status, competition_id, title")
+      .select("id, game_datetime, opponent_name, is_home, status, competition_id, title")
       .eq("age_group_id", ageGroupId)
       .in("status", ["scheduled", "live"])
-      .gte("scheduled_at", new Date().toISOString())
-      .order("scheduled_at")
+      .gte("game_datetime", new Date().toISOString())
+      .order("game_datetime")
       .limit(5);
     setUpcomingGames((upGames ?? []) as GameRow[]);
 
-    // Attendance stats (all time for this age group via teams)
-    if (teamRow?.id) {
-      const { data: sessions } = await supabase
-        .from("training_sessions")
-        .select("id")
-        .eq("age_group_id", ageGroupId);
-      const sessionIds = (sessions ?? []).map((s) => s.id);
-      if (sessionIds.length > 0) {
-        const { data: att } = await supabase
-          .from("training_attendance")
-          .select("status")
-          .in("session_id", sessionIds);
-        if (att) {
-          const counts: Record<string, number> = {};
-          att.forEach((a) => {
-            counts[a.status] = (counts[a.status] ?? 0) + 1;
-          });
-          setAttendanceStats(Object.entries(counts).map(([status, count]) => ({ status, count })));
-        }
+    // Bug 7 — Presenças: usar training_session_id (não session_id)
+    const { data: sessions } = await supabase
+      .from("training_sessions")
+      .select("id")
+      .eq("age_group_id", ageGroupId);
+    const sessionIds = (sessions ?? []).map((s) => s.id);
+    if (sessionIds.length > 0) {
+      const { data: att } = await supabase
+        .from("training_attendance")
+        .select("status")
+        .in("training_session_id", sessionIds);
+      if (att) {
+        const counts: Record<string, number> = {};
+        att.forEach((a) => { counts[a.status] = (counts[a.status] ?? 0) + 1; });
+        setAttendanceStats(counts);
       }
     }
 
-    // Game results (completed games)
+    // Bug 7 — Resultados: calcular a partir de score_home/score_away + is_home
     const { data: completedGames } = await supabase
       .from("games")
-      .select("id")
+      .select("id, score_home, score_away, is_home")
       .eq("age_group_id", ageGroupId)
-      .eq("status", "completed");
-
-    const completedIds = (completedGames ?? []).map((g) => g.id);
-    if (completedIds.length > 0) {
-      const { data: finalStats } = await supabase
-        .from("game_final_stats")
-        .select("result")
-        .in("game_id", completedIds);
-      if (finalStats) {
-        let wins = 0, draws = 0, losses = 0;
-        finalStats.forEach((s) => {
-          if (s.result === "win") wins++;
-          else if (s.result === "draw") draws++;
-          else if (s.result === "loss") losses++;
-        });
-        setGameResults({ wins, draws, losses, total: finalStats.length });
-      }
+      .eq("status", "completed")
+      .not("score_home", "is", null);
+    if (completedGames && completedGames.length > 0) {
+      let wins = 0, draws = 0, losses = 0;
+      completedGames.forEach((g) => {
+        const myScore = g.is_home ? (g.score_home ?? 0) : (g.score_away ?? 0);
+        const oppScore = g.is_home ? (g.score_away ?? 0) : (g.score_home ?? 0);
+        if (myScore > oppScore) wins++;
+        else if (myScore === oppScore) draws++;
+        else losses++;
+      });
+      setGameResults({ wins, draws, losses, total: wins + draws + losses });
     }
 
-    // All teams for dropdown
+    // All teams for switcher dropdown
     const { data: coordAgs } = await supabase
       .from("age_groups")
-      .select("id, name, club_name")
+      .select("id, name, age_level, club_name")
       .eq("coordinator_id", user.id);
     const { data: staffAgs } = await supabase
       .from("age_group_staff")
-      .select("age_group_id, age_groups(id, name, club_name)")
+      .select("age_group_id, age_groups(id, name, age_level, club_name)")
       .eq("profile_id", user.id);
     const staffAgList = (staffAgs ?? [])
       .map((s) => s.age_groups)
       .flat()
-      .filter(Boolean) as Array<{ id: string; name: string; club_name: string }>;
+      .filter(Boolean) as Array<{ id: string; name: string; age_level?: string | null; club_name: string }>;
     const seen = new Set<string>();
     const merged = [...(coordAgs ?? []), ...staffAgList].filter((a) => {
       if (seen.has(a.id)) return false;
@@ -317,6 +340,7 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
     setLoading(false);
   }
 
+  // Bug 5 — Calendário: usar game_datetime (não scheduled_at)
   async function loadWeekEvents() {
     if (!ageGroupId) return;
     const start = weekDates[0].toISOString().split("T")[0];
@@ -331,10 +355,10 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
         .lte("session_date", end),
       supabase
         .from("games")
-        .select("id, scheduled_at, opponent_name, is_home, status, competition_id, title")
+        .select("id, game_datetime, opponent_name, is_home, status, competition_id, title")
         .eq("age_group_id", ageGroupId)
-        .gte("scheduled_at", weekDates[0].toISOString())
-        .lte("scheduled_at", new Date(weekDates[6].getTime() + 86399999).toISOString()),
+        .gte("game_datetime", `${start}T00:00:00`)
+        .lte("game_datetime", `${end}T23:59:59`),
     ]);
     setWeekTrainings((trainings ?? []) as TrainingRow[]);
     setWeekGames((games ?? []) as GameRow[]);
@@ -353,6 +377,40 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
       toast.success("Sistema táctico guardado");
     }
     setSavingTactical(false);
+  }
+
+  // Bug 1 — Guardar informações da equipa
+  async function handleSaveInfo(e: { preventDefault(): void }) {
+    e.preventDefault();
+    if (!ageGroup) return;
+    setSavingInfo(true);
+    const { error } = await supabase
+      .from("age_groups")
+      .update({
+        name: editName.trim() || ageGroup.name,
+        age_level: editAgeLevel.trim() || null,
+        football_format: editFormat as FootballFormat,
+        season: editSeason.trim() || ageGroup.season,
+      })
+      .eq("id", ageGroup.id);
+    if (error) {
+      toast.error("Erro ao guardar: " + error.message);
+    } else {
+      setAgeGroup((prev) =>
+        prev
+          ? {
+              ...prev,
+              name: editName.trim() || prev.name,
+              age_level: editAgeLevel.trim() || null,
+              football_format: (editFormat as FootballFormat) || prev.football_format,
+              season: editSeason.trim() || prev.season,
+            }
+          : prev,
+      );
+      setEditingInfo(false);
+      toast.success("Informações da equipa guardadas");
+    }
+    setSavingInfo(false);
   }
 
   async function handleDeleteAgeGroup() {
@@ -398,7 +456,11 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
     );
   }
 
-  // Stats summary
+  // Bug 2 — Escalão: age_level se existir, senão fallback para name
+  const displayAgeLevel = ageGroup.age_level ?? ageGroup.name;
+  const displayName = ageGroup.name;
+  const formatLabel = FORMAT_LABELS[ageGroup.football_format] ?? `F${ageGroup.football_format}`;
+
   const activePlayers = players.filter((p) => p.status === "active").length;
   const staffCount = staff.length;
 
@@ -410,16 +472,17 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
     { id: "configuracoes", label: "Configurações", icon: Settings },
   ];
 
-  // Attendance pie data
-  const attTotal = attendanceStats.reduce((s, a) => s + a.count, 0);
-  const getAttCount = (status: string) =>
-    attendanceStats.find((a) => a.status === status)?.count ?? 0;
+  // Performance — presenças
+  const attTotal = Object.values(attendanceStats).reduce((a, b) => a + b, 0);
+  const getAttCount = (status: string) => attendanceStats[status] ?? 0;
   const attSlices = [
     { color: "#10b981", label: "Presentes", status: "present", pct: attTotal > 0 ? (getAttCount("present") / attTotal) * 100 : 0, count: getAttCount("present") },
     { color: "#f59e0b", label: "Condicionados", status: "late", pct: attTotal > 0 ? (getAttCount("late") / attTotal) * 100 : 0, count: getAttCount("late") },
     { color: "#ef4444", label: "Ausentes", status: "absent", pct: attTotal > 0 ? (getAttCount("absent") / attTotal) * 100 : 0, count: getAttCount("absent") },
     { color: "#94a3b8", label: "Dispensados", status: "injured", pct: attTotal > 0 ? (getAttCount("injured") / attTotal) * 100 : 0, count: getAttCount("injured") },
   ];
+
+  // Performance — jogos
   const gTotal = gameResults.total;
   const gameSlices = [
     { color: "#10b981", label: "Vitórias", pct: gTotal > 0 ? (gameResults.wins / gTotal) * 100 : 0, count: gameResults.wins },
@@ -429,59 +492,45 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
 
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Header */}
+
+      {/* ── Header ── */}
       <div className="bg-white border-b border-slate-200 sticky top-0 z-10">
         <div className="max-w-5xl mx-auto px-4 py-3">
           <div className="flex items-center gap-3">
-            <Link href="/teams" className="text-slate-400 hover:text-slate-600">
+            <Link href="/teams" className="text-slate-400 hover:text-slate-600 flex-shrink-0">
               <ChevronLeft size={20} />
             </Link>
 
-            {/* Team switcher */}
             {allTeams.length > 1 ? (
-              <Select
-                value={ageGroupId}
-                onValueChange={(id) => router.push(`/teams/${id}`)}
-              >
+              <Select value={ageGroupId} onValueChange={(id) => router.push(`/teams/${id}`)}>
                 <SelectTrigger className="border-0 shadow-none p-0 h-auto text-left font-bold text-slate-900 text-lg focus:ring-0 max-w-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   {allTeams.map((t) => (
                     <SelectItem key={t.id} value={t.id}>
-                      {t.name} · {t.club_name}
+                      {t.name}{t.age_level ? ` · ${t.age_level}` : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             ) : (
-              <div>
-                <h1 className="font-bold text-slate-900 text-lg leading-tight">{ageGroup.name}</h1>
-                <p className="text-xs text-slate-500">{ageGroup.club_name}</p>
+              <div className="flex-1 min-w-0">
+                <h1 className="font-bold text-slate-900 text-lg leading-tight truncate">{displayName}</h1>
+                <p className="text-xs text-slate-500">{displayAgeLevel} · {ageGroup.club_name}</p>
               </div>
             )}
 
-            {/* Prev/Next for multi-team */}
             {allTeams.length > 1 && (() => {
               const idx = allTeams.findIndex((t) => t.id === ageGroupId);
               const prev = allTeams[idx - 1];
               const next = allTeams[idx + 1];
               return (
-                <div className="flex gap-1 ml-auto">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    disabled={!prev}
-                    onClick={() => prev && router.push(`/teams/${prev.id}`)}
-                  >
+                <div className="flex gap-1 ml-auto flex-shrink-0">
+                  <Button variant="ghost" size="icon" disabled={!prev} onClick={() => prev && router.push(`/teams/${prev.id}`)}>
                     <ChevronLeft size={16} />
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    disabled={!next}
-                    onClick={() => next && router.push(`/teams/${next.id}`)}
-                  >
+                  <Button variant="ghost" size="icon" disabled={!next} onClick={() => next && router.push(`/teams/${next.id}`)}>
                     <ChevronRight size={16} />
                   </Button>
                 </div>
@@ -512,16 +561,17 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
       </div>
 
       <div className="max-w-5xl mx-auto px-4 py-5">
-        {/* Info card (always visible) */}
+
+        {/* Card de informação — Bug 2: nome + escalão separados; Bug 4: formato 9x9 */}
         <Card className="mb-5">
           <CardContent className="pt-4 pb-4">
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-6 gap-y-2 text-sm">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-6 gap-y-3 text-sm">
               {[
-                ["Desporto", "Futebol"],
-                ["Escalão", ageGroup.name],
+                ["Nome da equipa", displayName],
+                ["Escalão / Idade", displayAgeLevel],
                 ["Época", ageGroup.season],
-                ["Tipo", `F${ageGroup.football_format}`],
-                ["Sistema Táctico", ageGroup.tactical_system || "—"],
+                ["Tipo", formatLabel],
+                ["Sistema táctico", ageGroup.tactical_system || "—"],
                 ["Estado", "Activo"],
               ].map(([label, value]) => (
                 <div key={label}>
@@ -533,10 +583,11 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
           </CardContent>
         </Card>
 
-        {/* ───────── TAB: GERAL ───────── */}
+        {/* ─── TAB GERAL ─────────────────────────────────────────────────── */}
         {tab === "geral" && (
           <div className="space-y-5">
-            {/* Weekly Calendar */}
+
+            {/* Calendário semanal */}
             <Card>
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
@@ -545,7 +596,7 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
                     <Button variant="ghost" size="icon" onClick={() => setWeekOffset((o) => o - 1)}>
                       <ChevronLeft size={16} />
                     </Button>
-                    <span className="text-xs text-slate-500 px-1">
+                    <span className="text-xs text-slate-500 px-1 whitespace-nowrap">
                       {weekDates[0].getDate()}/{weekDates[0].getMonth() + 1} –{" "}
                       {weekDates[6].getDate()}/{weekDates[6].getMonth() + 1}
                     </span>
@@ -566,10 +617,10 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
                     const dateStr = date.toISOString().split("T")[0];
                     const isToday = dateStr === today.toISOString().split("T")[0];
                     const dayTrainings = weekTrainings.filter((t) => t.session_date === dateStr);
-                    const dayGames = weekGames.filter((g) => {
-                      if (!g.scheduled_at) return false;
-                      return g.scheduled_at.startsWith(dateStr);
-                    });
+                    // Bug 5 — comparar com game_datetime (não scheduled_at)
+                    const dayGames = weekGames.filter(
+                      (g) => typeof g.game_datetime === "string" && g.game_datetime.startsWith(dateStr),
+                    );
 
                     return (
                       <div
@@ -584,7 +635,7 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
                           </span>
                         </p>
                         {dayTrainings.map((t) => (
-                          <Link key={t.id} href={`/trainings`}>
+                          <Link key={t.id} href="/trainings">
                             <div className="text-[9px] bg-emerald-100 text-emerald-800 rounded px-1 py-0.5 mb-0.5 leading-tight truncate">
                               {t.title || "Treino"} {t.start_time?.slice(0, 5)}
                             </div>
@@ -594,7 +645,9 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
                           <Link key={g.id} href={`/games/${g.id}`}>
                             <div className="text-[9px] bg-blue-100 text-blue-800 rounded px-1 py-0.5 mb-0.5 leading-tight truncate">
                               {g.opponent_name ? (g.is_home ? "Casa" : "Fora") : "Jogo"}
-                              {g.scheduled_at ? ` ${new Date(g.scheduled_at).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })}` : ""}
+                              {g.game_datetime
+                                ? ` ${new Date(g.game_datetime).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })}`
+                                : ""}
                             </div>
                           </Link>
                         ))}
@@ -635,7 +688,7 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
                 </CardContent>
               </Card>
 
-              {/* Próximos Jogos */}
+              {/* Próximos Jogos — Bug 6 */}
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-base">Próximos Jogos</CardTitle>
@@ -646,7 +699,7 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
                   ) : (
                     <div className="space-y-3">
                       {upcomingGames.map((g) => {
-                        const dt = g.scheduled_at ? new Date(g.scheduled_at) : null;
+                        const dt = g.game_datetime ? new Date(g.game_datetime) : null;
                         return (
                           <Link key={g.id} href={`/games/${g.id}`}>
                             <div className="flex items-start gap-3 p-2 rounded-lg hover:bg-slate-50 -mx-2">
@@ -685,17 +738,16 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
               </Card>
             </div>
 
-            {/* Performance */}
+            {/* Performance — Bug 7 */}
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">Performance esta época</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="grid sm:grid-cols-2 gap-6">
-                  {/* Training attendance */}
                   <div>
                     <p className="text-sm font-medium text-slate-700 mb-3">
-                      Treinos · Total: {attTotal}
+                      Treinos · Total presenças: {attTotal}
                     </p>
                     {attTotal === 0 ? (
                       <p className="text-xs text-slate-400">Sem dados de presenças.</p>
@@ -715,10 +767,9 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
                     )}
                   </div>
 
-                  {/* Game results */}
                   <div>
                     <p className="text-sm font-medium text-slate-700 mb-3">
-                      Jogos · Total: {gTotal}
+                      Jogos concluídos: {gTotal}
                     </p>
                     {gTotal === 0 ? (
                       <p className="text-xs text-slate-400">Sem jogos concluídos.</p>
@@ -762,12 +813,12 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
           </div>
         )}
 
-        {/* ───────── TAB: ATLETAS ───────── */}
+        {/* ─── TAB ATLETAS ──────────────────────────────────────────────── */}
         {tab === "atletas" && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <p className="text-sm text-slate-500">
-                {activePlayers} atletas activos · {players.filter((p) => (p.status as string) === "archived").length} arquivados
+                {activePlayers} activos · {players.filter((p) => (p.status as string) === "archived").length} arquivados
               </p>
               <Link href="/players">
                 <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700">
@@ -809,13 +860,10 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
                               : "bg-slate-100 text-slate-500"
                           }`}
                         >
-                          {p.status === "active"
-                            ? "Activo"
-                            : p.status === "injured"
-                            ? "Lesionado"
-                            : p.status === "suspended"
-                            ? "Suspenso"
-                            : "Arquivado"}
+                          {p.status === "active" ? "Activo"
+                            : p.status === "injured" ? "Lesionado"
+                            : p.status === "suspended" ? "Suspenso"
+                            : "Inactivo"}
                         </span>
                       </CardContent>
                     </Card>
@@ -826,7 +874,7 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
           </div>
         )}
 
-        {/* ───────── TAB: STAFF ───────── */}
+        {/* ─── TAB STAFF ────────────────────────────────────────────────── */}
         {tab === "staff" && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
@@ -857,12 +905,10 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
                         </p>
                         <p className="text-xs text-slate-400">{s.profiles?.email ?? ""}</p>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap justify-end">
                         <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-medium">
-                          {s.role === "coach"
-                            ? "Treinador Principal"
-                            : s.role === "assistant_coach"
-                            ? "Adjunto"
+                          {s.role === "coach" ? "Treinador Principal"
+                            : s.role === "assistant_coach" ? "Adjunto"
                             : s.role}
                         </span>
                         {s.role === "coach" && (
@@ -879,7 +925,7 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
           </div>
         )}
 
-        {/* ───────── TAB: PLANEAMENTO ───────── */}
+        {/* ─── TAB PLANEAMENTO ─────────────────────────────────────────── */}
         {tab === "planeamento" && (
           <div className="space-y-4">
             {[
@@ -900,9 +946,118 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
           </div>
         )}
 
-        {/* ───────── TAB: CONFIGURAÇÕES ───────── */}
+        {/* ─── TAB CONFIGURAÇÕES ───────────────────────────────────────── */}
         {tab === "configuracoes" && (
           <div className="space-y-5">
+
+            {/* Bug 1 + Bug 2 — Informações da equipa editáveis */}
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base">Informações da equipa</CardTitle>
+                  {!editingInfo && canManage && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setEditName(ageGroup.name);
+                        setEditAgeLevel(ageGroup.age_level ?? ageGroup.name);
+                        setEditFormat(ageGroup.football_format);
+                        setEditSeason(ageGroup.season);
+                        setEditingInfo(true);
+                      }}
+                    >
+                      <Pencil size={13} className="mr-1" />
+                      Editar
+                    </Button>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent>
+                {!editingInfo ? (
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                    {[
+                      ["Nome da equipa", displayName],
+                      ["Escalão / Idade", displayAgeLevel],
+                      ["Modalidade", formatLabel],
+                      ["Época", ageGroup.season],
+                    ].map(([label, value]) => (
+                      <div key={label}>
+                        <p className="text-xs text-slate-400">{label}</p>
+                        <p className="font-medium text-slate-800 mt-0.5">{value}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <form onSubmit={handleSaveInfo} className="space-y-4">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5 col-span-2">
+                        <Label>Nome da equipa *</Label>
+                        <Input
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          placeholder="ex: Infantis A"
+                          required
+                        />
+                        <p className="text-xs text-slate-400">Nome que o clube dá a esta equipa</p>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Escalão / Faixa etária</Label>
+                        <Select value={editAgeLevel} onValueChange={setEditAgeLevel}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecciona..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {AGE_GROUPS.map((ag) => (
+                              <SelectItem key={ag} value={ag}>{ag}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Modalidade *</Label>
+                        <Select value={editFormat} onValueChange={setEditFormat}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {FOOTBALL_FORMATS.map((f) => (
+                              <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5 col-span-2">
+                        <Label>Época</Label>
+                        <Input
+                          value={editSeason}
+                          onChange={(e) => setEditSeason(e.target.value)}
+                          placeholder="2025/2026"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        type="submit"
+                        className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                        disabled={savingInfo}
+                      >
+                        {savingInfo ? <Loader2 size={16} className="animate-spin" /> : "Guardar"}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setEditingInfo(false)}
+                        disabled={savingInfo}
+                      >
+                        Cancelar
+                      </Button>
+                    </div>
+                  </form>
+                )}
+              </CardContent>
+            </Card>
+
             {/* Sistema Táctico */}
             <Card>
               <CardHeader className="pb-3">
@@ -923,9 +1078,7 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
                     </SelectTrigger>
                     <SelectContent>
                       {TACTICAL_SYSTEMS.map((sys) => (
-                        <SelectItem key={sys} value={sys}>
-                          {sys}
-                        </SelectItem>
+                        <SelectItem key={sys} value={sys}>{sys}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -959,10 +1112,7 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
                   <Button
                     variant="outline"
                     className="w-full border-red-200 text-red-600 hover:bg-red-50"
-                    onClick={() => {
-                      setDeleteConfirmText("");
-                      setDeleteModalOpen(true);
-                    }}
+                    onClick={() => { setDeleteConfirmText(""); setDeleteModalOpen(true); }}
                   >
                     <Trash2 size={16} className="mr-2" />
                     Apagar escalão
@@ -974,7 +1124,7 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
         )}
       </div>
 
-      {/* Delete modal */}
+      {/* Modal de confirmação — apagar */}
       {deleteModalOpen && ageGroup && (
         <div
           className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 md:items-center"
@@ -995,7 +1145,7 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
             </div>
             <div className="p-5 space-y-3">
               <div className="rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-900">
-                <p className="font-medium">{ageGroup.club_name} · {ageGroup.name}</p>
+                <p className="font-medium">{ageGroup.club_name} · {displayName}</p>
               </div>
               <div className="space-y-1.5">
                 <Label>Confirmação</Label>

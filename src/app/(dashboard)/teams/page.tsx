@@ -35,6 +35,13 @@ const FOOTBALL_FORMATS = [
   { value: "11", label: "Futebol 11" },
 ];
 
+const FORMAT_LABELS: Record<string, string> = {
+  "5": "5x5",
+  "7": "7x7",
+  "9": "9x9",
+  "11": "11x11",
+};
+
 const AGE_GROUPS = [
   "Sub-7", "Sub-8", "Sub-9", "Sub-10", "Sub-11", "Sub-12",
   "Sub-13", "Sub-14", "Sub-15", "Sub-16", "Sub-17", "Sub-18",
@@ -44,6 +51,7 @@ const AGE_GROUPS = [
 interface TeamStats {
   ageGroupId: string;
   name: string;
+  ageLevel?: string;
   clubName: string;
   clubShortName?: string;
   footballFormat: string;
@@ -109,7 +117,7 @@ export default function TeamsPage() {
     // Fetch age_groups coordinated by user
     const { data: coordAgeGroups } = await supabase
       .from("age_groups")
-      .select("id, name, club_name, club_short_name, football_format, season")
+      .select("id, name, age_level, club_name, club_short_name, football_format, season")
       .eq("coordinator_id", user.id)
       .order("created_at", { ascending: true });
 
@@ -125,7 +133,7 @@ export default function TeamsPage() {
     if (staffAgeGroupIds.length > 0) {
       const { data } = await supabase
         .from("age_groups")
-        .select("id, name, club_name, club_short_name, football_format, season")
+        .select("id, name, age_level, club_name, club_short_name, football_format, season")
         .in("id", staffAgeGroupIds);
       staffAgeGroups = data ?? [];
     }
@@ -175,7 +183,7 @@ export default function TeamsPage() {
         .from("training_sessions")
         .select("age_group_id")
         .in("age_group_id", ids)
-        .eq("status", "scheduled"),
+        .not("status", "eq", "cancelled"),
       supabase
         .from("training_sessions")
         .select("age_group_id")
@@ -185,14 +193,13 @@ export default function TeamsPage() {
       supabase
         .from("games")
         .select("age_group_id")
-        .in("age_group_id", ids)
-        .in("status", ["scheduled", "live"]),
+        .in("age_group_id", ids),
       supabase
         .from("games")
         .select("age_group_id")
         .in("age_group_id", ids)
         .not("status", "in", '("completed","cancelled")')
-        .lt("scheduled_at", new Date().toISOString()),
+        .lt("game_datetime", new Date().toISOString()),
     ]);
 
     function countById(rows: Array<{ age_group_id: string }> | null, id: string) {
@@ -202,6 +209,7 @@ export default function TeamsPage() {
     const stats: TeamStats[] = allAgeGroups.map((ag) => ({
       ageGroupId: ag.id,
       name: ag.name,
+      ageLevel: (ag as { age_level?: string | null }).age_level ?? undefined,
       clubName: ag.club_name,
       clubShortName: ag.club_short_name ?? undefined,
       footballFormat: ag.football_format,
@@ -414,8 +422,7 @@ export default function TeamsPage() {
                   <div className="px-5 pt-4 pb-3 border-b border-slate-100">
                     <p className="font-bold text-slate-900 text-lg leading-tight">{team.name}</p>
                     <p className="text-sm text-slate-500">
-                      {team.clubName}
-                      {team.clubShortName ? ` (${team.clubShortName})` : ""} · F{team.footballFormat} · {team.season}
+                      {team.ageLevel ?? team.name} · {FORMAT_LABELS[team.footballFormat] ?? team.footballFormat} · {team.season}
                     </p>
                   </div>
 

@@ -38,7 +38,10 @@ export interface AgeGroup {
   club_name: string;
   club_short_name?: string;
   club_logo_url?: string;
+  /** Nome da equipa, ex: "Infantis A". Historicamente guardava o escalão. */
   name: string;
+  /** Escalão/faixa etária, ex: "Sub-13". Campo adicionado em 2026-03-15. */
+  age_level?: string | null;
   public_slug?: string | null;
   public_access_enabled?: boolean;
   public_access_count?: number;
