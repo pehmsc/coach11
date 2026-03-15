@@ -70,12 +70,18 @@ export default async function DashboardPage() {
 
   // Fetch profile + age groups in parallel (both only depend on user.id)
   const [{ data: profile }, { data: managedAgeGroups }] = await Promise.all([
-    supabase.from("profiles").select("full_name").eq("id", user.id).single(),
+    supabase.from("profiles").select("full_name, role").eq("id", user.id).single(),
     (admin ?? supabase)
       .from("age_groups")
       .select("id, club_name, name, club_logo_url, teams(id)")
       .eq("coordinator_id", user.id),
   ]);
+
+  // Bug fix: coordenador sem escalão criado → redirecionar para onboarding.
+  // Safety net para navegação directa ao dashboard (ex: bookmark, histórico).
+  if (profile && "role" in profile && profile.role === "coordinator" && (managedAgeGroups?.length ?? 0) === 0) {
+    redirect("/onboarding");
+  }
 
   let firstTeamId: string | null = managedAgeGroups?.[0]?.teams?.[0]?.id ?? null;
   const managedTeamIds = (managedAgeGroups || [])
