@@ -180,13 +180,12 @@ function InteractivePieChart({
         )}
       </div>
 
-      {/* Legenda */}
+      {/* Legenda — apenas cor + nome, sem contagem (tooltip já mostra tudo) */}
       <div className="flex flex-wrap justify-center gap-x-3 gap-y-1">
         {slices.map((s) => (
           <div key={s.label} className="flex items-center gap-1.5 text-xs">
             <span className="h-2.5 w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} />
             <span className="text-slate-600">{s.label}</span>
-            <span className="font-semibold text-slate-800">{s.count}</span>
           </div>
         ))}
       </div>
@@ -231,6 +230,8 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
   const [attendanceStats, setAttendanceStats] = useState<Record<string, number>>({});
   const [completedTrainings, setCompletedTrainings] = useState(0);
   const [gameResults, setGameResults] = useState({ wins: 0, draws: 0, losses: 0, total: 0 });
+  const [gameMetrics, setGameMetrics] = useState({ goalsFor: 0, goalsAgainst: 0, yellowCards: 0, redCards: 0 });
+  const [recentForm, setRecentForm] = useState<("W" | "D" | "L")[]>([]);
 
   // Week navigation
   const [weekOffset, setWeekOffset] = useState(0);
@@ -378,23 +379,39 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
       }
     }
 
-    // Bug 7 — Resultados: calcular a partir de score_home/score_away + is_home
+    // Resultados + métricas de jogos
     const { data: completedGames } = await supabase
       .from("games")
-      .select("id, score_home, score_away, is_home")
+      .select("id, score_home, score_away, is_home, game_datetime")
       .eq("age_group_id", ageGroupId)
       .eq("status", "completed")
-      .not("score_home", "is", null);
+      .not("score_home", "is", null)
+      .order("game_datetime", { ascending: false });
     if (completedGames && completedGames.length > 0) {
-      let wins = 0, draws = 0, losses = 0;
+      let wins = 0, draws = 0, losses = 0, goalsFor = 0, goalsAgainst = 0;
+      const form: ("W" | "D" | "L")[] = [];
       completedGames.forEach((g) => {
         const myScore = g.is_home ? (g.score_home ?? 0) : (g.score_away ?? 0);
         const oppScore = g.is_home ? (g.score_away ?? 0) : (g.score_home ?? 0);
-        if (myScore > oppScore) wins++;
-        else if (myScore === oppScore) draws++;
-        else losses++;
+        goalsFor += myScore;
+        goalsAgainst += oppScore;
+        if (myScore > oppScore) { wins++; form.push("W"); }
+        else if (myScore === oppScore) { draws++; form.push("D"); }
+        else { losses++; form.push("L"); }
       });
       setGameResults({ wins, draws, losses, total: wins + draws + losses });
+      setRecentForm(form.slice(0, 5));
+
+      // Cartões: somar de game_final_stats para os jogos concluídos
+      const gameIds = completedGames.map((g) => g.id);
+      const { data: statsRows } = await supabase
+        .from("game_final_stats")
+        .select("yellow_cards, red_cards")
+        .in("game_id", gameIds)
+        .eq("is_finalized", true);
+      const yellowCards = (statsRows ?? []).reduce((sum, r) => sum + (r.yellow_cards ?? 0), 0);
+      const redCards = (statsRows ?? []).reduce((sum, r) => sum + (r.red_cards ?? 0), 0);
+      setGameMetrics({ goalsFor, goalsAgainst, yellowCards, redCards });
     }
 
     // All teams for switcher dropdown
@@ -874,7 +891,74 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
                     {gTotal === 0 ? (
                       <p className="text-xs text-slate-400 text-center mt-4">Sem jogos concluídos.</p>
                     ) : (
-                      <InteractivePieChart slices={gameSlices} />
+                      <>
+                        <InteractivePieChart slices={gameSlices} />
+
+                        {/* Forma recente */}
+                        {recentForm.length > 0 && (
+                          <div className="mt-3 flex items-center gap-1.5">
+                            <span className="text-xs text-slate-500 mr-1">Forma:</span>
+                            {recentForm.map((r, i) => (
+                              <span
+                                key={i}
+                                className={`inline-flex h-6 w-6 items-center justify-center rounded text-[11px] font-bold text-white flex-shrink-0 ${
+                                  r === "W" ? "bg-emerald-500" : r === "D" ? "bg-slate-400" : "bg-red-500"
+                                }`}
+                              >
+                                {r === "W" ? "V" : r === "D" ? "E" : "D"}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Métricas */}
+                        <div className="mt-3 space-y-1 text-xs text-slate-600">
+                          <div className="flex justify-between">
+                            <span>Golos marcados</span>
+                            <span className="font-semibold text-slate-800">
+                              {gameMetrics.goalsFor}
+                              {gTotal > 0 && (
+                                <span className="font-normal text-slate-400 ml-1">
+                                  ({(gameMetrics.goalsFor / gTotal).toFixed(2)} G/J)
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Golos sofridos</span>
+                            <span className="font-semibold text-slate-800">
+                              {gameMetrics.goalsAgainst}
+                              {gTotal > 0 && (
+                                <span className="font-normal text-slate-400 ml-1">
+                                  ({(gameMetrics.goalsAgainst / gTotal).toFixed(2)} G/J)
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Cartão amarelo</span>
+                            <span className="font-semibold text-slate-800">
+                              {gameMetrics.yellowCards}
+                              {gTotal > 0 && (
+                                <span className="font-normal text-slate-400 ml-1">
+                                  ({(gameMetrics.yellowCards / gTotal).toFixed(2)} /J)
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Cartão vermelho</span>
+                            <span className="font-semibold text-slate-800">
+                              {gameMetrics.redCards}
+                              {gTotal > 0 && (
+                                <span className="font-normal text-slate-400 ml-1">
+                                  ({(gameMetrics.redCards / gTotal).toFixed(2)} /J)
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                        </div>
+                      </>
                     )}
                   </div>
                 </div>
