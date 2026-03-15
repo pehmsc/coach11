@@ -67,7 +67,9 @@ interface StaffMember {
   id: string;
   profile_id: string;
   role: string;
-  profiles: { full_name: string; email?: string | null; avatar_url?: string | null } | null;
+  full_name?: string | null;
+  email?: string | null;
+  avatar_url?: string | null;
 }
 
 /** Bug 5/6 — campo correcto é game_datetime, não scheduled_at */
@@ -319,12 +321,31 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
       .order("first_name");
     setPlayers((playersData ?? []) as Player[]);
 
-    // Staff
-    const { data: staffData } = await supabase
+    // Staff — dois queries separados para evitar problemas de RLS no JOIN a profiles
+    const { data: staffLinks } = await supabase
       .from("age_group_staff")
-      .select("id, profile_id, role, profiles(full_name, email, avatar_url)")
+      .select("id, profile_id, role")
       .eq("age_group_id", ageGroupId);
-    setStaff((staffData ?? []) as unknown as StaffMember[]);
+    if (staffLinks && staffLinks.length > 0) {
+      const profileIds = staffLinks.map((s) => s.profile_id);
+      const { data: profilesData } = await supabase
+        .from("profiles")
+        .select("id, full_name, email, avatar_url")
+        .in("id", profileIds);
+      const profileMap = new Map((profilesData ?? []).map((p) => [p.id, p]));
+      setStaff(
+        staffLinks.map((s) => ({
+          id: s.id,
+          profile_id: s.profile_id,
+          role: s.role,
+          full_name: profileMap.get(s.profile_id)?.full_name ?? null,
+          email: profileMap.get(s.profile_id)?.email ?? null,
+          avatar_url: profileMap.get(s.profile_id)?.avatar_url ?? null,
+        })),
+      );
+    } else {
+      setStaff([]);
+    }
 
     // Bug 6 — Próximos jogos: usar game_datetime (não scheduled_at)
     const { data: upGames } = await supabase
@@ -964,25 +985,25 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
                 {staff.map((s) => (
                   <Card key={s.id}>
                     <CardContent className="py-3 px-4 flex items-center gap-3">
-                      {s.profiles?.avatar_url ? (
+                      {s.avatar_url ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
-                          src={s.profiles.avatar_url}
-                          alt={s.profiles.full_name ?? ""}
+                          src={s.avatar_url}
+                          alt={s.full_name ?? ""}
                           className="w-9 h-9 rounded-full object-cover flex-shrink-0"
                         />
                       ) : (
                         <div className="w-9 h-9 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold text-slate-600 flex-shrink-0">
-                          {s.profiles?.full_name
-                            ? s.profiles.full_name.trim().split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase()
+                          {s.full_name
+                            ? s.full_name.trim().split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase()
                             : "??"}
                         </div>
                       )}
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-slate-800 truncate">
-                          {s.profiles?.full_name ?? "—"}
+                          {s.full_name ?? "—"}
                         </p>
-                        <p className="text-xs text-slate-400 truncate">{s.profiles?.email ?? ""}</p>
+                        <p className="text-xs text-slate-400 truncate">{s.email ?? ""}</p>
                       </div>
                       <div className="flex items-center gap-2 flex-wrap justify-end">
                         <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-medium">
