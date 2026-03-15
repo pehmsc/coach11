@@ -36,8 +36,9 @@ function LoginForm() {
   const inviteCode = sp.get("code") ?? sp.get("inviteCode") ?? null;
 
   function resolvePostAuthDestination(payload: { redirectTo?: string } | null) {
-    if (payload?.redirectTo === "/team/setup") {
-      return "/team/setup";
+    const dest = payload?.redirectTo;
+    if (dest && dest !== "/dashboard") {
+      return dest;
     }
 
     return inviteCode ? `/dashboard?code=${inviteCode}` : "/dashboard";
