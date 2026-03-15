@@ -21,12 +21,26 @@ import {
   Users,
   CalendarDays,
   Swords,
-  AlertTriangle,
   ChevronRight,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import { normalizeManualShortName, isValidManualShortName } from "@/lib/football/short-name";
+
+function StatusBadge({ value }: { value: number }) {
+  const isAlert = value > 0;
+  return (
+    <span
+      className={cn(
+        "inline-flex h-6 min-w-6 items-center justify-center rounded px-1.5 text-xs font-semibold",
+        isAlert ? "bg-red-500/10 text-red-600" : "bg-emerald-500/10 text-emerald-600",
+      )}
+    >
+      {value}
+    </span>
+  );
+}
 
 const FOOTBALL_FORMATS = [
   { value: "5", label: "Futebol 5" },
@@ -446,33 +460,31 @@ export default function TeamsPage() {
                       <CalendarDays size={15} className="text-slate-400 flex-shrink-0" />
                       <div>
                         <p className="text-xs text-slate-400">Treinos</p>
-                        <p className="text-sm font-semibold text-slate-800">
-                          {team.scheduledTrainings}
-                        </p>
+                        <p className="text-sm font-semibold text-slate-800">{team.scheduledTrainings}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <Swords size={15} className="text-slate-400 flex-shrink-0" />
                       <div>
                         <p className="text-xs text-slate-400">Jogos</p>
-                        <p className="text-sm font-semibold text-slate-800">
-                          {team.scheduledGames}
-                        </p>
+                        <p className="text-sm font-semibold text-slate-800">{team.scheduledGames}</p>
                       </div>
                     </div>
                   </div>
 
-                  {/* Warnings */}
-                  {warnings.length > 0 && (
-                    <div className="px-5 py-2 border-b border-amber-100 bg-amber-50/50">
-                      {warnings.map((w) => (
-                        <div key={w} className="flex items-center gap-1.5 py-0.5">
-                          <AlertTriangle size={13} className="text-amber-500 flex-shrink-0" />
-                          <span className="text-xs text-amber-700">{w}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  {/* Alertas — sempre visíveis */}
+                  <div className="px-5 py-3 space-y-1.5 border-b border-slate-100">
+                    {[
+                      { label: "Atletas indisponíveis", value: team.unavailablePlayers },
+                      { label: "Jogos por fechar", value: team.gamesToClose },
+                      { label: "Treinos por fechar", value: team.trainingsToClose },
+                    ].map(({ label, value }) => (
+                      <div key={label} className="flex items-center justify-between">
+                        <span className="text-xs text-slate-500">{label}</span>
+                        <StatusBadge value={value} />
+                      </div>
+                    ))}
+                  </div>
 
                   {/* CTA */}
                   <div className="px-5 py-3 flex justify-end">

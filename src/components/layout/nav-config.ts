@@ -131,15 +131,12 @@ const BASE_APP_NAV_SECTIONS: AppNavSection[] = [
     items: [
       NAV_ITEMS.dashboard,
       NAV_ITEMS.calendar,
-      NAV_ITEMS.messages,
       NAV_ITEMS.notifications,
-      NAV_ITEMS.players,
       NAV_ITEMS.competitions,
       NAV_ITEMS.games,
       NAV_ITEMS.trainings,
       NAV_ITEMS.club,
       NAV_ITEMS.teams,
-      NAV_ITEMS.staff,
       NAV_ITEMS.statistics,
     ],
   },
@@ -153,13 +150,11 @@ const BASE_MOBILE_APP_NAV_SECTIONS: AppNavSection[] = [
   {
     id: "main",
     items: [
-      NAV_ITEMS.players,
       NAV_ITEMS.competitions,
       NAV_ITEMS.games,
       NAV_ITEMS.trainings,
       NAV_ITEMS.club,
       NAV_ITEMS.teams,
-      NAV_ITEMS.staff,
       NAV_ITEMS.notifications,
     ],
   },
@@ -172,7 +167,6 @@ const BASE_MOBILE_APP_NAV_SECTIONS: AppNavSection[] = [
 export const MOBILE_FOOTER_NAV_ITEMS: AppNavItem[] = [
   NAV_ITEMS.dashboard,
   NAV_ITEMS.calendar,
-  NAV_ITEMS.messages,
   NAV_ITEMS.statistics,
 ];
 

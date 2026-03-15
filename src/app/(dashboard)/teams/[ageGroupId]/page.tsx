@@ -67,7 +67,7 @@ interface StaffMember {
   id: string;
   profile_id: string;
   role: string;
-  profiles: { full_name: string; email?: string | null } | null;
+  profiles: { full_name: string; email?: string | null; avatar_url?: string | null } | null;
 }
 
 /** Bug 5/6 — campo correcto é game_datetime, não scheduled_at */
@@ -94,44 +94,101 @@ interface TrainingRow {
 
 type PageParams = { ageGroupId: string };
 
-// ─── Gráfico pizza SVG (sem dependências externas) ────────────────────────────
+// ─── Gráfico pizza SVG interactivo ───────────────────────────────────────────
 
-function PieChart({
+function InteractivePieChart({
   slices,
 }: {
   slices: { color: string; pct: number; label: string; count: number }[];
 }) {
+  const [activeIdx, setActiveIdx] = useState<number | null>(null);
   const radius = 42;
   const cx = 50;
   const cy = 50;
   const toRad = (deg: number) => (deg * Math.PI) / 180;
 
   const filtered = slices.filter((s) => s.pct > 0);
-  const paths = filtered.reduce<{ d: string; color: string; key: number }[]>(
-    (acc, slice, i) => {
-      const cum = acc.reduce((s, _, j) => s + filtered[j].pct, 0);
-      const startAngle = cum * 3.6 - 90;
-      const endAngle = (cum + slice.pct) * 3.6 - 90;
-      const x1 = cx + radius * Math.cos(toRad(startAngle));
-      const y1 = cy + radius * Math.sin(toRad(startAngle));
-      const x2 = cx + radius * Math.cos(toRad(endAngle));
-      const y2 = cy + radius * Math.sin(toRad(endAngle));
-      const largeArc = slice.pct > 50 ? 1 : 0;
-      acc.push({ d: `M ${cx} ${cy} L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2} Z`, color: slice.color, key: i });
-      return acc;
-    },
-    [],
-  );
+  const total = slices.reduce((a, s) => a + s.count, 0);
+
+  const paths = filtered.reduce<
+    { d: string; color: string; origIdx: number; key: number }[]
+  >((acc, slice, i) => {
+    const cum = acc.reduce((s, _, j) => s + filtered[j].pct, 0);
+    const startAngle = cum * 3.6 - 90;
+    const endAngle = (cum + slice.pct) * 3.6 - 90;
+    const x1 = cx + radius * Math.cos(toRad(startAngle));
+    const y1 = cy + radius * Math.sin(toRad(startAngle));
+    const x2 = cx + radius * Math.cos(toRad(endAngle));
+    const y2 = cy + radius * Math.sin(toRad(endAngle));
+    const largeArc = slice.pct > 50 ? 1 : 0;
+    const origIdx = slices.indexOf(slice);
+    acc.push({
+      d: `M ${cx} ${cy} L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2} Z`,
+      color: slice.color,
+      origIdx,
+      key: i,
+    });
+    return acc;
+  }, []);
+
+  const activeSlice = activeIdx !== null ? slices[activeIdx] : null;
 
   return (
-    <svg viewBox="0 0 100 100" className="w-24 h-24">
-      {paths.map((p) => (
-        <path key={p.key} d={p.d} fill={p.color} />
-      ))}
-      {slices.every((s) => s.pct === 0) && (
-        <circle cx={cx} cy={cy} r={radius} fill="#e2e8f0" />
-      )}
-    </svg>
+    <div className="flex flex-col items-center gap-2">
+      <div className="relative">
+        <svg
+          viewBox="0 0 100 100"
+          className="w-24 h-24 cursor-pointer"
+          onMouseLeave={() => setActiveIdx(null)}
+        >
+          {filtered.length === 0 ? (
+            <circle cx={cx} cy={cy} r={radius} fill="#e2e8f0" />
+          ) : (
+            paths.map((p) => (
+              <path
+                key={p.key}
+                d={p.d}
+                fill={p.color}
+                opacity={activeIdx === null || activeIdx === p.origIdx ? 1 : 0.45}
+                style={{ transition: "opacity 0.15s" }}
+                onMouseEnter={() => setActiveIdx(p.origIdx)}
+                onClick={() =>
+                  setActiveIdx((prev) => (prev === p.origIdx ? null : p.origIdx))
+                }
+              />
+            ))
+          )}
+        </svg>
+      </div>
+
+      {/* Tooltip inline */}
+      <div className="h-8 flex items-center">
+        {activeSlice ? (
+          <div
+            className="flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-medium text-white shadow-md"
+            style={{ backgroundColor: activeSlice.color }}
+          >
+            <span>{activeSlice.label}</span>
+            <span>·</span>
+            <span>{activeSlice.count}</span>
+            <span>({total > 0 ? ((activeSlice.count / total) * 100).toFixed(1) : 0}%)</span>
+          </div>
+        ) : (
+          <p className="text-[11px] text-slate-400 italic">Toca para ver detalhes</p>
+        )}
+      </div>
+
+      {/* Legenda */}
+      <div className="flex flex-wrap justify-center gap-x-3 gap-y-1">
+        {slices.map((s) => (
+          <div key={s.label} className="flex items-center gap-1.5 text-xs">
+            <span className="h-2.5 w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} />
+            <span className="text-slate-600">{s.label}</span>
+            <span className="font-semibold text-slate-800">{s.count}</span>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -170,6 +227,7 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
   const [weekGames, setWeekGames] = useState<GameRow[]>([]);
   const [upcomingGames, setUpcomingGames] = useState<GameRow[]>([]);
   const [attendanceStats, setAttendanceStats] = useState<Record<string, number>>({});
+  const [completedTrainings, setCompletedTrainings] = useState(0);
   const [gameResults, setGameResults] = useState({ wins: 0, draws: 0, losses: 0, total: 0 });
 
   // Week navigation
@@ -264,7 +322,7 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
     // Staff
     const { data: staffData } = await supabase
       .from("age_group_staff")
-      .select("id, profile_id, role, profiles(full_name, email)")
+      .select("id, profile_id, role, profiles(full_name, email, avatar_url)")
       .eq("age_group_id", ageGroupId);
     setStaff((staffData ?? []) as unknown as StaffMember[]);
 
@@ -279,17 +337,19 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
       .limit(5);
     setUpcomingGames((upGames ?? []) as GameRow[]);
 
-    // Bug 7 — Presenças: usar training_session_id (não session_id)
-    const { data: sessions } = await supabase
+    // Fix 2 — Presenças: só sessões concluídas, com contagem de treinos concluídos
+    const { data: completedSessions } = await supabase
       .from("training_sessions")
       .select("id")
-      .eq("age_group_id", ageGroupId);
-    const sessionIds = (sessions ?? []).map((s) => s.id);
-    if (sessionIds.length > 0) {
+      .eq("age_group_id", ageGroupId)
+      .eq("status", "completed");
+    const completedSessionIds = (completedSessions ?? []).map((s) => s.id);
+    setCompletedTrainings(completedSessionIds.length);
+    if (completedSessionIds.length > 0) {
       const { data: att } = await supabase
         .from("training_attendance")
         .select("status")
-        .in("training_session_id", sessionIds);
+        .in("training_session_id", completedSessionIds);
       if (att) {
         const counts: Record<string, number> = {};
         att.forEach((a) => { counts[a.status] = (counts[a.status] ?? 0) + 1; });
@@ -472,20 +532,20 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
     { id: "configuracoes", label: "Configurações", icon: Settings },
   ];
 
-  // Performance — presenças
+  // Performance — presenças (Fix 2: estados e cores correctos)
   const attTotal = Object.values(attendanceStats).reduce((a, b) => a + b, 0);
   const getAttCount = (status: string) => attendanceStats[status] ?? 0;
   const attSlices = [
-    { color: "#10b981", label: "Presentes", status: "present", pct: attTotal > 0 ? (getAttCount("present") / attTotal) * 100 : 0, count: getAttCount("present") },
-    { color: "#f59e0b", label: "Condicionados", status: "late", pct: attTotal > 0 ? (getAttCount("late") / attTotal) * 100 : 0, count: getAttCount("late") },
-    { color: "#ef4444", label: "Ausentes", status: "absent", pct: attTotal > 0 ? (getAttCount("absent") / attTotal) * 100 : 0, count: getAttCount("absent") },
-    { color: "#94a3b8", label: "Dispensados", status: "injured", pct: attTotal > 0 ? (getAttCount("injured") / attTotal) * 100 : 0, count: getAttCount("injured") },
+    { color: "#22c55e", label: "Presente", status: "present", pct: attTotal > 0 ? (getAttCount("present") / attTotal) * 100 : 0, count: getAttCount("present") },
+    { color: "#ef4444", label: "Ausente", status: "absent", pct: attTotal > 0 ? (getAttCount("absent") / attTotal) * 100 : 0, count: getAttCount("absent") },
+    { color: "#f59e0b", label: "Atrasado", status: "late", pct: attTotal > 0 ? (getAttCount("late") / attTotal) * 100 : 0, count: getAttCount("late") },
+    { color: "#f97316", label: "Lesionado", status: "injured", pct: attTotal > 0 ? (getAttCount("injured") / attTotal) * 100 : 0, count: getAttCount("injured") },
   ];
 
   // Performance — jogos
   const gTotal = gameResults.total;
   const gameSlices = [
-    { color: "#10b981", label: "Vitórias", pct: gTotal > 0 ? (gameResults.wins / gTotal) * 100 : 0, count: gameResults.wins },
+    { color: "#22c55e", label: "Vitórias", pct: gTotal > 0 ? (gameResults.wins / gTotal) * 100 : 0, count: gameResults.wins },
     { color: "#94a3b8", label: "Empates", pct: gTotal > 0 ? (gameResults.draws / gTotal) * 100 : 0, count: gameResults.draws },
     { color: "#ef4444", label: "Derrotas", pct: gTotal > 0 ? (gameResults.losses / gTotal) * 100 : 0, count: gameResults.losses },
   ];
@@ -738,54 +798,62 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
               </Card>
             </div>
 
-            {/* Performance — Bug 7 */}
+            {/* Performance */}
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">Performance esta época</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid sm:grid-cols-2 gap-6">
+                <div className="grid sm:grid-cols-2 gap-8">
+                  {/* Treinos */}
                   <div>
-                    <p className="text-sm font-medium text-slate-700 mb-3">
-                      Treinos · Total presenças: {attTotal}
+                    <p className="text-sm font-semibold text-slate-700 mb-1 text-center">
+                      Treinos concluídos: {completedTrainings}
                     </p>
                     {attTotal === 0 ? (
-                      <p className="text-xs text-slate-400">Sem dados de presenças.</p>
+                      <p className="text-xs text-slate-400 text-center mt-4">Sem dados de presenças.</p>
                     ) : (
-                      <div className="flex items-center gap-4">
-                        <PieChart slices={attSlices} />
-                        <div className="space-y-1.5">
-                          {attSlices.map((s) => (
-                            <div key={s.status} className="flex items-center gap-2 text-xs">
-                              <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: s.color }} />
-                              <span className="text-slate-600">{s.label}</span>
-                              <span className="font-semibold text-slate-800">{s.count}</span>
-                            </div>
-                          ))}
+                      <>
+                        <InteractivePieChart slices={attSlices} />
+                        <div className="mt-3 space-y-1 text-xs text-slate-600">
+                          <div className="flex justify-between">
+                            <span>Assiduidade</span>
+                            <span className="font-semibold text-slate-800">
+                              {attTotal > 0 ? ((getAttCount("present") / attTotal) * 100).toFixed(1) : 0}%
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Ausências</span>
+                            <span className="font-semibold text-slate-800">
+                              {attTotal > 0 ? ((getAttCount("absent") / attTotal) * 100).toFixed(1) : 0}%
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Atrasos</span>
+                            <span className="font-semibold text-slate-800">
+                              {attTotal > 0 ? ((getAttCount("late") / attTotal) * 100).toFixed(1) : 0}%
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Lesões</span>
+                            <span className="font-semibold text-slate-800">
+                              {attTotal > 0 ? ((getAttCount("injured") / attTotal) * 100).toFixed(1) : 0}%
+                            </span>
+                          </div>
                         </div>
-                      </div>
+                      </>
                     )}
                   </div>
 
+                  {/* Jogos */}
                   <div>
-                    <p className="text-sm font-medium text-slate-700 mb-3">
+                    <p className="text-sm font-semibold text-slate-700 mb-1 text-center">
                       Jogos concluídos: {gTotal}
                     </p>
                     {gTotal === 0 ? (
-                      <p className="text-xs text-slate-400">Sem jogos concluídos.</p>
+                      <p className="text-xs text-slate-400 text-center mt-4">Sem jogos concluídos.</p>
                     ) : (
-                      <div className="flex items-center gap-4">
-                        <PieChart slices={gameSlices} />
-                        <div className="space-y-1.5">
-                          {gameSlices.map((s) => (
-                            <div key={s.label} className="flex items-center gap-2 text-xs">
-                              <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: s.color }} />
-                              <span className="text-slate-600">{s.label}</span>
-                              <span className="font-semibold text-slate-800">{s.count}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
+                      <InteractivePieChart slices={gameSlices} />
                     )}
                   </div>
                 </div>
@@ -896,14 +964,25 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
                 {staff.map((s) => (
                   <Card key={s.id}>
                     <CardContent className="py-3 px-4 flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold text-slate-600 flex-shrink-0">
-                        {s.profiles?.full_name?.slice(0, 2).toUpperCase() ?? "??"}
-                      </div>
+                      {s.profiles?.avatar_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={s.profiles.avatar_url}
+                          alt={s.profiles.full_name ?? ""}
+                          className="w-9 h-9 rounded-full object-cover flex-shrink-0"
+                        />
+                      ) : (
+                        <div className="w-9 h-9 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold text-slate-600 flex-shrink-0">
+                          {s.profiles?.full_name
+                            ? s.profiles.full_name.trim().split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase()
+                            : "??"}
+                        </div>
+                      )}
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-slate-800 truncate">
                           {s.profiles?.full_name ?? "—"}
                         </p>
-                        <p className="text-xs text-slate-400">{s.profiles?.email ?? ""}</p>
+                        <p className="text-xs text-slate-400 truncate">{s.profiles?.email ?? ""}</p>
                       </div>
                       <div className="flex items-center gap-2 flex-wrap justify-end">
                         <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-medium">
