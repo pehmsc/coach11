@@ -1,20 +1,15 @@
 import { NextResponse } from "next/server";
 import { checkPermission } from "@/lib/auth/require-permission";
 import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  MAX_EXERCISE_IMAGE_BYTES,
+  validateExerciseImageUpload,
+} from "@/lib/exercises/shared";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 
 export const runtime = "nodejs";
 
-const ACCEPTED_EXTENSIONS = new Set(["png", "jpg", "jpeg", "webp"]);
-const ACCEPTED_MIME_PREFIX = "image/";
-const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 const BUCKET_NAME = "exercise-images";
-
-function resolveExtension(fileName: string) {
-  const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
-  if (ACCEPTED_EXTENSIONS.has(ext)) return ext;
-  return "png";
-}
 
 export async function POST(request: Request) {
   try {
@@ -31,19 +26,20 @@ export async function POST(request: Request) {
       );
     }
 
-    const mimeType = (file.type || "").toLowerCase();
-    const extension = resolveExtension(file.name || "");
-    const mimeLooksValid =
-      mimeType.startsWith(ACCEPTED_MIME_PREFIX) || ACCEPTED_EXTENSIONS.has(extension);
+    const validation = validateExerciseImageUpload({
+      fileName: file.name || "",
+      mimeType: file.type || "",
+      size: file.size,
+    });
 
-    if (!mimeLooksValid) {
-      return NextResponse.json(
-        { error: "Formato inválido. Usa uma imagem PNG, JPG ou WEBP." },
-        { status: 400 },
-      );
-    }
+    if (!validation.ok) {
+      if (validation.error === "invalid_type") {
+        return NextResponse.json(
+          { error: "Formato inválido. Usa uma imagem PNG, JPG ou WEBP." },
+          { status: 400 },
+        );
+      }
 
-    if (file.size > MAX_FILE_SIZE_BYTES) {
       return NextResponse.json(
         { error: "Imagem demasiado grande. Máximo: 5MB." },
         { status: 400 },
@@ -52,8 +48,8 @@ export async function POST(request: Request) {
 
     const admin = createAdminClient();
     const fileBytes = new Uint8Array(await file.arrayBuffer());
-    const fileName = `${check.ageGroupId}/${crypto.randomUUID()}.${extension}`;
-    const contentType = file.type || `image/${extension}`;
+    const fileName = `${check.ageGroupId}/${crypto.randomUUID()}.${validation.extension}`;
+    const contentType = validation.contentType;
 
     let { error: uploadError } = await admin.storage
       .from(BUCKET_NAME)
@@ -66,7 +62,7 @@ export async function POST(request: Request) {
     ) {
       await admin.storage.createBucket(BUCKET_NAME, {
         public: true,
-        fileSizeLimit: MAX_FILE_SIZE_BYTES,
+        fileSizeLimit: MAX_EXERCISE_IMAGE_BYTES,
         allowedMimeTypes: ["image/png", "image/jpeg", "image/webp"],
       });
 

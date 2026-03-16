@@ -1,0 +1,150 @@
+import { z } from "zod";
+
+export const EXERCISE_CATEGORIES = [
+  "warmup",
+  "technical",
+  "tactical",
+  "formal_game",
+  "finishing",
+  "defensive_org",
+  "offensive_org",
+  "transition",
+  "physical",
+  "set_pieces",
+  "strategy",
+  "cooldown",
+  "other",
+] as const;
+
+export const createExerciseSchema = z.object({
+  name: z.string().min(1, "Nome é obrigatório"),
+  category: z.enum(EXERCISE_CATEGORIES),
+  description: z.string().nullish(),
+  objectives: z.string().nullish(),
+  success_criteria: z.string().nullish(),
+  subcategory: z.string().nullish(),
+  game_format: z.string().nullish(),
+  duration_minutes: z.number().int().positive().nullish(),
+  rest_minutes: z.number().int().min(0).default(0),
+  min_players: z.number().int().positive().nullish(),
+  max_players: z.number().int().positive().nullish(),
+  field_dimensions: z.string().nullish(),
+  material: z.string().nullish(),
+  diagram_url: z.string().url().nullish(),
+});
+
+export const ACCEPTED_EXERCISE_IMAGE_EXTENSIONS = [
+  "png",
+  "jpg",
+  "jpeg",
+  "webp",
+] as const;
+
+export const ACCEPTED_EXERCISE_IMAGE_MIME_TYPES = [
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+] as const;
+
+export const MAX_EXERCISE_IMAGE_BYTES = 5 * 1024 * 1024;
+
+type ExerciseImageExtension = (typeof ACCEPTED_EXERCISE_IMAGE_EXTENSIONS)[number];
+type ExerciseImageMimeType = (typeof ACCEPTED_EXERCISE_IMAGE_MIME_TYPES)[number];
+
+type ExerciseImageValidation =
+  | {
+      ok: true;
+      extension: "png" | "jpg" | "webp";
+      contentType: ExerciseImageMimeType;
+    }
+  | {
+      ok: false;
+      error: "invalid_type" | "too_large";
+    };
+
+function normalizeExtension(extension: string | undefined): ExerciseImageExtension | null {
+  if (!extension) return null;
+  const normalized = extension.toLowerCase();
+
+  if (
+    (ACCEPTED_EXERCISE_IMAGE_EXTENSIONS as readonly string[]).includes(normalized)
+  ) {
+    return normalized as ExerciseImageExtension;
+  }
+
+  return null;
+}
+
+function normalizeMimeType(mimeType: string | undefined): ExerciseImageMimeType | null {
+  if (!mimeType) return null;
+  const normalized = mimeType.toLowerCase();
+
+  if (normalized === "application/octet-stream") return null;
+
+  if (
+    (ACCEPTED_EXERCISE_IMAGE_MIME_TYPES as readonly string[]).includes(normalized)
+  ) {
+    return normalized as ExerciseImageMimeType;
+  }
+
+  return null;
+}
+
+function getMimeTypeForExtension(extension: "png" | "jpg" | "webp"): ExerciseImageMimeType {
+  if (extension === "png") return "image/png";
+  if (extension === "webp") return "image/webp";
+  return "image/jpeg";
+}
+
+export function resolveExerciseImageExtension(
+  fileName: string,
+  mimeType?: string,
+): "png" | "jpg" | "webp" {
+  const rawExtension = fileName.split(".").pop();
+  const normalizedExtension = normalizeExtension(rawExtension);
+
+  if (normalizedExtension === "png" || normalizedExtension === "webp") {
+    return normalizedExtension;
+  }
+
+  if (normalizedExtension === "jpg" || normalizedExtension === "jpeg") {
+    return "jpg";
+  }
+
+  const normalizedMimeType = normalizeMimeType(mimeType);
+  if (normalizedMimeType === "image/png") return "png";
+  if (normalizedMimeType === "image/webp") return "webp";
+  if (normalizedMimeType === "image/jpeg") return "jpg";
+
+  return "png";
+}
+
+export function validateExerciseImageUpload(input: {
+  fileName: string;
+  mimeType?: string;
+  size: number;
+}): ExerciseImageValidation {
+  const rawExtension = input.fileName.split(".").pop();
+  const normalizedExtension = normalizeExtension(rawExtension);
+  const normalizedMimeType = normalizeMimeType(input.mimeType);
+
+  if (!normalizedMimeType && !normalizedExtension) {
+    return { ok: false, error: "invalid_type" };
+  }
+
+  if (normalizedMimeType === null && input.mimeType && input.mimeType !== "application/octet-stream") {
+    return { ok: false, error: "invalid_type" };
+  }
+
+  if (input.size > MAX_EXERCISE_IMAGE_BYTES) {
+    return { ok: false, error: "too_large" };
+  }
+
+  const extension = resolveExerciseImageExtension(input.fileName, input.mimeType);
+
+  return {
+    ok: true,
+    extension,
+    contentType: normalizedMimeType ?? getMimeTypeForExtension(extension),
+  };
+}

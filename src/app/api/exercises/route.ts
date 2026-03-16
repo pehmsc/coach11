@@ -1,42 +1,11 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
 import { checkPermission } from "@/lib/auth/require-permission";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { SHORT_PRIVATE_CACHE_CONTROL } from "@/lib/http/cache";
+import {
+  createExerciseSchema,
+} from "@/lib/exercises/shared";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
-
-const EXERCISE_CATEGORIES = [
-  "warmup",
-  "technical",
-  "tactical",
-  "formal_game",
-  "finishing",
-  "defensive_org",
-  "offensive_org",
-  "transition",
-  "physical",
-  "set_pieces",
-  "strategy",
-  "cooldown",
-  "other",
-] as const;
-
-const CreateExerciseSchema = z.object({
-  name: z.string().min(1, "Nome é obrigatório"),
-  category: z.enum(EXERCISE_CATEGORIES),
-  description: z.string().nullish(),
-  objectives: z.string().nullish(),
-  success_criteria: z.string().nullish(),
-  subcategory: z.string().nullish(),
-  game_format: z.string().nullish(),
-  duration_minutes: z.number().int().positive().nullish(),
-  rest_minutes: z.number().int().min(0).default(0),
-  min_players: z.number().int().positive().nullish(),
-  max_players: z.number().int().positive().nullish(),
-  field_dimensions: z.string().nullish(),
-  material: z.string().nullish(),
-  diagram_url: z.string().url().nullish(),
-});
 
 const SELECT_FIELDS =
   "id, club_id, age_group_id, created_by, name, description, objectives, success_criteria, category, subcategory, game_format, duration_minutes, rest_minutes, min_players, max_players, field_dimensions, material, diagram_url, is_shared, created_at, updated_at";
@@ -93,7 +62,7 @@ export async function POST(request: Request) {
     const { userId, ageGroupId } = check;
 
     const body = await request.json().catch(() => null);
-    const parsed = CreateExerciseSchema.safeParse(body);
+    const parsed = createExerciseSchema.safeParse(body);
 
     if (!parsed.success) {
       return NextResponse.json(
