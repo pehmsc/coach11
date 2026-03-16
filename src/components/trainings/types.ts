@@ -16,6 +16,10 @@ export interface TrainingRow {
   longitude?: number | null;
   osm_place_id?: string;
   location_source?: LocationSource | null;
+  microcycle_number?: number | null;
+  mesocycle_number?: number | null;
+  period_type?: string | null;
+  initial_instruction?: string | null;
   objective?: string | null;
   complementary_objectives?: string | null;
   focus?: string | null;

@@ -346,3 +346,42 @@ export interface Exercise {
   created_at: string;
   updated_at: string;
 }
+
+export type PhaseType = "initial" | "main" | "final" | "custom";
+
+export interface TrainingPhase {
+  id: string;
+  training_session_id: string;
+  club_id: string;
+  phase_type: PhaseType;
+  phase_name?: string | null;
+  phase_order: number;
+  duration_minutes?: number | null;
+  notes?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TrainingPhaseExercise {
+  id: string;
+  phase_id: string;
+  exercise_id?: string | null;
+  club_id: string;
+  exercise_order: number;
+  custom_name?: string | null;
+  custom_description?: string | null;
+  custom_objectives?: string | null;
+  custom_game_format?: string | null;
+  custom_duration_minutes?: number | null;
+  custom_rest_minutes?: number | null;
+  custom_num_players?: number | null;
+  custom_field_dimensions?: string | null;
+  custom_material?: string | null;
+  custom_diagram_url?: string | null;
+  planned_time_minutes?: number | null;
+  repetitions: number;
+  total_athletes?: number | null;
+  notes?: string | null;
+  created_at: string;
+  exercise?: Exercise | null;
+}
