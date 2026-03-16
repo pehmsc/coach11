@@ -100,6 +100,17 @@ const CalendarPayloadSchema = CalendarLocationSchema.extend({
   is_home: z.boolean().optional(),
   notes: z.string().nullable().optional(),
   image_url: z.string().nullable().optional(),
+  // UT metadata fields
+  microcycle_number: z.number().int().positive().nullable().optional(),
+  mesocycle_number: z.number().int().positive().nullable().optional(),
+  period_type: z.string().nullable().optional(),
+  focus: z.string().nullable().optional(),
+  intensity: z.string().nullable().optional(),
+  field_area: z.string().nullable().optional(),
+  objective: z.string().nullable().optional(),
+  complementary_objectives: z.string().nullable().optional(),
+  initial_instruction: z.string().nullable().optional(),
+  material: z.string().nullable().optional(),
 });
 
 const CalendarCreateSchema = z.object({

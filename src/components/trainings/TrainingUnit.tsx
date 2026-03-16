@@ -421,8 +421,8 @@ export function TrainingUnit({ trainingId, session, readOnly = false, onExportPd
                 </h3>
               </div>
               <div className="flex items-center gap-3">
-                <span className="text-[10px] font-semibold text-slate-400 w-8 text-center">TR</span>
-                <span className="text-[10px] font-semibold text-slate-400 w-10 text-center">TA</span>
+                <span className="text-[10px] font-semibold text-slate-400 w-8 text-right">TR</span>
+                <span className="text-[10px] font-semibold text-slate-400 w-10 text-right">TA</span>
                 {!readOnly && phase.phase_type === "custom" && (
                   <button type="button" onClick={() => handleRemovePhase(phaseIdx)} className="p-1 rounded text-slate-400 hover:text-red-500" title="Remover fase">
                     <X size={14} />
@@ -447,56 +447,57 @@ export function TrainingUnit({ trainingId, session, readOnly = false, onExportPd
 
                 return (
                   <div key={phaseEx.id}>
-                    <div className="flex items-start gap-3 px-4 py-2.5">
+                    <div className="flex gap-3 px-4 py-2.5">
                       {/* Thumbnail */}
                       {diagramUrl ? (
-                        <img src={diagramUrl} alt="" className="h-12 w-12 flex-shrink-0 rounded object-cover mt-0.5" />
+                        <img src={diagramUrl} alt="" className="h-12 w-12 flex-shrink-0 rounded object-cover" />
                       ) : (
-                        <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded bg-slate-100 mt-0.5">
+                        <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded bg-slate-100">
                           <BookOpen size={14} className="text-slate-300" />
                         </div>
                       )}
 
-                      {/* Main info */}
+                      {/* Content */}
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm font-medium text-slate-800 truncate">{name}</p>
-                          {duration != null && duration > 0 && (
-                            <span className="flex-shrink-0 text-xs text-slate-500">{duration}&apos;</span>
-                          )}
-                        </div>
+                        {/* Line 1: Name */}
+                        <p className="text-sm font-medium text-slate-800 leading-snug">{name}</p>
+                        {/* Line 2: Description */}
                         {description && (
                           <p className="text-xs text-slate-400 line-clamp-1 mt-0.5">{description}</p>
                         )}
+                        {/* Line 3: Badge + duration + actions */}
                         <div className="flex items-center gap-2 mt-1">
                           {category && (
                             <span className={`inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-medium ${catColor?.bg ?? "bg-slate-100"} ${catColor?.text ?? "text-slate-600"}`}>
                               {CATEGORY_LABELS[category] ?? category}
                             </span>
                           )}
+                          {duration != null && duration > 0 && (
+                            <span className="text-[11px] text-slate-500">{duration}&apos;</span>
+                          )}
+                          <div className="ml-auto flex items-center gap-0.5">
+                            <button type="button" onClick={() => setExpandedExercise(isExpanded ? null : phaseEx.id)} className="p-1 rounded text-slate-400 hover:text-emerald-600" title={isExpanded ? "Fechar" : "Detalhes"}>
+                              {isExpanded ? <EyeOff size={14} /> : <Eye size={14} />}
+                            </button>
+                            {!readOnly && (
+                              <>
+                                <button type="button" onClick={() => handleMoveExercise(phase.id, exIdx, -1)} disabled={exIdx === 0} className="p-1 rounded text-slate-400 hover:text-slate-700 disabled:opacity-30"><ChevronUp size={14} /></button>
+                                <button type="button" onClick={() => handleMoveExercise(phase.id, exIdx, 1)} disabled={exIdx === phase.exercises.length - 1} className="p-1 rounded text-slate-400 hover:text-slate-700 disabled:opacity-30"><ChevronDown size={14} /></button>
+                                <button type="button" onClick={() => handleRemoveExercise(phase.id, exIdx)} className="p-1 rounded text-slate-400 hover:text-red-500"><X size={14} /></button>
+                              </>
+                            )}
+                          </div>
                         </div>
                       </div>
 
-                      {/* TR / TA + actions */}
-                      <div className="flex items-center gap-3 flex-shrink-0 mt-1">
-                        <span className="text-[11px] text-slate-400 w-8 text-center">
+                      {/* TR / TA column — aligned with phase header */}
+                      <div className="flex items-start gap-3 flex-shrink-0 pt-0.5">
+                        <span className="text-[11px] text-slate-400 w-8 text-right">
                           {restMin && restMin > 0 ? `${restMin}'` : "—"}
                         </span>
-                        <span className="text-[11px] font-medium text-slate-600 w-10 text-center">
+                        <span className="text-[11px] font-medium text-slate-600 w-10 text-right">
                           {formatTA(ta)}
                         </span>
-                        <div className="flex items-center gap-0.5">
-                          <button type="button" onClick={() => setExpandedExercise(isExpanded ? null : phaseEx.id)} className="p-1 rounded text-slate-400 hover:text-emerald-600" title={isExpanded ? "Fechar" : "Detalhes"}>
-                            {isExpanded ? <EyeOff size={14} /> : <Eye size={14} />}
-                          </button>
-                          {!readOnly && (
-                            <>
-                              <button type="button" onClick={() => handleMoveExercise(phase.id, exIdx, -1)} disabled={exIdx === 0} className="p-1 rounded text-slate-400 hover:text-slate-700 disabled:opacity-30"><ChevronUp size={14} /></button>
-                              <button type="button" onClick={() => handleMoveExercise(phase.id, exIdx, 1)} disabled={exIdx === phase.exercises.length - 1} className="p-1 rounded text-slate-400 hover:text-slate-700 disabled:opacity-30"><ChevronDown size={14} /></button>
-                              <button type="button" onClick={() => handleRemoveExercise(phase.id, exIdx)} className="p-1 rounded text-slate-400 hover:text-red-500"><X size={14} /></button>
-                            </>
-                          )}
-                        </div>
                       </div>
                     </div>
 
