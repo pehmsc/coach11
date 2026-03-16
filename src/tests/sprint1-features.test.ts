@@ -8,12 +8,11 @@ import {
   resolveExerciseImageExtension,
   validateExerciseImageUpload,
 } from "../lib/exercises/shared";
-import { getNextUtNumber, resolveNextUtNumber } from "../lib/trainings/ut-numbering";
+import { getNextUtNumber, getWeekStartDate, formatUtLabel } from "../lib/trainings/ut-numbering";
 import {
-  duplicateTrainingWeek,
-  formatUtNumber,
-  getWeekStartDate,
+  buildWeeklyDuplicatedTrainings,
   type WeeklyDuplicationSourceSession,
+  type WeeklyDuplicatedTrainingInsert,
 } from "../lib/trainings/weekly-duplication";
 
 const categoryLabelsSource = readFileSync(
@@ -53,49 +52,43 @@ function createSupabaseMock(result: { ut_number: number | null } | null) {
 function buildSourceWeek(): WeeklyDuplicationSourceSession[] {
   return [
     {
-      clubId: "club-1",
-      ageGroupId: "age-1",
-      teamId: "team-1",
-      sessionDate: "2026-01-05",
-      startTime: "18:30",
-      endTime: "20:00",
+      age_group_id: "age-1",
+      team_id: "team-1",
+      session_date: "2026-01-05",
+      start_time: "18:30",
+      end_time: "20:00",
       location: "Campo A",
       focus: "technical",
       intensity: "high",
       objective: "Saida de bola",
       material: "Bolas",
-      fieldArea: "Meio campo",
-      notes: "nao copiar",
+      field_area: "Meio campo",
     },
     {
-      clubId: "club-1",
-      ageGroupId: "age-1",
-      teamId: "team-1",
-      sessionDate: "2026-01-07",
-      startTime: "18:30",
-      endTime: "20:00",
+      age_group_id: "age-1",
+      team_id: "team-1",
+      session_date: "2026-01-07",
+      start_time: "18:30",
+      end_time: "20:00",
       location: "Campo A",
       focus: "tactical",
       intensity: "medium",
       objective: "Pressao",
       material: "Coletes",
-      fieldArea: "2/3 campo",
-      notes: "nao copiar",
+      field_area: "2/3 campo",
     },
     {
-      clubId: "club-1",
-      ageGroupId: "age-1",
-      teamId: "team-1",
-      sessionDate: "2026-01-09",
-      startTime: "18:30",
-      endTime: "20:00",
+      age_group_id: "age-1",
+      team_id: "team-1",
+      session_date: "2026-01-09",
+      start_time: "18:30",
+      end_time: "20:00",
       location: "Campo B",
       focus: "finishing",
       intensity: "high",
       objective: "Finalizacao",
       material: "Balizas",
-      fieldArea: "Ultimo terco",
-      notes: "nao copiar",
+      field_area: "Ultimo terco",
     },
   ];
 }
@@ -220,12 +213,16 @@ describe("Exercise Library", () => {
 });
 
 describe("Weekly Duplication", () => {
-  it("resolveNextUtNumber retorna 1 quando nao existem treinos", () => {
-    expect(resolveNextUtNumber(null)).toBe(1);
+  it("formatUtLabel retorna null para valores invalidos", () => {
+    expect(formatUtLabel(null)).toBe(null);
+    expect(formatUtLabel(undefined)).toBe(null);
+    expect(formatUtLabel(0)).toBe(null);
   });
 
-  it("resolveNextUtNumber retorna max+1 quando existe UT previa", () => {
-    expect(resolveNextUtNumber(12)).toBe(13);
+  it("formatUtLabel formata com zero padding", () => {
+    expect(formatUtLabel(1)).toBe("UT01");
+    expect(formatUtLabel(12)).toBe("UT12");
+    expect(formatUtLabel(100)).toBe("UT100");
   });
 
   it("getNextUtNumber retorna 1 quando nao existem treinos", async () => {
@@ -255,25 +252,25 @@ describe("Weekly Duplication", () => {
   });
 
   it("duplicacao cria N por M treinos", () => {
-    const result = duplicateTrainingWeek({
+    const result = buildWeeklyDuplicatedTrainings({
       sourceSessions: buildSourceWeek(),
       numberOfWeeks: 4,
-      startingUtNumber: 4,
+      nextUtNumber: 4,
     });
 
-    expect(result.createdSessions).toHaveLength(12);
+    expect(result.sessions).toHaveLength(12);
     expect(result.utRange).toEqual({ from: 4, to: 15 });
   });
 
   it("ut_numbers sao sequenciais apos duplicacao", () => {
-    const result = duplicateTrainingWeek({
+    const result = buildWeeklyDuplicatedTrainings({
       sourceSessions: buildSourceWeek(),
       numberOfWeeks: 2,
-      startingUtNumber: 4,
+      nextUtNumber: 4,
     });
 
-    expect(result.createdSessions.map((session) => session.ut_number)).toEqual([4, 5, 6, 7, 8, 9]);
-    expect(result.createdSessions.map((session) => session.title)).toEqual([
+    expect(result.sessions.map((session: WeeklyDuplicatedTrainingInsert) => session.ut_number)).toEqual([4, 5, 6, 7, 8, 9]);
+    expect(result.sessions.map((session: WeeklyDuplicatedTrainingInsert) => session.title)).toEqual([
       "UT04",
       "UT05",
       "UT06",
@@ -284,13 +281,13 @@ describe("Weekly Duplication", () => {
   });
 
   it("datas duplicadas caem nos dias corretos da semana", () => {
-    const result = duplicateTrainingWeek({
+    const result = buildWeeklyDuplicatedTrainings({
       sourceSessions: buildSourceWeek(),
       numberOfWeeks: 2,
-      startingUtNumber: 4,
+      nextUtNumber: 4,
     });
 
-    expect(result.createdSessions.map((session) => session.session_date)).toEqual([
+    expect(result.sessions.map((session: WeeklyDuplicatedTrainingInsert) => session.session_date)).toEqual([
       "2026-01-12",
       "2026-01-14",
       "2026-01-16",
@@ -301,13 +298,13 @@ describe("Weekly Duplication", () => {
   });
 
   it("week_start_date e recalculado para cada sessao duplicada", () => {
-    const result = duplicateTrainingWeek({
+    const result = buildWeeklyDuplicatedTrainings({
       sourceSessions: buildSourceWeek(),
       numberOfWeeks: 2,
-      startingUtNumber: 4,
+      nextUtNumber: 4,
     });
 
-    expect(result.createdSessions.map((session) => session.week_start_date)).toEqual([
+    expect(result.sessions.map((session: WeeklyDuplicatedTrainingInsert) => session.week_start_date)).toEqual([
       "2026-01-12",
       "2026-01-12",
       "2026-01-12",
@@ -318,14 +315,13 @@ describe("Weekly Duplication", () => {
   });
 
   it("duplicacao copia metadados relevantes e limpa notes", () => {
-    const result = duplicateTrainingWeek({
+    const result = buildWeeklyDuplicatedTrainings({
       sourceSessions: buildSourceWeek(),
       numberOfWeeks: 1,
-      startingUtNumber: 4,
+      nextUtNumber: 4,
     });
 
-    expect(result.createdSessions[0]).toMatchObject({
-      club_id: "club-1",
+    expect(result.sessions[0]).toMatchObject({
       age_group_id: "age-1",
       team_id: "team-1",
       start_time: "18:30",
@@ -341,8 +337,8 @@ describe("Weekly Duplication", () => {
     });
   });
 
-  it("formatUtNumber cria o prefixo UT com zero padding", () => {
-    expect(formatUtNumber(4)).toBe("UT04");
-    expect(formatUtNumber(15)).toBe("UT15");
+  it("formatUtLabel cria o prefixo UT com zero padding", () => {
+    expect(formatUtLabel(4)).toBe("UT04");
+    expect(formatUtLabel(15)).toBe("UT15");
   });
 });
