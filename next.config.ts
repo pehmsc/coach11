@@ -5,12 +5,22 @@ const supabaseHost = process.env.NEXT_PUBLIC_SUPABASE_URL
   ? new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname
   : "hqlqgviiafqfefukodpe.supabase.co";
 const posthogOrigin = normalizeOrigin(process.env.NEXT_PUBLIC_POSTHOG_HOST);
+const posthogAssetsOrigin = getPostHogAssetsOrigin(posthogOrigin);
 const sentryOrigin = normalizeOrigin(process.env.NEXT_PUBLIC_SENTRY_DSN);
+const scriptSources = [
+  "'self'",
+  "'unsafe-inline'",
+  ...new Set([posthogAssetsOrigin].filter((value): value is string => !!value)),
+];
 const connectSources = [
   "'self'",
   `https://${supabaseHost}`,
   `wss://${supabaseHost}`,
-  ...new Set([posthogOrigin, sentryOrigin].filter((value): value is string => !!value)),
+  ...new Set(
+    [posthogOrigin, posthogAssetsOrigin, sentryOrigin].filter(
+      (value): value is string => !!value,
+    ),
+  ),
 ];
 
 function normalizeOrigin(value: string | undefined | null) {
@@ -35,6 +45,30 @@ function parseOriginList(value: string | undefined) {
     .filter((entry): entry is string => !!entry);
 }
 
+function getPostHogAssetsOrigin(origin: string | null) {
+  if (!origin) return null;
+
+  try {
+    const parsed = new URL(origin);
+
+    if (parsed.hostname === "app.posthog.com") {
+      return "https://us-assets.i.posthog.com";
+    }
+
+    if (/^(eu|eu-assets)\.i\.posthog\.com$/i.test(parsed.hostname)) {
+      return "https://eu-assets.i.posthog.com";
+    }
+
+    if (/^(us|us-assets)\.i\.posthog\.com$/i.test(parsed.hostname)) {
+      return "https://us-assets.i.posthog.com";
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
 function toSocketOrigin(origin: string) {
   if (origin.startsWith("https://")) return origin.replace("https://", "wss://");
   if (origin.startsWith("http://")) return origin.replace("http://", "ws://");
@@ -43,7 +77,7 @@ function toSocketOrigin(origin: string) {
 
 const csp = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline'",
+  `script-src ${scriptSources.join(" ")}`,
   "style-src 'self' 'unsafe-inline'",
   `img-src 'self' data: blob: https://${supabaseHost} https://lh3.googleusercontent.com https://tile.openstreetmap.org`,
   `connect-src ${connectSources.join(" ")}`,
@@ -82,15 +116,21 @@ const reportOnlyConnectSources = [
       reportOnlySupabaseOrigin,
       reportOnlySupabaseOrigin ? toSocketOrigin(reportOnlySupabaseOrigin) : null,
       posthogOrigin,
+      posthogAssetsOrigin,
       sentryOrigin,
       ...parseOriginList(process.env.CSP_REPORT_ONLY_CONNECT_ORIGINS),
     ].filter((value): value is string => !!value),
   ),
 ];
+const reportOnlyScriptSources = [
+  "'self'",
+  "'unsafe-inline'",
+  ...new Set([posthogAssetsOrigin].filter((value): value is string => !!value)),
+];
 
 const reportOnlyDirectives = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline'",
+  `script-src ${reportOnlyScriptSources.join(" ")}`,
   "style-src 'self' 'unsafe-inline'",
   `img-src ${reportOnlyImgSources.join(" ")}`,
   `connect-src ${reportOnlyConnectSources.join(" ")}`,
