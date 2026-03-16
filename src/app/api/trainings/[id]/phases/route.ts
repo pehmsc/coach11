@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { checkPermission } from "@/lib/auth/require-permission";
+import { checkPermission, checkReadAccess } from "@/lib/auth/require-permission";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 
@@ -42,8 +42,8 @@ type RouteParams = { params: Promise<{ id: string }> };
 
 export async function GET(_request: Request, { params }: RouteParams) {
   try {
-    const check = await checkPermission("trainings", "read");
-    if (!check.allowed) return check.response;
+    const access = await checkReadAccess();
+    if (!access.allowed) return access.response;
 
     const { id: trainingSessionId } = await params;
     const admin = createAdminClient();

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { checkPermission } from "@/lib/auth/require-permission";
+import { checkPermission, checkReadAccess } from "@/lib/auth/require-permission";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { SHORT_PRIVATE_CACHE_CONTROL } from "@/lib/http/cache";
 import {
@@ -12,31 +12,20 @@ const SELECT_FIELDS =
 
 export async function GET(request: Request) {
   try {
-    const check = await checkPermission("exercises", "read");
-    if (!check.allowed) return check.response;
+    const access = await checkReadAccess();
+    if (!access.allowed) return access.response;
 
-    const { ageGroupId } = check;
+    const { clubId } = access;
     const { searchParams } = new URL(request.url);
     const category = searchParams.get("category");
     const search = searchParams.get("search");
 
     const admin = createAdminClient();
 
-    // Resolve club_id para partilhar exercícios ao nível do clube
-    const { data: ageGroup } = await admin
-      .from("age_groups")
-      .select("club_id")
-      .eq("id", ageGroupId)
-      .single();
-
-    if (!ageGroup) {
-      return NextResponse.json({ error: "Escalão não encontrado." }, { status: 404 });
-    }
-
     let query = admin
       .from("exercises")
       .select(SELECT_FIELDS)
-      .eq("club_id", ageGroup.club_id)
+      .eq("club_id", clubId)
       .order("updated_at", { ascending: false });
 
     if (category) {

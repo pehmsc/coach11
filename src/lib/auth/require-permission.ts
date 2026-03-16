@@ -33,6 +33,65 @@ export type PermissionCheckResult = PermissionCheckSuccess | PermissionCheckFail
  * if (!check.allowed) return check.response;
  * // check.userId, check.ageGroupId disponíveis
  */
+export type ReadAccessSuccess = {
+  allowed: true;
+  userId: string;
+  ageGroupId: string;
+  clubId: string;
+  teamId: string | null;
+};
+
+export type ReadAccessResult = ReadAccessSuccess | PermissionCheckFailure;
+
+/**
+ * Verifica apenas autenticação + pertença ao clube.
+ * Para endpoints GET — todo o staff do clube pode ler, sem verificação de permissões.
+ */
+export async function checkReadAccess(): Promise<ReadAccessResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return {
+      allowed: false,
+      response: NextResponse.json({ error: "Não autenticado" }, { status: 401 }),
+    };
+  }
+
+  const admin = createAdminClient();
+  const context = await resolveUserTeamContext(admin, user.id);
+
+  if (!context.ageGroup?.id) {
+    return {
+      allowed: false,
+      response: NextResponse.json({ error: "Sem escalão associado" }, { status: 403 }),
+    };
+  }
+
+  const { data: ageGroup } = await admin
+    .from("age_groups")
+    .select("club_id")
+    .eq("id", context.ageGroup.id)
+    .single();
+
+  if (!ageGroup?.club_id) {
+    return {
+      allowed: false,
+      response: NextResponse.json({ error: "Clube não encontrado" }, { status: 403 }),
+    };
+  }
+
+  return {
+    allowed: true,
+    userId: user.id,
+    ageGroupId: context.ageGroup.id,
+    clubId: ageGroup.club_id,
+    teamId: context.teamId,
+  };
+}
+
 export async function checkPermission(
   area: PermissionArea,
   operation: PermissionOperation,

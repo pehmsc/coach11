@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { checkPermission } from "@/lib/auth/require-permission";
+import { checkPermission, checkReadAccess } from "@/lib/auth/require-permission";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 
@@ -45,24 +45,17 @@ type RouteParams = { params: Promise<{ id: string }> };
 
 export async function GET(_request: Request, { params }: RouteParams) {
   try {
-    const check = await checkPermission("exercises", "read");
-    if (!check.allowed) return check.response;
+    const access = await checkReadAccess();
+    if (!access.allowed) return access.response;
 
     const { id } = await params;
     const admin = createAdminClient();
-
-    // Resolve club_id para acesso ao nível do clube
-    const { data: ageGroup } = await admin
-      .from("age_groups")
-      .select("club_id")
-      .eq("id", check.ageGroupId)
-      .single();
 
     const { data, error } = await admin
       .from("exercises")
       .select(SELECT_FIELDS)
       .eq("id", id)
-      .eq("club_id", ageGroup?.club_id ?? check.ageGroupId)
+      .eq("club_id", access.clubId)
       .single();
 
     if (error || !data) {
