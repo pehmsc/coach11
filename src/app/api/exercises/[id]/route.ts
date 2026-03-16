@@ -51,11 +51,18 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const { id } = await params;
     const admin = createAdminClient();
 
+    // Resolve club_id para acesso ao nível do clube
+    const { data: ageGroup } = await admin
+      .from("age_groups")
+      .select("club_id")
+      .eq("id", check.ageGroupId)
+      .single();
+
     const { data, error } = await admin
       .from("exercises")
       .select(SELECT_FIELDS)
       .eq("id", id)
-      .eq("age_group_id", check.ageGroupId)
+      .eq("club_id", ageGroup?.club_id ?? check.ageGroupId)
       .single();
 
     if (error || !data) {
@@ -121,6 +128,7 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
     const { id } = await params;
     const admin = createAdminClient();
 
+    // DELETE restringe ao age_group_id do user (só apaga exercícios do próprio escalão)
     const { error } = await admin
       .from("exercises")
       .delete()
