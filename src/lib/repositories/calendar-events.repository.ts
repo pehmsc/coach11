@@ -20,6 +20,17 @@ type TrainingWritePayload = {
   location_source: string | null | undefined;
   notes: string | null | undefined;
   image_url: string | null | undefined;
+  // UT metadata
+  microcycle_number?: number | null | undefined;
+  mesocycle_number?: number | null | undefined;
+  period_type?: string | null | undefined;
+  focus?: string | null | undefined;
+  intensity?: string | null | undefined;
+  field_area?: string | null | undefined;
+  objective?: string | null | undefined;
+  complementary_objectives?: string | null | undefined;
+  initial_instruction?: string | null | undefined;
+  material?: string | null | undefined;
 };
 
 type GameWritePayload = {

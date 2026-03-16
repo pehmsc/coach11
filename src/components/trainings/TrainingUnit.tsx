@@ -12,7 +12,9 @@ import {
   BookOpen,
   Users,
   FileDown,
+  Pencil,
 } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ExercisePicker } from "@/components/exercises/ExercisePicker";
@@ -38,7 +40,35 @@ const PHASE_TYPE_LABELS: Record<PhaseType, string> = {
 const PERIOD_LABELS: Record<string, string> = { pre_season: "Pré-Época", competitive: "Competitivo", transition: "Transição" };
 const FOCUS_LABELS: Record<string, string> = { tactical: "Tática", technical: "Técnica", physical: "Física", mixed: "Mista" };
 const INTENSITY_LABELS: Record<string, string> = { low: "Baixo", medium: "Médio", high: "Alto", very_high: "Muito Alto" };
-const FIELD_AREA_LABELS: Record<string, string> = { completo: "Completo", "1/2": "1/2", "1/3": "1/3", "1/4": "1/4" };
+const FIELD_AREA_LABELS: Record<string, string> = { complete: "Completo", half: "1/2", third: "1/3", quarter: "1/4" };
+
+const PERIOD_OPTIONS = [
+  { value: "", label: "—" },
+  { value: "pre_season", label: "Pré-época" },
+  { value: "competitive", label: "Competitivo" },
+  { value: "transition", label: "Transição" },
+];
+const FOCUS_OPTIONS = [
+  { value: "", label: "—" },
+  { value: "tactical", label: "Tática" },
+  { value: "technical", label: "Técnica" },
+  { value: "physical", label: "Física" },
+  { value: "mixed", label: "Mista" },
+];
+const INTENSITY_OPTIONS = [
+  { value: "", label: "—" },
+  { value: "low", label: "Baixo" },
+  { value: "medium", label: "Médio" },
+  { value: "high", label: "Alto" },
+  { value: "very_high", label: "Muito Alto" },
+];
+const FIELD_AREA_OPTIONS = [
+  { value: "", label: "—" },
+  { value: "complete", label: "Completo" },
+  { value: "half", label: "1/2" },
+  { value: "third", label: "1/3" },
+  { value: "quarter", label: "1/4" },
+];
 
 function formatTA(minutes: number): string {
   if (minutes <= 0) return "0m";
@@ -71,21 +101,80 @@ type PhaseWithExercises = TrainingPhase & {
   exercises: (TrainingPhaseExercise & { exercise?: Exercise | null })[];
 };
 
+type HeaderFormState = {
+  microcycle_number: string;
+  mesocycle_number: string;
+  period_type: string;
+  focus: string;
+  intensity: string;
+  field_area: string;
+  objective: string;
+  complementary_objectives: string;
+  initial_instruction: string;
+  material: string;
+};
+
 type Props = {
   trainingId: string;
   session: TrainingRow;
   readOnly?: boolean;
   onExportPdf?: () => void;
+  onUpdateSession?: (fields: Record<string, unknown>) => Promise<void>;
 };
 
 /* ── Main Component ────────────────────────── */
 
-export function TrainingUnit({ trainingId, session, readOnly = false, onExportPdf }: Props) {
+export function TrainingUnit({ trainingId, session, readOnly = false, onExportPdf, onUpdateSession }: Props) {
   const [phases, setPhases] = useState<PhaseWithExercises[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [expandedExercise, setExpandedExercise] = useState<string | null>(null);
   const [pickerPhaseId, setPickerPhaseId] = useState<string | null>(null);
+  const [editingHeader, setEditingHeader] = useState(false);
+  const [savingHeader, setSavingHeader] = useState(false);
+  const [headerForm, setHeaderForm] = useState<HeaderFormState>({
+    microcycle_number: "", mesocycle_number: "", period_type: "", focus: "",
+    intensity: "", field_area: "", objective: "", complementary_objectives: "",
+    initial_instruction: "", material: "",
+  });
+
+  function openHeaderEdit() {
+    setHeaderForm({
+      microcycle_number: session.microcycle_number?.toString() ?? "",
+      mesocycle_number: session.mesocycle_number?.toString() ?? "",
+      period_type: session.period_type ?? "",
+      focus: session.focus ?? "",
+      intensity: session.intensity ?? "",
+      field_area: session.field_area ?? "",
+      objective: session.objective ?? "",
+      complementary_objectives: session.complementary_objectives ?? "",
+      initial_instruction: session.initial_instruction ?? "",
+      material: session.material ?? "",
+    });
+    setEditingHeader(true);
+  }
+
+  async function saveHeaderEdit() {
+    if (!onUpdateSession) return;
+    setSavingHeader(true);
+    try {
+      await onUpdateSession({
+        microcycle_number: headerForm.microcycle_number ? parseInt(headerForm.microcycle_number, 10) : null,
+        mesocycle_number: headerForm.mesocycle_number ? parseInt(headerForm.mesocycle_number, 10) : null,
+        period_type: headerForm.period_type || null,
+        focus: headerForm.focus || null,
+        intensity: headerForm.intensity || null,
+        field_area: headerForm.field_area || null,
+        objective: headerForm.objective || null,
+        complementary_objectives: headerForm.complementary_objectives || null,
+        initial_instruction: headerForm.initial_instruction || null,
+        material: headerForm.material || null,
+      });
+      setEditingHeader(false);
+    } finally {
+      setSavingHeader(false);
+    }
+  }
 
   const loadPhases = useCallback(async () => {
     try {
@@ -200,29 +289,101 @@ export function TrainingUnit({ trainingId, session, readOnly = false, onExportPd
   }
 
   /* ── UT Header ── */
+  const selectCls = "w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500";
+  const inputCls = "h-8 text-xs";
+
   const utHeader = (
     <div className="rounded-2xl border border-slate-200 bg-white p-4 mb-4">
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-sm font-bold text-slate-900">Unidade de Treino</h2>
-        {onExportPdf && phases.length > 0 && (
-          <Button type="button" variant="outline" size="sm" className="border-emerald-200 text-emerald-700 hover:bg-emerald-50" onClick={onExportPdf}>
-            <FileDown size={14} className="mr-1.5" />PDF
-          </Button>
-        )}
+        <div className="flex items-center gap-1.5">
+          {!readOnly && !editingHeader && onUpdateSession && (
+            <Button type="button" variant="outline" size="sm" onClick={openHeaderEdit}>
+              <Pencil size={14} className="mr-1.5" />Editar
+            </Button>
+          )}
+          {editingHeader && (
+            <>
+              <Button type="button" variant="outline" size="sm" onClick={() => setEditingHeader(false)} disabled={savingHeader}>Cancelar</Button>
+              <Button type="button" size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={() => void saveHeaderEdit()} disabled={savingHeader}>
+                {savingHeader ? <Loader2 size={14} className="animate-spin mr-1" /> : null}Guardar
+              </Button>
+            </>
+          )}
+          {onExportPdf && phases.length > 0 && !editingHeader && (
+            <Button type="button" variant="outline" size="sm" className="border-emerald-200 text-emerald-700 hover:bg-emerald-50" onClick={onExportPdf}>
+              <FileDown size={14} className="mr-1.5" />PDF
+            </Button>
+          )}
+        </div>
       </div>
-      <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
-        {session.ut_number != null && <Field label="UT" value={session.ut_number} />}
-        {session.microcycle_number != null && <Field label="Microciclo" value={session.microcycle_number} />}
-        {session.mesocycle_number != null && <Field label="Mesociclo" value={session.mesocycle_number} />}
-        <Field label="Período" value={session.period_type ? (PERIOD_LABELS[session.period_type] ?? session.period_type) : null} />
-        <Field label="Foco" value={session.focus ? (FOCUS_LABELS[session.focus] ?? session.focus) : null} />
-        <Field label="Intensidade" value={session.intensity ? (INTENSITY_LABELS[session.intensity] ?? session.intensity) : null} />
-        <Field label="Área de treino" value={session.field_area ? (FIELD_AREA_LABELS[session.field_area] ?? session.field_area) : null} className="col-span-2" />
-        <Field label="Objectivo principal" value={session.objective} className="col-span-2" />
-        <Field label="Obj. complementares" value={session.complementary_objectives} className="col-span-2" />
-        <Field label="Instrução Inicial" value={session.initial_instruction} className="col-span-2" />
-        <Field label="Material" value={session.material} className="col-span-2" />
-      </div>
+
+      {editingHeader ? (
+        <div className="grid grid-cols-2 gap-3 text-xs">
+          <div className="space-y-1">
+            <label className="text-slate-400">Microciclo</label>
+            <Input type="number" className={inputCls} value={headerForm.microcycle_number} onChange={(e) => setHeaderForm((f) => ({ ...f, microcycle_number: e.target.value }))} />
+          </div>
+          <div className="space-y-1">
+            <label className="text-slate-400">Mesociclo</label>
+            <Input type="number" className={inputCls} value={headerForm.mesocycle_number} onChange={(e) => setHeaderForm((f) => ({ ...f, mesocycle_number: e.target.value }))} />
+          </div>
+          <div className="space-y-1">
+            <label className="text-slate-400">Período</label>
+            <select className={selectCls} value={headerForm.period_type} onChange={(e) => setHeaderForm((f) => ({ ...f, period_type: e.target.value }))}>
+              {PERIOD_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-slate-400">Foco</label>
+            <select className={selectCls} value={headerForm.focus} onChange={(e) => setHeaderForm((f) => ({ ...f, focus: e.target.value }))}>
+              {FOCUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-slate-400">Intensidade</label>
+            <select className={selectCls} value={headerForm.intensity} onChange={(e) => setHeaderForm((f) => ({ ...f, intensity: e.target.value }))}>
+              {INTENSITY_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-slate-400">Área de treino</label>
+            <select className={selectCls} value={headerForm.field_area} onChange={(e) => setHeaderForm((f) => ({ ...f, field_area: e.target.value }))}>
+              {FIELD_AREA_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+          <div className="space-y-1 col-span-2">
+            <label className="text-slate-400">Objectivo principal</label>
+            <Input className={inputCls} value={headerForm.objective} onChange={(e) => setHeaderForm((f) => ({ ...f, objective: e.target.value }))} placeholder="Objectivo do treino" />
+          </div>
+          <div className="space-y-1 col-span-2">
+            <label className="text-slate-400">Obj. complementares</label>
+            <Input className={inputCls} value={headerForm.complementary_objectives} onChange={(e) => setHeaderForm((f) => ({ ...f, complementary_objectives: e.target.value }))} />
+          </div>
+          <div className="space-y-1 col-span-2">
+            <label className="text-slate-400">Instrução Inicial</label>
+            <Input className={inputCls} value={headerForm.initial_instruction} onChange={(e) => setHeaderForm((f) => ({ ...f, initial_instruction: e.target.value }))} placeholder="Ex: Concentração 18:15" />
+          </div>
+          <div className="space-y-1 col-span-2">
+            <label className="text-slate-400">Material</label>
+            <Input className={inputCls} value={headerForm.material} onChange={(e) => setHeaderForm((f) => ({ ...f, material: e.target.value }))} placeholder="Ex: 18 bolas, 2 balizas, coletes" />
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+          {session.ut_number != null && <Field label="UT" value={session.ut_number} />}
+          <Field label="Microciclo" value={session.microcycle_number} />
+          <Field label="Mesociclo" value={session.mesocycle_number} />
+          <Field label="Período" value={session.period_type ? (PERIOD_LABELS[session.period_type] ?? session.period_type) : null} />
+          <Field label="Foco" value={session.focus ? (FOCUS_LABELS[session.focus] ?? session.focus) : null} />
+          <Field label="Intensidade" value={session.intensity ? (INTENSITY_LABELS[session.intensity] ?? session.intensity) : null} />
+          <Field label="Área de treino" value={session.field_area ? (FIELD_AREA_LABELS[session.field_area] ?? session.field_area) : null} className="col-span-2" />
+          <Field label="Objectivo principal" value={session.objective} className="col-span-2" />
+          <Field label="Obj. complementares" value={session.complementary_objectives} className="col-span-2" />
+          <Field label="Instrução Inicial" value={session.initial_instruction} className="col-span-2" />
+          <Field label="Material" value={session.material} className="col-span-2" />
+        </div>
+      )}
     </div>
   );
 

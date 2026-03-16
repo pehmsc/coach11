@@ -64,4 +64,12 @@ export interface TrainingFormFields {
   locationSource: "google" | "osm" | "manual" | null;
   notes: string;
   imageUrl: string;
+  // UT metadata
+  utFocus: string;
+  utIntensity: string;
+  utPeriodType: string;
+  utFieldArea: string;
+  utObjective: string;
+  utMaterial: string;
+  utInitialInstruction: string;
 }

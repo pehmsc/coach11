@@ -19,6 +19,13 @@ const DEFAULT_FORM: TrainingFormFields = {
   locationSource: null,
   notes: "",
   imageUrl: "",
+  utFocus: "",
+  utIntensity: "",
+  utPeriodType: "",
+  utFieldArea: "",
+  utObjective: "",
+  utMaterial: "",
+  utInitialInstruction: "",
 };
 
 export function useTrainingForm(initialValues?: Partial<TrainingFormFields>) {
@@ -36,23 +43,22 @@ export function useTrainingForm(initialValues?: Partial<TrainingFormFields>) {
   const [locationSource, setLocationSource] = useState<"google" | "osm" | "manual" | null>(initialValues?.locationSource ?? DEFAULT_FORM.locationSource);
   const [notes, setNotes] = useState(initialValues?.notes ?? DEFAULT_FORM.notes);
   const [imageUrl, setImageUrl] = useState(initialValues?.imageUrl ?? DEFAULT_FORM.imageUrl);
+  const [utFocus, setUtFocus] = useState(initialValues?.utFocus ?? DEFAULT_FORM.utFocus);
+  const [utIntensity, setUtIntensity] = useState(initialValues?.utIntensity ?? DEFAULT_FORM.utIntensity);
+  const [utPeriodType, setUtPeriodType] = useState(initialValues?.utPeriodType ?? DEFAULT_FORM.utPeriodType);
+  const [utFieldArea, setUtFieldArea] = useState(initialValues?.utFieldArea ?? DEFAULT_FORM.utFieldArea);
+  const [utObjective, setUtObjective] = useState(initialValues?.utObjective ?? DEFAULT_FORM.utObjective);
+  const [utMaterial, setUtMaterial] = useState(initialValues?.utMaterial ?? DEFAULT_FORM.utMaterial);
+  const [utInitialInstruction, setUtInitialInstruction] = useState(initialValues?.utInitialInstruction ?? DEFAULT_FORM.utInitialInstruction);
 
   function getFields(): TrainingFormFields {
     return {
-      title,
-      utNumber,
-      date,
-      startTime,
-      endTime,
-      location,
-      locationAddress,
-      formattedAddress,
-      latitude,
-      longitude,
-      osmPlaceId,
-      locationSource,
-      notes,
-      imageUrl,
+      title, utNumber, date, startTime, endTime,
+      location, locationAddress, formattedAddress,
+      latitude, longitude, osmPlaceId, locationSource,
+      notes, imageUrl,
+      utFocus, utIntensity, utPeriodType, utFieldArea,
+      utObjective, utMaterial, utInitialInstruction,
     };
   }
 
@@ -76,6 +82,13 @@ export function useTrainingForm(initialValues?: Partial<TrainingFormFields>) {
     setLocationSource(DEFAULT_FORM.locationSource);
     setNotes(DEFAULT_FORM.notes);
     setImageUrl(DEFAULT_FORM.imageUrl);
+    setUtFocus(DEFAULT_FORM.utFocus);
+    setUtIntensity(DEFAULT_FORM.utIntensity);
+    setUtPeriodType(DEFAULT_FORM.utPeriodType);
+    setUtFieldArea(DEFAULT_FORM.utFieldArea);
+    setUtObjective(DEFAULT_FORM.utObjective);
+    setUtMaterial(DEFAULT_FORM.utMaterial);
+    setUtInitialInstruction(DEFAULT_FORM.utInitialInstruction);
   }
 
   function populateFromSource(
@@ -105,6 +118,13 @@ export function useTrainingForm(initialValues?: Partial<TrainingFormFields>) {
     setLocationSource(source.location_source ?? null);
     setNotes(source.notes || "");
     setImageUrl(source.image_url || "");
+    setUtFocus(source.focus || "");
+    setUtIntensity(source.intensity || "");
+    setUtPeriodType(source.period_type || "");
+    setUtFieldArea(source.field_area || "");
+    setUtObjective(source.objective || "");
+    setUtMaterial(source.material || "");
+    setUtInitialInstruction(source.initial_instruction || "");
   }
 
   return {
@@ -122,6 +142,13 @@ export function useTrainingForm(initialValues?: Partial<TrainingFormFields>) {
     locationSource, setLocationSource,
     notes, setNotes,
     imageUrl, setImageUrl,
+    utFocus, setUtFocus,
+    utIntensity, setUtIntensity,
+    utPeriodType, setUtPeriodType,
+    utFieldArea, setUtFieldArea,
+    utObjective, setUtObjective,
+    utMaterial, setUtMaterial,
+    utInitialInstruction, setUtInitialInstruction,
     getFields,
     resetToDefaults,
     populateFromSource,

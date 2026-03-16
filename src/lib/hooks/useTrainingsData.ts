@@ -300,6 +300,13 @@ export function useTrainingsData() {
             location_source: fields.locationSource,
             notes: fields.notes.trim() || null,
             image_url: fields.imageUrl.trim() || null,
+            focus: fields.utFocus || null,
+            intensity: fields.utIntensity || null,
+            period_type: fields.utPeriodType || null,
+            field_area: fields.utFieldArea || null,
+            objective: fields.utObjective?.trim() || null,
+            material: fields.utMaterial?.trim() || null,
+            initial_instruction: fields.utInitialInstruction?.trim() || null,
           },
         }),
       });
