@@ -59,6 +59,17 @@ type CalendarPayload = {
   is_home?: boolean;
   notes?: string | null;
   image_url?: string | null;
+  // UT metadata fields
+  microcycle_number?: number | null;
+  mesocycle_number?: number | null;
+  period_type?: string | null;
+  focus?: string | null;
+  intensity?: string | null;
+  field_area?: string | null;
+  objective?: string | null;
+  complementary_objectives?: string | null;
+  initial_instruction?: string | null;
+  material?: string | null;
 };
 
 type RouteContextData = {
@@ -528,6 +539,16 @@ export async function handleCalendarEventsPost(request: Request) {
         location_source: payload.location_source,
         notes: payload.notes,
         image_url: payload.image_url,
+        microcycle_number: payload.microcycle_number,
+        mesocycle_number: payload.mesocycle_number,
+        period_type: payload.period_type,
+        focus: payload.focus,
+        intensity: payload.intensity,
+        field_area: payload.field_area,
+        objective: payload.objective,
+        complementary_objectives: payload.complementary_objectives,
+        initial_instruction: payload.initial_instruction,
+        material: payload.material,
       });
 
       if (error) {
@@ -691,6 +712,16 @@ export async function handleCalendarEventsPatch(request: Request) {
         location_source: payload.location_source,
         notes: payload.notes,
         image_url: payload.image_url,
+        microcycle_number: payload.microcycle_number,
+        mesocycle_number: payload.mesocycle_number,
+        period_type: payload.period_type,
+        focus: payload.focus,
+        intensity: payload.intensity,
+        field_area: payload.field_area,
+        objective: payload.objective,
+        complementary_objectives: payload.complementary_objectives,
+        initial_instruction: payload.initial_instruction,
+        material: payload.material,
       });
 
       if (error) {

@@ -240,6 +240,33 @@ export default function TrainingDetailPage() {
     }
   }
 
+  async function handleUpdateUtFields(fields: Record<string, unknown>) {
+    if (!session || !ageGroupId) return;
+    const res = await fetch("/api/calendar/events", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: session.id,
+        type: "training",
+        ageGroupId,
+        payload: {
+          title: session.title || "Treino",
+          date: session.session_date,
+          start_time: session.start_time,
+          ...fields,
+        },
+      }),
+    });
+    const data = await res.json().catch(() => null) as { success?: boolean; event?: TrainingRow; error?: string } | null;
+    if (!res.ok || !data?.success) {
+      toast.error(data?.error || "Erro ao guardar campos da UT.");
+      return;
+    }
+    setSession((prev) => prev ? { ...prev, ...data.event } : prev);
+    toast.success("Campos da UT guardados.");
+    await loadDetail();
+  }
+
   async function handleExportUtPdf() {
     if (!session) return;
     try {
@@ -480,6 +507,7 @@ export default function TrainingDetailPage() {
                   session={session}
                   isClosed={isClosed}
                   onExportPdf={() => void handleExportUtPdf()}
+                  onUpdateSession={handleUpdateUtFields}
                 />
               )}
 
@@ -563,10 +591,9 @@ function TabBtn({ active, label, count, onClick }: { active: boolean; label: str
   );
 }
 
-function TabPlanning({ session, isClosed, onExportPdf }: { session: TrainingRow; isClosed: boolean; onExportPdf: () => void }) {
+function TabPlanning({ session, isClosed, onExportPdf, onUpdateSession }: { session: TrainingRow; isClosed: boolean; onExportPdf: () => void; onUpdateSession?: (fields: Record<string, unknown>) => Promise<void> }) {
   return (
     <div className="space-y-4">
-      {/* Notes */}
       {session.notes?.trim() && (
         <div className="rounded-2xl border border-slate-200 bg-white p-4">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-2">Notas</p>
@@ -574,12 +601,12 @@ function TabPlanning({ session, isClosed, onExportPdf }: { session: TrainingRow;
         </div>
       )}
 
-      {/* UT */}
       <TrainingUnit
         trainingId={session.id}
         session={session}
         readOnly={isClosed}
         onExportPdf={onExportPdf}
+        onUpdateSession={onUpdateSession}
       />
     </div>
   );

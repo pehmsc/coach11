@@ -134,8 +134,8 @@ export async function exportTrainingUnitPDF(data: TrainingUnitPdfData) {
   let headerTextX = mg;
   if (logoB64) {
     try {
-      doc.addImage(logoB64, "PNG", mg, y - 4, 12, 12);
-      headerTextX = mg + 15;
+      doc.addImage(logoB64, "PNG", mg, y - 6, 20, 20);
+      headerTextX = mg + 24;
     } catch {
       // ignore failed image
     }
@@ -231,14 +231,14 @@ export async function exportTrainingUnitPDF(data: TrainingUnitPdfData) {
     for (const ex of phase.exercises) {
       globalTA += ex.duration ?? 0;
 
-      if (y > pageH - 50) { doc.addPage(); y = 14; }
+      if (y > pageH - 70) { doc.addPage(); y = 14; }
 
       const exStartY = y;
       const imgB64 = ex.diagramUrl ? imageCache.get(ex.diagramUrl) : null;
-      const imgW = 50;
-      const imgH = 38;
+      const imgW = 75;
+      const imgH = 56;
       const textX = imgB64 ? mg + imgW + 4 : mg;
-      const textW = imgB64 ? cw - imgW - 4 : cw;
+      const textW = imgB64 ? cw - imgW - 4 - 25 : cw - 25; // reserve 25mm for right metadata
 
       // Draw image
       if (imgB64) {
@@ -272,9 +272,10 @@ export async function exportTrainingUnitPDF(data: TrainingUnitPdfData) {
       doc.setTextColor(71, 85, 105);
 
       if (ex.description) {
-        const descLines = doc.splitTextToSize(ex.description, textW - 30);
-        doc.text(descLines.slice(0, 4), textX, descY);
-        descY += Math.min(descLines.length, 4) * 3.2;
+        const descLines = doc.splitTextToSize(ex.description, textW);
+        const showLines = descLines.slice(0, 8);
+        doc.text(showLines, textX, descY);
+        descY += showLines.length * 3.2;
       }
 
       if (ex.objectives) {
@@ -285,9 +286,10 @@ export async function exportTrainingUnitPDF(data: TrainingUnitPdfData) {
         descY += 3.2;
         doc.setFont("helvetica", "normal");
         doc.setTextColor(71, 85, 105);
-        const objLines = doc.splitTextToSize(ex.objectives, textW - 30);
-        doc.text(objLines.slice(0, 3), textX, descY);
-        descY += Math.min(objLines.length, 3) * 3.2;
+        const objLines = doc.splitTextToSize(ex.objectives, textW);
+        const showObjLines = objLines.slice(0, 5);
+        doc.text(showObjLines, textX, descY);
+        descY += showObjLines.length * 3.2;
       }
 
       // TA in bottom-right
