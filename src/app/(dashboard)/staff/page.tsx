@@ -29,13 +29,10 @@ import {
 } from "lucide-react";
 import {
   ALL_PERMISSION_AREAS,
-  AREA_LABELS,
-  PERMISSION_TEMPLATES,
-  TEMPLATE_LABELS,
   type PermissionArea,
   type AreaPermissions,
-  type PermissionTemplateKey,
 } from "@/lib/auth/permissions-shared";
+import { PermissionsGrid } from "@/components/staff/PermissionsGrid";
 import { toast } from "sonner";
 import {
   AGE_GROUP_STAFF_ROLE_LABELS,
@@ -395,29 +392,6 @@ export default function StaffPage() {
   function closePermissionsModal() {
     setManagingPermissionsFor(null);
     setPermissions(null);
-  }
-
-  function applyTemplate(templateKey: PermissionTemplateKey) {
-    const tpl = PERMISSION_TEMPLATES[templateKey];
-    const newPerms: Record<PermissionArea, AreaPermissions> = {} as Record<PermissionArea, AreaPermissions>;
-    for (const area of ALL_PERMISSION_AREAS) {
-      newPerms[area] = { ...tpl[area] };
-    }
-    setPermissions(newPerms);
-  }
-
-  function togglePermission(area: PermissionArea, col: keyof AreaPermissions) {
-    if (!permissions) return;
-    setPermissions((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        [area]: {
-          ...prev[area],
-          [col]: !prev[area][col],
-        },
-      };
-    });
   }
 
   async function handleSavePermissions(e: { preventDefault(): void }) {
@@ -897,76 +871,16 @@ export default function StaffPage() {
                   <div className="flex items-center justify-center py-10">
                     <Loader2 size={24} className="animate-spin text-slate-400" />
                   </div>
-                ) : (
-                  <>
-                    {/* Treinador principal — RWED automático */}
-                    {managingPermissionsFor.role === "coach" ? (
-                      <div className="bg-violet-50 border border-violet-200 rounded-xl p-3 text-sm text-violet-700">
-                        O Treinador Principal tem acesso total (RWED) automático em todas as áreas. Não é editável.
-                      </div>
-                    ) : (
-                      <>
-                        {/* Templates rápidos */}
-                        <div>
-                          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
-                            Aplicar template
-                          </p>
-                          <div className="flex gap-2 flex-wrap">
-                            {(Object.keys(TEMPLATE_LABELS) as PermissionTemplateKey[]).map((key) => (
-                              <button
-                                key={key}
-                                type="button"
-                                onClick={() => applyTemplate(key)}
-                                className="px-3 py-1.5 text-xs font-semibold bg-slate-100 hover:bg-violet-100 hover:text-violet-700 rounded-lg transition-colors"
-                              >
-                                {TEMPLATE_LABELS[key]}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Permissions grid */}
-                        {permissions && (
-                          <div className="overflow-x-auto -mx-1">
-                            <table className="w-full min-w-[340px] text-sm">
-                              <thead>
-                                <tr className="border-b">
-                                  <th className="text-left py-2 px-2 font-semibold text-slate-700 w-32">Área</th>
-                                  <th className="text-center py-2 px-1 font-semibold text-slate-500 text-xs w-10">Ler</th>
-                                  <th className="text-center py-2 px-1 font-semibold text-slate-500 text-xs w-12">Escrever</th>
-                                  <th className="text-center py-2 px-1 font-semibold text-slate-500 text-xs w-10">Editar</th>
-                                  <th className="text-center py-2 px-1 font-semibold text-slate-500 text-xs w-12">Eliminar</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {ALL_PERMISSION_AREAS.map((area) => (
-                                  <tr key={area} className="border-b last:border-0 hover:bg-slate-50">
-                                    <td className="py-2 px-2 text-slate-700 font-medium text-xs">
-                                      {AREA_LABELS[area]}
-                                    </td>
-                                    {(["can_read", "can_write", "can_edit", "can_delete"] as (keyof AreaPermissions)[]).map((col) => (
-                                      <td key={col} className="py-2 px-1 text-center">
-                                        <input
-                                          type="checkbox"
-                                          checked={permissions[area][col]}
-                                          onChange={() => togglePermission(area, col)}
-                                          className="w-4 h-4 accent-violet-600 cursor-pointer"
-                                        />
-                                      </td>
-                                    ))}
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </>
-                )}
+                ) : permissions ? (
+                  <PermissionsGrid
+                    permissions={permissions}
+                    onChange={setPermissions}
+                    showTemplateSelector
+                  />
+                ) : null}
               </div>
 
-              {!loadingPermissions && managingPermissionsFor.role !== "coach" && (
+              {!loadingPermissions && permissions && (
                 <div className="flex gap-2 p-5 pt-3 border-t bg-white shrink-0 pb-[max(1rem,env(safe-area-inset-bottom))]">
                   <Button
                     type="submit"

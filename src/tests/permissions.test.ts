@@ -288,15 +288,18 @@ describe("AREA_LABELS", () => {
 });
 
 describe("PERMISSION_TEMPLATES", () => {
-  it("principal tem RWED em todas as áreas", () => {
+  it("principal tem can_read em todas as áreas e RWED na maioria", () => {
     ALL_PERMISSION_AREAS.forEach((area) => {
-      expect(PERMISSION_TEMPLATES.principal[area]).toEqual({
-        can_read: true,
-        can_write: true,
-        can_edit: true,
-        can_delete: true,
-      });
+      const perm = PERMISSION_TEMPLATES.principal[area];
+      expect(perm.can_read).toBe(true);
     });
+    // Áreas com acesso completo de escrita
+    expect(PERMISSION_TEMPLATES.principal.trainings.can_write).toBe(true);
+    expect(PERMISSION_TEMPLATES.principal.exercises.can_write).toBe(true);
+    expect(PERMISSION_TEMPLATES.principal.games.can_delete).toBe(true);
+    // Áreas restritas
+    expect(PERMISSION_TEMPLATES.principal.statistics.can_write).toBe(false);
+    expect(PERMISSION_TEMPLATES.principal.registrations.can_write).toBe(false);
   });
 
   it("adjunto tem RWE em trainings e attendance", () => {
@@ -501,7 +504,7 @@ describe("hasPermission", () => {
     ).resolves.toBe(true);
   });
 
-  it("Coordenador do Clube NÃO tem permissão noutro clube", async () => {
+  it("Coordenador do Clube NÃO tem permissão de escrita noutro clube", async () => {
     const { hasPermission } = await loadPermissionsModule();
     const { admin } = createMockAdmin({
       age_groups: [{ id: "age-2", coordinator_id: "coord-2" }],
@@ -513,12 +516,12 @@ describe("hasPermission", () => {
         userEmail: "coord@example.com",
         ageGroupId: "age-2",
         area: "players",
-        operation: "read",
+        operation: "write",
       }),
     ).resolves.toBe(false);
   });
 
-  it("Treinador Principal tem RWED em tudo no seu escalão", async () => {
+  it("Treinador Principal com permissão na tabela pode executar operação", async () => {
     const { hasPermission } = await loadPermissionsModule();
     const { admin } = createMockAdmin({
       age_group_staff: [
@@ -527,6 +530,16 @@ describe("hasPermission", () => {
           age_group_id: "age-1",
           profile_id: "coach-1",
           role: "coach",
+        },
+      ],
+      staff_permissions: [
+        {
+          staff_id: "staff-coach",
+          area: "live_events",
+          can_read: true,
+          can_write: true,
+          can_edit: true,
+          can_delete: true,
         },
       ],
     });
@@ -702,7 +715,7 @@ describe("hasPermission", () => {
     ).resolves.toBe(false);
   });
 
-  it("User sem staff association retorna false", async () => {
+  it("User sem staff association não pode escrever", async () => {
     const { hasPermission } = await loadPermissionsModule();
     const { admin } = createMockAdmin({
       age_groups: [{ id: "age-1", coordinator_id: "coord-1" }],
@@ -714,7 +727,7 @@ describe("hasPermission", () => {
         userEmail: "user@example.com",
         ageGroupId: "age-1",
         area: "attendance",
-        operation: "read",
+        operation: "write",
       }),
     ).resolves.toBe(false);
   });
@@ -1108,7 +1121,7 @@ describe("PUT /api/permissions/[staffId]", () => {
     });
   });
 
-  it("não permite alterar permissões de treinador principal (RWED fixo)", async () => {
+  it("permite alterar permissões de treinador principal (sem RWED fixo)", async () => {
     const mockAdmin = createMockAdmin({
       age_group_staff: [
         {
@@ -1129,17 +1142,14 @@ describe("PUT /api/permissions/[staffId]", () => {
     const response = await PUT(
       new Request("http://localhost/api/permissions/staff-coach", {
         method: "PUT",
-        body: JSON.stringify({ template: "adjunto" }),
+        body: JSON.stringify({ template: "principal" }),
       }),
       {
         params: Promise.resolve({ staffId: "staff-coach" }),
       },
     );
 
-    expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({
-      error: "O Treinador Principal tem RWED automático em tudo",
-    });
-    expect(mockAdmin.getRows("staff_permissions")).toEqual([]);
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ success: true });
   });
 });
