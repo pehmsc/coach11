@@ -53,8 +53,9 @@ const INTENSITY_LABELS: Record<string, string> = { low: "Baixo", medium: "Médio
 
 async function createPdfDocument() {
   const { default: jsPDF } = await import("jspdf");
-  await import("jspdf-autotable");
-  return new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+  const { default: autoTable } = await import("jspdf-autotable");
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+  return { doc, autoTable };
 }
 
 function fmtDate(dateStr: string) {
@@ -80,7 +81,7 @@ function autoTableY(doc: unknown, fallback: number): number {
 }
 
 export async function exportTrainingUnitPDF(data: TrainingUnitPdfData) {
-  const doc = await createPdfDocument();
+  const { doc, autoTable } = await createPdfDocument();
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
   const m = 14; // margin
@@ -137,7 +138,7 @@ export async function exportTrainingUnitPDF(data: TrainingUnitPdfData) {
   }
   if (data.initialInstruction) metaRows.push([`Instrução Inicial: ${data.initialInstruction}`]);
 
-  (doc as unknown as { autoTable: (opts: Record<string, unknown>) => void }).autoTable({
+  autoTable(doc, {
     startY: y,
     margin: { left: m, right: m },
     body: metaRows,
@@ -182,7 +183,7 @@ export async function exportTrainingUnitPDF(data: TrainingUnitPdfData) {
         ];
       });
 
-      (doc as unknown as { autoTable: (opts: Record<string, unknown>) => void }).autoTable({
+      autoTable(doc, {
         startY: y,
         margin: { left: m, right: m },
         head: [["Exercício", "Descrição", "Detalhes", "Dur.", "TA"]],

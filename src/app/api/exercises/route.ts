@@ -22,10 +22,21 @@ export async function GET(request: Request) {
 
     const admin = createAdminClient();
 
+    // Resolve club_id para partilhar exercícios ao nível do clube
+    const { data: ageGroup } = await admin
+      .from("age_groups")
+      .select("club_id")
+      .eq("id", ageGroupId)
+      .single();
+
+    if (!ageGroup) {
+      return NextResponse.json({ error: "Escalão não encontrado." }, { status: 404 });
+    }
+
     let query = admin
       .from("exercises")
       .select(SELECT_FIELDS)
-      .eq("age_group_id", ageGroupId)
+      .eq("club_id", ageGroup.club_id)
       .order("updated_at", { ascending: false });
 
     if (category) {
