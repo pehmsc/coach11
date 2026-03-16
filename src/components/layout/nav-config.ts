@@ -2,6 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   BarChart2,
   Bell,
+  BookOpen,
   Briefcase,
   Building2,
   Calendar,
@@ -84,6 +85,12 @@ const NAV_ITEMS = {
     label: "Treinos",
     icon: Dumbbell,
   },
+  exercises: {
+    id: "exercises",
+    href: "/exercises",
+    label: "Exercícios",
+    icon: BookOpen,
+  },
   club: {
     id: "club",
     href: "/club",
@@ -135,6 +142,7 @@ const BASE_APP_NAV_SECTIONS: AppNavSection[] = [
       NAV_ITEMS.competitions,
       NAV_ITEMS.games,
       NAV_ITEMS.trainings,
+      NAV_ITEMS.exercises,
       NAV_ITEMS.club,
       NAV_ITEMS.teams,
       NAV_ITEMS.statistics,
@@ -153,6 +161,7 @@ const BASE_MOBILE_APP_NAV_SECTIONS: AppNavSection[] = [
       NAV_ITEMS.competitions,
       NAV_ITEMS.games,
       NAV_ITEMS.trainings,
+      NAV_ITEMS.exercises,
       NAV_ITEMS.club,
       NAV_ITEMS.teams,
       NAV_ITEMS.notifications,
