@@ -102,6 +102,23 @@ async function urlToBase64(url: string): Promise<string | null> {
   }
 }
 
+async function getImageDimensions(base64: string): Promise<{ width: number; height: number }> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+    img.onerror = () => resolve({ width: 400, height: 300 });
+    img.src = base64;
+  });
+}
+
+function fitImage(imgW: number, imgH: number, maxW: number, maxH: number): { w: number; h: number } {
+  const ratio = imgW / imgH;
+  let w = maxW;
+  let h = maxW / ratio;
+  if (h > maxH) { h = maxH; w = maxH * ratio; }
+  return { w, h };
+}
+
 export async function exportTrainingUnitPDF(data: TrainingUnitPdfData) {
   const { doc, autoTable } = await createPdfDocument();
   const pageW = doc.internal.pageSize.getWidth();
@@ -134,8 +151,10 @@ export async function exportTrainingUnitPDF(data: TrainingUnitPdfData) {
   let headerTextX = mg;
   if (logoB64) {
     try {
-      doc.addImage(logoB64, "PNG", mg, y - 6, 20, 20);
-      headerTextX = mg + 24;
+      const logoDims = await getImageDimensions(logoB64);
+      const logoFit = fitImage(logoDims.width, logoDims.height, 20, 20);
+      doc.addImage(logoB64, "PNG", mg, y - 6, logoFit.w, logoFit.h);
+      headerTextX = mg + logoFit.w + 4;
     } catch {
       // ignore failed image
     }
@@ -231,23 +250,33 @@ export async function exportTrainingUnitPDF(data: TrainingUnitPdfData) {
     for (const ex of phase.exercises) {
       globalTA += ex.duration ?? 0;
 
+      // Estimate height — check page break
       if (y > pageH - 70) { doc.addPage(); y = 14; }
 
       const exStartY = y;
       const imgB64 = ex.diagramUrl ? imageCache.get(ex.diagramUrl) : null;
-      const imgW = 75;
-      const imgH = 56;
-      const textX = imgB64 ? mg + imgW + 4 : mg;
-      const textW = imgB64 ? cw - imgW - 4 - 25 : cw - 25; // reserve 25mm for right metadata
+      const maxImgW = 75;
+      const maxImgH = 56;
+      let drawImgW = 0;
+      let drawImgH = 0;
 
-      // Draw image
       if (imgB64) {
+        const dims = await getImageDimensions(imgB64);
+        const fitted = fitImage(dims.width, dims.height, maxImgW, maxImgH);
+        drawImgW = fitted.w;
+        drawImgH = fitted.h;
         try {
-          doc.addImage(imgB64, "JPEG", mg, y, imgW, imgH);
+          doc.addImage(imgB64, "JPEG", mg, y, drawImgW, drawImgH);
         } catch {
-          // ignore failed image
+          drawImgW = 0;
+          drawImgH = 0;
         }
       }
+
+      const hasImg = drawImgW > 0;
+      const textX = hasImg ? mg + drawImgW + 4 : mg;
+      const metaColW = 25;
+      const textW = hasImg ? cw - drawImgW - 4 - metaColW : cw - metaColW;
 
       // Exercise name
       doc.setFontSize(8);
@@ -265,17 +294,16 @@ export async function exportTrainingUnitPDF(data: TrainingUnitPdfData) {
       if (ex.numPlayers) { doc.text(`Atletas: ${ex.numPlayers}`, metaX, metaY, { align: "right" }); metaY += 3.5; }
       if (ex.fieldDimensions) { doc.text(`Espaço: ${ex.fieldDimensions}`, metaX, metaY, { align: "right" }); metaY += 3.5; }
 
-      // Description + objectives
+      // Description + objectives (no line limit — dynamic height)
       let descY = y + 8;
       doc.setFontSize(7);
       doc.setFont("helvetica", "normal");
       doc.setTextColor(71, 85, 105);
 
       if (ex.description) {
-        const descLines = doc.splitTextToSize(ex.description, textW);
-        const showLines = descLines.slice(0, 8);
-        doc.text(showLines, textX, descY);
-        descY += showLines.length * 3.2;
+        const descLines = doc.splitTextToSize(ex.description, textW) as string[];
+        doc.text(descLines, textX, descY);
+        descY += descLines.length * 3.2;
       }
 
       if (ex.objectives) {
@@ -286,14 +314,13 @@ export async function exportTrainingUnitPDF(data: TrainingUnitPdfData) {
         descY += 3.2;
         doc.setFont("helvetica", "normal");
         doc.setTextColor(71, 85, 105);
-        const objLines = doc.splitTextToSize(ex.objectives, textW);
-        const showObjLines = objLines.slice(0, 5);
-        doc.text(showObjLines, textX, descY);
-        descY += showObjLines.length * 3.2;
+        const objLines = doc.splitTextToSize(ex.objectives, textW) as string[];
+        doc.text(objLines, textX, descY);
+        descY += objLines.length * 3.2;
       }
 
       // TA in bottom-right
-      const blockHeight = Math.max(imgB64 ? imgH : 0, descY - exStartY, 20);
+      const blockHeight = Math.max(drawImgH, descY - exStartY, 20);
       doc.setFontSize(8);
       doc.setFont("helvetica", "bold");
       doc.setTextColor(16, 185, 129);
