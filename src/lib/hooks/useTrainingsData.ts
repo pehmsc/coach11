@@ -2,7 +2,13 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import type { TrainingRow, AttendanceSummary, SessionDetail } from "@/components/trainings/types";
+import type {
+  TrainingRow,
+  AttendanceSummary,
+  SessionDetail,
+  TrainingFormFields,
+} from "@/components/trainings/types";
+import { parseUtNumberInput } from "@/lib/trainings/ut-numbering";
 import type { Player } from "@/types/database";
 
 export function useTrainingsData() {
@@ -182,6 +188,7 @@ export function useTrainingsData() {
   async function handleSaveSelectedSession(
     editFields: {
       title: string;
+      utNumber: string;
       date: string;
       startTime: string;
       endTime: string;
@@ -214,6 +221,7 @@ export function useTrainingsData() {
           ageGroupId,
           payload: {
             title: editFields.title.trim() || "Treino",
+            ut_number: parseUtNumberInput(editFields.utNumber),
             date: editFields.date,
             start_time: editFields.startTime,
             end_time: editFields.endTime || null,
@@ -264,21 +272,9 @@ export function useTrainingsData() {
     }
   }
 
-  async function handleCreateTraining(fields: {
-    title: string;
-    date: string;
-    startTime: string;
-    endTime: string;
-    location: string;
-    locationAddress: string;
-    formattedAddress: string;
-    latitude: number | null;
-    longitude: number | null;
-    osmPlaceId: string;
-    locationSource: "google" | "osm" | "manual" | null;
-    notes: string;
-    imageUrl: string;
-  }): Promise<{ success: boolean; error?: string }> {
+  async function handleCreateTraining(
+    fields: TrainingFormFields,
+  ): Promise<{ success: boolean; error?: string }> {
     if (!fields.date || !fields.startTime) {
       return { success: false, error: "Preenche data e hora de início." };
     }
@@ -291,6 +287,7 @@ export function useTrainingsData() {
           type: "training",
           payload: {
             title: fields.title.trim() || "Treino",
+            ut_number: parseUtNumberInput(fields.utNumber),
             date: fields.date,
             start_time: fields.startTime,
             end_time: fields.endTime || null,
@@ -336,6 +333,15 @@ export function useTrainingsData() {
     }
   }, [loading, router, searchParams, sessions]);
 
+  const nextUtNumber =
+    sessions.reduce((maxValue, session) => {
+      if (typeof session.ut_number !== "number") {
+        return maxValue;
+      }
+
+      return Math.max(maxValue, session.ut_number);
+    }, 0) + 1;
+
   return {
     loading,
     sessions,
@@ -354,6 +360,7 @@ export function useTrainingsData() {
     setDetailError,
     editingSelectedSession,
     setEditingSelectedSession,
+    nextUtNumber,
     getSummary,
     clearOpenSessionQuery,
     handleSessionClick,

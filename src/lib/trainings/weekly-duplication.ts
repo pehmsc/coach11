@@ -1,131 +1,119 @@
-function toUtcDate(sessionDate: Date | string) {
-  if (sessionDate instanceof Date) {
-    return new Date(
-      Date.UTC(
-        sessionDate.getUTCFullYear(),
-        sessionDate.getUTCMonth(),
-        sessionDate.getUTCDate(),
-      ),
-    );
-  }
-
-  const [year, month, day] = sessionDate.split("-").map((value) => Number(value));
-  return new Date(Date.UTC(year, month - 1, day));
-}
-
-function toIsoDate(date: Date) {
-  return date.toISOString().slice(0, 10);
-}
-
-function addDays(date: Date, days: number) {
-  const next = new Date(date);
-  next.setUTCDate(next.getUTCDate() + days);
-  return next;
-}
-
-export function getWeekStartDate(sessionDate: Date) {
-  const date = toUtcDate(sessionDate);
-  const day = date.getUTCDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  date.setUTCDate(date.getUTCDate() + diff);
-  return date;
-}
-
-export function formatUtNumber(utNumber: number) {
-  return `UT${String(utNumber).padStart(2, "0")}`;
-}
+import { addWeeks, format, parseISO } from "date-fns";
+import type { LocationSource } from "../location";
+import { formatUtLabel, getWeekStartDate } from "./ut-numbering";
 
 export type WeeklyDuplicationSourceSession = {
-  clubId: string;
-  ageGroupId: string;
-  teamId: string;
-  sessionDate: string;
-  startTime: string;
-  endTime?: string | null;
+  age_group_id?: string | null;
+  team_id?: string | null;
+  session_date: string;
+  start_time?: string | null;
+  end_time?: string | null;
   location?: string | null;
+  location_address?: string | null;
+  formatted_address?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  osm_place_id?: string | null;
+  location_source?: LocationSource | null;
+  objective?: string | null;
   focus?: string | null;
   intensity?: string | null;
-  objective?: string | null;
   material?: string | null;
-  fieldArea?: string | null;
-  notes?: string | null;
+  field_area?: string | null;
 };
 
 export type WeeklyDuplicatedTrainingInsert = {
-  club_id: string;
   age_group_id: string;
   team_id: string;
+  title: string;
   session_date: string;
-  week_start_date: string;
   start_time: string;
   end_time: string | null;
   location: string | null;
-  ut_number: number;
-  title: string;
+  location_address: string | null;
+  formatted_address: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  osm_place_id: string | null;
+  location_source: LocationSource | null;
   status: "scheduled";
+  ut_number: number;
+  week_start_date: string;
+  objective: string | null;
   focus: string | null;
   intensity: string | null;
-  objective: string | null;
   material: string | null;
   field_area: string | null;
   notes: null;
 };
 
-export function duplicateTrainingWeek(input: {
+type BuildWeeklyDuplicatedTrainingsInput = {
   sourceSessions: WeeklyDuplicationSourceSession[];
   numberOfWeeks: number;
-  startingUtNumber: number;
-}) {
-  if (!Number.isInteger(input.numberOfWeeks) || input.numberOfWeeks < 1) {
-    throw new Error("numberOfWeeks must be a positive integer");
-  }
+  nextUtNumber: number;
+};
 
-  if (!Number.isInteger(input.startingUtNumber) || input.startingUtNumber < 1) {
-    throw new Error("startingUtNumber must be a positive integer");
-  }
+export function buildWeeklyDuplicatedTrainings({
+  sourceSessions,
+  numberOfWeeks,
+  nextUtNumber,
+}: BuildWeeklyDuplicatedTrainingsInput) {
+  const sessions: WeeklyDuplicatedTrainingInsert[] = [];
+  let utNumber = nextUtNumber;
 
-  const sourceSessions = [...input.sourceSessions].sort((left, right) => {
-    const dateCompare = left.sessionDate.localeCompare(right.sessionDate);
-    if (dateCompare !== 0) return dateCompare;
-    return left.startTime.localeCompare(right.startTime);
-  });
+  for (let weekOffset = 1; weekOffset <= numberOfWeeks; weekOffset += 1) {
+    for (const sourceSession of sourceSessions) {
+      if (!sourceSession.age_group_id || !sourceSession.team_id) {
+        throw new Error("weekly_duplication_missing_training_scope");
+      }
 
-  let nextUtNumber = input.startingUtNumber;
-  const createdSessions: WeeklyDuplicatedTrainingInsert[] = [];
+      const duplicatedSessionDate = addWeeks(parseISO(sourceSession.session_date), weekOffset);
+      const duplicatedDate = format(duplicatedSessionDate, "yyyy-MM-dd");
+      const utLabel = formatUtLabel(utNumber) || "Treino";
 
-  for (let weekIndex = 1; weekIndex <= input.numberOfWeeks; weekIndex += 1) {
-    for (const session of sourceSessions) {
-      const duplicatedDate = addDays(toUtcDate(session.sessionDate), weekIndex * 7);
-      const utNumber = nextUtNumber;
-      nextUtNumber += 1;
-
-      createdSessions.push({
-        club_id: session.clubId,
-        age_group_id: session.ageGroupId,
-        team_id: session.teamId,
-        session_date: toIsoDate(duplicatedDate),
-        week_start_date: toIsoDate(getWeekStartDate(duplicatedDate)),
-        start_time: session.startTime,
-        end_time: session.endTime ?? null,
-        location: session.location ?? null,
-        ut_number: utNumber,
-        title: formatUtNumber(utNumber),
+      sessions.push({
+        age_group_id: sourceSession.age_group_id,
+        team_id: sourceSession.team_id,
+        title: utLabel,
+        session_date: duplicatedDate,
+        start_time: sourceSession.start_time || "00:00",
+        end_time: sourceSession.end_time ?? null,
+        location: sourceSession.location ?? null,
+        location_address: sourceSession.location_address ?? null,
+        formatted_address: sourceSession.formatted_address ?? null,
+        latitude: sourceSession.latitude ?? null,
+        longitude: sourceSession.longitude ?? null,
+        osm_place_id: sourceSession.osm_place_id ?? null,
+        location_source: sourceSession.location_source ?? null,
         status: "scheduled",
-        focus: session.focus ?? null,
-        intensity: session.intensity ?? null,
-        objective: session.objective ?? null,
-        material: session.material ?? null,
-        field_area: session.fieldArea ?? null,
+        ut_number: utNumber,
+        week_start_date: format(getWeekStartDate(duplicatedSessionDate), "yyyy-MM-dd"),
+        objective: sourceSession.objective ?? null,
+        focus: sourceSession.focus ?? null,
+        intensity: sourceSession.intensity ?? null,
+        material: sourceSession.material ?? null,
+        field_area: sourceSession.field_area ?? null,
         notes: null,
       });
+
+      utNumber += 1;
     }
   }
 
+  const created = sessions.length;
+  const utRange =
+    created > 0
+      ? {
+          from: nextUtNumber,
+          to: nextUtNumber + created - 1,
+        }
+      : null;
+
   return {
-    createdSessions,
-    utRange: {
-      from: input.startingUtNumber,
-      to: createdSessions.length > 0 ? nextUtNumber - 1 : input.startingUtNumber,
-    },
+    sessions,
+    created,
+    utRange,
+    firstSessionDate: sessions[0]?.session_date ?? null,
+    lastSessionDate: sessions.at(-1)?.session_date ?? null,
   };
 }

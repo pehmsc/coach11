@@ -8,6 +8,8 @@ import { NotesEditor } from "@/components/forms/NotesEditor";
 interface TrainingFormFieldsProps {
   title: string;
   onTitleChange: (value: string) => void;
+  utNumber: string;
+  onUtNumberChange: (value: string) => void;
   date: string;
   onDateChange: (value: string) => void;
   startTime: string;
@@ -40,6 +42,8 @@ interface TrainingFormFieldsProps {
 export function TrainingFormFieldsComponent({
   title,
   onTitleChange,
+  utNumber,
+  onUtNumberChange,
   date,
   onDateChange,
   startTime,
@@ -62,15 +66,31 @@ export function TrainingFormFieldsComponent({
 }: TrainingFormFieldsProps) {
   return (
     <>
-      <div className="space-y-1">
-        <label className="text-sm font-medium text-slate-700">Título</label>
-        <input
-          type="text"
-          value={title}
-          onChange={(event) => onTitleChange(event.target.value)}
-          placeholder="Treino"
-          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
-        />
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_9rem]">
+        <div className="space-y-1">
+          <label className="text-sm font-medium text-slate-700">Título</label>
+          <input
+            type="text"
+            value={title}
+            onChange={(event) => onTitleChange(event.target.value)}
+            placeholder="Treino"
+            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+          />
+        </div>
+        <div className="space-y-1">
+          <label className="text-sm font-medium text-slate-700">UT</label>
+          <input
+            type="number"
+            min={1}
+            step={1}
+            inputMode="numeric"
+            value={utNumber}
+            onChange={(event) => onUtNumberChange(event.target.value)}
+            placeholder="Ex: 4"
+            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+          />
+          <p className="text-[11px] text-slate-500">Mostrado na app como UT01, UT02, ...</p>
+        </div>
       </div>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <div className="space-y-1">

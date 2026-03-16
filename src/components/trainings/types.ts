@@ -7,6 +7,8 @@ export interface TrainingRow {
   start_time?: string;
   end_time?: string;
   title?: string;
+  ut_number?: number | null;
+  week_start_date?: string | null;
   location?: string;
   location_address?: string;
   formatted_address?: string;
@@ -14,6 +16,12 @@ export interface TrainingRow {
   longitude?: number | null;
   osm_place_id?: string;
   location_source?: LocationSource | null;
+  objective?: string | null;
+  complementary_objectives?: string | null;
+  focus?: string | null;
+  intensity?: string | null;
+  material?: string | null;
+  field_area?: string | null;
   notes?: string;
   image_url?: string | null;
   status: string;
@@ -39,6 +47,7 @@ export interface SessionDetail {
 
 export interface TrainingFormFields {
   title: string;
+  utNumber: string;
   date: string;
   startTime: string;
   endTime: string;
