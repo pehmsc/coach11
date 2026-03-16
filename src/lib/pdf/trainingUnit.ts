@@ -1,5 +1,5 @@
 /**
- * Export PDF da Unidade de Treino.
+ * Export PDF da Unidade de Treino — layout EMJOGO.
  * Usa jsPDF + jspdf-autotable (dynamic import, client-only).
  */
 
@@ -25,6 +25,7 @@ export type TrainingUnitPdfData = {
   title?: string;
   sessionDate: string;
   startTime?: string;
+  endTime?: string;
   location?: string;
   teamName?: string;
   season?: string;
@@ -35,188 +36,189 @@ export type TrainingUnitPdfData = {
   complementaryObjectives?: string | null;
   material?: string | null;
   initialInstruction?: string | null;
+  fieldArea?: string | null;
   phases: PhaseData[];
 };
 
 const PHASE_LABELS: Record<string, string> = {
-  initial: "Parte Inicial",
-  main: "Parte Principal",
-  final: "Parte Final",
+  initial: "Fase Inicial",
+  main: "Fase Fundamental",
+  final: "Fase Final",
   custom: "Fase Personalizada",
 };
 
-const PERIOD_LABELS: Record<string, string> = {
-  pre_season: "Pré-Época",
-  competitive: "Competitivo",
-  transition: "Transição",
-};
-
-const FOCUS_LABELS: Record<string, string> = {
-  tactical: "Tática",
-  technical: "Técnica",
-  physical: "Física",
-  mixed: "Mista",
-};
-
-const INTENSITY_LABELS: Record<string, string> = {
-  low: "Baixa",
-  medium: "Média",
-  high: "Alta",
-  very_high: "Muito Alta",
-};
+const PERIOD_LABELS: Record<string, string> = { pre_season: "Pré-Época", competitive: "Competitivo", transition: "Transição" };
+const FOCUS_LABELS: Record<string, string> = { tactical: "Tática", technical: "Técnica", physical: "Física", mixed: "Mista" };
+const INTENSITY_LABELS: Record<string, string> = { low: "Baixo", medium: "Médio", high: "Alto", very_high: "Muito Alto" };
 
 async function createPdfDocument() {
   const { default: jsPDF } = await import("jspdf");
   await import("jspdf-autotable");
-  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-  return doc;
+  return new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
 }
 
-function formatDate(dateStr: string) {
-  return new Date(dateStr).toLocaleDateString("pt-PT", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
+function fmtDate(dateStr: string) {
+  return new Date(dateStr).toLocaleDateString("pt-PT", { day: "2-digit", month: "2-digit", year: "numeric" });
+}
+
+function formatTA(minutes: number): string {
+  if (minutes <= 0) return "0m";
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h === 0) return `${m}m`;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}m`;
+}
+
+function label(val: string | null | undefined, map: Record<string, string>): string {
+  if (!val) return "—";
+  return map[val] ?? val;
+}
+
+function autoTableY(doc: unknown, fallback: number): number {
+  return (doc as { lastAutoTable?: { finalY?: number } }).lastAutoTable?.finalY ?? fallback;
 }
 
 export async function exportTrainingUnitPDF(data: TrainingUnitPdfData) {
   const doc = await createPdfDocument();
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const margin = 14;
-  const contentWidth = pageWidth - margin * 2;
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const m = 14; // margin
+  const cw = pageW - m * 2;
   let y = 14;
 
-  // ─── Title ─────────────────────────────────
+  // ─── Title ───
   doc.setFontSize(14);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(30, 41, 59);
-  const utLabel = data.utNumber ? `UT ${data.utNumber}` : "Unidade de Treino";
-  doc.text(utLabel, margin, y);
-  y += 6;
-
+  const utLabel = data.utNumber ? `Treino ${data.utNumber}` : (data.title ?? "Unidade de Treino");
+  doc.text(utLabel, m, y);
   if (data.teamName) {
     doc.setFontSize(9);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(100, 116, 139);
-    doc.text(`${data.teamName}${data.season ? ` — ${data.season}` : ""}`, margin, y);
-    y += 5;
+    doc.text(`${data.teamName}${data.season ? ` — ${data.season}` : ""}`, pageW - m, y, { align: "right" });
   }
+  y += 8;
 
-  // ─── Metadata grid ──────────────────────────
-  doc.setFontSize(8);
-  doc.setTextColor(71, 85, 105);
-  const metaLines: string[] = [];
-
-  const line1Parts: string[] = [];
-  line1Parts.push(`Data: ${formatDate(data.sessionDate)}`);
-  if (data.startTime) line1Parts.push(`Hora: ${data.startTime.substring(0, 5)}`);
-  if (data.location) line1Parts.push(`Local: ${data.location}`);
-  metaLines.push(line1Parts.join("    "));
-
-  const line2Parts: string[] = [];
-  if (data.periodType) line2Parts.push(`Período: ${PERIOD_LABELS[data.periodType] ?? data.periodType}`);
-  if (data.focus) line2Parts.push(`Foco: ${FOCUS_LABELS[data.focus] ?? data.focus}`);
-  if (data.intensity) line2Parts.push(`Intensidade: ${INTENSITY_LABELS[data.intensity] ?? data.intensity}`);
-  if (line2Parts.length > 0) metaLines.push(line2Parts.join("    "));
-
-  if (data.objective) metaLines.push(`Objectivo: ${data.objective}`);
-  if (data.complementaryObjectives) metaLines.push(`Obj. Complementares: ${data.complementaryObjectives}`);
-  if (data.material) metaLines.push(`Material: ${data.material}`);
-  if (data.initialInstruction) metaLines.push(`Instrução Inicial: ${data.initialInstruction}`);
-
-  for (const line of metaLines) {
-    doc.text(line, margin, y);
-    y += 4;
+  // ─── Metadata table ───
+  const metaRows: string[][] = [];
+  const line1 = [];
+  line1.push(`Data: ${fmtDate(data.sessionDate)}`);
+  if (data.startTime) {
+    const time = data.startTime.substring(0, 5) + (data.endTime ? `–${data.endTime.substring(0, 5)}` : "");
+    line1.push(`Hora: ${time}`);
   }
-
-  y += 3;
-
-  // ─── Phases ─────────────────────────────────
+  // Calculate total duration from phases
+  let totalDuration = 0;
   for (const phase of data.phases) {
-    // Check page break
-    if (y > 260) {
-      doc.addPage();
-      y = 14;
-    }
+    for (const ex of phase.exercises) totalDuration += ex.duration ?? 0;
+  }
+  if (totalDuration > 0) line1.push(`Duração: ${totalDuration}'`);
+  metaRows.push([line1.join("    ")]);
+
+  const line2 = [];
+  if (data.location) line2.push(`Local: ${data.location}`);
+  if (data.fieldArea) line2.push(`Área: ${data.fieldArea}`);
+  if (data.material) line2.push(`Material: ${data.material}`);
+  if (line2.length) metaRows.push([line2.join("    ")]);
+
+  const line3 = [];
+  line3.push(`Período: ${label(data.periodType, PERIOD_LABELS)}`);
+  line3.push(`Foco: ${label(data.focus, FOCUS_LABELS)}`);
+  line3.push(`Intensidade: ${label(data.intensity, INTENSITY_LABELS)}`);
+  metaRows.push([line3.join("    ")]);
+
+  if (data.objective || data.complementaryObjectives) {
+    const parts = [];
+    if (data.objective) parts.push(`Objectivo: ${data.objective}`);
+    if (data.complementaryObjectives) parts.push(`Obj. Compl.: ${data.complementaryObjectives}`);
+    metaRows.push([parts.join("    ")]);
+  }
+  if (data.initialInstruction) metaRows.push([`Instrução Inicial: ${data.initialInstruction}`]);
+
+  (doc as unknown as { autoTable: (opts: Record<string, unknown>) => void }).autoTable({
+    startY: y,
+    margin: { left: m, right: m },
+    body: metaRows,
+    theme: "plain",
+    styles: { fontSize: 7.5, cellPadding: 1.5, textColor: [71, 85, 105] },
+    tableLineColor: [226, 232, 240],
+    tableLineWidth: 0.2,
+  });
+  y = autoTableY(doc, y) + 4;
+
+  // ─── Phases ───
+  let cumulativeTA = 0;
+
+  for (const phase of data.phases) {
+    if (y > pageH - 40) { doc.addPage(); y = 14; }
 
     // Phase header
-    doc.setFillColor(241, 245, 249); // slate-100
-    doc.rect(margin, y - 3, contentWidth, 7, "F");
+    doc.setFillColor(241, 245, 249);
+    doc.rect(m, y - 3, cw, 7, "F");
     doc.setFontSize(9);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(30, 41, 59);
-    const phaseName = phase.phase_type === "custom"
-      ? phase.phase_name || "Fase Personalizada"
-      : PHASE_LABELS[phase.phase_type] || phase.phase_type;
-    doc.text(phaseName, margin + 2, y + 1.5);
+    const phaseName = phase.phase_type === "custom" ? (phase.phase_name || "Fase Personalizada") : (PHASE_LABELS[phase.phase_type] || phase.phase_type);
+    doc.text(phaseName, m + 2, y + 1.5);
     y += 8;
 
-    // Exercises table
     if (phase.exercises.length > 0) {
-      const tableBody = phase.exercises.map((ex) => {
-        const details: string[] = [];
-        if (ex.objectives) details.push(`Obj: ${ex.objectives}`);
-        if (ex.gameFormat) details.push(`Forma: ${ex.gameFormat}`);
-        if (ex.numPlayers) details.push(`Jog: ${ex.numPlayers}`);
-        if (ex.fieldDimensions) details.push(`Espaço: ${ex.fieldDimensions}`);
-        if (ex.material) details.push(`Material: ${ex.material}`);
-
+      const rows = phase.exercises.map((ex) => {
+        cumulativeTA += ex.duration ?? 0;
+        const detailParts: string[] = [];
+        if (ex.objectives) detailParts.push(`Obj: ${ex.objectives}`);
+        if (ex.gameFormat) detailParts.push(`Forma: ${ex.gameFormat}`);
+        if (ex.numPlayers) detailParts.push(`Atletas: ${ex.numPlayers}`);
+        if (ex.fieldDimensions) detailParts.push(`Espaço: ${ex.fieldDimensions}`);
+        if (ex.material) detailParts.push(`Material: ${ex.material}`);
         return [
           ex.name,
           ex.description || "",
-          details.join(" | "),
+          detailParts.join(" | "),
           ex.duration ? `${ex.duration}'` : "",
+          formatTA(cumulativeTA),
         ];
       });
 
-      (doc as unknown as { autoTable: (options: Record<string, unknown>) => void }).autoTable({
+      (doc as unknown as { autoTable: (opts: Record<string, unknown>) => void }).autoTable({
         startY: y,
-        margin: { left: margin, right: margin },
-        head: [["Exercício", "Descrição", "Detalhes", "Tempo"]],
-        body: tableBody,
+        margin: { left: m, right: m },
+        head: [["Exercício", "Descrição", "Detalhes", "Dur.", "TA"]],
+        body: rows,
         styles: { fontSize: 7, cellPadding: 2, textColor: [51, 65, 85] },
-        headStyles: {
-          fillColor: [16, 185, 129], // emerald-500
-          textColor: [255, 255, 255],
-          fontStyle: "bold",
-          fontSize: 7,
-        },
+        headStyles: { fillColor: [16, 185, 129], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 7 },
         columnStyles: {
-          0: { cellWidth: 35, fontStyle: "bold" },
-          1: { cellWidth: 55 },
-          2: { cellWidth: 70 },
-          3: { cellWidth: 15, halign: "center" },
+          0: { cellWidth: 30, fontStyle: "bold" },
+          1: { cellWidth: 45 },
+          2: { cellWidth: 65 },
+          3: { cellWidth: 12, halign: "center" },
+          4: { cellWidth: 14, halign: "center" },
         },
         theme: "grid",
       });
-
-      y = ((doc as unknown as { lastAutoTable?: { finalY?: number } }).lastAutoTable?.finalY ?? y) + 5;
+      y = autoTableY(doc, y) + 5;
     } else {
       doc.setFontSize(7);
       doc.setFont("helvetica", "italic");
       doc.setTextColor(148, 163, 184);
-      doc.text("Sem exercícios nesta fase.", margin + 2, y);
+      doc.text("Sem exercícios nesta fase.", m + 2, y);
       y += 5;
     }
   }
 
-  // ─── Footer ─────────────────────────────────
+  // ─── Footer ───
   const pageCount = doc.getNumberOfPages();
   for (let p = 1; p <= pageCount; p++) {
     doc.setPage(p);
     doc.setFontSize(7);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(148, 163, 184);
-    doc.text(
-      `COACH11 · Gerado em ${new Date().toLocaleDateString("pt-PT")} · Página ${p}/${pageCount}`,
-      margin,
-      doc.internal.pageSize.getHeight() - 8,
-    );
+    doc.text(`Coach11 · Página ${p} de ${pageCount}`, m, pageH - 8);
   }
 
-  // ─── Save ───────────────────────────────────
-  const dateStr = formatDate(data.sessionDate).replace(/\//g, "-");
-  const fileName = `UT${data.utNumber ?? ""}_${dateStr}.pdf`;
-  doc.save(fileName);
+  // ─── Save ───
+  const dateStr = fmtDate(data.sessionDate).replace(/\//g, "-");
+  doc.save(`UT${data.utNumber ?? ""}_${dateStr}.pdf`);
 }

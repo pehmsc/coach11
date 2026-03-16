@@ -9,6 +9,7 @@ import { AppModal } from "@/components/ui/app-modal";
 import { ExerciseForm, type ExerciseFormValues } from "@/components/exercises/ExerciseForm";
 import {
   CATEGORY_LABELS,
+  CATEGORY_COLORS,
   CATEGORY_OPTIONS,
 } from "@/components/exercises/category-labels";
 import { createClient } from "@/lib/supabase/client";
@@ -70,10 +71,14 @@ export default function ExercisesPage() {
       const payload = {
         name: values.name.trim(),
         category: values.category,
+        subcategory: values.subcategory || null,
         description: values.description || null,
         objectives: values.objectives || null,
         success_criteria: values.success_criteria || null,
         game_format: values.game_format || null,
+        rest_minutes: values.rest_minutes
+          ? parseInt(values.rest_minutes, 10)
+          : 0,
         duration_minutes: values.duration_minutes
           ? parseInt(values.duration_minutes, 10)
           : null,
@@ -86,6 +91,9 @@ export default function ExercisesPage() {
         field_dimensions: values.field_dimensions || null,
         material: values.material || null,
         diagram_url: values.diagram_url || null,
+        orientation: values.orientation || null,
+        regime: values.regime || null,
+        notes: values.notes || null,
       };
 
       const url = editingExercise
@@ -229,7 +237,7 @@ export default function ExercisesPage() {
                   <p className="font-medium text-slate-800 text-sm line-clamp-2">
                     {ex.name}
                   </p>
-                  <span className="inline-flex w-fit rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+                  <span className={`inline-flex w-fit rounded-full px-2 py-0.5 text-[11px] font-medium ${CATEGORY_COLORS[ex.category]?.bg ?? "bg-slate-100"} ${CATEGORY_COLORS[ex.category]?.text ?? "text-slate-700"}`}>
                     {CATEGORY_LABELS[ex.category] ?? ex.category}
                   </span>
                   <div className="mt-auto flex items-center gap-3 pt-1 text-[11px] text-slate-400">

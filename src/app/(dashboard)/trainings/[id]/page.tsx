@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import { pt } from "date-fns/locale";
-import { Loader2, Trash2, Pencil, Copy, Users, AlertCircle } from "lucide-react";
+import { Loader2, Trash2, Pencil, Copy, Users, AlertCircle, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { RichTextContent } from "@/components/content/RichTextContent";
@@ -24,6 +24,8 @@ import { TrainingUnit } from "@/components/trainings/TrainingUnit";
 import type { TrainingRow, AttendanceSummary, TrainingFormFields } from "@/components/trainings/types";
 import type { Player, Exercise } from "@/types/database";
 
+type TabKey = "planning" | "attendance" | "documents";
+
 function computeCanEdit(session: TrainingRow): boolean {
   const startsAt = portugalDateTimeToUtc(session.session_date, session.start_time);
   return !!startsAt && startsAt.getTime() > Date.now();
@@ -40,24 +42,20 @@ export default function TrainingDetailPage() {
   const [attendanceMap, setAttendanceMap] = useState<Record<string, { player: Player; status: string }>>({});
   const [hasRecordedAttendance, setHasRecordedAttendance] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<TabKey>("planning");
 
-  // Formulário partilhado entre edição inline e duplicação
   const editForm = useTrainingForm();
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
-
-  // Estado do modal de duplicação
   const [duplicateModalOpen, setDuplicateModalOpen] = useState(false);
-
-  // Estado de confirmação de apagar
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [mapExpanded, setMapExpanded] = useState(false);
 
   const loadDetail = useCallback(async function loadDetail() {
     setLoading(true);
     setError(null);
 
-    // Contexto do utilizador (ageGroupId + permissões)
     const ctxRes = await fetch("/api/me/context");
     const ctx = await ctxRes.json().catch(() => ({})) as {
       canManageStaff?: boolean;
@@ -72,7 +70,6 @@ export default function TrainingDetailPage() {
     }
     setAgeGroupId(ctx.ageGroup.id);
 
-    // Detalhe do treino
     const detailRes = await fetch(`/api/trainings?sessionId=${id}`, { cache: "no-store" });
     const payload = await detailRes.json().catch(() => null) as {
       success?: boolean;
@@ -168,27 +165,20 @@ export default function TrainingDetailPage() {
 
   async function handleDelete() {
     if (!session || !ageGroupId || !canDelete) return;
-
     setDeleting(true);
     setError(null);
-
     try {
       const res = await fetch("/api/calendar/events", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: session.id, type: "training", ageGroupId }),
       });
-      const data = await res.json().catch(() => null) as {
-        success?: boolean;
-        error?: string;
-      } | null;
-
+      const data = await res.json().catch(() => null) as { success?: boolean; error?: string } | null;
       if (!res.ok || !data?.success) {
         setError(data?.error || "Erro ao apagar treino.");
         setShowDeleteConfirm(false);
         return;
       }
-
       toast.success("Treino apagado.");
       router.push("/trainings");
     } catch {
@@ -200,10 +190,7 @@ export default function TrainingDetailPage() {
   }
 
   async function handleCreateDuplicate(fields: TrainingFormFields): Promise<{ success: boolean; error?: string }> {
-    if (!fields.date || !fields.startTime) {
-      return { success: false, error: "Preenche data e hora de início." };
-    }
-
+    if (!fields.date || !fields.startTime) return { success: false, error: "Preenche data e hora de início." };
     try {
       const res = await fetch("/api/calendar/events", {
         method: "POST",
@@ -230,10 +217,8 @@ export default function TrainingDetailPage() {
       });
       const payload = await res.json().catch(() => null);
       if (!res.ok || !(payload as { event?: { id: string } } | null)?.event?.id) {
-        const err = (payload as { error?: string } | null)?.error || "Erro ao criar treino.";
-        return { success: false, error: err };
+        return { success: false, error: (payload as { error?: string } | null)?.error || "Erro ao criar treino." };
       }
-
       toast.success("Treino duplicado.");
       router.push("/trainings");
       return { success: true };
@@ -245,7 +230,6 @@ export default function TrainingDetailPage() {
   async function handleExportUtPdf() {
     if (!session) return;
     try {
-      // Fetch phases for PDF
       const phasesRes = await fetch(`/api/trainings/${id}/phases`);
       const phasesJson = await phasesRes.json() as {
         success?: boolean;
@@ -280,6 +264,7 @@ export default function TrainingDetailPage() {
         complementaryObjectives: session.complementary_objectives,
         material: session.material,
         initialInstruction: session.initial_instruction,
+        fieldArea: session.field_area,
         phases: (phasesJson.phases ?? []).map((p) => ({
           phase_type: p.phase_type,
           phase_name: p.phase_name,
@@ -314,22 +299,18 @@ export default function TrainingDetailPage() {
       <div className="p-4 md:p-8 max-w-2xl mx-auto text-center py-16">
         <AlertCircle size={40} className="text-red-400 mx-auto mb-3" />
         <p className="text-slate-700 font-semibold">{error || "Treino não encontrado."}</p>
-        <Button variant="outline" className="mt-4" onClick={() => router.push("/trainings")}>
-          Voltar aos treinos
-        </Button>
+        <Button variant="outline" className="mt-4" onClick={() => router.push("/trainings")}>Voltar aos treinos</Button>
       </div>
     );
   }
 
-  const locationLabel = resolveLocationLabel(
-    session.location,
-    session.formatted_address,
-    session.location_address,
-  );
+  const locationLabel = resolveLocationLabel(session.location, session.formatted_address, session.location_address);
   const canEditSession = computeCanEdit(session);
   const canCorrectAttendance = canDelete && session.status === "completed";
   const isClosed = session.status === "completed";
   const displayTitle = getTrainingDisplayTitle(session);
+  const attendanceCount = Object.keys(attendanceMap).length;
+  const hasLocation = !!(session.location || session.location_address || session.formatted_address);
 
   return (
     <>
@@ -340,15 +321,12 @@ export default function TrainingDetailPage() {
           wrapperClassName="-mx-4 mb-4 bg-slate-50/95 px-4 py-2 md:-mx-8 md:px-8"
         />
 
-        {/* Cabeçalho do treino */}
-        <div className="rounded-2xl bg-emerald-600 text-white p-5 mb-5 relative">
+        {/* ── Header (sempre visível acima das tabs) ── */}
+        <div className="rounded-2xl bg-emerald-600 text-white p-5 mb-0 relative">
           <div className="absolute top-3 right-3 flex items-center gap-1.5">
             {canEditSession && !editing && (
               <button
-                onClick={() => {
-                  editForm.populateFromSource(session, "edit");
-                  setEditing(true);
-                }}
+                onClick={() => { editForm.populateFromSource(session, "edit"); setEditing(true); }}
                 className="p-1.5 rounded-full bg-white/20 hover:bg-white/30 transition-colors"
                 title="Editar treino"
               >
@@ -356,10 +334,7 @@ export default function TrainingDetailPage() {
               </button>
             )}
             <button
-              onClick={() => {
-                editForm.populateFromSource(session, "duplicate");
-                setDuplicateModalOpen(true);
-              }}
+              onClick={() => { editForm.populateFromSource(session, "duplicate"); setDuplicateModalOpen(true); }}
               className="p-1.5 rounded-full bg-white/20 hover:bg-white/30 transition-colors"
               title="Duplicar treino"
             >
@@ -392,80 +367,20 @@ export default function TrainingDetailPage() {
                 {session.end_time ? ` – ${session.end_time.substring(0, 5)}` : ""}
               </span>
             )}
-            {locationLabel && <span>{locationLabel}</span>}
-          </div>
-        </div>
-
-        {/* Mensagem de erro */}
-        {error && (
-          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-            {error}
-          </div>
-        )}
-
-        {/* Formulário de edição inline */}
-        {editing && (
-          <form
-            onSubmit={(e) => void handleSave(e)}
-            className="mb-5 rounded-2xl border border-slate-200 bg-white p-5 space-y-4"
-          >
-            <TrainingFormFieldsComponent
-              title={editForm.title}
-              onTitleChange={editForm.setTitle}
-              utNumber={editForm.utNumber}
-              onUtNumberChange={editForm.setUtNumber}
-              date={editForm.date}
-              onDateChange={editForm.setDate}
-              startTime={editForm.startTime}
-              onStartTimeChange={editForm.setStartTime}
-              endTime={editForm.endTime}
-              onEndTimeChange={editForm.setEndTime}
-              location={editForm.location}
-              locationAddress={editForm.locationAddress}
-              formattedAddress={editForm.formattedAddress}
-              latitude={editForm.latitude}
-              longitude={editForm.longitude}
-              osmPlaceId={editForm.osmPlaceId}
-              locationSource={editForm.locationSource}
-              onLocationChange={(nextValue) => {
-                editForm.setLocation(nextValue.location);
-                editForm.setLocationAddress(nextValue.location_address);
-                editForm.setFormattedAddress(nextValue.formatted_address);
-                editForm.setLatitude(nextValue.latitude);
-                editForm.setLongitude(nextValue.longitude);
-                editForm.setOsmPlaceId(nextValue.osm_place_id);
-                editForm.setLocationSource(nextValue.location_source);
-              }}
-              imageUrl={editForm.imageUrl}
-              onImageUrlChange={editForm.setImageUrl}
-              notes={editForm.notes}
-              onNotesChange={editForm.setNotes}
-              ageGroupId={ageGroupId}
-            />
-            <div className="flex gap-2 pt-2">
-              <Button
-                type="submit"
-                disabled={saving}
-                className="flex-1 bg-emerald-600 hover:bg-emerald-700"
-              >
-                {saving ? <Loader2 size={16} className="animate-spin" /> : "Guardar treino"}
-              </Button>
-              <Button
+            {locationLabel && (
+              <button
                 type="button"
-                variant="outline"
-                onClick={() => setEditing(false)}
-                disabled={saving}
+                className="underline underline-offset-2 hover:text-white"
+                onClick={() => setMapExpanded((v) => !v)}
               >
-                Cancelar
-              </Button>
-            </div>
-          </form>
-        )}
+                {locationLabel}
+              </button>
+            )}
+          </div>
 
-        {/* Mapa de localização */}
-        {!editing && (session.location || session.location_address || session.formatted_address) && (
-          <div className="mb-5 rounded-2xl border border-slate-200 bg-white overflow-hidden">
-            <div className="p-4">
+          {/* Collapsible map inside header */}
+          {mapExpanded && hasLocation && (
+            <div className="mt-3 rounded-xl overflow-hidden bg-white/10">
               <LocationMapPreview
                 location={session.location}
                 locationAddress={session.location_address}
@@ -473,100 +388,100 @@ export default function TrainingDetailPage() {
                 latitude={session.latitude}
                 longitude={session.longitude}
                 accent="emerald"
-                label="Localização"
+                label=""
                 showDirectionsButton={false}
               />
             </div>
+          )}
+        </div>
+
+        {/* ── Error ── */}
+        {error && (
+          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {error}
           </div>
         )}
 
-        {/* Notas */}
-        {!editing && session.notes?.trim() && (
-          <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-4">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-2">
-              Notas
-            </p>
-            <RichTextContent content={session.notes} />
-          </div>
+        {/* ── Editing form ── */}
+        {editing && (
+          <form
+            onSubmit={(e) => void handleSave(e)}
+            className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 space-y-4"
+          >
+            <TrainingFormFieldsComponent
+              title={editForm.title} onTitleChange={editForm.setTitle}
+              utNumber={editForm.utNumber} onUtNumberChange={editForm.setUtNumber}
+              date={editForm.date} onDateChange={editForm.setDate}
+              startTime={editForm.startTime} onStartTimeChange={editForm.setStartTime}
+              endTime={editForm.endTime} onEndTimeChange={editForm.setEndTime}
+              location={editForm.location} locationAddress={editForm.locationAddress}
+              formattedAddress={editForm.formattedAddress} latitude={editForm.latitude}
+              longitude={editForm.longitude} osmPlaceId={editForm.osmPlaceId}
+              locationSource={editForm.locationSource}
+              onLocationChange={(nv) => {
+                editForm.setLocation(nv.location);
+                editForm.setLocationAddress(nv.location_address);
+                editForm.setFormattedAddress(nv.formatted_address);
+                editForm.setLatitude(nv.latitude);
+                editForm.setLongitude(nv.longitude);
+                editForm.setOsmPlaceId(nv.osm_place_id);
+                editForm.setLocationSource(nv.location_source);
+              }}
+              imageUrl={editForm.imageUrl} onImageUrlChange={editForm.setImageUrl}
+              notes={editForm.notes} onNotesChange={editForm.setNotes}
+              ageGroupId={ageGroupId}
+            />
+            <div className="flex gap-2 pt-2">
+              <Button type="submit" disabled={saving} className="flex-1 bg-emerald-600 hover:bg-emerald-700">
+                {saving ? <Loader2 size={16} className="animate-spin" /> : "Guardar treino"}
+              </Button>
+              <Button type="button" variant="outline" onClick={() => setEditing(false)} disabled={saving}>Cancelar</Button>
+            </div>
+          </form>
         )}
 
-        {/* Secção de presenças */}
+        {/* ── Tabs ── */}
         {!editing && (
-          <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
-            <div className="flex items-center justify-between p-4 border-b border-slate-100">
-              <p className="text-sm font-semibold text-slate-900">Presenças</p>
-              {canCorrectAttendance && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="border-emerald-200 text-emerald-700 hover:bg-emerald-50"
-                  onClick={() => router.push(`/attendance?date=${session.session_date}`)}
-                >
-                  <Users size={14} className="mr-1.5" />
-                  Corrigir
-                </Button>
-              )}
+          <>
+            <div className="flex border-b border-slate-200 mt-0">
+              <TabBtn active={activeTab === "planning"} label="Planeamento" onClick={() => setActiveTab("planning")} />
+              <TabBtn active={activeTab === "attendance"} label="Presenças" count={attendanceCount} onClick={() => setActiveTab("attendance")} />
+              <TabBtn active={activeTab === "documents"} label="Documentos" count={0} onClick={() => setActiveTab("documents")} />
             </div>
 
-            {isClosed && !hasRecordedAttendance ? (
-              <div className="px-5 py-8 text-center">
-                <p className="text-sm font-semibold text-slate-700">Sem presenças gravadas.</p>
-                <p className="mt-1 text-xs text-slate-500">
-                  O treino está fechado, mas não existem registos de presenças associados.
-                </p>
-                {canCorrectAttendance && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="mt-4 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
-                    onClick={() => router.push(`/attendance?date=${session.session_date}`)}
-                  >
-                    Corrigir presenças
-                  </Button>
-                )}
-              </div>
-            ) : Object.keys(attendanceMap).length === 0 ? (
-              <div className="px-5 py-8 text-center">
-                <p className="text-sm text-slate-500">Sem jogadores com presenças registadas.</p>
-              </div>
-            ) : (
-              <div className="divide-y divide-slate-100">
-                {Object.values(attendanceMap)
-                  .sort((a, b) => a.player.first_name.localeCompare(b.player.first_name))
-                  .map(({ player, status }) => {
-                    const statusUi = getAttendanceStatusClasses(status);
-                    return (
-                      <div key={player.id} className="flex items-center gap-3 px-5 py-3">
-                        <div className={`h-2.5 w-2.5 flex-shrink-0 rounded-full ${statusUi.dot}`} />
-                        <p className="text-sm text-slate-800">
-                          {player.first_name} {player.last_name}
-                        </p>
-                        <span className={`ml-auto text-xs font-medium ${statusUi.text}`}>
-                          {statusUi.label}
-                        </span>
-                      </div>
-                    );
-                  })}
-              </div>
-            )}
-          </div>
-        )}
+            <div className="mt-4">
+              {activeTab === "planning" && (
+                <TabPlanning
+                  session={session}
+                  isClosed={isClosed}
+                  onExportPdf={() => void handleExportUtPdf()}
+                />
+              )}
 
-        {/* Unidade de Treino */}
-        {!editing && (
-          <div className="mt-5">
-            <TrainingUnit
-              trainingId={session.id}
-              session={session}
-              readOnly={isClosed}
-              onExportPdf={() => void handleExportUtPdf()}
-            />
-          </div>
+              {activeTab === "attendance" && (
+                <TabAttendance
+                  session={session}
+                  attendanceMap={attendanceMap}
+                  hasRecordedAttendance={hasRecordedAttendance}
+                  isClosed={isClosed}
+                  canCorrectAttendance={canCorrectAttendance}
+                  onCorrect={() => router.push(`/attendance?date=${session.session_date}`)}
+                />
+              )}
+
+              {activeTab === "documents" && (
+                <div className="text-center py-12">
+                  <FileText size={36} className="text-slate-200 mx-auto mb-3" />
+                  <p className="text-sm text-slate-500">Documentos associados a este treino.</p>
+                  <p className="text-xs text-slate-400 mt-1">Em breve.</p>
+                </div>
+              )}
+            </div>
+          </>
         )}
       </div>
 
-      {/* Modal de duplicação */}
+      {/* Modals */}
       {duplicateModalOpen && (
         <TrainingCreateModal
           createMode="duplicate"
@@ -577,48 +492,22 @@ export default function TrainingDetailPage() {
         />
       )}
 
-      {/* Confirmação de apagar */}
       {showDeleteConfirm && (
         <div
           className="fixed inset-0 bg-black/50 z-50 flex items-end md:items-center justify-center p-4"
-          onClick={() => {
-            if (deleting) return;
-            setShowDeleteConfirm(false);
-          }}
+          onClick={() => { if (!deleting) setShowDeleteConfirm(false); }}
         >
-          <div
-            className="bg-white rounded-2xl w-full max-w-sm shadow-xl p-5 space-y-4"
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
             <div>
               <h3 className="text-base font-bold text-slate-900">Apagar treino?</h3>
               <p className="text-sm text-slate-600 mt-1">
-                {isClosed
-                  ? "Este treino está fechado e tem presenças registadas. Esta acção é irreversível."
-                  : "Esta acção é irreversível."}
+                {isClosed ? "Este treino está fechado e tem presenças registadas. Esta acção é irreversível." : "Esta acção é irreversível."}
               </p>
             </div>
             <div className="flex gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                className="flex-1"
-                onClick={() => setShowDeleteConfirm(false)}
-                disabled={deleting}
-              >
-                Cancelar
-              </Button>
-              <Button
-                type="button"
-                className="flex-1 bg-red-600 hover:bg-red-700"
-                onClick={() => void handleDelete()}
-                disabled={deleting}
-              >
-                {deleting ? (
-                  <Loader2 size={15} className="mr-2 animate-spin" />
-                ) : (
-                  <Trash2 size={15} className="mr-2" />
-                )}
+              <Button type="button" variant="outline" className="flex-1" onClick={() => setShowDeleteConfirm(false)} disabled={deleting}>Cancelar</Button>
+              <Button type="button" className="flex-1 bg-red-600 hover:bg-red-700" onClick={() => void handleDelete()} disabled={deleting}>
+                {deleting ? <Loader2 size={15} className="mr-2 animate-spin" /> : <Trash2 size={15} className="mr-2" />}
                 Apagar
               </Button>
             </div>
@@ -626,5 +515,108 @@ export default function TrainingDetailPage() {
         </div>
       )}
     </>
+  );
+}
+
+/* ── Sub-components ── */
+
+function TabBtn({ active, label, count, onClick }: { active: boolean; label: string; count?: number; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`relative px-4 py-2.5 text-sm font-medium transition-colors ${active ? "text-emerald-700" : "text-slate-500 hover:text-slate-700"}`}
+    >
+      {label}
+      {count != null && (
+        <span className={`ml-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-semibold ${active ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
+          {count}
+        </span>
+      )}
+      {active && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-600 rounded-t" />}
+    </button>
+  );
+}
+
+function TabPlanning({ session, isClosed, onExportPdf }: { session: TrainingRow; isClosed: boolean; onExportPdf: () => void }) {
+  return (
+    <div className="space-y-4">
+      {/* Notes */}
+      {session.notes?.trim() && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-2">Notas</p>
+          <RichTextContent content={session.notes} />
+        </div>
+      )}
+
+      {/* UT */}
+      <TrainingUnit
+        trainingId={session.id}
+        session={session}
+        readOnly={isClosed}
+        onExportPdf={onExportPdf}
+      />
+    </div>
+  );
+}
+
+function TabAttendance({
+  session,
+  attendanceMap,
+  hasRecordedAttendance,
+  isClosed,
+  canCorrectAttendance,
+  onCorrect,
+}: {
+  session: TrainingRow;
+  attendanceMap: Record<string, { player: Player; status: string }>;
+  hasRecordedAttendance: boolean;
+  isClosed: boolean;
+  canCorrectAttendance: boolean;
+  onCorrect: () => void;
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+      <div className="flex items-center justify-between p-4 border-b border-slate-100">
+        <p className="text-sm font-semibold text-slate-900">Presenças</p>
+        {canCorrectAttendance && (
+          <Button type="button" variant="outline" size="sm" className="border-emerald-200 text-emerald-700 hover:bg-emerald-50" onClick={onCorrect}>
+            <Users size={14} className="mr-1.5" />
+            Corrigir
+          </Button>
+        )}
+      </div>
+
+      {isClosed && !hasRecordedAttendance ? (
+        <div className="px-5 py-8 text-center">
+          <p className="text-sm font-semibold text-slate-700">Sem presenças gravadas.</p>
+          <p className="mt-1 text-xs text-slate-500">O treino está fechado, mas não existem registos de presenças associados.</p>
+          {canCorrectAttendance && (
+            <Button type="button" variant="outline" className="mt-4 border-emerald-200 text-emerald-700 hover:bg-emerald-50" onClick={onCorrect}>
+              Corrigir presenças
+            </Button>
+          )}
+        </div>
+      ) : Object.keys(attendanceMap).length === 0 ? (
+        <div className="px-5 py-8 text-center">
+          <p className="text-sm text-slate-500">Sem jogadores com presenças registadas.</p>
+        </div>
+      ) : (
+        <div className="divide-y divide-slate-100">
+          {Object.values(attendanceMap)
+            .sort((a, b) => a.player.first_name.localeCompare(b.player.first_name))
+            .map(({ player, status }) => {
+              const statusUi = getAttendanceStatusClasses(status);
+              return (
+                <div key={player.id} className="flex items-center gap-3 px-5 py-3">
+                  <div className={`h-2.5 w-2.5 flex-shrink-0 rounded-full ${statusUi.dot}`} />
+                  <p className="text-sm text-slate-800">{player.first_name} {player.last_name}</p>
+                  <span className={`ml-auto text-xs font-medium ${statusUi.text}`}>{statusUi.label}</span>
+                </div>
+              );
+            })}
+        </div>
+      )}
+    </div>
   );
 }

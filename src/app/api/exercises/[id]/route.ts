@@ -5,19 +5,16 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 
 const EXERCISE_CATEGORIES = [
-  "warmup",
-  "technical",
-  "tactical",
-  "formal_game",
-  "finishing",
-  "defensive_org",
-  "offensive_org",
-  "transition",
-  "physical",
-  "set_pieces",
-  "strategy",
-  "cooldown",
-  "other",
+  "attb",
+  "esquemas_taticos",
+  "estrategia",
+  "finalizacao",
+  "organizacao_defensiva",
+  "organizacao_ofensiva",
+  "principios_de_jogo",
+  "qualidades_fisicas",
+  "transicao_defensiva",
+  "transicao_ofensiva",
 ] as const;
 
 const UpdateExerciseSchema = z.object({
@@ -35,10 +32,14 @@ const UpdateExerciseSchema = z.object({
   field_dimensions: z.string().nullish(),
   material: z.string().nullish(),
   diagram_url: z.string().url().nullish(),
+  orientation: z.enum(["recovery", "strength", "endurance", "speed", "flexibility", "other"]).nullish(),
+  regime: z.enum(["aerobic", "anaerobic_lactic", "anaerobic_alactic"]).nullish(),
+  notes: z.string().nullish(),
+  status: z.enum(["active", "archived"]).optional(),
 });
 
 const SELECT_FIELDS =
-  "id, club_id, age_group_id, created_by, name, description, objectives, success_criteria, category, subcategory, game_format, duration_minutes, rest_minutes, min_players, max_players, field_dimensions, material, diagram_url, is_shared, created_at, updated_at";
+  "id, club_id, age_group_id, created_by, name, description, objectives, success_criteria, category, subcategory, game_format, duration_minutes, rest_minutes, min_players, max_players, field_dimensions, material, diagram_url, orientation, regime, notes, status, is_shared, created_at, updated_at";
 
 type RouteParams = { params: Promise<{ id: string }> };
 

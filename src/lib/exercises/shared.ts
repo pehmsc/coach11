@@ -1,20 +1,21 @@
 import { z } from "zod";
 
 export const EXERCISE_CATEGORIES = [
-  "warmup",
-  "technical",
-  "tactical",
-  "formal_game",
-  "finishing",
-  "defensive_org",
-  "offensive_org",
-  "transition",
-  "physical",
-  "set_pieces",
-  "strategy",
-  "cooldown",
-  "other",
+  "attb",
+  "esquemas_taticos",
+  "estrategia",
+  "finalizacao",
+  "organizacao_defensiva",
+  "organizacao_ofensiva",
+  "principios_de_jogo",
+  "qualidades_fisicas",
+  "transicao_defensiva",
+  "transicao_ofensiva",
 ] as const;
+
+const ORIENTATION_VALUES = ["recovery", "strength", "endurance", "speed", "flexibility", "other"] as const;
+const REGIME_VALUES = ["aerobic", "anaerobic_lactic", "anaerobic_alactic"] as const;
+const STATUS_VALUES = ["active", "archived"] as const;
 
 export const createExerciseSchema = z.object({
   name: z.string().min(1, "Nome é obrigatório"),
@@ -31,6 +32,10 @@ export const createExerciseSchema = z.object({
   field_dimensions: z.string().nullish(),
   material: z.string().nullish(),
   diagram_url: z.string().url().nullish(),
+  orientation: z.enum(ORIENTATION_VALUES).nullish(),
+  regime: z.enum(REGIME_VALUES).nullish(),
+  notes: z.string().nullish(),
+  status: z.enum(STATUS_VALUES).default("active"),
 });
 
 export const ACCEPTED_EXERCISE_IMAGE_EXTENSIONS = [
