@@ -37,6 +37,7 @@ export default function TrainingDetailPage() {
 
   const [loading, setLoading] = useState(true);
   const [ageGroupId, setAgeGroupId] = useState<string | null>(null);
+  const [clubInfo, setClubInfo] = useState<{ clubName: string; clubLogoUrl: string | null; teamName: string; season: string | null } | null>(null);
   const [canDelete, setCanDelete] = useState(false);
   const [session, setSession] = useState<TrainingRow | null>(null);
   const [attendanceMap, setAttendanceMap] = useState<Record<string, { player: Player; status: string }>>({});
@@ -59,7 +60,13 @@ export default function TrainingDetailPage() {
     const ctxRes = await fetch("/api/me/context");
     const ctx = await ctxRes.json().catch(() => ({})) as {
       canManageStaff?: boolean;
-      ageGroup?: { id: string };
+      ageGroup?: {
+        id: string;
+        club_name?: string;
+        club_logo_url?: string | null;
+        name?: string;
+        season?: string | null;
+      };
     };
     setCanDelete(ctx?.canManageStaff === true);
 
@@ -69,6 +76,12 @@ export default function TrainingDetailPage() {
       return;
     }
     setAgeGroupId(ctx.ageGroup.id);
+    setClubInfo({
+      clubName: ctx.ageGroup.club_name ?? "",
+      clubLogoUrl: ctx.ageGroup.club_logo_url ?? null,
+      teamName: ctx.ageGroup.name ?? "",
+      season: ctx.ageGroup.season ?? null,
+    });
 
     const detailRes = await fetch(`/api/trainings?sessionId=${id}`, { cache: "no-store" });
     const payload = await detailRes.json().catch(() => null) as {
@@ -245,6 +258,8 @@ export default function TrainingDetailPage() {
             custom_num_players?: number | null;
             custom_field_dimensions?: string | null;
             custom_material?: string | null;
+            custom_diagram_url?: string | null;
+            notes?: string | null;
             exercise?: Exercise | null;
           }>;
         }>;
@@ -252,19 +267,27 @@ export default function TrainingDetailPage() {
 
       const { exportTrainingUnitPDF } = await import("@/lib/pdf/trainingUnit");
       await exportTrainingUnitPDF({
+        clubName: clubInfo?.clubName,
+        clubLogoUrl: clubInfo?.clubLogoUrl,
+        teamName: clubInfo?.teamName,
+        season: clubInfo?.season ?? undefined,
         utNumber: session.ut_number,
         title: session.title,
         sessionDate: session.session_date,
         startTime: session.start_time,
+        endTime: session.end_time,
         location: resolveLocationLabel(session.location, session.formatted_address, session.location_address) ?? undefined,
+        fieldArea: session.field_area,
+        mesocycle: session.mesocycle_number,
+        microcycle: session.microcycle_number,
         periodType: session.period_type,
         focus: session.focus,
         intensity: session.intensity,
         objective: session.objective,
         complementaryObjectives: session.complementary_objectives,
-        material: session.material,
         initialInstruction: session.initial_instruction,
-        fieldArea: session.field_area,
+        material: session.material,
+        notes: session.notes,
         phases: (phasesJson.phases ?? []).map((p) => ({
           phase_type: p.phase_type,
           phase_name: p.phase_name,
@@ -277,6 +300,8 @@ export default function TrainingDetailPage() {
             numPlayers: ex.custom_num_players ?? ex.exercise?.min_players ?? null,
             fieldDimensions: ex.custom_field_dimensions || ex.exercise?.field_dimensions || null,
             material: ex.custom_material || ex.exercise?.material || null,
+            diagramUrl: ex.custom_diagram_url || ex.exercise?.diagram_url || null,
+            notes: ex.notes || null,
           })),
         })),
       });

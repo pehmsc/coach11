@@ -58,18 +58,30 @@ export const TEMPLATE_LABELS: Record<PermissionTemplateKey, string> = {
 };
 
 const RWED: AreaPermissions = { can_read: true, can_write: true, can_edit: true, can_delete: true };
+const RWED_NO_DEL: AreaPermissions = { can_read: true, can_write: true, can_edit: true, can_delete: false };
 const RWE: AreaPermissions = { can_read: true, can_write: true, can_edit: true, can_delete: false };
 const RW: AreaPermissions = { can_read: true, can_write: true, can_edit: false, can_delete: false };
 const R: AreaPermissions = { can_read: true, can_write: false, can_edit: false, can_delete: false };
 
 export const PERMISSION_TEMPLATES: Record<PermissionTemplateKey, PermissionTemplate> = {
-  principal: Object.fromEntries(ALL_PERMISSION_AREAS.map((a) => [a, RWED])) as PermissionTemplate,
+  principal: {
+    players: RWED_NO_DEL,
+    trainings: RWED,
+    attendance: RWED,
+    games: RWED,
+    convocations: RWED,
+    live_events: RWED,
+    statistics: R,
+    exercises: RWED,
+    documents: RWED_NO_DEL,
+    registrations: R,
+  },
   adjunto: {
     players: R,
     trainings: RWE,
     attendance: RWE,
     games: RW,
-    convocations: RW,
+    convocations: R,
     live_events: RW,
     statistics: R,
     exercises: RW,

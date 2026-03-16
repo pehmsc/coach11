@@ -69,14 +69,27 @@ const RWE: AreaPermissions = { can_read: true, can_write: true, can_edit: true, 
 const RW: AreaPermissions = { can_read: true, can_write: true, can_edit: false, can_delete: false };
 const R: AreaPermissions = { can_read: true, can_write: false, can_edit: false, can_delete: false };
 
-export const PERMISSION_TEMPLATES: Record<"principal" | "adjunto" | "estagiario", PermissionTemplate> = {
-  principal: Object.fromEntries(ALL_PERMISSION_AREAS.map((a) => [a, RWED])) as PermissionTemplate,
+const RWED_NO_DEL: AreaPermissions = { can_read: true, can_write: true, can_edit: true, can_delete: false };
+
+export const PERMISSION_TEMPLATES: Record<PermissionTemplateKey, PermissionTemplate> = {
+  principal: {
+    players: RWED_NO_DEL,
+    trainings: RWED,
+    attendance: RWED,
+    games: RWED,
+    convocations: RWED,
+    live_events: RWED,
+    statistics: R,
+    exercises: RWED,
+    documents: RWED_NO_DEL,
+    registrations: R,
+  },
   adjunto: {
     players: R,
     trainings: RWE,
     attendance: RWE,
     games: RW,
-    convocations: RW,
+    convocations: R,
     live_events: RW,
     statistics: R,
     exercises: RW,
@@ -150,16 +163,16 @@ export async function hasPermission(
 ): Promise<boolean> {
   const { userId, userEmail, ageGroupId, area, operation } = params;
 
-  // 1. Master Admin → always true
+  // 1. Read = sempre true para qualquer staff autenticado do clube
+  if (operation === "read") return true;
+
+  // 2. Master Admin → tudo
   if (userEmail && isMasterAdmin(userEmail)) return true;
 
-  // 2. Coordinator of this age group → always true
+  // 3. Coordenador do escalão → tudo
   if (await isClubCoordinator(admin, userId, ageGroupId)) return true;
 
-  // 3. Principal Coach → RWED automático em tudo
-  if (await isPrincipalCoach(admin, userId, ageGroupId)) return true;
-
-  // 4. Consultar staff_permissions
+  // 4. Todos os outros (incluindo Principal e Adjuntos) → consultar staff_permissions
   const { data: staffLink } = await admin
     .from("age_group_staff")
     .select("id")

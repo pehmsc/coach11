@@ -129,14 +129,6 @@ export async function PUT(
       );
     }
 
-    // Treinador Principal tem RWED automático — não editável na tabela
-    if (staffRecord.role === "coach") {
-      return NextResponse.json(
-        { error: "O Treinador Principal tem RWED automático em tudo" },
-        { status: 400 },
-      );
-    }
-
     const body = await request.json().catch(() => null);
     if (!body) {
       return NextResponse.json({ error: "Dados inválidos" }, { status: 400 });
