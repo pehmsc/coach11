@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Dumbbell, Plus } from "lucide-react";
+import { Loader2, Dumbbell, Copy, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTrainingsData } from "@/lib/hooks/useTrainingsData";
 import { useTrainingForm } from "@/lib/hooks/useTrainingForm";
 import { TrainingSessionList } from "@/components/trainings/TrainingSessionList";
 import { TrainingCreateModal } from "@/components/trainings/TrainingCreateModal";
+import { DuplicateWeekDialog } from "@/components/trainings/DuplicateWeekDialog";
 import type { TrainingRow } from "@/components/trainings/types";
 
 export default function TrainingsPage() {
@@ -17,16 +18,19 @@ export default function TrainingsPage() {
 
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [createMode, setCreateMode] = useState<"create" | "duplicate">("create");
+  const [duplicateWeekOpen, setDuplicateWeekOpen] = useState(false);
 
   function openCreateTrainingModal() {
-    createForm.resetToDefaults();
+    createForm.resetToDefaults({ utNumber: data.nextUtNumber });
     setCreateMode("create");
     setCreateModalOpen(true);
   }
 
   function openDuplicateTraining(source: TrainingRow) {
     setCreateMode("duplicate");
-    createForm.populateFromSource(source, "duplicate");
+    createForm.populateFromSource(source, "duplicate", {
+      utNumber: data.nextUtNumber,
+    });
     setCreateModalOpen(true);
   }
 
@@ -58,15 +62,26 @@ export default function TrainingsPage() {
   return (
     <>
       <div className="p-4 md:p-8 max-w-2xl mx-auto">
-        <div className="mb-6 flex items-center justify-between gap-3">
+        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h1 className="text-2xl font-bold text-slate-900">Treinos</h1>
-          <Button
-            className="bg-emerald-600 hover:bg-emerald-700"
-            onClick={openCreateTrainingModal}
-          >
-            <Plus size={16} className="mr-2" />
-            Adicionar treino
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+              onClick={() => setDuplicateWeekOpen(true)}
+            >
+              <Copy size={16} className="mr-2" />
+              Duplicar semana
+            </Button>
+            <Button
+              className="bg-emerald-600 hover:bg-emerald-700"
+              onClick={openCreateTrainingModal}
+            >
+              <Plus size={16} className="mr-2" />
+              Adicionar treino
+            </Button>
+          </div>
         </div>
 
         <TrainingSessionList
@@ -86,6 +101,14 @@ export default function TrainingsPage() {
           onSubmit={data.handleCreateTraining}
         />
       )}
+      <DuplicateWeekDialog
+        open={duplicateWeekOpen}
+        sessions={data.sessions}
+        ageGroupId={data.ageGroupId}
+        nextUtNumber={data.nextUtNumber}
+        onClose={() => setDuplicateWeekOpen(false)}
+        onSuccess={data.loadData}
+      />
 
     </>
   );

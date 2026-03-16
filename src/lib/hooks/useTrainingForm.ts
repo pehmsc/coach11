@@ -6,6 +6,7 @@ import type { TrainingFormFields, TrainingRow } from "@/components/trainings/typ
 
 const DEFAULT_FORM: TrainingFormFields = {
   title: "Treino",
+  utNumber: "",
   date: "",
   startTime: "18:30",
   endTime: "20:00",
@@ -22,6 +23,7 @@ const DEFAULT_FORM: TrainingFormFields = {
 
 export function useTrainingForm(initialValues?: Partial<TrainingFormFields>) {
   const [title, setTitle] = useState(initialValues?.title ?? DEFAULT_FORM.title);
+  const [utNumber, setUtNumber] = useState(initialValues?.utNumber ?? DEFAULT_FORM.utNumber);
   const [date, setDate] = useState(initialValues?.date ?? DEFAULT_FORM.date);
   const [startTime, setStartTime] = useState(initialValues?.startTime ?? DEFAULT_FORM.startTime);
   const [endTime, setEndTime] = useState(initialValues?.endTime ?? DEFAULT_FORM.endTime);
@@ -38,6 +40,7 @@ export function useTrainingForm(initialValues?: Partial<TrainingFormFields>) {
   function getFields(): TrainingFormFields {
     return {
       title,
+      utNumber,
       date,
       startTime,
       endTime,
@@ -53,9 +56,14 @@ export function useTrainingForm(initialValues?: Partial<TrainingFormFields>) {
     };
   }
 
-  function resetToDefaults() {
+  function resetToDefaults(options?: { utNumber?: number | null }) {
     const today = new Date();
     setTitle(DEFAULT_FORM.title);
+    setUtNumber(
+      typeof options?.utNumber === "number" && options.utNumber > 0
+        ? String(options.utNumber)
+        : DEFAULT_FORM.utNumber,
+    );
     setDate(format(today, "yyyy-MM-dd"));
     setStartTime(DEFAULT_FORM.startTime);
     setEndTime(DEFAULT_FORM.endTime);
@@ -70,8 +78,21 @@ export function useTrainingForm(initialValues?: Partial<TrainingFormFields>) {
     setImageUrl(DEFAULT_FORM.imageUrl);
   }
 
-  function populateFromSource(source: TrainingRow, mode: "duplicate" | "edit") {
+  function populateFromSource(
+    source: TrainingRow,
+    mode: "duplicate" | "edit",
+    options?: { utNumber?: number | null },
+  ) {
     setTitle(mode === "duplicate" ? `Cópia de ${source.title || "Treino"}` : (source.title || "Treino"));
+    setUtNumber(
+      mode === "duplicate"
+        ? typeof options?.utNumber === "number" && options.utNumber > 0
+          ? String(options.utNumber)
+          : ""
+        : typeof source.ut_number === "number" && source.ut_number > 0
+          ? String(source.ut_number)
+          : "",
+    );
     setDate(mode === "duplicate" ? "" : source.session_date);
     setStartTime(source.start_time?.slice(0, 5) || "18:30");
     setEndTime(source.end_time?.slice(0, 5) || "20:00");
@@ -88,6 +109,7 @@ export function useTrainingForm(initialValues?: Partial<TrainingFormFields>) {
 
   return {
     title, setTitle,
+    utNumber, setUtNumber,
     date, setDate,
     startTime, setStartTime,
     endTime, setEndTime,
