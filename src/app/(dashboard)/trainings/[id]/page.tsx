@@ -20,8 +20,9 @@ import {
 import { TrainingFormFieldsComponent } from "@/components/trainings/TrainingFormFields";
 import { TrainingCreateModal } from "@/components/trainings/TrainingCreateModal";
 import { getAttendanceStatusClasses } from "@/components/trainings/utils";
+import { TrainingUnit } from "@/components/trainings/TrainingUnit";
 import type { TrainingRow, AttendanceSummary, TrainingFormFields } from "@/components/trainings/types";
-import type { Player } from "@/types/database";
+import type { Player, Exercise } from "@/types/database";
 
 function computeCanEdit(session: TrainingRow): boolean {
   const startsAt = portugalDateTimeToUtc(session.session_date, session.start_time);
@@ -238,6 +239,65 @@ export default function TrainingDetailPage() {
       return { success: true };
     } catch {
       return { success: false, error: "Erro de ligação ao criar treino." };
+    }
+  }
+
+  async function handleExportUtPdf() {
+    if (!session) return;
+    try {
+      // Fetch phases for PDF
+      const phasesRes = await fetch(`/api/trainings/${id}/phases`);
+      const phasesJson = await phasesRes.json() as {
+        success?: boolean;
+        phases?: Array<{
+          phase_type: string;
+          phase_name?: string | null;
+          exercises: Array<{
+            custom_name?: string | null;
+            custom_description?: string | null;
+            custom_objectives?: string | null;
+            custom_game_format?: string | null;
+            custom_duration_minutes?: number | null;
+            custom_num_players?: number | null;
+            custom_field_dimensions?: string | null;
+            custom_material?: string | null;
+            exercise?: Exercise | null;
+          }>;
+        }>;
+      };
+
+      const { exportTrainingUnitPDF } = await import("@/lib/pdf/trainingUnit");
+      await exportTrainingUnitPDF({
+        utNumber: session.ut_number,
+        title: session.title,
+        sessionDate: session.session_date,
+        startTime: session.start_time,
+        location: resolveLocationLabel(session.location, session.formatted_address, session.location_address) ?? undefined,
+        periodType: session.period_type,
+        focus: session.focus,
+        intensity: session.intensity,
+        objective: session.objective,
+        complementaryObjectives: session.complementary_objectives,
+        material: session.material,
+        initialInstruction: session.initial_instruction,
+        phases: (phasesJson.phases ?? []).map((p) => ({
+          phase_type: p.phase_type,
+          phase_name: p.phase_name,
+          exercises: p.exercises.map((ex) => ({
+            name: ex.custom_name || ex.exercise?.name || "Exercício",
+            description: ex.custom_description || ex.exercise?.description || null,
+            objectives: ex.custom_objectives || ex.exercise?.objectives || null,
+            gameFormat: ex.custom_game_format || ex.exercise?.game_format || null,
+            duration: ex.custom_duration_minutes ?? ex.exercise?.duration_minutes ?? null,
+            numPlayers: ex.custom_num_players ?? ex.exercise?.min_players ?? null,
+            fieldDimensions: ex.custom_field_dimensions || ex.exercise?.field_dimensions || null,
+            material: ex.custom_material || ex.exercise?.material || null,
+          })),
+        })),
+      });
+      toast.success("PDF exportado.");
+    } catch {
+      toast.error("Erro ao exportar PDF.");
     }
   }
 
@@ -490,6 +550,18 @@ export default function TrainingDetailPage() {
                   })}
               </div>
             )}
+          </div>
+        )}
+
+        {/* Unidade de Treino */}
+        {!editing && (
+          <div className="mt-5">
+            <TrainingUnit
+              trainingId={session.id}
+              session={session}
+              readOnly={isClosed}
+              onExportPdf={() => void handleExportUtPdf()}
+            />
           </div>
         )}
       </div>
