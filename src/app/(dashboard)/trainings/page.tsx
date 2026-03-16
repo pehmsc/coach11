@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Dumbbell, Copy, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -9,16 +9,44 @@ import { useTrainingForm } from "@/lib/hooks/useTrainingForm";
 import { TrainingSessionList } from "@/components/trainings/TrainingSessionList";
 import { TrainingCreateModal } from "@/components/trainings/TrainingCreateModal";
 import { DuplicateWeekDialog } from "@/components/trainings/DuplicateWeekDialog";
+import { isTrainingClosed } from "@/components/trainings/utils";
 import type { TrainingRow } from "@/components/trainings/types";
+
+type TabKey = "scheduled" | "closed";
 
 export default function TrainingsPage() {
   const router = useRouter();
   const data = useTrainingsData();
   const createForm = useTrainingForm();
 
+  const [activeTab, setActiveTab] = useState<TabKey>("scheduled");
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [createMode, setCreateMode] = useState<"create" | "duplicate">("create");
   const [duplicateWeekOpen, setDuplicateWeekOpen] = useState(false);
+
+  const scheduled = useMemo(
+    () =>
+      data.sessions
+        .filter((s) => !isTrainingClosed(s))
+        .sort(
+          (a, b) =>
+            new Date(a.session_date).getTime() -
+            new Date(b.session_date).getTime(),
+        ),
+    [data.sessions],
+  );
+
+  const closed = useMemo(
+    () =>
+      data.sessions
+        .filter((s) => isTrainingClosed(s))
+        .sort(
+          (a, b) =>
+            new Date(b.session_date).getTime() -
+            new Date(a.session_date).getTime(),
+        ),
+    [data.sessions],
+  );
 
   function openCreateTrainingModal() {
     createForm.resetToDefaults({ utNumber: data.nextUtNumber });
@@ -59,10 +87,13 @@ export default function TrainingsPage() {
     );
   }
 
+  const displayedSessions = activeTab === "scheduled" ? scheduled : closed;
+
   return (
     <>
       <div className="p-4 md:p-8 max-w-2xl mx-auto">
-        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        {/* Header */}
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h1 className="text-2xl font-bold text-slate-900">Treinos</h1>
           <div className="flex flex-wrap gap-2">
             <Button
@@ -84,11 +115,29 @@ export default function TrainingsPage() {
           </div>
         </div>
 
+        {/* Tabs */}
+        <div className="mb-5 flex border-b border-slate-200">
+          <TabButton
+            active={activeTab === "scheduled"}
+            count={scheduled.length}
+            label="Agendados"
+            onClick={() => setActiveTab("scheduled")}
+          />
+          <TabButton
+            active={activeTab === "closed"}
+            count={closed.length}
+            label="Fechados"
+            onClick={() => setActiveTab("closed")}
+          />
+        </div>
+
+        {/* List */}
         <TrainingSessionList
-          sessions={data.sessions}
+          sessions={displayedSessions}
           getSummary={data.getSummary}
           onSessionClick={(session) => router.push(`/trainings/${session.id}`)}
-          onDuplicate={openDuplicateTraining}
+          onDuplicate={activeTab === "scheduled" ? openDuplicateTraining : undefined}
+          variant={activeTab === "scheduled" ? "open" : "closed"}
         />
       </div>
 
@@ -109,7 +158,44 @@ export default function TrainingsPage() {
         onClose={() => setDuplicateWeekOpen(false)}
         onSuccess={data.loadData}
       />
-
     </>
+  );
+}
+
+function TabButton({
+  active,
+  count,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  count: number;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`relative px-4 py-2.5 text-sm font-medium transition-colors ${
+        active
+          ? "text-emerald-700"
+          : "text-slate-500 hover:text-slate-700"
+      }`}
+    >
+      {label}
+      <span
+        className={`ml-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-semibold ${
+          active
+            ? "bg-emerald-100 text-emerald-700"
+            : "bg-slate-100 text-slate-500"
+        }`}
+      >
+        {count}
+      </span>
+      {active && (
+        <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-600 rounded-t" />
+      )}
+    </button>
   );
 }
