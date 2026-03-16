@@ -76,6 +76,8 @@ export function TrainingCreateModal({
             <TrainingFormFieldsComponent
               title={form.title}
               onTitleChange={form.setTitle}
+              utNumber={form.utNumber}
+              onUtNumberChange={form.setUtNumber}
               date={form.date}
               onDateChange={form.setDate}
               startTime={form.startTime}

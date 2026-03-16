@@ -97,6 +97,7 @@ export interface Player {
 export interface TrainingSession {
   id: string;
   age_group_id?: string;
+  club_id?: string;
   team_id: string;
   title?: string;
   session_date: string;
@@ -109,6 +110,14 @@ export interface TrainingSession {
   longitude?: number | null;
   osm_place_id?: string;
   location_source?: LocationSource | null;
+  ut_number?: number | null;
+  week_start_date?: string | null;
+  objective?: string | null;
+  complementary_objectives?: string | null;
+  focus?: string | null;
+  intensity?: string | null;
+  material?: string | null;
+  field_area?: string | null;
   notes?: string;
   image_url?: string;
   status: EventStatus;

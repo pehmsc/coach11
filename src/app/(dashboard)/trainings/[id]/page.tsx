@@ -13,6 +13,10 @@ import { StickyBackLink } from "@/components/navigation/StickyBackLink";
 import { resolveLocationLabel } from "@/lib/location";
 import { portugalDateTimeToUtc } from "@/lib/events/presence-window";
 import { useTrainingForm } from "@/lib/hooks/useTrainingForm";
+import {
+  getTrainingDisplayTitle,
+  parseUtNumberInput,
+} from "@/lib/trainings/ut-numbering";
 import { TrainingFormFieldsComponent } from "@/components/trainings/TrainingFormFields";
 import { TrainingCreateModal } from "@/components/trainings/TrainingCreateModal";
 import { getAttendanceStatusClasses } from "@/components/trainings/utils";
@@ -123,6 +127,7 @@ export default function TrainingDetailPage() {
           ageGroupId,
           payload: {
             title: fields.title.trim() || "Treino",
+            ut_number: parseUtNumberInput(fields.utNumber),
             date: fields.date,
             start_time: fields.startTime,
             end_time: fields.endTime || null,
@@ -206,6 +211,7 @@ export default function TrainingDetailPage() {
           type: "training",
           payload: {
             title: fields.title.trim() || "Treino",
+            ut_number: parseUtNumberInput(fields.utNumber),
             date: fields.date,
             start_time: fields.startTime,
             end_time: fields.endTime || null,
@@ -263,6 +269,7 @@ export default function TrainingDetailPage() {
   const canEditSession = computeCanEdit(session);
   const canCorrectAttendance = canDelete && session.status === "completed";
   const isClosed = session.status === "completed";
+  const displayTitle = getTrainingDisplayTitle(session);
 
   return (
     <>
@@ -314,7 +321,7 @@ export default function TrainingDetailPage() {
               {isClosed ? "Fechado" : "Agendado"}
             </span>
           </div>
-          <h1 className="text-xl font-bold mt-1">{session.title || "Treino"}</h1>
+          <h1 className="text-xl font-bold mt-1">{displayTitle}</h1>
           <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-emerald-100">
             <span className="capitalize">
               {format(parseISO(session.session_date), "EEEE, d 'de' MMMM yyyy", { locale: pt })}
@@ -345,6 +352,8 @@ export default function TrainingDetailPage() {
             <TrainingFormFieldsComponent
               title={editForm.title}
               onTitleChange={editForm.setTitle}
+              utNumber={editForm.utNumber}
+              onUtNumberChange={editForm.setUtNumber}
               date={editForm.date}
               onDateChange={editForm.setDate}
               startTime={editForm.startTime}
