@@ -94,8 +94,8 @@ function buildSourceWeek(): WeeklyDuplicationSourceSession[] {
 }
 
 describe("Exercise Library", () => {
-  it("exercise categories sao 13 no total", () => {
-    expect(EXERCISE_CATEGORIES).toHaveLength(13);
+  it("exercise categories sao 10 no total (EMJOGO)", () => {
+    expect(EXERCISE_CATEGORIES).toHaveLength(10);
   });
 
   it("category labels cobrem todas as categorias", () => {
@@ -111,7 +111,7 @@ describe("Exercise Library", () => {
   it("exercise form valida nome obrigatorio", () => {
     const parsed = createExerciseSchema.safeParse({
       name: "",
-      category: "technical",
+      category: "principios_de_jogo",
     });
 
     expect(parsed.success).toBe(false);
@@ -130,7 +130,7 @@ describe("Exercise Library", () => {
   it("exercise form aceita payload minimo valido", () => {
     const parsed = createExerciseSchema.safeParse({
       name: "Finalizacao 3x2",
-      category: "finishing",
+      category: "finalizacao",
     });
 
     expect(parsed.success).toBe(true);

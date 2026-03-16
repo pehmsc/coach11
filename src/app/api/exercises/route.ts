@@ -8,7 +8,7 @@ import {
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 
 const SELECT_FIELDS =
-  "id, club_id, age_group_id, created_by, name, description, objectives, success_criteria, category, subcategory, game_format, duration_minutes, rest_minutes, min_players, max_players, field_dimensions, material, diagram_url, is_shared, created_at, updated_at";
+  "id, club_id, age_group_id, created_by, name, description, objectives, success_criteria, category, subcategory, game_format, duration_minutes, rest_minutes, min_players, max_players, field_dimensions, material, diagram_url, orientation, regime, notes, status, is_shared, created_at, updated_at";
 
 export async function GET(request: Request) {
   try {

@@ -21,19 +21,19 @@ export type PlayerType = "field" | "goalkeeper";
 export type PieceType = "shirt" | "shorts" | "socks";
 export type LocationSource = "google" | "osm" | "manual";
 export type ExerciseCategory =
-  | "warmup"
-  | "technical"
-  | "tactical"
-  | "formal_game"
-  | "finishing"
-  | "defensive_org"
-  | "offensive_org"
-  | "transition"
-  | "physical"
-  | "set_pieces"
-  | "strategy"
-  | "cooldown"
-  | "other";
+  | "attb"
+  | "esquemas_taticos"
+  | "estrategia"
+  | "finalizacao"
+  | "organizacao_defensiva"
+  | "organizacao_ofensiva"
+  | "principios_de_jogo"
+  | "qualidades_fisicas"
+  | "transicao_defensiva"
+  | "transicao_ofensiva";
+export type ExerciseOrientation = "recovery" | "strength" | "endurance" | "speed" | "flexibility" | "other";
+export type ExerciseRegime = "aerobic" | "anaerobic_lactic" | "anaerobic_alactic";
+export type ExerciseStatus = "active" | "archived";
 
 export interface Profile {
   id: string;
@@ -342,6 +342,10 @@ export interface Exercise {
   field_dimensions?: string | null;
   material?: string | null;
   diagram_url?: string | null;
+  orientation?: ExerciseOrientation | null;
+  regime?: ExerciseRegime | null;
+  notes?: string | null;
+  status?: ExerciseStatus;
   is_shared: boolean;
   created_at: string;
   updated_at: string;
