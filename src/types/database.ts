@@ -20,6 +20,20 @@ export type KitNumber = 1 | 2 | 3;
 export type PlayerType = "field" | "goalkeeper";
 export type PieceType = "shirt" | "shorts" | "socks";
 export type LocationSource = "google" | "osm" | "manual";
+export type ExerciseCategory =
+  | "warmup"
+  | "technical"
+  | "tactical"
+  | "formal_game"
+  | "finishing"
+  | "defensive_org"
+  | "offensive_org"
+  | "transition"
+  | "physical"
+  | "set_pieces"
+  | "strategy"
+  | "cooldown"
+  | "other";
 
 export interface Profile {
   id: string;
@@ -298,4 +312,28 @@ export interface TeamStaff {
   profile_id: string;
   role: string;
   created_at: string;
+}
+
+export interface Exercise {
+  id: string;
+  club_id: string;
+  age_group_id: string;
+  created_by: string;
+  name: string;
+  description?: string | null;
+  objectives?: string | null;
+  success_criteria?: string | null;
+  category: ExerciseCategory;
+  subcategory?: string | null;
+  game_format?: string | null;
+  duration_minutes?: number | null;
+  rest_minutes: number;
+  min_players?: number | null;
+  max_players?: number | null;
+  field_dimensions?: string | null;
+  material?: string | null;
+  diagram_url?: string | null;
+  is_shared: boolean;
+  created_at: string;
+  updated_at: string;
 }
