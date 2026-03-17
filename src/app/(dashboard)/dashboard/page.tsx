@@ -77,12 +77,6 @@ export default async function DashboardPage() {
       .eq("coordinator_id", user.id),
   ]);
 
-  // Bug fix: coordenador sem escalão criado → redirecionar para onboarding.
-  // Safety net para navegação directa ao dashboard (ex: bookmark, histórico).
-  if (profile && "role" in profile && profile.role === "coordinator" && (managedAgeGroups?.length ?? 0) === 0) {
-    redirect("/onboarding");
-  }
-
   let firstTeamId: string | null = managedAgeGroups?.[0]?.teams?.[0]?.id ?? null;
   const managedTeamIds = (managedAgeGroups || [])
     .flatMap((ageGroup) => (ageGroup.teams || []).map((team) => team?.id).filter(Boolean))

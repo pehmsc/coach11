@@ -34,6 +34,19 @@ export default async function DashboardLayout({
     .eq("id", user.id)
     .single();
 
+  // Onboarding guard: coordinator sem escalão criado → redirecionar para /onboarding
+  if (profile && "role" in profile && profile.role === "coordinator") {
+    const { data: ageGroup } = await supabase
+      .from("age_groups")
+      .select("id")
+      .eq("coordinator_id", user.id)
+      .limit(1)
+      .maybeSingle();
+    if (!ageGroup) {
+      redirect("/onboarding");
+    }
+  }
+
   const metadata = (user.user_metadata ?? {}) as Record<string, unknown>;
   const metadataAvatar =
     (typeof metadata.avatar_url === "string" && metadata.avatar_url) ||
