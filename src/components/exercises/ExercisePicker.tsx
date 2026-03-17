@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Image from "next/image";
 import { Loader2, Search, BookOpen, Clock, Users, Check } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -111,9 +112,11 @@ export function ExercisePicker({ open, onClose, onSelect, selectedId }: Props) {
                   }`}
                 >
                   {ex.diagram_url ? (
-                    <img
+                    <Image
                       src={ex.diagram_url}
                       alt=""
+                      width={48}
+                      height={48}
                       className="h-12 w-12 flex-shrink-0 rounded object-cover"
                     />
                   ) : (

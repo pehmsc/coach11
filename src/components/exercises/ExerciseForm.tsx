@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef } from "react";
+import NextImage from "next/image";
 import { Loader2, Upload, X, Image as ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -239,7 +240,9 @@ export function ExerciseForm({ exercise, onSubmit, onCancel, submitting }: Props
         <legend className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">Diagrama</legend>
         {values.diagram_url ? (
           <div className="relative rounded-lg border border-slate-200 p-2">
-            <img src={values.diagram_url} alt="Diagrama tático" className="mx-auto max-h-48 rounded object-contain" />
+            <div className="relative h-48 w-full">
+              <NextImage src={values.diagram_url} alt="Diagrama tático" fill className="rounded object-contain" />
+            </div>
             <button type="button" onClick={() => set("diagram_url", "")} className="absolute top-1 right-1 rounded-full bg-white/80 p-1 text-slate-500 hover:text-red-500">
               <X size={16} />
             </button>
