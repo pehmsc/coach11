@@ -53,7 +53,7 @@ const FOCUS_OPTIONS = [
   { value: "tactical", label: "Tática" },
   { value: "technical", label: "Técnica" },
   { value: "physical", label: "Física" },
-  { value: "mixed", label: "Mista" },
+  { value: "mixed", label: "Misto" },
 ];
 const INTENSITY_OPTIONS = [
   { value: "", label: "—" },
