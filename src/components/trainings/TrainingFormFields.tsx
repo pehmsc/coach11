@@ -192,7 +192,7 @@ export function TrainingFormFieldsComponent({
                     <option value="tactical">Tática</option>
                     <option value="technical">Técnica</option>
                     <option value="physical">Física</option>
-                    <option value="mixed">Mista</option>
+                    <option value="mixed">Misto</option>
                   </select>
                 </div>
                 <div className="space-y-1">
@@ -218,10 +218,10 @@ export function TrainingFormFieldsComponent({
                   <label className="text-xs text-slate-500">Área de treino</label>
                   <select className={selectCls} value={utFieldArea ?? ""} onChange={(e) => onUtFieldAreaChange?.(e.target.value)}>
                     <option value="">—</option>
-                    <option value="complete">Completo</option>
-                    <option value="half">1/2</option>
-                    <option value="third">1/3</option>
-                    <option value="quarter">1/4</option>
+                    <option value="complete">Campo Inteiro</option>
+                    <option value="half">Meio Campo</option>
+                    <option value="third">1/3 Campo</option>
+                    <option value="quarter">1/4 Campo</option>
                   </select>
                 </div>
               </div>

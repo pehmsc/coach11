@@ -44,7 +44,6 @@ export type TrainingUnitPdfData = {
   complementaryObjectives?: string | null;
   initialInstruction?: string | null;
   material?: string | null;
-  notes?: string | null;
   phases: PhaseData[];
 };
 
@@ -56,14 +55,34 @@ const PHASE_LABELS: Record<string, string> = {
 };
 
 const PERIOD_LABELS: Record<string, string> = { pre_season: "Pré-Época", competitive: "Competitivo", transition: "Transição" };
-const FOCUS_LABELS: Record<string, string> = { tactical: "Tática", technical: "Técnica", physical: "Física", mixed: "Mista" };
+const FOCUS_LABELS: Record<string, string> = { tactical: "Tática", technical: "Técnica", physical: "Física", mixed: "Misto" };
 const INTENSITY_LABELS: Record<string, string> = { low: "Baixo", medium: "Médio", high: "Alto", very_high: "Muito Alto" };
+const FIELD_AREA_LABELS: Record<string, string> = { complete: "Campo Inteiro", half: "Meio Campo", third: "1/3 Campo", quarter: "1/4 Campo" };
+
+type PdfDoc = {
+  setFontSize: (s: number) => void;
+  setFont: (f: string, s: string) => void;
+  setTextColor: (r: number, g: number, b: number) => void;
+  text: (t: string | string[], x: number, y: number, opts?: { align?: string }) => void;
+  getTextWidth: (t: string) => number;
+  splitTextToSize: (t: string, w: number) => string[];
+  setFillColor: (r: number, g: number, b: number) => void;
+  setDrawColor: (r: number, g?: number, b?: number) => void;
+  rect: (x: number, y: number, w: number, h: number, s: string) => void;
+  line: (x1: number, y1: number, x2: number, y2: number) => void;
+  addImage: (d: string, f: string, x: number, y: number, w: number, h: number) => void;
+  addPage: () => void;
+  setPage: (p: number) => void;
+  getNumberOfPages: () => number;
+  save: (f: string) => void;
+  internal: { pageSize: { getWidth: () => number; getHeight: () => number } };
+};
 
 async function createPdfDocument() {
   const { default: jsPDF } = await import("jspdf");
   const { default: autoTable } = await import("jspdf-autotable");
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-  return { doc, autoTable };
+  return { doc: doc as unknown as PdfDoc, autoTable };
 }
 
 function fmtDate(dateStr: string) {
@@ -84,8 +103,13 @@ function lbl(val: string | null | undefined, map: Record<string, string>): strin
   return map[val] ?? val;
 }
 
-function autoTableY(doc: unknown, fallback: number): number {
-  return (doc as { lastAutoTable?: { finalY?: number } }).lastAutoTable?.finalY ?? fallback;
+function stripMarkdown(text: string): string {
+  return text
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/\*(.*?)\*/g, "$1")
+    .replace(/__(.*?)__/g, "$1")
+    .replace(/~~(.*?)~~/g, "$1")
+    .trim();
 }
 
 async function urlToBase64(url: string): Promise<string | null> {
@@ -120,24 +144,31 @@ function fitImage(imgW: number, imgH: number, maxW: number, maxH: number): { w: 
   return { w, h };
 }
 
+/** Draw bold label + normal value, return X position after */
+function drawLV(doc: PdfDoc, x: number, y: number, label: string, value: string): number {
+  doc.setFont("helvetica", "bold");
+  doc.text(label, x, y);
+  const lw = doc.getTextWidth(label);
+  doc.setFont("helvetica", "normal");
+  const v = value || "—";
+  doc.text(v, x + lw + 1, y);
+  return x + lw + 1 + doc.getTextWidth(v);
+}
+
 export async function exportTrainingUnitPDF(data: TrainingUnitPdfData) {
-  const { doc, autoTable } = await createPdfDocument();
+  const { doc } = await createPdfDocument();
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
-  const mg = 14;
+  const mg = 15;
   const cw = pageW - mg * 2;
-  let y = 14;
+  let y = 16;
 
   // ─── Pre-load images ───
   const imageCache = new Map<string, string>();
-
-  // Logo
   if (data.clubLogoUrl) {
-    const logoB64 = await urlToBase64(data.clubLogoUrl);
-    if (logoB64) imageCache.set("__logo__", logoB64);
+    const b64 = await urlToBase64(data.clubLogoUrl);
+    if (b64) imageCache.set("__logo__", b64);
   }
-
-  // Exercise diagrams
   for (const phase of data.phases) {
     for (const ex of phase.exercises) {
       if (ex.diagramUrl && !imageCache.has(ex.diagramUrl)) {
@@ -147,96 +178,94 @@ export async function exportTrainingUnitPDF(data: TrainingUnitPdfData) {
     }
   }
 
-  // ─── Header with logo ───
+  // ─── Header: logo + club name + UT number ───
   const logoB64 = imageCache.get("__logo__");
-  let headerTextX = mg;
+  let hx = mg;
   if (logoB64) {
     try {
-      const logoDims = await getImageDimensions(logoB64);
-      const logoFit = fitImage(logoDims.width, logoDims.height, 20, 20);
-      doc.addImage(logoB64, "PNG", mg, y - 6, logoFit.w, logoFit.h);
-      headerTextX = mg + logoFit.w + 4;
-    } catch {
-      // ignore failed image
-    }
+      const dims = await getImageDimensions(logoB64);
+      const fit = fitImage(dims.width, dims.height, 20, 20);
+      doc.addImage(logoB64, "PNG", mg, y - 6, fit.w, fit.h);
+      hx = mg + fit.w + 4;
+    } catch { /* ignore */ }
   }
-
   doc.setFontSize(11);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(30, 41, 59);
-  doc.text(data.clubName || "", headerTextX, y);
-
+  doc.text(data.clubName || "", hx, y);
   const utLabel = data.utNumber ? `Treino ${data.utNumber}` : (data.title ?? "Unidade de Treino");
   doc.text(utLabel, pageW - mg, y, { align: "right" });
-
   y += 5;
   doc.setFontSize(8);
   doc.setFont("helvetica", "normal");
   doc.setTextColor(100, 116, 139);
-  if (data.teamName) {
-    doc.text(data.teamName, headerTextX, y);
-  }
-  if (data.season) {
-    doc.text(`Época ${data.season}`, pageW - mg, y, { align: "right" });
-  }
-  y += 8;
+  if (data.teamName) doc.text(data.teamName, hx, y);
+  if (data.season) doc.text(`Época ${data.season}`, pageW - mg, y, { align: "right" });
+  y += 6;
 
-  // ─── Metadata table ───
-  const totalDuration = data.phases.reduce(
-    (sum, ph) => sum + ph.exercises.reduce((s, ex) => s + (ex.duration ?? 0), 0),
-    0,
-  );
+  // Separator
+  doc.setDrawColor(200, 200, 200);
+  doc.line(mg, y, pageW - mg, y);
+  y += 5;
 
-  const metaRows: string[][] = [];
+  // ─── Metadata with bold labels ───
+  doc.setFontSize(7.5);
+  doc.setTextColor(51, 65, 85);
+  const sp = 8;
 
-  const r1: string[] = [];
-  if (data.mesocycle != null) r1.push(`Mesociclo: ${data.mesocycle}`);
-  if (data.microcycle != null) r1.push(`Microciclo: ${data.microcycle}`);
-  r1.push(`Período: ${lbl(data.periodType, PERIOD_LABELS)}`);
-  if (r1.length) metaRows.push([r1.join("    ")]);
+  // Line 1: Mesociclo, Microciclo, Período
+  let x = mg;
+  x = drawLV(doc, x, y, "Mesociclo: ", String(data.mesocycle ?? "—"));
+  x = drawLV(doc, x + sp, y, "Microciclo: ", String(data.microcycle ?? "—"));
+  drawLV(doc, x + sp, y, "Período: ", lbl(data.periodType, PERIOD_LABELS));
+  y += 5;
 
-  const r2: string[] = [];
-  r2.push(`Data: ${fmtDate(data.sessionDate)}`);
+  // Line 2: Data, Hora, Duração
+  const totalDur = data.phases.reduce((s, p) => s + p.exercises.reduce((s2, e) => s2 + (e.duration ?? 0) + (e.rest ?? 0), 0), 0);
+  x = mg;
+  x = drawLV(doc, x, y, "Data: ", fmtDate(data.sessionDate));
   if (data.startTime) {
     const time = data.startTime.substring(0, 5) + (data.endTime ? `–${data.endTime.substring(0, 5)}` : "");
-    r2.push(`Hora: ${time}`);
+    x = drawLV(doc, x + sp, y, "Hora: ", time);
   }
-  if (totalDuration > 0) r2.push(`Duração: ${totalDuration}'`);
-  metaRows.push([r2.join("    ")]);
+  if (totalDur > 0) drawLV(doc, x + sp, y, "Duração: ", `${totalDur}'`);
+  y += 5;
 
-  const r3: string[] = [];
-  if (data.location) r3.push(`Local: ${data.location}`);
-  if (data.fieldArea) r3.push(`Área de treino: ${data.fieldArea}`);
-  if (data.material) r3.push(`Material: ${data.material}`);
-  if (r3.length) metaRows.push([r3.join("    ")]);
+  // Line 3: Local, Área de treino
+  x = mg;
+  x = drawLV(doc, x, y, "Local: ", data.location || "—");
+  drawLV(doc, x + sp, y, "Área de treino: ", lbl(data.fieldArea, FIELD_AREA_LABELS));
+  y += 5;
 
-  const r4: string[] = [];
-  r4.push(`Foco: ${lbl(data.focus, FOCUS_LABELS)}`);
-  r4.push(`Intensidade: ${lbl(data.intensity, INTENSITY_LABELS)}`);
-  if (r4.length) metaRows.push([r4.join("    ")]);
+  // Line 4: Material
+  drawLV(doc, mg, y, "Material: ", data.material || "—");
+  y += 5;
 
-  if (data.objective) metaRows.push([`Objectivo: ${data.objective}`]);
-  if (data.complementaryObjectives) metaRows.push([`Obj. Complementares: ${data.complementaryObjectives}`]);
-  if (data.initialInstruction) metaRows.push([`Instrução Inicial: ${data.initialInstruction}`]);
+  // Line 5: Foco, Intensidade
+  x = mg;
+  x = drawLV(doc, x, y, "Foco: ", lbl(data.focus, FOCUS_LABELS));
+  drawLV(doc, x + sp, y, "Intensidade: ", lbl(data.intensity, INTENSITY_LABELS));
+  y += 7;
 
-  autoTable(doc, {
-    startY: y,
-    margin: { left: mg, right: mg },
-    body: metaRows,
-    theme: "plain",
-    styles: { fontSize: 7.5, cellPadding: 1.5, textColor: [71, 85, 105] },
-    tableLineColor: [226, 232, 240],
-    tableLineWidth: 0.2,
-  });
-  y = autoTableY(doc, y) + 6;
+  // Objectives
+  drawLV(doc, mg, y, "Objectivo: ", stripMarkdown(data.objective || "—"));
+  y += 5;
+  drawLV(doc, mg, y, "Obj. Complementares: ", stripMarkdown(data.complementaryObjectives || "—"));
+  y += 5;
+  drawLV(doc, mg, y, "Instrução Inicial: ", stripMarkdown(data.initialInstruction || "—"));
+  y += 6;
 
-  // ─── Phases with exercises ───
+  // Separator
+  doc.setDrawColor(200, 200, 200);
+  doc.line(mg, y, pageW - mg, y);
+  y += 6;
+
+  // ─── Phases ───
   let globalTA = 0;
 
   for (const phase of data.phases) {
-    if (y > pageH - 40) { doc.addPage(); y = 14; }
+    if (y > pageH - 40) { doc.addPage(); y = 16; }
 
-    // Phase header bar
     doc.setFillColor(241, 245, 249);
     doc.rect(mg, y - 3, cw, 7, "F");
     doc.setFontSize(9);
@@ -252,84 +281,75 @@ export async function exportTrainingUnitPDF(data: TrainingUnitPdfData) {
       const exTR = (ex.duration ?? 0) + (ex.rest ?? 0);
       globalTA += exTR;
 
-      // Estimate height — check page break
-      if (y > pageH - 70) { doc.addPage(); y = 14; }
+      if (y > pageH - 70) { doc.addPage(); y = 16; }
 
       const exStartY = y;
       const imgB64 = ex.diagramUrl ? imageCache.get(ex.diagramUrl) : null;
-      const maxImgW = 75;
-      const maxImgH = 56;
       let drawImgW = 0;
       let drawImgH = 0;
 
       if (imgB64) {
         const dims = await getImageDimensions(imgB64);
-        const fitted = fitImage(dims.width, dims.height, maxImgW, maxImgH);
+        const fitted = fitImage(dims.width, dims.height, 75, 56);
         drawImgW = fitted.w;
         drawImgH = fitted.h;
-        try {
-          doc.addImage(imgB64, "JPEG", mg, y, drawImgW, drawImgH);
-        } catch {
-          drawImgW = 0;
-          drawImgH = 0;
-        }
+        try { doc.addImage(imgB64, "JPEG", mg, y, drawImgW, drawImgH); } catch { drawImgW = 0; drawImgH = 0; }
       }
 
       const hasImg = drawImgW > 0;
       const textX = hasImg ? mg + drawImgW + 4 : mg;
       const metaColW = 25;
       const textW = hasImg ? cw - drawImgW - 4 - metaColW : cw - metaColW;
+      const metaX = pageW - mg;
 
-      // Exercise name
+      // Name
       doc.setFontSize(8);
       doc.setFont("helvetica", "bold");
       doc.setTextColor(30, 41, 59);
-      doc.text(ex.name, textX, y + 4);
+      doc.text(stripMarkdown(ex.name), textX, y + 4);
 
-      // Right-side metadata
-      const metaX = pageW - mg;
+      // Right metadata
       doc.setFontSize(7);
       doc.setFont("helvetica", "normal");
       doc.setTextColor(100, 116, 139);
-      let metaY = y + 4;
-      if (ex.duration) { doc.text(`${ex.duration}'`, metaX, metaY, { align: "right" }); metaY += 3.5; }
-      if (ex.numPlayers) { doc.text(`Atletas: ${ex.numPlayers}`, metaX, metaY, { align: "right" }); metaY += 3.5; }
-      if (ex.fieldDimensions) { doc.text(`Espaço: ${ex.fieldDimensions}`, metaX, metaY, { align: "right" }); metaY += 3.5; }
+      let my = y + 4;
+      if (ex.duration) { doc.text(`${ex.duration}'`, metaX, my, { align: "right" }); my += 3.5; }
+      if (ex.numPlayers) { doc.text(`Atletas: ${ex.numPlayers}`, metaX, my, { align: "right" }); my += 3.5; }
+      if (ex.fieldDimensions) { doc.text(`Espaço: ${stripMarkdown(ex.fieldDimensions)}`, metaX, my, { align: "right" }); my += 3.5; }
 
-      // Description + objectives (no line limit — dynamic height)
-      let descY = y + 8;
+      // Description + objectives (full text, stripped of markdown)
+      let dy = y + 8;
       doc.setFontSize(7);
       doc.setFont("helvetica", "normal");
       doc.setTextColor(71, 85, 105);
 
       if (ex.description) {
-        const descLines = doc.splitTextToSize(ex.description, textW) as string[];
-        doc.text(descLines, textX, descY);
-        descY += descLines.length * 3.2;
+        const lines = doc.splitTextToSize(stripMarkdown(ex.description), textW);
+        doc.text(lines, textX, dy);
+        dy += lines.length * 3.2;
       }
 
       if (ex.objectives) {
-        descY += 1;
+        dy += 1;
         doc.setFont("helvetica", "bold");
         doc.setTextColor(100, 116, 139);
-        doc.text("Objectivos:", textX, descY);
-        descY += 3.2;
+        doc.text("Objectivos:", textX, dy);
+        dy += 3.2;
         doc.setFont("helvetica", "normal");
         doc.setTextColor(71, 85, 105);
-        const objLines = doc.splitTextToSize(ex.objectives, textW) as string[];
-        doc.text(objLines, textX, descY);
-        descY += objLines.length * 3.2;
+        const lines = doc.splitTextToSize(stripMarkdown(ex.objectives), textW);
+        doc.text(lines, textX, dy);
+        dy += lines.length * 3.2;
       }
 
-      // TA in bottom-right
-      const blockHeight = Math.max(drawImgH, descY - exStartY, 20);
+      // TA bottom-right
+      const blockH = Math.max(drawImgH, dy - exStartY, 20);
       doc.setFontSize(8);
       doc.setFont("helvetica", "bold");
       doc.setTextColor(16, 185, 129);
-      doc.text(`TA: ${formatTA(globalTA)}`, metaX, exStartY + blockHeight - 1, { align: "right" });
+      doc.text(`TA: ${formatTA(globalTA)}`, metaX, exStartY + blockH - 1, { align: "right" });
 
-      // Bottom border
-      y = exStartY + blockHeight + 3;
+      y = exStartY + blockH + 3;
       doc.setDrawColor(226, 232, 240);
       doc.line(mg, y - 1, pageW - mg, y - 1);
     }
@@ -345,25 +365,7 @@ export async function exportTrainingUnitPDF(data: TrainingUnitPdfData) {
     y += 3;
   }
 
-  // ─── Notes section ───
-  if (data.notes?.trim()) {
-    if (y > pageH - 30) { doc.addPage(); y = 14; }
-    doc.setFillColor(241, 245, 249);
-    doc.rect(mg, y - 3, cw, 7, "F");
-    doc.setFontSize(9);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(30, 41, 59);
-    doc.text("Observações", mg + 2, y + 1.5);
-    y += 8;
-    doc.setFontSize(7.5);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(71, 85, 105);
-    const noteLines = doc.splitTextToSize(data.notes.trim(), cw);
-    doc.text(noteLines, mg, y);
-    y += noteLines.length * 3.5;
-  }
-
-  // ─── Footer ───
+  // ─── Footer (no "Observações" section) ───
   const pageCount = doc.getNumberOfPages();
   for (let p = 1; p <= pageCount; p++) {
     doc.setPage(p);
@@ -373,7 +375,6 @@ export async function exportTrainingUnitPDF(data: TrainingUnitPdfData) {
     doc.text(`Coach11 · Página ${p} de ${pageCount}`, mg, pageH - 8);
   }
 
-  // ─── Save ───
   const dateStr = fmtDate(data.sessionDate).replace(/\//g, "-");
   doc.save(`UT${data.utNumber ?? ""}_${dateStr}.pdf`);
 }

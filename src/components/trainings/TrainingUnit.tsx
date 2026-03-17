@@ -38,9 +38,9 @@ const PHASE_TYPE_LABELS: Record<PhaseType, string> = {
 };
 
 const PERIOD_LABELS: Record<string, string> = { pre_season: "Pré-Época", competitive: "Competitivo", transition: "Transição" };
-const FOCUS_LABELS: Record<string, string> = { tactical: "Tática", technical: "Técnica", physical: "Física", mixed: "Mista" };
+const FOCUS_LABELS: Record<string, string> = { tactical: "Tática", technical: "Técnica", physical: "Física", mixed: "Misto" };
 const INTENSITY_LABELS: Record<string, string> = { low: "Baixo", medium: "Médio", high: "Alto", very_high: "Muito Alto" };
-const FIELD_AREA_LABELS: Record<string, string> = { complete: "Completo", half: "1/2", third: "1/3", quarter: "1/4" };
+const FIELD_AREA_LABELS: Record<string, string> = { complete: "Campo Inteiro", half: "Meio Campo", third: "1/3 Campo", quarter: "1/4 Campo" };
 
 const PERIOD_OPTIONS = [
   { value: "", label: "—" },
@@ -64,10 +64,10 @@ const INTENSITY_OPTIONS = [
 ];
 const FIELD_AREA_OPTIONS = [
   { value: "", label: "—" },
-  { value: "complete", label: "Completo" },
-  { value: "half", label: "1/2" },
-  { value: "third", label: "1/3" },
-  { value: "quarter", label: "1/4" },
+  { value: "complete", label: "Campo Inteiro" },
+  { value: "half", label: "Meio Campo" },
+  { value: "third", label: "1/3 Campo" },
+  { value: "quarter", label: "1/4 Campo" },
 ];
 
 function formatTA(minutes: number): string {
@@ -480,13 +480,10 @@ export function TrainingUnit({ trainingId, session, readOnly = false, onExportPd
 
                       {/* Content */}
                       <div className="flex-1 min-w-0">
-                        {/* Line 1: Name */}
                         <p className="text-sm font-medium text-slate-800 leading-snug">{name}</p>
-                        {/* Line 2: Description */}
                         {description && (
                           <p className="text-xs text-slate-400 line-clamp-1 mt-0.5">{description}</p>
                         )}
-                        {/* Line 3: Badge + duration + actions */}
                         <div className="flex items-center gap-2 mt-1">
                           {category && (
                             <span className={`inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-medium ${catColor?.bg ?? "bg-slate-100"} ${catColor?.text ?? "text-slate-600"}`}>
@@ -499,29 +496,27 @@ export function TrainingUnit({ trainingId, session, readOnly = false, onExportPd
                           {restMin > 0 && (
                             <span className="text-[11px] text-slate-400">+{restMin}&apos; desc.</span>
                           )}
-                          <div className="ml-auto flex items-center gap-0.5">
-                            <button type="button" onClick={() => setExpandedExercise(isExpanded ? null : phaseEx.id)} className="p-1 rounded text-slate-400 hover:text-emerald-600" title={isExpanded ? "Fechar" : "Detalhes"}>
-                              {isExpanded ? <EyeOff size={14} /> : <Eye size={14} />}
-                            </button>
-                            {!readOnly && (
-                              <>
-                                <button type="button" onClick={() => handleMoveExercise(phase.id, exIdx, -1)} disabled={exIdx === 0} className="p-1 rounded text-slate-400 hover:text-slate-700 disabled:opacity-30"><ChevronUp size={14} /></button>
-                                <button type="button" onClick={() => handleMoveExercise(phase.id, exIdx, 1)} disabled={exIdx === phase.exercises.length - 1} className="p-1 rounded text-slate-400 hover:text-slate-700 disabled:opacity-30"><ChevronDown size={14} /></button>
-                                <button type="button" onClick={() => handleRemoveExercise(phase.id, exIdx)} className="p-1 rounded text-slate-400 hover:text-red-500"><X size={14} /></button>
-                              </>
-                            )}
-                          </div>
                         </div>
                       </div>
 
-                      {/* TR / TA column — aligned with phase header */}
-                      <div className="flex items-start gap-3 flex-shrink-0 pt-0.5">
-                        <span className="text-[11px] text-slate-500 w-8 text-right">
-                          {tr > 0 ? `${tr}'` : "—"}
-                        </span>
-                        <span className="text-[11px] font-medium text-slate-600 w-10 text-right">
-                          {formatTA(ta)}
-                        </span>
+                      {/* Right column: TR/TA + action buttons */}
+                      <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                        <div className="flex gap-3">
+                          <span className="text-[11px] text-slate-500 w-8 text-right">{tr > 0 ? `${tr}'` : "—"}</span>
+                          <span className="text-[11px] font-medium text-slate-600 w-10 text-right">{formatTA(ta)}</span>
+                        </div>
+                        <div className="flex items-center gap-0.5 mt-0.5">
+                          <button type="button" onClick={() => setExpandedExercise(isExpanded ? null : phaseEx.id)} className="p-1.5 rounded text-slate-400 hover:text-emerald-600" title={isExpanded ? "Fechar detalhes" : "Ver detalhes"}>
+                            {isExpanded ? <EyeOff size={14} /> : <Eye size={14} />}
+                          </button>
+                          {!readOnly && (
+                            <>
+                              <button type="button" onClick={() => handleMoveExercise(phase.id, exIdx, -1)} disabled={exIdx === 0} className="p-1.5 rounded text-slate-400 hover:text-slate-700 disabled:opacity-30" title="Mover para cima"><ChevronUp size={14} /></button>
+                              <button type="button" onClick={() => handleMoveExercise(phase.id, exIdx, 1)} disabled={exIdx === phase.exercises.length - 1} className="p-1.5 rounded text-slate-400 hover:text-slate-700 disabled:opacity-30" title="Mover para baixo"><ChevronDown size={14} /></button>
+                              <button type="button" onClick={() => handleRemoveExercise(phase.id, exIdx)} className="p-1.5 rounded text-slate-400 hover:text-red-500" title="Remover exercício"><X size={14} /></button>
+                            </>
+                          )}
+                        </div>
                       </div>
                     </div>
 

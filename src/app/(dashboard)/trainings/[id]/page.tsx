@@ -288,7 +288,6 @@ export default function TrainingDetailPage() {
         complementaryObjectives: session.complementary_objectives,
         initialInstruction: session.initial_instruction,
         material: session.material,
-        notes: session.notes,
         phases: (phasesJson.phases ?? []).map((p) => ({
           phase_type: p.phase_type,
           phase_name: p.phase_name,
