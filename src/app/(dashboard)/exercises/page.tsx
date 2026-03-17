@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Loader2, Plus, Search, BookOpen, Clock, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -221,11 +222,12 @@ export default function ExercisesPage() {
                 className="group relative flex flex-col overflow-hidden rounded-xl border border-slate-100 bg-white text-left shadow-sm transition-shadow hover:shadow-md"
               >
                 {ex.diagram_url ? (
-                  <div className="h-32 w-full overflow-hidden bg-slate-50">
-                    <img
+                  <div className="relative h-32 w-full overflow-hidden bg-slate-50">
+                    <Image
                       src={ex.diagram_url}
                       alt={ex.name}
-                      className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                      fill
+                      className="object-cover transition-transform group-hover:scale-105"
                     />
                   </div>
                 ) : (
@@ -316,11 +318,14 @@ function ExerciseDetail({
   return (
     <div className="space-y-4">
       {exercise.diagram_url && (
-        <img
-          src={exercise.diagram_url}
-          alt="Diagrama tático"
-          className="w-full rounded-lg object-contain"
-        />
+        <div className="relative h-64 w-full">
+          <Image
+            src={exercise.diagram_url}
+            alt="Diagrama tático"
+            fill
+            className="rounded-lg object-contain"
+          />
+        </div>
       )}
 
       <div className="flex flex-wrap gap-2">

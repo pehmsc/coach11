@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Image from "next/image";
 import {
   Loader2,
   Plus,
@@ -471,7 +472,7 @@ export function TrainingUnit({ trainingId, session, readOnly = false, onExportPd
                     <div className="flex gap-3 px-4 py-2.5">
                       {/* Thumbnail */}
                       {diagramUrl ? (
-                        <img src={diagramUrl} alt="" className="h-12 w-12 flex-shrink-0 rounded object-cover" />
+                        <Image src={diagramUrl} alt="" width={48} height={48} className="h-12 w-12 flex-shrink-0 rounded object-cover" />
                       ) : (
                         <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded bg-slate-100">
                           <BookOpen size={14} className="text-slate-300" />
@@ -587,7 +588,9 @@ function ExerciseExpandedDetails({ phaseEx, exercise }: { phaseEx: TrainingPhase
   return (
     <div className="px-4 pb-3 pt-1 bg-slate-50/50 space-y-2">
       {diagramUrl && (
-        <img src={diagramUrl} alt="Diagrama tático" className="w-full max-h-48 rounded-lg object-contain bg-white border border-slate-100" />
+        <div className="relative h-48 w-full">
+          <Image src={diagramUrl} alt="Diagrama tático" fill className="rounded-lg object-contain bg-white border border-slate-100" />
+        </div>
       )}
       {description && (
         <div>
