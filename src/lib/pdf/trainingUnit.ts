@@ -180,50 +180,49 @@ export async function exportTrainingUnitPDF(data: TrainingUnitPdfData) {
 
   // ─── Header: logo + club name + UT number ───
   const logoB64 = imageCache.get("__logo__");
+  const logoY = y;
+  let logoH = 0;
   let hx = mg;
   if (logoB64) {
     try {
       const dims = await getImageDimensions(logoB64);
-      const fit = fitImage(dims.width, dims.height, 20, 20);
-      doc.addImage(logoB64, "PNG", mg, y - 6, fit.w, fit.h);
+      const fit = fitImage(dims.width, dims.height, 22, 22);
+      doc.addImage(logoB64, "PNG", mg, logoY, fit.w, fit.h);
+      logoH = fit.h;
       hx = mg + fit.w + 4;
     } catch { /* ignore */ }
   }
+
+  // Club name + UT label (beside logo)
   doc.setFontSize(11);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(30, 41, 59);
-  doc.text(data.clubName || "", hx, y);
+  doc.text(data.clubName || "", hx, y + 5);
   const utLabel = data.utNumber ? `Treino ${data.utNumber}` : (data.title ?? "Unidade de Treino");
-  doc.text(utLabel, pageW - mg, y, { align: "right" });
-  y += 5;
+  doc.text(utLabel, pageW - mg, y + 5, { align: "right" });
+
+  // Team name + season (second header line)
   doc.setFontSize(8);
   doc.setFont("helvetica", "normal");
   doc.setTextColor(100, 116, 139);
-  if (data.teamName) doc.text(data.teamName, hx, y);
-  if (data.season) doc.text(`Época ${data.season}`, pageW - mg, y, { align: "right" });
-  y += 6;
+  if (data.teamName) doc.text(data.teamName, hx, y + 10);
+  if (data.season) doc.text(`Época ${data.season}`, pageW - mg, y + 10, { align: "right" });
 
-  // Separator
-  doc.setDrawColor(200, 200, 200);
-  doc.line(mg, y, pageW - mg, y);
-  y += 5;
+  // Move below the logo (ensure no overlap)
+  y = logoY + Math.max(logoH, 14) + 4;
 
-  // ─── Metadata with bold labels ───
+  // ─── Metadata (compact, no separators between lines) ───
   doc.setFontSize(7.5);
   doc.setTextColor(51, 65, 85);
   const sp = 8;
+  const totalDur = data.phases.reduce((s, p) => s + p.exercises.reduce((s2, e) => s2 + (e.duration ?? 0) + (e.rest ?? 0), 0), 0);
 
-  // Line 1: Mesociclo, Microciclo, Período
+  // Line 1: Mesociclo + Microciclo + Período + Data + Hora + Duração
   let x = mg;
   x = drawLV(doc, x, y, "Mesociclo: ", String(data.mesocycle ?? "—"));
   x = drawLV(doc, x + sp, y, "Microciclo: ", String(data.microcycle ?? "—"));
-  drawLV(doc, x + sp, y, "Período: ", lbl(data.periodType, PERIOD_LABELS));
-  y += 5;
-
-  // Line 2: Data, Hora, Duração
-  const totalDur = data.phases.reduce((s, p) => s + p.exercises.reduce((s2, e) => s2 + (e.duration ?? 0) + (e.rest ?? 0), 0), 0);
-  x = mg;
-  x = drawLV(doc, x, y, "Data: ", fmtDate(data.sessionDate));
+  x = drawLV(doc, x + sp, y, "Período: ", lbl(data.periodType, PERIOD_LABELS));
+  x = drawLV(doc, x + sp, y, "Data: ", fmtDate(data.sessionDate));
   if (data.startTime) {
     const time = data.startTime.substring(0, 5) + (data.endTime ? `–${data.endTime.substring(0, 5)}` : "");
     x = drawLV(doc, x + sp, y, "Hora: ", time);
@@ -231,31 +230,52 @@ export async function exportTrainingUnitPDF(data: TrainingUnitPdfData) {
   if (totalDur > 0) drawLV(doc, x + sp, y, "Duração: ", `${totalDur}'`);
   y += 5;
 
-  // Line 3: Local, Área de treino
+  // Line 2: Local + Área de treino + Material
   x = mg;
   x = drawLV(doc, x, y, "Local: ", data.location || "—");
-  drawLV(doc, x + sp, y, "Área de treino: ", lbl(data.fieldArea, FIELD_AREA_LABELS));
-  y += 5;
+  x = drawLV(doc, x + sp, y, "Área de treino: ", lbl(data.fieldArea, FIELD_AREA_LABELS));
+  // Material can be long — check if it fits on same line
+  const matLabel = "Material: ";
+  const matValue = data.material || "—";
+  doc.setFont("helvetica", "bold");
+  const matLabelW = doc.getTextWidth(matLabel);
+  doc.setFont("helvetica", "normal");
+  const matValueW = doc.getTextWidth(matValue);
+  if (x + sp + matLabelW + matValueW < pageW - mg) {
+    drawLV(doc, x + sp, y, matLabel, matValue);
+    y += 5;
+  } else {
+    y += 5;
+    drawLV(doc, mg, y, matLabel, matValue);
+    y += 5;
+  }
 
-  // Line 4: Material
-  drawLV(doc, mg, y, "Material: ", data.material || "—");
-  y += 5;
-
-  // Line 5: Foco, Intensidade
+  // Line 3: Foco + Intensidade + Objectivo
   x = mg;
   x = drawLV(doc, x, y, "Foco: ", lbl(data.focus, FOCUS_LABELS));
-  drawLV(doc, x + sp, y, "Intensidade: ", lbl(data.intensity, INTENSITY_LABELS));
-  y += 7;
+  x = drawLV(doc, x + sp, y, "Intensidade: ", lbl(data.intensity, INTENSITY_LABELS));
+  const objText = stripMarkdown(data.objective || "—");
+  doc.setFont("helvetica", "bold");
+  const objLabelW = doc.getTextWidth("Objectivo: ");
+  doc.setFont("helvetica", "normal");
+  const objValueW = doc.getTextWidth(objText);
+  if (x + sp + objLabelW + objValueW < pageW - mg) {
+    drawLV(doc, x + sp, y, "Objectivo: ", objText);
+    y += 5;
+  } else {
+    y += 5;
+    drawLV(doc, mg, y, "Objectivo: ", objText);
+    y += 5;
+  }
 
-  // Objectives
-  drawLV(doc, mg, y, "Objectivo: ", stripMarkdown(data.objective || "—"));
+  // Line 4: Obj. Complementares + Instrução Inicial
+  x = mg;
+  x = drawLV(doc, x, y, "Obj. Complementares: ", stripMarkdown(data.complementaryObjectives || "—"));
+  drawLV(doc, x + sp, y, "Instrução Inicial: ", stripMarkdown(data.initialInstruction || "—"));
   y += 5;
-  drawLV(doc, mg, y, "Obj. Complementares: ", stripMarkdown(data.complementaryObjectives || "—"));
-  y += 5;
-  drawLV(doc, mg, y, "Instrução Inicial: ", stripMarkdown(data.initialInstruction || "—"));
-  y += 6;
 
-  // Separator
+  // Single separator before phases
+  y += 2;
   doc.setDrawColor(200, 200, 200);
   doc.line(mg, y, pageW - mg, y);
   y += 6;
