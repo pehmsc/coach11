@@ -31,8 +31,9 @@ import {
   ALL_PERMISSION_AREAS,
   type PermissionArea,
   type AreaPermissions,
+  type PermissionTemplateKey,
 } from "@/lib/auth/permissions-shared";
-import { PermissionsGrid } from "@/components/staff/PermissionsGrid";
+import { PermissionsGrid, type PermissionsMap, templateToPermissions } from "@/components/staff/PermissionsGrid";
 import { toast } from "sonner";
 import {
   AGE_GROUP_STAFF_ROLE_LABELS,
@@ -87,6 +88,11 @@ type TechnicalStaffUsage = {
   overLimit: boolean;
 };
 
+const ROLE_TO_TEMPLATE: Record<string, PermissionTemplateKey> = {
+  coach: "principal",
+  assistant_coach: "adjunto",
+};
+
 const EMPTY_FORM = {
   firstName: "",
   lastName: "",
@@ -113,6 +119,9 @@ export default function StaffPage() {
 
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [invitePermissions, setInvitePermissions] = useState<PermissionsMap>(() =>
+    templateToPermissions(ROLE_TO_TEMPLATE["assistant_coach"]),
+  );
   const [sending, setSending] = useState(false);
   const [inviteResult, setInviteResult] = useState<{ code: string; emailSent: boolean; name: string } | null>(null);
 
@@ -217,16 +226,29 @@ export default function StaffPage() {
     setSending(true);
     setInviteResult(null);
 
+    const permissionsArray = ALL_PERMISSION_AREAS.map((area) => ({
+      area,
+      ...invitePermissions[area],
+    }));
+
     const res = await fetch("/api/invite/staff", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ firstName: form.firstName, lastName: form.lastName, email: form.email, phone: form.phone, role: form.role }),
+      body: JSON.stringify({
+        firstName: form.firstName,
+        lastName: form.lastName,
+        email: form.email,
+        phone: form.phone,
+        role: form.role,
+        permissions: permissionsArray,
+      }),
     });
     const data = await res.json().catch(() => ({}));
 
     if (data.success) {
       setInviteResult({ code: data.inviteCode, emailSent: data.emailSent, name: form.firstName });
       setForm(EMPTY_FORM);
+      setInvitePermissions(templateToPermissions(ROLE_TO_TEMPLATE["assistant_coach"]));
       setShowForm(false);
       setInvitesExpanded(true);
       if (data.emailSent) {
@@ -821,7 +843,14 @@ export default function StaffPage() {
                 </div>
                 <div className="space-y-1.5">
                   <Label>Função *</Label>
-                  <Select value={form.role} onValueChange={(v) => setForm((f) => ({ ...f, role: v }))}>
+                  <Select
+                    value={form.role}
+                    onValueChange={(v) => {
+                      setForm((f) => ({ ...f, role: v }));
+                      const tplKey = ROLE_TO_TEMPLATE[v];
+                      if (tplKey) setInvitePermissions(templateToPermissions(tplKey));
+                    }}
+                  >
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {INVITE_ROLE_OPTIONS.map((opt) => (
@@ -829,6 +858,16 @@ export default function StaffPage() {
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Permissões</Label>
+                  <div className="rounded-lg border border-slate-100 p-3">
+                    <PermissionsGrid
+                      permissions={invitePermissions}
+                      onChange={setInvitePermissions}
+                      showTemplateSelector
+                    />
+                  </div>
                 </div>
               </div>
               <div className="flex gap-2 p-5 pt-3 border-t bg-white shrink-0 pb-[max(1rem,env(safe-area-inset-bottom))]">
