@@ -15,6 +15,7 @@ type ExerciseData = {
   objectives?: string | null;
   gameFormat?: string | null;
   duration?: number | null;
+  rest?: number | null;
   numPlayers?: number | null;
   fieldDimensions?: string | null;
   material?: string | null;
@@ -248,7 +249,8 @@ export async function exportTrainingUnitPDF(data: TrainingUnitPdfData) {
     y += 8;
 
     for (const ex of phase.exercises) {
-      globalTA += ex.duration ?? 0;
+      const exTR = (ex.duration ?? 0) + (ex.rest ?? 0);
+      globalTA += exTR;
 
       // Estimate height — check page break
       if (y > pageH - 70) { doc.addPage(); y = 14; }
