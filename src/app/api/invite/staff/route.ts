@@ -25,6 +25,14 @@ function generateCode(length = 8): string {
   return Array.from(arr).map((b) => chars[b % chars.length]).join("");
 }
 
+const AreaPermissionsSchema = z.object({
+  area: z.string().max(50),
+  can_read: z.boolean().optional(),
+  can_write: z.boolean().optional(),
+  can_edit: z.boolean().optional(),
+  can_delete: z.boolean().optional(),
+});
+
 const StaffInviteSchema = z.object({
   // QC-04: mínimo 2 caracteres para prevenir nomes triviais (ex: "A").
   firstName: z.string().trim().min(2, "O primeiro nome deve ter pelo menos 2 caracteres.").max(100),
@@ -32,6 +40,7 @@ const StaffInviteSchema = z.object({
   email: z.string().email().max(254),
   phone: z.string().max(20).nullable().optional(),
   role: z.enum(["coach", "assistant_coach"]),
+  permissions: z.array(AreaPermissionsSchema).max(20).optional(),
 });
 
 const roleLabel: Record<string, string> = {
@@ -117,7 +126,7 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
-    const { firstName, lastName, email, phone, role } = parsed.data;
+    const { firstName, lastName, email, phone, role, permissions } = parsed.data;
     const normalizedEmail = normalizeEmail(email);
 
     // 🔑 Gerar código único
@@ -138,6 +147,17 @@ export async function POST(request: Request) {
     }
 
     // 💾 Guardar convite na DB
+    // Normalizar permissões: can_read é sempre true
+    const initialPermissions = permissions && permissions.length > 0
+      ? permissions.map((p) => ({
+          area: p.area,
+          can_read: true,
+          can_write: p.can_write ?? false,
+          can_edit: p.can_edit ?? false,
+          can_delete: p.can_delete ?? false,
+        }))
+      : null;
+
     const { data: createdInvite, error: dbError } = await admin
       .from("staff_invites")
       .insert({
@@ -151,6 +171,7 @@ export async function POST(request: Request) {
         phone: phone || null,
         role,
         invite_code: inviteCode,
+        initial_permissions: initialPermissions,
       })
       .select("id")
       .maybeSingle();

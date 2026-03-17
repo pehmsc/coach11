@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef, useEffect } from "react";
 import {
   ALL_PERMISSION_AREAS,
   AREA_LABELS,
@@ -57,11 +58,32 @@ export function templateToPermissions(key: PermissionTemplateKey): PermissionsMa
   return { ...tpl };
 }
 
+type ColState = "all" | "some" | "none";
+
+function getColState(permissions: PermissionsMap, op: keyof AreaPermissions): ColState {
+  if (op === "can_read") return "all";
+  const count = ALL_PERMISSION_AREAS.filter((a) => permissions[a][op]).length;
+  if (count === ALL_PERMISSION_AREAS.length) return "all";
+  if (count === 0) return "none";
+  return "some";
+}
+
 export function PermissionsGrid({ permissions, onChange, readOnly, showTemplateSelector }: Props) {
   function toggle(area: PermissionArea, op: keyof AreaPermissions) {
     if (readOnly || op === "can_read") return;
     const next = { ...permissions };
     next[area] = { ...next[area], [op]: !next[area][op] };
+    onChange(next);
+  }
+
+  function toggleAll(op: keyof AreaPermissions) {
+    if (readOnly || op === "can_read") return;
+    const state = getColState(permissions, op);
+    const newVal = state !== "all";
+    const next = { ...permissions };
+    for (const area of ALL_PERMISSION_AREAS) {
+      next[area] = { ...next[area], [op]: newVal };
+    }
     onChange(next);
   }
 
@@ -101,6 +123,30 @@ export function PermissionsGrid({ permissions, onChange, readOnly, showTemplateS
             </tr>
           </thead>
           <tbody>
+            {/* Marcar tudo row */}
+            {!readOnly && (
+              <tr className="border-b border-slate-200 bg-slate-50">
+                <td className="py-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wide">
+                  Marcar tudo
+                </td>
+                {OP_LABELS.map((op) => (
+                  <td key={op.key} className="text-center py-1.5">
+                    {op.locked ? (
+                      <span className="inline-flex h-5 w-5 items-center justify-center rounded bg-emerald-100">
+                        <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                          <path d="M1 4L3.5 6.5L9 1" stroke="#059669" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </span>
+                    ) : (
+                      <TriStateCheck
+                        state={getColState(permissions, op.key)}
+                        onClick={() => toggleAll(op.key)}
+                      />
+                    )}
+                  </td>
+                ))}
+              </tr>
+            )}
             {ALL_PERMISSION_AREAS.map((area) => (
               <tr key={area} className="border-b border-slate-50">
                 <td className="py-1.5 text-slate-700">{AREA_LABELS[area]}</td>
@@ -121,6 +167,44 @@ export function PermissionsGrid({ permissions, onChange, readOnly, showTemplateS
 
       {/* Mobile cards */}
       <div className="sm:hidden space-y-2">
+        {/* Marcar tudo card */}
+        {!readOnly && (
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5">
+            <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Marcar tudo</p>
+            <div className="flex flex-wrap gap-1.5">
+              {OP_LABELS.map((op) => {
+                if (op.locked) {
+                  return (
+                    <span
+                      key={op.key}
+                      className="rounded-full px-2.5 py-0.5 text-[10px] font-medium bg-emerald-100 text-emerald-700 cursor-default"
+                    >
+                      {op.label}
+                    </span>
+                  );
+                }
+                const state = getColState(permissions, op.key);
+                return (
+                  <button
+                    key={op.key}
+                    type="button"
+                    onClick={() => toggleAll(op.key)}
+                    className={`rounded-full px-2.5 py-0.5 text-[10px] font-medium transition-colors cursor-pointer hover:opacity-80 ${
+                      state === "all"
+                        ? "bg-emerald-100 text-emerald-700"
+                        : state === "some"
+                        ? "bg-amber-100 text-amber-700"
+                        : "bg-slate-100 text-slate-400"
+                    }`}
+                  >
+                    {op.label}
+                    {state === "some" ? " (parcial)" : ""}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
         {ALL_PERMISSION_AREAS.map((area) => (
           <div key={area} className="rounded-lg border border-slate-100 p-2.5">
             <p className="text-xs font-medium text-slate-700 mb-1.5">{AREA_LABELS[area]}</p>
@@ -166,5 +250,25 @@ function ToggleCheck({ checked, locked, onChange }: { checked: boolean; locked?:
         </svg>
       )}
     </button>
+  );
+}
+
+function TriStateCheck({ state, onClick }: { state: ColState; onClick: () => void }) {
+  const ref = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (ref.current) {
+      ref.current.indeterminate = state === "some";
+    }
+  }, [state]);
+
+  return (
+    <input
+      ref={ref}
+      type="checkbox"
+      checked={state === "all"}
+      onChange={onClick}
+      className="h-4 w-4 cursor-pointer rounded accent-emerald-500"
+    />
   );
 }
