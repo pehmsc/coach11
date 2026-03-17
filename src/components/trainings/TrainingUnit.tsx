@@ -83,13 +83,23 @@ function getExDuration(ex: TrainingPhaseExercise & { exercise?: Exercise | null 
   return ex.custom_duration_minutes ?? ex.exercise?.duration_minutes ?? 0;
 }
 
+function getExRest(ex: TrainingPhaseExercise & { exercise?: Exercise | null }): number {
+  return ex.custom_rest_minutes ?? ex.exercise?.rest_minutes ?? 0;
+}
+
+/** TR = Tempo Real = duração + descanso */
+function calculateTR(ex: TrainingPhaseExercise & { exercise?: Exercise | null }): number {
+  return getExDuration(ex) + getExRest(ex);
+}
+
+/** TA = Tempo Acumulado = soma de todos os TRs desde o início da UT */
 function calculateTA(phases: PhaseWithExercises[], phaseIdx: number, exIdx: number): number {
   let total = 0;
   for (let p = 0; p <= phaseIdx; p++) {
     const exercises = phases[p].exercises;
     const limit = p === phaseIdx ? exIdx + 1 : exercises.length;
     for (let e = 0; e < limit; e++) {
-      total += getExDuration(exercises[e]);
+      total += calculateTR(exercises[e]);
     }
   }
   return total;
@@ -119,12 +129,12 @@ type Props = {
   session: TrainingRow;
   readOnly?: boolean;
   onExportPdf?: () => void;
-  onUpdateSession?: (fields: Record<string, unknown>) => Promise<void>;
+  onSessionSaved?: () => void;
 };
 
 /* ── Main Component ────────────────────────── */
 
-export function TrainingUnit({ trainingId, session, readOnly = false, onExportPdf, onUpdateSession }: Props) {
+export function TrainingUnit({ trainingId, session, readOnly = false, onExportPdf, onSessionSaved }: Props) {
   const [phases, setPhases] = useState<PhaseWithExercises[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -155,22 +165,32 @@ export function TrainingUnit({ trainingId, session, readOnly = false, onExportPd
   }
 
   async function saveHeaderEdit() {
-    if (!onUpdateSession) return;
     setSavingHeader(true);
     try {
-      await onUpdateSession({
-        microcycle_number: headerForm.microcycle_number ? parseInt(headerForm.microcycle_number, 10) : null,
-        mesocycle_number: headerForm.mesocycle_number ? parseInt(headerForm.mesocycle_number, 10) : null,
-        period_type: headerForm.period_type || null,
-        focus: headerForm.focus || null,
-        intensity: headerForm.intensity || null,
-        field_area: headerForm.field_area || null,
-        objective: headerForm.objective || null,
-        complementary_objectives: headerForm.complementary_objectives || null,
-        initial_instruction: headerForm.initial_instruction || null,
-        material: headerForm.material || null,
+      const res = await fetch(`/api/trainings/${trainingId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          microcycle_number: headerForm.microcycle_number ? parseInt(headerForm.microcycle_number, 10) : null,
+          mesocycle_number: headerForm.mesocycle_number ? parseInt(headerForm.mesocycle_number, 10) : null,
+          period_type: headerForm.period_type || null,
+          focus: headerForm.focus || null,
+          intensity: headerForm.intensity || null,
+          field_area: headerForm.field_area || null,
+          objective: headerForm.objective || null,
+          complementary_objectives: headerForm.complementary_objectives || null,
+          initial_instruction: headerForm.initial_instruction || null,
+          material: headerForm.material || null,
+        }),
       });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        toast.error(json.error || "Erro ao guardar planeamento.");
+        return;
+      }
+      toast.success("Planeamento guardado.");
       setEditingHeader(false);
+      onSessionSaved?.();
     } finally {
       setSavingHeader(false);
     }
@@ -297,7 +317,7 @@ export function TrainingUnit({ trainingId, session, readOnly = false, onExportPd
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-sm font-bold text-slate-900">Unidade de Treino</h2>
         <div className="flex items-center gap-1.5">
-          {!readOnly && !editingHeader && onUpdateSession && (
+          {!readOnly && !editingHeader && (
             <Button type="button" variant="outline" size="sm" onClick={openHeaderEdit}>
               <Pencil size={14} className="mr-1.5" />Editar
             </Button>
@@ -421,8 +441,8 @@ export function TrainingUnit({ trainingId, session, readOnly = false, onExportPd
                 </h3>
               </div>
               <div className="flex items-center gap-3">
-                <span className="text-[10px] font-semibold text-slate-400 w-8 text-right">TR</span>
-                <span className="text-[10px] font-semibold text-slate-400 w-10 text-right">TA</span>
+                <span className="text-[10px] font-semibold text-slate-400 w-8 text-right cursor-help underline decoration-dotted decoration-slate-300" title="Tempo Real (duração + descanso)">TR</span>
+                <span className="text-[10px] font-semibold text-slate-400 w-10 text-right cursor-help underline decoration-dotted decoration-slate-300" title="Tempo Acumulado desde o início da UT">TA</span>
                 {!readOnly && phase.phase_type === "custom" && (
                   <button type="button" onClick={() => handleRemovePhase(phaseIdx)} className="p-1 rounded text-slate-400 hover:text-red-500" title="Remover fase">
                     <X size={14} />
@@ -440,7 +460,8 @@ export function TrainingUnit({ trainingId, session, readOnly = false, onExportPd
                 const description = phaseEx.custom_description || ex?.description;
                 const category = ex?.category as ExerciseCategory | undefined;
                 const diagramUrl = phaseEx.custom_diagram_url || ex?.diagram_url;
-                const restMin = phaseEx.custom_rest_minutes ?? ex?.rest_minutes;
+                const restMin = phaseEx.custom_rest_minutes ?? ex?.rest_minutes ?? 0;
+                const tr = calculateTR(phaseEx);
                 const ta = calculateTA(phases, phaseIdx, exIdx);
                 const isExpanded = expandedExercise === phaseEx.id;
                 const catColor = category ? CATEGORY_COLORS[category] : null;
@@ -475,6 +496,9 @@ export function TrainingUnit({ trainingId, session, readOnly = false, onExportPd
                           {duration != null && duration > 0 && (
                             <span className="text-[11px] text-slate-500">{duration}&apos;</span>
                           )}
+                          {restMin > 0 && (
+                            <span className="text-[11px] text-slate-400">+{restMin}&apos; desc.</span>
+                          )}
                           <div className="ml-auto flex items-center gap-0.5">
                             <button type="button" onClick={() => setExpandedExercise(isExpanded ? null : phaseEx.id)} className="p-1 rounded text-slate-400 hover:text-emerald-600" title={isExpanded ? "Fechar" : "Detalhes"}>
                               {isExpanded ? <EyeOff size={14} /> : <Eye size={14} />}
@@ -492,8 +516,8 @@ export function TrainingUnit({ trainingId, session, readOnly = false, onExportPd
 
                       {/* TR / TA column — aligned with phase header */}
                       <div className="flex items-start gap-3 flex-shrink-0 pt-0.5">
-                        <span className="text-[11px] text-slate-400 w-8 text-right">
-                          {restMin && restMin > 0 ? `${restMin}'` : "—"}
+                        <span className="text-[11px] text-slate-500 w-8 text-right">
+                          {tr > 0 ? `${tr}'` : "—"}
                         </span>
                         <span className="text-[11px] font-medium text-slate-600 w-10 text-right">
                           {formatTA(ta)}

@@ -240,33 +240,6 @@ export default function TrainingDetailPage() {
     }
   }
 
-  async function handleUpdateUtFields(fields: Record<string, unknown>) {
-    if (!session || !ageGroupId) return;
-    const res = await fetch("/api/calendar/events", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id: session.id,
-        type: "training",
-        ageGroupId,
-        payload: {
-          title: session.title || "Treino",
-          date: session.session_date,
-          start_time: session.start_time,
-          ...fields,
-        },
-      }),
-    });
-    const data = await res.json().catch(() => null) as { success?: boolean; event?: TrainingRow; error?: string } | null;
-    if (!res.ok || !data?.success) {
-      toast.error(data?.error || "Erro ao guardar campos da UT.");
-      return;
-    }
-    setSession((prev) => prev ? { ...prev, ...data.event } : prev);
-    toast.success("Campos da UT guardados.");
-    await loadDetail();
-  }
-
   async function handleExportUtPdf() {
     if (!session) return;
     try {
@@ -282,6 +255,7 @@ export default function TrainingDetailPage() {
             custom_objectives?: string | null;
             custom_game_format?: string | null;
             custom_duration_minutes?: number | null;
+            custom_rest_minutes?: number | null;
             custom_num_players?: number | null;
             custom_field_dimensions?: string | null;
             custom_material?: string | null;
@@ -327,6 +301,7 @@ export default function TrainingDetailPage() {
             numPlayers: ex.custom_num_players ?? ex.exercise?.min_players ?? null,
             fieldDimensions: ex.custom_field_dimensions || ex.exercise?.field_dimensions || null,
             material: ex.custom_material || ex.exercise?.material || null,
+            rest: ex.custom_rest_minutes ?? ex.exercise?.rest_minutes ?? 0,
             diagramUrl: ex.custom_diagram_url || ex.exercise?.diagram_url || null,
             notes: ex.notes || null,
           })),
@@ -507,7 +482,7 @@ export default function TrainingDetailPage() {
                   session={session}
                   isClosed={isClosed}
                   onExportPdf={() => void handleExportUtPdf()}
-                  onUpdateSession={handleUpdateUtFields}
+                  onSessionSaved={() => void loadDetail()}
                 />
               )}
 
@@ -591,7 +566,7 @@ function TabBtn({ active, label, count, onClick }: { active: boolean; label: str
   );
 }
 
-function TabPlanning({ session, isClosed, onExportPdf, onUpdateSession }: { session: TrainingRow; isClosed: boolean; onExportPdf: () => void; onUpdateSession?: (fields: Record<string, unknown>) => Promise<void> }) {
+function TabPlanning({ session, isClosed, onExportPdf, onSessionSaved }: { session: TrainingRow; isClosed: boolean; onExportPdf: () => void; onSessionSaved?: () => void }) {
   return (
     <div className="space-y-4">
       {session.notes?.trim() && (
@@ -606,7 +581,7 @@ function TabPlanning({ session, isClosed, onExportPdf, onUpdateSession }: { sess
         session={session}
         readOnly={isClosed}
         onExportPdf={onExportPdf}
-        onUpdateSession={onUpdateSession}
+        onSessionSaved={onSessionSaved}
       />
     </div>
   );
