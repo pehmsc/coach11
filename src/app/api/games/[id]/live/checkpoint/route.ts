@@ -84,7 +84,8 @@ async function assertGameAccess(
   let access = null;
   try {
     access = await fetchGameAccessContext(db, gameId);
-  } catch {
+  } catch (error) {
+    console.error("[api.games.live.checkpoint.access]", { gameId, error });
     return {
       ok: false as const,
       response: NextResponse.json({ error: "Erro ao validar jogo." }, { status: 500 }),

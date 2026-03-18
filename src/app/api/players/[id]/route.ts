@@ -44,7 +44,8 @@ async function getRouteContext() {
   let db = supabase;
   try {
     db = createAdminClient();
-  } catch {
+  } catch (error) {
+    console.warn("[api.players.id] admin client unavailable", error);
     db = supabase;
   }
 

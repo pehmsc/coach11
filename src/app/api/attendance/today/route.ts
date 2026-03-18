@@ -251,7 +251,8 @@ export async function POST(request: Request) {
     let db = supabase;
     try {
       db = createAdminClient();
-    } catch {
+    } catch (error) {
+      console.warn("[api.attendance.today] admin client unavailable", error);
       db = supabase;
     }
 

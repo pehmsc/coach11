@@ -143,7 +143,8 @@ export async function GET(request: Request) {
     let admin: SupabaseClient | null = null;
     try {
       admin = createAdminClient();
-    } catch {
+    } catch (error) {
+      console.warn("[api.messages.get] admin client unavailable", error);
       admin = null;
     }
     const {
@@ -275,7 +276,8 @@ export async function POST(request: Request) {
     let db = supabase;
     try {
       db = createAdminClient();
-    } catch {
+    } catch (error) {
+      console.warn("[api.messages.post] admin client unavailable", error);
       db = supabase;
     }
 
@@ -319,7 +321,8 @@ export async function POST(request: Request) {
       try {
         senderDisplayName =
           (await loadAuthDisplayNamesById(createAdminClient(), [user.id])).get(user.id) || null;
-      } catch {
+      } catch (error) {
+        console.warn("[api.messages] failed to load auth display name", error);
         senderDisplayName = null;
       }
     }

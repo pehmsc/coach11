@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { checkRedeemLimit } from "@/lib/rate-limit";
 import { TECHNICAL_STAFF_LIMIT_ERROR_MESSAGE } from "@/lib/team/technical-staff-limit";
+import { respondInternalError } from "@/lib/http/respond-internal-error";
 
 type RedeemRpcResult = {
   ok?: boolean;
@@ -151,10 +152,6 @@ export async function POST(request: Request) {
       role,
     });
   } catch (error) {
-    console.error("Erro inesperado em invite/redeem:", error);
-    return NextResponse.json(
-      { error: "Erro interno ao aceitar o convite." },
-      { status: 500 },
-    );
+    return respondInternalError("api.invite.redeem", error, { request });
   }
 }

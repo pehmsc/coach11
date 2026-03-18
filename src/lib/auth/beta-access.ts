@@ -1,10 +1,17 @@
 // Email do super-coordenador lido da variável de ambiente (nunca hardcoded).
 // Definir SUPER_COORDINATOR_EMAIL no .env.local e nas env vars de produção.
 const _superCoordinatorEmail = process.env.SUPER_COORDINATOR_EMAIL?.trim().toLowerCase() ?? "";
-if (!_superCoordinatorEmail && process.env.NODE_ENV === "production") {
-  throw new Error("SUPER_COORDINATOR_EMAIL env var é obrigatória em produção.");
+
+function getSuperCoordinatorEmail(): string {
+  if (!_superCoordinatorEmail && process.env.NODE_ENV === "production") {
+    throw new Error("SUPER_COORDINATOR_EMAIL env var é obrigatória em produção.");
+  }
+  return _superCoordinatorEmail;
 }
+
 export const SUPER_COORDINATOR_EMAIL = _superCoordinatorEmail;
+
+export { getSuperCoordinatorEmail };
 
 export type BetaInviteType = "beta_coordinator";
 export type BetaInviteStatus = "sent" | "accepted" | "revoked" | "expired";
@@ -48,5 +55,6 @@ export function normalizeEmail(email: string | null | undefined) {
 }
 
 export function isSuperCoordinatorEmail(email: string | null | undefined) {
+  if (!SUPER_COORDINATOR_EMAIL) return false;
   return normalizeEmail(email) === SUPER_COORDINATOR_EMAIL;
 }
