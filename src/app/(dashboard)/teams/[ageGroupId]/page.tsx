@@ -312,8 +312,9 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
 
   async function loadAll() {
     setLoading(true);
+    try {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setLoading(false); return; }
+    if (!user) { return; }
 
     // Profile & permissions
     const { data: profile } = await supabase
@@ -329,7 +330,7 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
       .eq("id", ageGroupId)
       .maybeSingle();
 
-    if (!ag) { setLoading(false); return; }
+    if (!ag) { return; }
     const ageGroupData = ag as AgeGroup;
     setAgeGroup(ageGroupData);
     setTacticalSystem(ag.tactical_system || "");
@@ -497,7 +498,11 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
       setSeasonObjectives(objData.objectives_text ?? "");
     }
 
-    setLoading(false);
+    } catch {
+      // Network or query error — stop loading so the page doesn't hang.
+    } finally {
+      setLoading(false);
+    }
   }
 
   // Bug 5 — Calendário: usar game_datetime (não scheduled_at)

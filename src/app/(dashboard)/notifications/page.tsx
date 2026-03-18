@@ -61,38 +61,37 @@ export default function NotificationsPage() {
     if (showLoading) {
       setLoading(true);
     }
-    const res = await fetch("/api/notifications?limit=80", { cache: "no-store" });
-    const payload = (await res.json().catch(() => null)) as NotificationsResponse | null;
+    try {
+      const res = await fetch("/api/notifications?limit=80", { cache: "no-store" });
+      const payload = (await res.json().catch(() => null)) as NotificationsResponse | null;
 
-    if (!res.ok || !payload) {
-      setError(payload?.error || "Erro ao carregar notificações.");
-      if (showLoading) {
-        setLoading(false);
+      if (!res.ok || !payload) {
+        setError(payload?.error || "Erro ao carregar notificações.");
+        return;
       }
-      return;
-    }
 
-    if (payload.linked === false) {
-      setLinked(false);
-      setNotifications([]);
-      setUnreadCount(0);
+      if (payload.linked === false) {
+        setLinked(false);
+        setNotifications([]);
+        setUnreadCount(0);
+        setCurrentUserId(payload.currentUserId || null);
+        dispatchUnreadCountPatch({ notifications: 0 });
+        return;
+      }
+
+      setLinked(true);
+      setError(null);
       setCurrentUserId(payload.currentUserId || null);
-      dispatchUnreadCountPatch({ notifications: 0 });
+      const nextNotifications = Array.isArray(payload.notifications) ? payload.notifications : [];
+      setNotifications(nextNotifications);
+      setUnreadCount(payload.unreadCount || 0);
+      dispatchUnreadCountPatch({ notifications: payload.unreadCount || 0 });
+    } catch {
+      setError("Erro de ligação ao carregar notificações.");
+    } finally {
       if (showLoading) {
         setLoading(false);
       }
-      return;
-    }
-
-    setLinked(true);
-    setError(null);
-    setCurrentUserId(payload.currentUserId || null);
-    const nextNotifications = Array.isArray(payload.notifications) ? payload.notifications : [];
-    setNotifications(nextNotifications);
-    setUnreadCount(payload.unreadCount || 0);
-    dispatchUnreadCountPatch({ notifications: payload.unreadCount || 0 });
-    if (showLoading) {
-      setLoading(false);
     }
   }, []);
 

@@ -109,67 +109,69 @@ export default function ClubPage() {
 
   async function loadData() {
     setLoading(true);
-    const res = await fetch("/api/me/context");
-    const payload = await res.json().catch(() => ({}));
+    try {
+      const res = await fetch("/api/me/context");
+      const payload = await res.json().catch(() => ({}));
 
-    if (!res.ok) {
-      toast.error(payload?.error || "Erro ao carregar clube.");
-      setLoading(false);
-      return;
-    }
-
-    const ag = payload?.ageGroup as AgeGroup | null;
-    const role = typeof payload?.profile?.role === "string" ? payload.profile.role : "coach";
-    const isSuper = payload?.profile?.is_super_coordinator === true;
-    const manage = role === "coordinator" || isSuper;
-    setCanManage(manage);
-
-    if (!ag) {
-      setLoading(false);
-      return;
-    }
-
-    setAgeGroup(ag);
-    setClubName(ag.club_name);
-    setClubShortName(normalizeManualShortName(ag.club_short_name, 5) || "");
-    setLogoUrl(ag.club_logo_url || "");
-    setKitPieces((payload?.kits as KitPiece[]) || []);
-
-    let tid = typeof payload?.teamId === "string" ? payload.teamId : null;
-    if (!tid && manage) {
-      const { data: newTeam } = await supabase
-        .from("teams")
-        .insert({
-          age_group_id: ag.id,
-          name: `${ag.club_name} ${ag.name}`,
-          is_competitive: true,
-        })
-        .select("id")
-        .single();
-      tid = newTeam?.id ?? null;
-    }
-    setTeamId(tid);
-
-    // Load branding from clubs table
-    const { data: agRow } = await supabase
-      .from("age_groups")
-      .select("club_id")
-      .eq("id", ag.id)
-      .maybeSingle();
-    if (agRow?.club_id) {
-      setClubId(agRow.club_id);
-      const { data: club } = await supabase
-        .from("clubs")
-        .select("primary_color, secondary_color")
-        .eq("id", agRow.club_id)
-        .maybeSingle();
-      if (club) {
-        setPrimaryColor(club.primary_color || "#1A7F4B");
-        setSecondaryColor(club.secondary_color || "#0F172A");
+      if (!res.ok) {
+        toast.error(payload?.error || "Erro ao carregar clube.");
+        return;
       }
-    }
 
-    setLoading(false);
+      const ag = payload?.ageGroup as AgeGroup | null;
+      const role = typeof payload?.profile?.role === "string" ? payload.profile.role : "coach";
+      const isSuper = payload?.profile?.is_super_coordinator === true;
+      const manage = role === "coordinator" || isSuper;
+      setCanManage(manage);
+
+      if (!ag) {
+        return;
+      }
+
+      setAgeGroup(ag);
+      setClubName(ag.club_name);
+      setClubShortName(normalizeManualShortName(ag.club_short_name, 5) || "");
+      setLogoUrl(ag.club_logo_url || "");
+      setKitPieces((payload?.kits as KitPiece[]) || []);
+
+      let tid = typeof payload?.teamId === "string" ? payload.teamId : null;
+      if (!tid && manage) {
+        const { data: newTeam } = await supabase
+          .from("teams")
+          .insert({
+            age_group_id: ag.id,
+            name: `${ag.club_name} ${ag.name}`,
+            is_competitive: true,
+          })
+          .select("id")
+          .single();
+        tid = newTeam?.id ?? null;
+      }
+      setTeamId(tid);
+
+      // Load branding from clubs table
+      const { data: agRow } = await supabase
+        .from("age_groups")
+        .select("club_id")
+        .eq("id", ag.id)
+        .maybeSingle();
+      if (agRow?.club_id) {
+        setClubId(agRow.club_id);
+        const { data: club } = await supabase
+          .from("clubs")
+          .select("primary_color, secondary_color")
+          .eq("id", agRow.club_id)
+          .maybeSingle();
+        if (club) {
+          setPrimaryColor(club.primary_color || "#1A7F4B");
+          setSecondaryColor(club.secondary_color || "#0F172A");
+        }
+      }
+    } catch {
+      toast.error("Erro de ligação ao carregar clube.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function handleSaveClub(e: { preventDefault(): void }) {
