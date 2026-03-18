@@ -15,7 +15,16 @@ const SRC_ALLOWED_EXCEPTIONS = new Map([
   ],
 ]);
 
-const MIGRATION_ALLOWED_EXCEPTIONS = new Map();
+const MIGRATION_ALLOWED_EXCEPTIONS = new Map([
+  [
+    "supabase/migrations/20260318120000_club_hierarchy.sql",
+    new Set([
+      "sql-club-memberships-auth",
+      // Sprint 4: intentionally introduces club hierarchy with club_memberships
+      // as a new authorization boundary for the multi-club phase.
+    ]),
+  ],
+]);
 
 const SRC_RULES = [
   {
