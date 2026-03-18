@@ -379,24 +379,66 @@ pdf.severity_badge("OK", "unstable_cache para paginas publicas (ISR)")
 pdf.severity_badge("OK", "Cache-Control headers bem configurados para assets")
 pdf.severity_badge("MEDIO", "Sem caching server-side para API routes autenticadas")
 
-pdf.chapter_title("5.4 Bundle e Dependencias", level=2)
-pdf.severity_badge("MEDIO", "leaflet importado globalmente (pode ser lazy-loaded)")
-pdf.severity_badge("MEDIO", "jspdf importado globalmente (so usado na exportacao)")
+pdf.chapter_title("5.4 Queries de Base de Dados", level=2)
+pdf.severity_badge("ALTO", "Convocation route: 10+ queries sequenciais (waterfall)")
 pdf.body_text(
-    "Bibliotecas como leaflet e jspdf devem usar dynamic import para reduzir "
-    "o bundle inicial. Exemplo: const leaflet = await import('leaflet')."
+    "A route GET /api/games/[id]/convocation faz 10+ queries sequenciais ao "
+    "Supabase que poderiam ser parallelizadas com Promise.all. Inclui: game, "
+    "access context, convocations, players, external players, same-day games, "
+    "kit pieces, checkpoints."
+)
+pdf.severity_badge("ALTO", "resolveUserTeamContext: 3-5 queries POR REQUEST")
+pdf.body_text(
+    "Esta funcao corre em CADA request autenticado e no dashboard layout, "
+    "fazendo 3-5 queries sem qualquer caching. Para 100 utilizadores activos, "
+    "isto representa 300-500 queries/request ao Supabase. Implementar caching "
+    "com unstable_cache ou React Query server-side."
+)
+pdf.severity_badge("ALTO", "N+1 em messages: getUserById por sender")
+pdf.body_text(
+    "loadAuthDisplayNamesById() chama auth.admin.getUserById() individualmente "
+    "por cada sender unico. Com muitos senders, cria N+1 auth lookups."
+)
+pdf.severity_badge("ALTO", "/api/games e /api/trainings sem paginacao")
+pdf.body_text(
+    "Ambos retornam TODOS os registos sem limite. A medida que as temporadas "
+    "acumulam, estas respostas crescem sem controlo. Adicionar cursor pagination."
 )
 
-pdf.chapter_title("5.5 Optimizacoes React", level=2)
+pdf.chapter_title("5.5 Bundle e Dependencias", level=2)
+pdf.severity_badge("ALTO", "radix-ui umbrella package importa tudo")
+pdf.body_text(
+    "O package 'radix-ui' (v1.4.3) importa TODOS os primitivos Radix mesmo "
+    "quando so alguns sao usados. Migrar para packages individuais "
+    "(@radix-ui/react-dialog, etc.) para tree-shaking efectivo."
+)
+pdf.severity_badge("OK", "leaflet e jspdf ja usam dynamic import")
+pdf.severity_badge("MEDIO", "posthog-js (~45KB) carregado em todas as paginas")
+
+pdf.chapter_title("5.6 React Query Subutilizado", level=2)
+pdf.severity_badge("ALTO", "React Query instalado mas maioria usa raw fetch/useState")
+pdf.body_text(
+    "A maioria das pages usa fetch() + useState/useEffect em vez de React Query. "
+    "Perde-se deduplicacao, caching, background refetching e retry automatico. "
+    "Migrar progressivamente para useQuery/useMutation."
+)
+
+pdf.chapter_title("5.7 Optimizacoes React", level=2)
 pdf.severity_badge("OK", "111 usos de useMemo/useCallback em 27 ficheiros")
+pdf.severity_badge("MEDIO", "Sem React.memo em list items (ConvocatedRow, etc.)")
+pdf.severity_badge("MEDIO", "Pages com 15+ useState - considerar useReducer")
+
+pdf.chapter_title("5.8 Polling Redundante", level=2)
+pdf.severity_badge("MEDIO", "Notifications: polling 60-120s + Supabase Realtime")
 pdf.body_text(
-    "Boa adopcao de memoizacao, especialmente em useLiveGameState.ts (26 usos). "
-    "Manter esta pratica ao refactorar componentes."
+    "use-unread-notifications.ts faz polling E subscreve Supabase Realtime. "
+    "O polling e redundante - remover e confiar apenas no realtime."
 )
 
-pdf.chapter_title("5.6 Paginacao", level=2)
-pdf.severity_badge("OK", "23 API routes implementam paginacao")
-pdf.body_text("Boa cobertura de paginacao nas endpoints de listagem.")
+pdf.chapter_title("5.9 Memory Leaks", level=2)
+pdf.severity_badge("OK", "Todos event listeners e intervals limpos correctamente")
+pdf.severity_badge("OK", "Supabase realtime channels limpos no cleanup")
+pdf.body_text("Nenhum memory leak detectado - boa pratica de cleanup.")
 
 # ============ 6. REFACTORING ============
 pdf.add_page()
@@ -592,8 +634,14 @@ pdf.chapter_title("Sprint 2: Performance e Validacao (Semana 3-4)", level=2)
 pdf.chapter_title("Prioridade: Alto", level=3)
 pdf.bullet("Adicionar Zod validation a API routes POST/PUT (priorizar games, players, staff)")
 pdf.bullet("Corrigir restantes catch {} vazios (104 no total)")
+pdf.bullet("Parallelizar queries na convocation route (Promise.all)")
+pdf.bullet("Adicionar paginacao a /api/games e /api/trainings")
+pdf.bullet("Cachear resolveUserTeamContext (corre 3-5 queries por request)")
+pdf.bullet("Corrigir N+1 getUserById em messages route")
+pdf.bullet("Migrar radix-ui umbrella para packages individuais")
+pdf.bullet("Migrar pages para React Query (eliminar raw fetch/useState)")
+pdf.bullet("Remover polling redundante em notifications (manter Realtime)")
 pdf.bullet("Migrar dashboard page para Server Component")
-pdf.bullet("Lazy-load leaflet e jspdf com dynamic imports")
 pdf.bullet("Substituir <img> por next/image em staff/page.tsx e ClubLogoUpload.tsx")
 pdf.bullet("Refactorar useLiveGameState.ts (1668 linhas) em sub-hooks")
 pdf.bullet("Implementar rate limiting distribuido (Upstash Redis)")
