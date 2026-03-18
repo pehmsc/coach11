@@ -312,39 +312,94 @@ pdf.severity_badge("OK", "Todas as API routes verificam supabase.auth.getUser()"
 pdf.severity_badge("OK", "Admin routes usam getSuperUserAccess() dedicado")
 pdf.severity_badge("OK", "RPC functions parametrizadas (0 vectores de SQL injection)")
 pdf.severity_badge("OK", "Open redirect protegido via sanitizeNextPath()")
-pdf.severity_badge("OK", "Password minimo 10 caracteres enforced")
-pdf.severity_badge("INFO", "Sem middleware.ts - auth per-route (funcional mas nao centralizado)")
+pdf.severity_badge("OK", "Password minimo 10 caracteres enforced (Zod server-side)")
+pdf.severity_badge("OK", "PKCE OAuth flow configurado correctamente")
+pdf.severity_badge("MEDIO", "Sem middleware.ts - sem gatekeeper centralizado de auth")
+pdf.body_text(
+    "Se um developer esquecer de adicionar auth check a uma nova API route, "
+    "fica publicamente acessivel. Recomenda-se adicionar middleware.ts com "
+    "route matcher para /api/* e /(dashboard)/*."
+)
 
-pdf.chapter_title("4.2 Headers de Seguranca", level=2)
+pdf.chapter_title("4.2 Sessao e Cookies", level=2)
+pdf.severity_badge("MEDIO", "Auth cookie httpOnly: false (acessivel a JS client)")
+pdf.body_text(
+    "O Supabase SSR requer acesso client-side ao cookie, mas isto significa que "
+    "um XSS poderia roubar o session token. O cookie tem maxAge de 400 dias, "
+    "prolongando a janela de vulnerabilidade."
+)
+pdf.severity_badge("OK", "SameSite: lax configurado (proteccao CSRF basica)")
+pdf.severity_badge("OK", "secure: true em producao")
+pdf.severity_badge("INFO", "Sem CSRF token explicito (depende de SameSite + JSON-only)")
+
+pdf.chapter_title("4.3 Headers de Seguranca", level=2)
 pdf.severity_badge("OK", "CSP configurado sem unsafe-eval")
-pdf.severity_badge("OK", "X-Frame-Options: DENY")
+pdf.severity_badge("OK", "X-Frame-Options: DENY, frame-ancestors 'none'")
 pdf.severity_badge("OK", "Strict-Transport-Security: max-age=63072000")
 pdf.severity_badge("OK", "Permissions-Policy: camera=(), microphone=(), geolocation=()")
+pdf.severity_badge("OK", "X-Content-Type-Options: nosniff")
 
-pdf.chapter_title("4.3 Input Validation", level=2)
+pdf.chapter_title("4.4 Input Validation", level=2)
 pdf.severity_badge("MEDIO", "34% das API routes usam Zod (21/62)")
 pdf.body_text(
     "41 API routes (~66%) nao tem validacao explicita Zod. Usam validacao manual "
-    "que e mais propensa a erros. Recomenda-se migrar para Zod progressivamente."
+    "que e mais propensa a erros. Existe helper parseBody() reutilizavel em "
+    "lib/http/validate.ts. Recomenda-se migrar para Zod progressivamente."
 )
 
-pdf.chapter_title("4.4 Rate Limiting", level=2)
-pdf.severity_badge("OK", "Rate limiting implementado para invites, location, redeem")
+pdf.chapter_title("4.5 Rate Limiting", level=2)
+pdf.severity_badge("MEDIO", "Maioria das API routes SEM rate limiting")
+pdf.body_text(
+    "Rate limiting existe apenas para: invites (5/15min), location (12/min), "
+    "redeem (10/hr). Falta em: games CRUD, players CRUD, messages, "
+    "notifications, team, push, competitions. Um atacante autenticado pode "
+    "inundar a maioria dos endpoints."
+)
+pdf.severity_badge("MEDIO", "Endpoints publicos sem rate limiting")
+pdf.body_text(
+    "/api/auth/register e /api/auth/beta-access/check nao tem rate limiting, "
+    "permitindo brute-force ou enumeracao de emails."
+)
 pdf.severity_badge("MEDIO", "Rate limiting in-memory (per-instance em serverless)")
 pdf.body_text(
     "Em Vercel serverless, cada instancia tem o seu rate limiter independente. "
     "Para proteccao distribuida real, migrar para Upstash Redis ou Vercel KV."
 )
 
-pdf.chapter_title("4.5 XSS e Sanitizacao", level=2)
-pdf.severity_badge("OK", "dangerouslySetInnerHTML usado 1x com sanitizacao completa")
-pdf.severity_badge("OK", "HTML gerado via renderNotesToHtml() com escape de caracteres")
+pdf.chapter_title("4.6 Upload de Ficheiros", level=2)
+pdf.severity_badge("MEDIO", "Upload de SVG aceite (risco de stored XSS)")
+pdf.body_text(
+    "O endpoint /api/team/logo aceita SVG, que pode conter JavaScript embebido. "
+    "Positivo: limite 5MB, whitelist de extensoes, validacao MIME, auth check. "
+    "Recomendacao: remover SVG do whitelist ou sanitizar server-side. "
+    "Tambem falta validacao magic-byte (tipo real do ficheiro)."
+)
 
-pdf.chapter_title("4.6 Suite de Testes de Seguranca", level=2)
+pdf.chapter_title("4.7 XSS e Sanitizacao", level=2)
+pdf.severity_badge("OK", "dangerouslySetInnerHTML com sanitizacao completa")
+pdf.severity_badge("OK", "escapeHtml() aplicado ANTES de markdown transforms")
+
+pdf.chapter_title("4.8 Enumeracao de Emails", level=2)
+pdf.severity_badge("BAIXO", "beta-access/check revela status de invite por email")
+pdf.body_text(
+    "O endpoint retorna {allowed, reason} para qualquer email, revelando se "
+    "tem beta invite, staff invite ou e legacy user. Considerar remover 'reason' "
+    "ou limitar informacao exposta."
+)
+pdf.severity_badge("OK", "Register retorna erro generico para 'ja registado' (SEC-06)")
+
+pdf.chapter_title("4.9 RLS e Base de Dados", level=2)
+pdf.severity_badge("OK", "RLS extensivo em 18+ migrations Supabase")
+pdf.severity_badge("OK", "Policies usam security definer functions")
+pdf.severity_badge("OK", "Admin client protegido com 'server-only' import")
+pdf.severity_badge("OK", "Cross-club boundary policies RESTRICTIVE")
+
+pdf.chapter_title("4.10 Suite de Testes de Seguranca", level=2)
 pdf.severity_badge("OK", "security-fixes.test.ts com 19 testes automatizados")
 pdf.body_text(
     "Valida: CSP sem unsafe-eval, password min 10 chars, sem hardcoded secrets, "
-    "score max cap, correlationId hidden em producao, validacao de nomes."
+    "score max cap, correlationId hidden em producao, validacao de nomes. "
+    "Erros em producao retornam apenas 'Erro interno do servidor' sem detalhes."
 )
 
 # ============ 5. PERFORMANCE ============
