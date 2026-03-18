@@ -149,10 +149,25 @@ async function loadPermissionsModule(
   clearDynamicMocks();
   vi.resetModules();
   process.env.SUPER_COORDINATOR_EMAIL = superCoordinatorEmail;
-  const betaAccessModule = await import("../lib/auth/beta-access");
-  vi.doMock("@/lib/auth/beta-access", () => betaAccessModule);
 
-  return import("../lib/auth/permissions");
+  // Inline mock so beta-access is evaluated fresh with the current env var
+  // when permissions.ts imports it.
+  const normalized = superCoordinatorEmail.trim().toLowerCase();
+  vi.doMock("@/lib/auth/beta-access", () => {
+    const normalizeEmail = (email: string | null | undefined) =>
+      typeof email === "string" ? email.trim().toLowerCase() : "";
+    const SUPER_COORDINATOR_EMAIL = normalized;
+    return {
+      SUPER_COORDINATOR_EMAIL,
+      normalizeEmail,
+      isSuperCoordinatorEmail: (email: string | null | undefined) => {
+        if (!SUPER_COORDINATOR_EMAIL) return false;
+        return normalizeEmail(email) === SUPER_COORDINATOR_EMAIL;
+      },
+    };
+  });
+
+  return import("@/lib/auth/permissions");
 }
 
 async function loadCheckPermissionModule(options: {
