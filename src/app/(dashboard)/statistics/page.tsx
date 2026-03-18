@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import type { Tab } from "@/components/statistics/types";
 import {
   StatisticsLoadingSkeleton,
@@ -10,12 +11,15 @@ import { YellowCardAlert } from "@/components/statistics/YellowCardAlert";
 import { StatisticsTabs } from "@/components/statistics/StatisticsTabs";
 import { PdfExportCard } from "@/components/statistics/PdfExportCard";
 import { AttendanceTable } from "@/components/statistics/AttendanceTable";
+import { AttendanceHeatmap } from "@/components/statistics/AttendanceHeatmap";
 import { GameStatsSummaryCards } from "@/components/statistics/GameStatsSummaryCards";
 import { GameStatsTable } from "@/components/statistics/GameStatsTable";
 import { useStatisticsData } from "@/lib/hooks/useStatisticsData";
 import { useStatisticsSorting } from "@/lib/hooks/useStatisticsSorting";
 import { usePlayerSelection } from "@/lib/hooks/usePlayerSelection";
 import { useStatisticsExport } from "@/lib/hooks/useStatisticsExport";
+import { apiFetch } from "@/lib/http/apiFetch";
+import { queryKeys } from "@/lib/query/keys";
 
 // ── Component ────────────────────────────────────────────────────────────────
 
@@ -28,6 +32,7 @@ export default function StatisticsPage() {
     players,
     attendanceStats,
     gameStats,
+    rawFinalStats,
     loading,
     yellowAlerts,
   } = useStatisticsData();
@@ -61,6 +66,23 @@ export default function StatisticsPage() {
 
   const { exportingPdf, handleExportActiveTabPdf, handleExportActiveTabCsv } =
     useStatisticsExport(ageGroupId, ageGroupName);
+
+  // Heatmap data
+  const heatmapQuery = useQuery({
+    queryKey: ageGroupId
+      ? queryKeys.statistics.attendanceDaily(ageGroupId)
+      : ["statistics", "attendance-daily", "none"],
+    queryFn: () =>
+      apiFetch<{ daily: Array<{ date: string; present: number; late: number; absent: number; injured: number; total: number }> }>(
+        `/api/statistics/attendance-daily?ageGroupId=${ageGroupId}`,
+      ),
+    enabled: Boolean(ageGroupId),
+  });
+
+  const dailyData = useMemo(
+    () => heatmapQuery.data?.daily ?? [],
+    [heatmapQuery.data?.daily],
+  );
 
   // ── Render ──
 
@@ -112,21 +134,24 @@ export default function StatisticsPage() {
 
       {/* ── TAB: MAPA DE PRESENÇAS ── */}
       {activeTab === "attendance" && (
-        <AttendanceTable
-          sortedAttendance={sortedAttendance}
-          attendanceSort={attendanceSort}
-          toggleAttendanceSort={toggleAttendanceSort}
-          allCurrentTabSelected={allCurrentTabSelected}
-          toggleSelectAllCurrentTab={toggleSelectAllCurrentTab}
-          selectedPlayerIds={selectedPlayerIds}
-          toggleSelectedPlayer={toggleSelectedPlayer}
-        />
+        <>
+          <AttendanceHeatmap dailyData={dailyData} />
+          <AttendanceTable
+            sortedAttendance={sortedAttendance}
+            attendanceSort={attendanceSort}
+            toggleAttendanceSort={toggleAttendanceSort}
+            allCurrentTabSelected={allCurrentTabSelected}
+            toggleSelectAllCurrentTab={toggleSelectAllCurrentTab}
+            selectedPlayerIds={selectedPlayerIds}
+            toggleSelectedPlayer={toggleSelectedPlayer}
+          />
+        </>
       )}
 
       {/* ── TAB: ESTATÍSTICAS DE JOGO ── */}
       {activeTab === "game" && (
         <>
-          <GameStatsSummaryCards gameStats={gameStats} />
+          <GameStatsSummaryCards gameStats={gameStats} finalStats={rawFinalStats} />
           <GameStatsTable
             sortedGameStats={sortedGameStats}
             gameSort={gameSort}

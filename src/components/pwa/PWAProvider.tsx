@@ -15,6 +15,7 @@ import { createClient } from "@/lib/supabase/client";
 import { dispatchUnreadCountPatch } from "@/lib/notifications/unread-sync";
 import { Button } from "@/components/ui/button";
 import { IOSInstallModal } from "@/components/pwa/IOSInstallModal";
+import { OfflineIndicator } from "@/components/pwa/OfflineIndicator";
 import {
   isSessionExpiringSoon,
   waitForSessionPersistence,
@@ -239,6 +240,14 @@ export function PWAProvider({
       const data = event.data as
         | { type?: string; badgeCount?: number; messageBadgeCount?: number }
         | undefined;
+
+      if (data?.type === "COACH11_SYNC_COMPLETE") {
+        // Background sync finished — trigger a re-check of the sync queue count
+        // by dispatching a custom event that network-status listeners pick up.
+        window.dispatchEvent(new Event("online"));
+        return;
+      }
+
       if (data?.type !== "COACH11_PUSH_RECEIVED") return;
 
       if (typeof data.badgeCount === "number") {
@@ -463,6 +472,7 @@ export function PWAProvider({
   return (
     <PWAContext.Provider value={value}>
       {children}
+      <OfflineIndicator />
       <IOSInstallModal />
       <UpdateSnackbar
         open={updateReady}

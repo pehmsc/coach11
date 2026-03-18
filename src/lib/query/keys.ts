@@ -9,6 +9,8 @@ export const queryKeys = {
     root: () => ["statistics"] as const,
     players: (ageGroupId: string) =>
       ["statistics", "players", ageGroupId] as const,
+    attendanceDaily: (ageGroupId: string) =>
+      ["statistics", "attendance-daily", ageGroupId] as const,
   },
   join: {
     status: (code: string | null) => ["join", "status", code ?? ""] as const,

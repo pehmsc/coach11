@@ -1,4 +1,5 @@
 import type { QueryClient } from "@tanstack/react-query";
+import { clearAllOfflineData } from "@/lib/pwa/offline-store";
 
 const STORAGE_KEY_HINTS = ["react-query", "tanstack-query", "coach11-query-cache"];
 
@@ -24,4 +25,16 @@ export function clearClientCaches(queryClient?: QueryClient | null) {
 
   clearStorageByHints(window.localStorage);
   clearStorageByHints(window.sessionStorage);
+
+  // Clear IndexedDB offline data (API cache + sync queue).
+  void clearAllOfflineData();
+
+  // Clear service worker API cache.
+  void caches.keys().then((keys) =>
+    Promise.all(
+      keys
+        .filter((key) => key.startsWith("coach11-api-"))
+        .map((key) => caches.delete(key)),
+    ),
+  );
 }

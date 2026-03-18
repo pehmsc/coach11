@@ -187,12 +187,18 @@ export function useStatisticsData() {
     [gameStats],
   );
 
+  const rawFinalStats = useMemo(
+    () => statisticsQuery.data?.finalStats ?? [],
+    [statisticsQuery.data?.finalStats],
+  );
+
   return {
     ageGroupId,
     ageGroupName,
     players,
     attendanceStats,
     gameStats,
+    rawFinalStats,
     loading,
     yellowAlerts,
   };
