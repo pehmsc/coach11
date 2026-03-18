@@ -48,7 +48,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
     const { data: game, error: gameError } = await supabase
       .from("games")
       .select(
-        "id, team_id, age_group_id, status, title, opponent_name, opponent_short_name, game_datetime, location, is_home, score_home, score_away, notes",
+        "id, team_id, age_group_id, status, title, opponent_name, opponent_short_name, game_datetime, location, is_home, score_home, score_away, notes, positive_aspects, negative_aspects, coach_notes, opponent_tactical_system",
       )
       .eq("id", gameId)
       .maybeSingle();

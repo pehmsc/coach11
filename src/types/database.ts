@@ -168,6 +168,9 @@ export interface Game {
   equipment?: string;
   opponent_tactical_system?: string;
   additional_info?: string;
+  positive_aspects?: string;
+  negative_aspects?: string;
+  coach_notes?: string;
   created_at: string;
 }
 

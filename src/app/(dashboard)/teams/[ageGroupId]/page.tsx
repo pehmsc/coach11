@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { PublicSharePanel } from "@/components/team/PublicSharePanel";
+import { PlayerDocuments } from "@/components/team/PlayerDocuments";
 import type { AgeGroup, Player, FootballFormat } from "@/types/database";
 
 // ─── Constantes ──────────────────────────────────────────────────────────────
@@ -262,6 +263,10 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [deleting, setDeleting] = useState(false);
 
+  // Player documents
+  const [docsPlayerId, setDocsPlayerId] = useState<string | null>(null);
+  const docsPlayer = players.find((p) => p.id === docsPlayerId);
+
   // Planeamento — Modelo de Jogo (4 momentos)
   const [gameModel, setGameModel] = useState<Record<string, string>>({
     org_ofensiva: "",
@@ -274,6 +279,23 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
   const [seasonObjectives, setSeasonObjectives] = useState("");
   const [seasonObjectivesId, setSeasonObjectivesId] = useState<string | null>(null);
   const [savingObjectives, setSavingObjectives] = useState(false);
+
+  // Microciclo
+  const [microcicloObjective, setMicrocicloObjective] = useState("");
+  const [microcicloIntensity, setMicrocicloIntensity] = useState<string>("medium");
+  const [microcicloNotes, setMicrocicloNotes] = useState("");
+  const [microcicloId, setMicrocicloId] = useState<string | null>(null);
+  const [savingMicrociclo, setSavingMicrociclo] = useState(false);
+  const [microcicloWeekOffset, setMicrocicloWeekOffset] = useState(0);
+
+  const microcicloWeekStart = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + microcicloWeekOffset * 7);
+    const day = d.getDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    d.setDate(d.getDate() + diff);
+    return d.toISOString().split("T")[0];
+  }, [microcicloWeekOffset]);
 
   // Header — all user teams for dropdown
   const [allTeams, setAllTeams] = useState<Array<{ id: string; name: string; age_level?: string | null; club_name: string }>>([]);
@@ -571,6 +593,67 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
     }
     toast.success("Escalão apagado com sucesso.");
     router.push("/teams");
+  }
+
+  useEffect(() => {
+    if (!ageGroupId || loading) return;
+    void loadMicrociclo();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ageGroupId, microcicloWeekStart, loading]);
+
+  async function loadMicrociclo() {
+    const { data } = await supabase
+      .from("microciclos")
+      .select("id, objective, intensity, notes")
+      .eq("age_group_id", ageGroupId)
+      .eq("week_start_date", microcicloWeekStart)
+      .maybeSingle();
+    if (data) {
+      setMicrocicloId(data.id);
+      setMicrocicloObjective(data.objective ?? "");
+      setMicrocicloIntensity(data.intensity ?? "medium");
+      setMicrocicloNotes(data.notes ?? "");
+    } else {
+      setMicrocicloId(null);
+      setMicrocicloObjective("");
+      setMicrocicloIntensity("medium");
+      setMicrocicloNotes("");
+    }
+  }
+
+  async function handleSaveMicrociclo() {
+    if (!ageGroup || !canManage) return;
+    setSavingMicrociclo(true);
+    if (microcicloId) {
+      const { error } = await supabase
+        .from("microciclos")
+        .update({
+          objective: microcicloObjective || null,
+          intensity: microcicloIntensity || null,
+          notes: microcicloNotes || null,
+        })
+        .eq("id", microcicloId);
+      if (error) toast.error("Erro ao guardar microciclo.");
+      else toast.success("Microciclo guardado");
+    } else {
+      const { data, error } = await supabase
+        .from("microciclos")
+        .insert({
+          age_group_id: ageGroup.id,
+          week_start_date: microcicloWeekStart,
+          objective: microcicloObjective || null,
+          intensity: microcicloIntensity || null,
+          notes: microcicloNotes || null,
+        })
+        .select("id")
+        .single();
+      if (error) toast.error("Erro ao criar microciclo.");
+      else {
+        setMicrocicloId(data.id);
+        toast.success("Microciclo guardado");
+      }
+    }
+    setSavingMicrociclo(false);
   }
 
   async function handleSaveGameModel() {
@@ -1089,9 +1172,9 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
             ) : (
               <div className="space-y-2">
                 {players.map((p) => (
-                  <Link key={p.id} href={`/players/${p.id}`}>
-                    <Card className="hover:shadow-sm transition-shadow">
-                      <CardContent className="py-3 px-4 flex items-center gap-3">
+                  <Card key={p.id} className="hover:shadow-sm transition-shadow">
+                    <CardContent className="py-3 px-4 flex items-center gap-3">
+                      <Link href={`/players/${p.id}`} className="flex items-center gap-3 flex-1 min-w-0">
                         <div className="w-9 h-9 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold text-slate-600 flex-shrink-0">
                           {p.jersey_number ?? "—"}
                         </div>
@@ -1103,27 +1186,44 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
                             {p.preferred_position ?? "Sem posição"}
                           </p>
                         </div>
-                        <span
-                          className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                            p.status === "active"
-                              ? "bg-emerald-100 text-emerald-700"
-                              : p.status === "injured"
-                              ? "bg-red-100 text-red-700"
-                              : p.status === "suspended"
-                              ? "bg-amber-100 text-amber-700"
-                              : "bg-slate-100 text-slate-500"
-                          }`}
-                        >
-                          {p.status === "active" ? "Activo"
-                            : p.status === "injured" ? "Lesionado"
-                            : p.status === "suspended" ? "Suspenso"
-                            : "Inactivo"}
-                        </span>
-                      </CardContent>
-                    </Card>
-                  </Link>
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={() => setDocsPlayerId(docsPlayerId === p.id ? null : p.id)}
+                        className={`text-xs px-2 py-1 rounded-md border transition-colors ${docsPlayerId === p.id ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "border-slate-200 text-slate-400 hover:text-slate-600 hover:border-slate-300"}`}
+                        title="Ver documentos"
+                      >
+                        Docs
+                      </button>
+                      <span
+                        className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                          p.status === "active"
+                            ? "bg-emerald-100 text-emerald-700"
+                            : p.status === "injured"
+                            ? "bg-red-100 text-red-700"
+                            : p.status === "suspended"
+                            ? "bg-amber-100 text-amber-700"
+                            : "bg-slate-100 text-slate-500"
+                        }`}
+                      >
+                        {p.status === "active" ? "Activo"
+                          : p.status === "injured" ? "Lesionado"
+                          : p.status === "suspended" ? "Suspenso"
+                          : "Inactivo"}
+                      </span>
+                    </CardContent>
+                  </Card>
                 ))}
               </div>
+            )}
+
+            {docsPlayer && (
+              <PlayerDocuments
+                key={docsPlayer.id}
+                playerId={docsPlayer.id}
+                playerName={`${docsPlayer.first_name} ${docsPlayer.last_name}`}
+                canManage={canManage}
+              />
             )}
           </div>
         )}
@@ -1275,21 +1375,105 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
               </CardContent>
             </Card>
 
-            {/* Microciclo & Mesociclo — future sprint */}
-            {[
-              { title: "Microciclo", desc: "Planeamento semanal de treinos com carga e objectivos." },
-              { title: "Mesociclo", desc: "Planeamento periódico (blocos de 4–6 semanas)." },
-            ].map((section) => (
-              <Card key={section.title} className="opacity-60">
-                <CardContent className="pt-5 pb-5">
-                  <p className="font-semibold text-slate-500 mb-1">{section.title}</p>
-                  <p className="text-sm text-slate-400">{section.desc}</p>
-                  <span className="inline-block mt-2 text-xs bg-slate-100 text-slate-500 px-2 py-1 rounded-full">
-                    Em breve
-                  </span>
-                </CardContent>
-              </Card>
-            ))}
+            {/* Microciclo — planeamento semanal */}
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base">Microciclo Semanal</CardTitle>
+                  <div className="flex items-center gap-1">
+                    <Button variant="ghost" size="icon" onClick={() => setMicrocicloWeekOffset((o) => o - 1)}>
+                      <ChevronLeft size={16} />
+                    </Button>
+                    <span className="text-xs text-slate-500 px-1 whitespace-nowrap min-w-[100px] text-center">
+                      Semana {microcicloWeekStart}
+                    </span>
+                    <Button variant="ghost" size="icon" onClick={() => setMicrocicloWeekOffset((o) => o + 1)}>
+                      <ChevronRight size={16} />
+                    </Button>
+                    {microcicloWeekOffset !== 0 && (
+                      <Button variant="ghost" size="sm" className="text-xs" onClick={() => setMicrocicloWeekOffset(0)}>
+                        Hoje
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div>
+                  <Label className="text-sm font-semibold text-slate-700">Objectivo da semana</Label>
+                  <textarea
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-emerald-300 focus:outline-none focus:ring-1 focus:ring-emerald-300 min-h-[60px] resize-y"
+                    value={microcicloObjective}
+                    onChange={(e) => setMicrocicloObjective(e.target.value)}
+                    placeholder="Ex: Trabalhar a saída de bola em construção..."
+                    readOnly={!canManage}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-sm font-semibold text-slate-700">Intensidade</Label>
+                    <Select value={microcicloIntensity} onValueChange={setMicrocicloIntensity} disabled={!canManage}>
+                      <SelectTrigger className="mt-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="recovery">Recuperação</SelectItem>
+                        <SelectItem value="low">Baixa</SelectItem>
+                        <SelectItem value="medium">Média</SelectItem>
+                        <SelectItem value="high">Alta</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex items-end">
+                    <div className="flex gap-1">
+                      {["recovery", "low", "medium", "high"].map((level) => (
+                        <div
+                          key={level}
+                          className={`h-6 w-5 rounded-sm transition-colors ${
+                            ["recovery", "low", "medium", "high"].indexOf(microcicloIntensity) >=
+                            ["recovery", "low", "medium", "high"].indexOf(level)
+                              ? level === "high" ? "bg-red-400" : level === "medium" ? "bg-amber-400" : level === "low" ? "bg-emerald-400" : "bg-blue-300"
+                              : "bg-slate-100"
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-sm font-semibold text-slate-700">Notas</Label>
+                  <textarea
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-emerald-300 focus:outline-none focus:ring-1 focus:ring-emerald-300 min-h-[50px] resize-y"
+                    value={microcicloNotes}
+                    onChange={(e) => setMicrocicloNotes(e.target.value)}
+                    placeholder="Notas adicionais para a semana..."
+                    readOnly={!canManage}
+                  />
+                </div>
+                {canManage && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={savingMicrociclo}
+                    onClick={() => void handleSaveMicrociclo()}
+                  >
+                    {savingMicrociclo ? <Loader2 size={13} className="mr-1 animate-spin" /> : <Save size={13} className="mr-1" />}
+                    Guardar Microciclo
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Mesociclo — future sprint */}
+            <Card className="opacity-60">
+              <CardContent className="pt-5 pb-5">
+                <p className="font-semibold text-slate-500 mb-1">Mesociclo</p>
+                <p className="text-sm text-slate-400">Planeamento periódico (blocos de 4–6 semanas).</p>
+                <span className="inline-block mt-2 text-xs bg-slate-100 text-slate-500 px-2 py-1 rounded-full">
+                  Em breve
+                </span>
+              </CardContent>
+            </Card>
           </div>
         )}
 

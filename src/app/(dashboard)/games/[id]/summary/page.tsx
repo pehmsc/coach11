@@ -10,10 +10,15 @@ import {
   Download,
   FileText,
   Loader2,
+  Pencil,
   RotateCcw,
+  Save,
   Star,
+  ThumbsDown,
+  ThumbsUp,
   Users,
 } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 import { StickyBackLink } from "@/components/navigation/StickyBackLink";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -147,6 +152,13 @@ export default function GameSummaryPage() {
   const [convocationExport, setConvocationExport] =
     useState<ConvocationExportPayload | null>(null);
 
+  // Post-match analysis
+  const [positiveAspects, setPositiveAspects] = useState("");
+  const [negativeAspects, setNegativeAspects] = useState("");
+  const [coachNotes, setCoachNotes] = useState("");
+  const [editingAnalysis, setEditingAnalysis] = useState(false);
+  const [savingAnalysis, setSavingAnalysis] = useState(false);
+
   const syncDraftsFromSummary = useCallback((payload: SummaryPayload) => {
     setRatingDraft(() => {
       const next: Record<string, string> = {};
@@ -193,6 +205,9 @@ export default function GameSummaryPage() {
 
       setSummary(payload);
       syncDraftsFromSummary(payload);
+      setPositiveAspects(payload.game.positive_aspects ?? "");
+      setNegativeAspects(payload.game.negative_aspects ?? "");
+      setCoachNotes(payload.game.coach_notes ?? "");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Erro ao carregar sumário.";
       setLoadError(message);
@@ -474,6 +489,31 @@ export default function GameSummaryPage() {
       toast.error(message);
     } finally {
       setExportingPdf(null);
+    }
+  }
+
+  async function handleSaveAnalysis() {
+    setSavingAnalysis(true);
+    try {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("games")
+        .update({
+          positive_aspects: positiveAspects || null,
+          negative_aspects: negativeAspects || null,
+          coach_notes: coachNotes || null,
+        })
+        .eq("id", id);
+      if (error) {
+        toast.error("Erro ao guardar análise.");
+      } else {
+        toast.success("Análise pós-jogo guardada");
+        setEditingAnalysis(false);
+      }
+    } catch {
+      toast.error("Erro ao guardar análise.");
+    } finally {
+      setSavingAnalysis(false);
     }
   }
 
@@ -824,6 +864,111 @@ export default function GameSummaryPage() {
             )}
           </div>
         </div>
+      </div>
+
+      {/* Análise pós-jogo */}
+      <div className="rounded-xl border border-slate-200 bg-white p-4 mb-5">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-xs font-semibold text-slate-500 uppercase">Análise Pós-Jogo</p>
+          {summary.isCoordinator && !editingAnalysis && (
+            <button
+              type="button"
+              onClick={() => setEditingAnalysis(true)}
+              className="text-xs text-slate-500 hover:text-slate-700 flex items-center gap-1"
+            >
+              <Pencil size={12} /> Editar
+            </button>
+          )}
+          {editingAnalysis && (
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setEditingAnalysis(false);
+                  setPositiveAspects(summary.game.positive_aspects ?? "");
+                  setNegativeAspects(summary.game.negative_aspects ?? "");
+                  setCoachNotes(summary.game.coach_notes ?? "");
+                }}
+                disabled={savingAnalysis}
+              >
+                Cancelar
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => void handleSaveAnalysis()}
+                disabled={savingAnalysis}
+                className="bg-emerald-600 hover:bg-emerald-700"
+              >
+                {savingAnalysis ? <Loader2 size={13} className="mr-1 animate-spin" /> : <Save size={13} className="mr-1" />}
+                Guardar
+              </Button>
+            </div>
+          )}
+        </div>
+
+        {game.opponent_tactical_system && (
+          <div className="mb-3 text-sm text-slate-600">
+            <span className="font-medium">Sistema táctico adversário:</span>{" "}
+            <span className="font-semibold text-slate-800">{game.opponent_tactical_system}</span>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-3">
+            <div className="flex items-center gap-1.5 mb-2">
+              <ThumbsUp size={14} className="text-emerald-600" />
+              <p className="text-xs font-semibold text-emerald-700">Aspectos Positivos</p>
+            </div>
+            {editingAnalysis ? (
+              <textarea
+                className="w-full rounded-md border border-emerald-200 bg-white px-2.5 py-1.5 text-sm text-slate-800 placeholder:text-slate-400 focus:border-emerald-300 focus:outline-none focus:ring-1 focus:ring-emerald-300 min-h-[80px] resize-y"
+                value={positiveAspects}
+                onChange={(e) => setPositiveAspects(e.target.value)}
+                placeholder="O que correu bem..."
+              />
+            ) : (
+              <p className="text-sm text-slate-700 whitespace-pre-wrap">
+                {positiveAspects || <span className="text-slate-400 italic">Sem registos</span>}
+              </p>
+            )}
+          </div>
+
+          <div className="rounded-lg border border-red-200 bg-red-50/50 p-3">
+            <div className="flex items-center gap-1.5 mb-2">
+              <ThumbsDown size={14} className="text-red-600" />
+              <p className="text-xs font-semibold text-red-700">Aspectos a Melhorar</p>
+            </div>
+            {editingAnalysis ? (
+              <textarea
+                className="w-full rounded-md border border-red-200 bg-white px-2.5 py-1.5 text-sm text-slate-800 placeholder:text-slate-400 focus:border-red-300 focus:outline-none focus:ring-1 focus:ring-red-300 min-h-[80px] resize-y"
+                value={negativeAspects}
+                onChange={(e) => setNegativeAspects(e.target.value)}
+                placeholder="O que pode melhorar..."
+              />
+            ) : (
+              <p className="text-sm text-slate-700 whitespace-pre-wrap">
+                {negativeAspects || <span className="text-slate-400 italic">Sem registos</span>}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {(editingAnalysis || coachNotes) && (
+          <div className="mt-3">
+            <p className="text-xs font-semibold text-slate-500 mb-1.5">Notas do Treinador</p>
+            {editingAnalysis ? (
+              <textarea
+                className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-800 placeholder:text-slate-400 focus:border-slate-300 focus:outline-none focus:ring-1 focus:ring-slate-300 min-h-[60px] resize-y"
+                value={coachNotes}
+                onChange={(e) => setCoachNotes(e.target.value)}
+                placeholder="Notas adicionais..."
+              />
+            ) : (
+              <p className="text-sm text-slate-700 whitespace-pre-wrap">{coachNotes}</p>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
