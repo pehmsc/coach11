@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUpDown, Download } from "lucide-react";
+import { ArrowUpDown, Download, FileSpreadsheet } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import type { Tab } from "./types";
@@ -11,6 +11,7 @@ interface PdfExportCardProps {
   currentTabPlayerIds: string[];
   exportingPdf: Tab | null;
   onExport: () => void;
+  onExportCsv?: () => void;
   onClearSelection: () => void;
 }
 
@@ -20,6 +21,7 @@ export function PdfExportCard({
   currentTabPlayerIds,
   exportingPdf,
   onExport,
+  onExportCsv,
   onClearSelection,
 }: PdfExportCardProps) {
   return (
@@ -28,7 +30,7 @@ export function PdfExportCard({
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-sm font-semibold text-slate-900">
-              Exportação PDF da vista atual
+              Exportação da vista atual
             </p>
             <p className="text-xs text-slate-500 mt-1">
               Sem seleção exporta a informação geral. Se selecionares atletas,
@@ -49,6 +51,17 @@ export function PdfExportCard({
                 Limpar seleção
               </Button>
             )}
+            {onExportCsv && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onExportCsv}
+                disabled={currentTabPlayerIds.length === 0}
+              >
+                <FileSpreadsheet size={16} className="mr-2" />
+                CSV
+              </Button>
+            )}
             <Button
               type="button"
               onClick={onExport}
@@ -59,9 +72,7 @@ export function PdfExportCard({
               ) : (
                 <Download size={16} className="mr-2" />
               )}
-              {activeTab === "attendance"
-                ? "Exportar mapa de presenças"
-                : "Exportar estatísticas de jogo"}
+              PDF
             </Button>
           </div>
         </div>

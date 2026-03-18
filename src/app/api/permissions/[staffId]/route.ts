@@ -120,7 +120,7 @@ export async function PUT(
       return NextResponse.json({ error: access.error }, { status: access.status });
     }
 
-    const { admin, staffRecord, isCoordinator, isSuperAdmin } = access;
+    const { admin, isCoordinator, isSuperAdmin } = access;
 
     if (!isCoordinator && !isSuperAdmin) {
       return NextResponse.json(

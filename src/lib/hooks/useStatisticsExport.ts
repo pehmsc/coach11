@@ -7,6 +7,10 @@ import {
   exportAttendanceStatisticsPDF,
   exportGameStatisticsPDF,
 } from "@/lib/pdf/statistics";
+import {
+  exportAttendanceCsv,
+  exportGameStatsCsv,
+} from "@/lib/csv/statistics";
 import type { AttendanceStats, GameStats, Tab } from "@/components/statistics/types";
 import { isGoalkeeper } from "@/components/statistics/utils";
 
@@ -119,8 +123,69 @@ export function useStatisticsExport(
     }
   }
 
+  function handleExportActiveTabCsv(
+    activeTab: Tab,
+    selectedPlayerIds: Set<string>,
+    currentTabPlayerIds: string[],
+    sortedAttendance: AttendanceStats[],
+    sortedGameStats: GameStats[],
+  ) {
+    const selectedIds =
+      selectedPlayerIds.size > 0
+        ? selectedPlayerIds
+        : new Set(currentTabPlayerIds);
+
+    if (activeTab === "attendance") {
+      const rows = sortedAttendance
+        .filter((row) => selectedIds.has(row.player.id))
+        .map((row) => ({
+          name: `${row.player.first_name} ${row.player.last_name}`.trim(),
+          position: row.player.preferred_position ?? null,
+          minutes: row.minutos,
+          presences: row.presencas,
+          late: row.atrasados,
+          absent: row.ausencias,
+          injured: row.lesionados,
+        }));
+      exportAttendanceCsv(ageGroupName, rows);
+      captureClientProductEvent("pdf_generated", {
+        age_group_id: ageGroupId,
+        source: "statistics_attendance",
+        players_count: rows.length,
+      });
+      toast.success("Mapa de presenças exportado em CSV.");
+      return;
+    }
+
+    const rows = sortedGameStats
+      .filter((row) => selectedIds.has(row.player.id))
+      .map((row) => ({
+        name: `${row.player.first_name} ${row.player.last_name}`.trim(),
+        position: row.player.preferred_position ?? null,
+        convocations: row.convocatorias,
+        starters: row.titular,
+        substitutes: row.suplente,
+        minutes: row.minutos,
+        goals: row.golos,
+        assists: row.assistencias,
+        yellowCards: row.amarelos,
+        redCards: row.vermelhos,
+        mvp: row.mvp,
+        averageRating:
+          row.mediaNotaCount > 0 ? row.mediaNotaSum / row.mediaNotaCount : null,
+      }));
+    exportGameStatsCsv(ageGroupName, rows);
+    captureClientProductEvent("pdf_generated", {
+      age_group_id: ageGroupId,
+      source: "statistics_game",
+      players_count: rows.length,
+    });
+    toast.success("Estatísticas de jogo exportadas em CSV.");
+  }
+
   return {
     exportingPdf,
     handleExportActiveTabPdf,
+    handleExportActiveTabCsv,
   };
 }
