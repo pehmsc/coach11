@@ -445,11 +445,60 @@ pdf.body_text(
     "em repositorios por dominio: PlayerRepository, GameRepository, etc."
 )
 
-pdf.chapter_title("6.5 eslint-disable Comments", level=2)
+pdf.chapter_title("6.5 Blocos catch {} Vazios", level=2)
+pdf.severity_badge("ALTO", "104 blocos catch {} vazios em todo o codebase")
+pdf.body_text(
+    "104 blocos catch que engolem erros silenciosamente. Torna o debugging "
+    "extremamente dificil. Adicionar pelo menos console.error ou toast em cada um. "
+    "Priorizar os que estao em componentes client-side e API routes."
+)
+
+pdf.chapter_title("6.6 API Routes sem respondInternalError", level=2)
+pdf.severity_badge("MEDIO", "3 API routes sem error reporting padronizado")
+pdf.body_text(
+    "Falta respondInternalError + Sentry em:\n"
+    "- api/calendar/events/route.ts\n"
+    "- api/invite/redeem/route.ts\n"
+    "- api/waitlist/route.ts\n\n"
+    "Todas as outras ~58 routes usam o padrao correctamente."
+)
+
+pdf.chapter_title("6.7 Chamadas Supabase Directas em Pages", level=2)
+pdf.severity_badge("MEDIO", "6 dashboard pages com supabase.from() directo")
+pdf.body_text(
+    "Pages que devem migrar para hooks/repositories:\n"
+    "- competitions/page.tsx\n"
+    "- dashboard/page.tsx\n"
+    "- join/page.tsx\n"
+    "- messages/page.tsx\n"
+    "- notifications/page.tsx\n"
+    "- settings/page.tsx"
+)
+
+pdf.chapter_title("6.8 Padroes de Data Fetching Inconsistentes", level=2)
+pdf.severity_badge("MEDIO", "3 padroes diferentes de fetch no client-side")
+pdf.body_text(
+    "O codebase usa 3 padroes diferentes:\n"
+    "1. fetch() directo com res.json().catch(() => ({}))\n"
+    "2. apiFetch<T>() wrapper (lib/http/apiFetch.ts)\n"
+    "3. supabase.from() directo em pages\n\n"
+    "Recomendacao: Standardizar em apiFetch para client->API, mover Supabase "
+    "para server components ou camada de repositorio."
+)
+
+pdf.chapter_title("6.9 eslint-disable Comments", level=2)
 pdf.severity_badge("BAIXO", "11 eslint-disable comments (7 exhaustive-deps)")
 pdf.body_text(
     "Revisar cada supressao - muitas podem ser resolvidas com useCallback ou "
     "refs. As restantes devem ter comentarios explicativos."
+)
+
+pdf.chapter_title("6.10 Environment Variables", level=2)
+pdf.severity_badge("MEDIO", "20+ env vars sem .env.example documentado")
+pdf.body_text(
+    "Variaveis criticas dispersas pelo codebase sem documentacao centralizada. "
+    "Nota: SUPABASE_SERVICE_ROLE_KEY tem 3 nomes fallback diferentes - consolidar. "
+    "Criar .env.example com todas as variaveis e descricoes."
 )
 
 # ============ 7. SMOKE TEST ============
@@ -534,11 +583,15 @@ pdf.bullet("Actualizar README.md com dominio coach11.app")
 pdf.bullet("Configurar Playwright para testes E2E")
 pdf.bullet("Criar 3-5 testes E2E para fluxos criticos (login, criar jogo, live game)")
 pdf.bullet("Gating dos console.info debug em PWAProvider.tsx")
+pdf.bullet("Corrigir catch {} vazios mais criticos (API routes e hooks)")
+pdf.bullet("Adicionar respondInternalError a 3 API routes em falta")
+pdf.bullet("Consolidar 3 nomes fallback de SUPABASE_SERVICE_ROLE_KEY")
 
 pdf.check_page_break(60)
 pdf.chapter_title("Sprint 2: Performance e Validacao (Semana 3-4)", level=2)
 pdf.chapter_title("Prioridade: Alto", level=3)
 pdf.bullet("Adicionar Zod validation a API routes POST/PUT (priorizar games, players, staff)")
+pdf.bullet("Corrigir restantes catch {} vazios (104 no total)")
 pdf.bullet("Migrar dashboard page para Server Component")
 pdf.bullet("Lazy-load leaflet e jspdf com dynamic imports")
 pdf.bullet("Substituir <img> por next/image em staff/page.tsx e ClubLogoUpload.tsx")
@@ -551,6 +604,8 @@ pdf.chapter_title("Sprint 3: Refactoring e Arquitectura (Semana 5-6)", level=2)
 pdf.chapter_title("Prioridade: Medio", level=3)
 pdf.bullet("Refactorar pages grandes: summary, competitions, team, staff, players (>800 linhas)")
 pdf.bullet("Expandir camada de repositorio (PlayerRepo, GameRepo, TrainingRepo)")
+pdf.bullet("Mover 6 pages com supabase.from() directo para hooks/repositories")
+pdf.bullet("Standardizar data fetching em apiFetch (eliminar 3 padroes diferentes)")
 pdf.bullet("Gerar tipos Supabase automaticamente (supabase gen types)")
 pdf.bullet("Revisar e resolver 7 eslint-disable exhaustive-deps")
 pdf.bullet("Adicionar middleware.ts centralizado para auth (opcional mas recomendado)")
@@ -587,13 +642,13 @@ immediate = [
     ("1", "CRITICO", "Criar .env.example e fix beta-access.ts build error"),
     ("2", "CRITICO", "Adicionar loading.tsx e error.tsx boundaries"),
     ("3", "CRITICO", "Configurar Playwright e criar primeiros testes E2E"),
-    ("4", "ALTO", "Adicionar Zod validation a 41 API routes"),
-    ("5", "ALTO", "Refactorar useLiveGameState.ts (1668 linhas)"),
-    ("6", "ALTO", "Migrar paginas para Server Components"),
-    ("7", "MEDIO", "Lazy-load leaflet e jspdf"),
-    ("8", "MEDIO", "Implementar rate limiting distribuido"),
-    ("9", "MEDIO", "Gerar tipos Supabase automaticamente"),
-    ("10", "BAIXO", "Resolver warnings de lint e eslint-disable"),
+    ("4", "ALTO", "Corrigir 104 catch {} vazios (erros silenciosos)"),
+    ("5", "ALTO", "Adicionar Zod validation a 41 API routes"),
+    ("6", "ALTO", "Refactorar useLiveGameState.ts (1668 linhas)"),
+    ("7", "ALTO", "Migrar paginas para Server Components"),
+    ("8", "MEDIO", "Standardizar data fetching (3 padroes -> 1)"),
+    ("9", "MEDIO", "Implementar rate limiting distribuido"),
+    ("10", "MEDIO", "Expandir camada repositorio + gerar tipos Supabase"),
 ]
 
 widths5 = [10, 25, 155]
