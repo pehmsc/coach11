@@ -3,7 +3,7 @@ import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { NextResponse } from "next/server";
 
 type RouteContext = {
-  params: Promise<{ playerId: string }>;
+  params: Promise<{ id: string }>;
 };
 
 const DOC_TYPES = [
@@ -18,7 +18,7 @@ const DOC_TYPES = [
 
 export async function GET(_request: Request, { params }: RouteContext) {
   try {
-    const { playerId } = await params;
+    const { id: playerId } = await params;
     const supabase = await createClient();
     const {
       data: { user },
@@ -49,7 +49,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
 
 export async function POST(request: Request, { params }: RouteContext) {
   try {
-    const { playerId } = await params;
+    const { id: playerId } = await params;
     const supabase = await createClient();
     const {
       data: { user },
@@ -132,7 +132,7 @@ export async function POST(request: Request, { params }: RouteContext) {
 
 export async function DELETE(request: Request, { params }: RouteContext) {
   try {
-    const { playerId } = await params;
+    const { id: playerId } = await params;
     const supabase = await createClient();
     const {
       data: { user },
