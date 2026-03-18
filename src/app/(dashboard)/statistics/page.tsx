@@ -59,10 +59,8 @@ export default function StatisticsPage() {
     clearSelectedPlayers,
   } = usePlayerSelection(players, activeTab, sortedAttendanceIds, sortedGameStatsIds);
 
-  const { exportingPdf, handleExportActiveTabPdf } = useStatisticsExport(
-    ageGroupId,
-    ageGroupName,
-  );
+  const { exportingPdf, handleExportActiveTabPdf, handleExportActiveTabCsv } =
+    useStatisticsExport(ageGroupId, ageGroupName);
 
   // ── Render ──
 
@@ -93,6 +91,15 @@ export default function StatisticsPage() {
         exportingPdf={exportingPdf}
         onExport={() =>
           void handleExportActiveTabPdf(
+            activeTab,
+            selectedPlayerIds,
+            currentTabPlayerIds,
+            sortedAttendance,
+            sortedGameStats,
+          )
+        }
+        onExportCsv={() =>
+          handleExportActiveTabCsv(
             activeTab,
             selectedPlayerIds,
             currentTabPlayerIds,

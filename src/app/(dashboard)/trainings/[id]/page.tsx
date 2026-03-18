@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import { pt } from "date-fns/locale";
-import { Loader2, Trash2, Pencil, Copy, Users, AlertCircle, FileText } from "lucide-react";
+import { Loader2, Trash2, Pencil, Copy, Users, AlertCircle, Download } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { RichTextContent } from "@/components/content/RichTextContent";
@@ -487,7 +488,6 @@ export default function TrainingDetailPage() {
 
               {activeTab === "attendance" && (
                 <TabAttendance
-                  session={session}
                   attendanceMap={attendanceMap}
                   hasRecordedAttendance={hasRecordedAttendance}
                   isClosed={isClosed}
@@ -497,10 +497,45 @@ export default function TrainingDetailPage() {
               )}
 
               {activeTab === "documents" && (
-                <div className="text-center py-12">
-                  <FileText size={36} className="text-slate-200 mx-auto mb-3" />
-                  <p className="text-sm text-slate-500">Documentos associados a este treino.</p>
-                  <p className="text-xs text-slate-400 mt-1">Em breve.</p>
+                <div className="space-y-4">
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                    <h3 className="text-sm font-semibold text-slate-900 mb-3">Exportação da Unidade de Treino</h3>
+                    <p className="text-xs text-slate-500 mb-4">
+                      Exporta a ficha completa do treino com exercícios, diagramas e tempos acumulados.
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                      onClick={() => void handleExportUtPdf()}
+                    >
+                      <Download size={14} className="mr-1.5" />
+                      Exportar PDF da UT
+                    </Button>
+                  </div>
+
+                  {session.notes && (
+                    <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                      <h3 className="text-sm font-semibold text-slate-900 mb-3">Notas do Treino</h3>
+                      <div className="text-sm text-slate-700 whitespace-pre-wrap">
+                        <RichTextContent content={session.notes} />
+                      </div>
+                    </div>
+                  )}
+
+                  {session.image_url && (
+                    <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                      <h3 className="text-sm font-semibold text-slate-900 mb-3">Imagem do Treino</h3>
+                      <Image
+                        src={session.image_url}
+                        alt="Imagem do treino"
+                        width={400}
+                        height={256}
+                        className="rounded-lg max-h-64 object-contain"
+                        unoptimized
+                      />
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -587,14 +622,12 @@ function TabPlanning({ session, isClosed, onExportPdf, onSessionSaved }: { sessi
 }
 
 function TabAttendance({
-  session,
   attendanceMap,
   hasRecordedAttendance,
   isClosed,
   canCorrectAttendance,
   onCorrect,
 }: {
-  session: TrainingRow;
   attendanceMap: Record<string, { player: Player; status: string }>;
   hasRecordedAttendance: boolean;
   isClosed: boolean;

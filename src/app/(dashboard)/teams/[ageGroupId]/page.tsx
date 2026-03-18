@@ -27,6 +27,8 @@ import {
   Settings,
   ClipboardList,
   LayoutGrid,
+  Save,
+  Target,
 } from "lucide-react";
 import { toast } from "sonner";
 import { PublicSharePanel } from "@/components/team/PublicSharePanel";
@@ -260,6 +262,19 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [deleting, setDeleting] = useState(false);
 
+  // Planeamento — Modelo de Jogo (4 momentos)
+  const [gameModel, setGameModel] = useState<Record<string, string>>({
+    org_ofensiva: "",
+    org_defensiva: "",
+    trans_ofensiva: "",
+    trans_defensiva: "",
+  });
+  const [savingGameModel, setSavingGameModel] = useState(false);
+  // Planeamento — Objectivos da Época
+  const [seasonObjectives, setSeasonObjectives] = useState("");
+  const [seasonObjectivesId, setSeasonObjectivesId] = useState<string | null>(null);
+  const [savingObjectives, setSavingObjectives] = useState(false);
+
   // Header — all user teams for dropdown
   const [allTeams, setAllTeams] = useState<Array<{ id: string; name: string; age_level?: string | null; club_name: string }>>([]);
 
@@ -437,6 +452,29 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
     });
     setAllTeams(merged);
 
+    // Planeamento — Modelo de Jogo (stored as JSON in age_groups.game_model)
+    if (ag.game_model && typeof ag.game_model === "object") {
+      const gm = ag.game_model as Record<string, string>;
+      setGameModel({
+        org_ofensiva: gm.org_ofensiva ?? "",
+        org_defensiva: gm.org_defensiva ?? "",
+        trans_ofensiva: gm.trans_ofensiva ?? "",
+        trans_defensiva: gm.trans_defensiva ?? "",
+      });
+    }
+
+    // Planeamento — Objectivos da Época
+    const { data: objData } = await supabase
+      .from("season_objectives")
+      .select("id, objectives_text")
+      .eq("age_group_id", ageGroupId)
+      .eq("season", ag.season)
+      .maybeSingle();
+    if (objData) {
+      setSeasonObjectivesId(objData.id);
+      setSeasonObjectives(objData.objectives_text ?? "");
+    }
+
     setLoading(false);
   }
 
@@ -533,6 +571,47 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
     }
     toast.success("Escalão apagado com sucesso.");
     router.push("/teams");
+  }
+
+  async function handleSaveGameModel() {
+    if (!ageGroup || !canManage) return;
+    setSavingGameModel(true);
+    const { error } = await supabase
+      .from("age_groups")
+      .update({ game_model: gameModel })
+      .eq("id", ageGroup.id);
+    if (error) toast.error("Erro ao guardar modelo de jogo.");
+    else toast.success("Modelo de jogo guardado");
+    setSavingGameModel(false);
+  }
+
+  async function handleSaveObjectives() {
+    if (!ageGroup || !canManage) return;
+    setSavingObjectives(true);
+    if (seasonObjectivesId) {
+      const { error } = await supabase
+        .from("season_objectives")
+        .update({ objectives_text: seasonObjectives })
+        .eq("id", seasonObjectivesId);
+      if (error) toast.error("Erro ao guardar objectivos.");
+      else toast.success("Objectivos guardados");
+    } else {
+      const { data, error } = await supabase
+        .from("season_objectives")
+        .insert({
+          age_group_id: ageGroup.id,
+          season: ageGroup.season,
+          objectives_text: seasonObjectives,
+        })
+        .select("id")
+        .single();
+      if (error) toast.error("Erro ao criar objectivos.");
+      else {
+        setSeasonObjectivesId(data.id);
+        toast.success("Objectivos guardados");
+      }
+    }
+    setSavingObjectives(false);
   }
 
   if (loading) {
@@ -1116,11 +1195,90 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
 
         {/* ─── TAB PLANEAMENTO ─────────────────────────────────────────── */}
         {tab === "planeamento" && (
-          <div className="space-y-4">
+          <div className="space-y-5">
+            {/* Modelo de Jogo — 4 momentos */}
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base">Modelo de Jogo</CardTitle>
+                  {canManage && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={savingGameModel}
+                      onClick={() => void handleSaveGameModel()}
+                    >
+                      {savingGameModel ? <Loader2 size={13} className="mr-1 animate-spin" /> : <Save size={13} className="mr-1" />}
+                      Guardar
+                    </Button>
+                  )}
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  Descreve os 4 momentos do jogo da tua equipa. Texto livre editável.
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {[
+                  { key: "org_ofensiva", label: "Organização Ofensiva", placeholder: "Como a equipa ataca quando tem a posse de bola..." },
+                  { key: "org_defensiva", label: "Organização Defensiva", placeholder: "Como a equipa se organiza quando não tem a posse..." },
+                  { key: "trans_ofensiva", label: "Transição Ofensiva", placeholder: "Comportamentos ao recuperar a bola..." },
+                  { key: "trans_defensiva", label: "Transição Defensiva", placeholder: "Comportamentos ao perder a posse de bola..." },
+                ].map((moment) => (
+                  <div key={moment.key}>
+                    <Label className="text-sm font-semibold text-slate-700">{moment.label}</Label>
+                    <textarea
+                      className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-emerald-300 focus:outline-none focus:ring-1 focus:ring-emerald-300 min-h-[80px] resize-y"
+                      value={gameModel[moment.key] ?? ""}
+                      onChange={(e) =>
+                        setGameModel((prev) => ({ ...prev, [moment.key]: e.target.value }))
+                      }
+                      placeholder={moment.placeholder}
+                      readOnly={!canManage}
+                    />
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            {/* Objectivos da Época */}
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Target size={16} className="text-slate-500" />
+                    Objectivos da Época ({ageGroup?.season})
+                  </CardTitle>
+                  {canManage && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={savingObjectives}
+                      onClick={() => void handleSaveObjectives()}
+                    >
+                      {savingObjectives ? <Loader2 size={13} className="mr-1 animate-spin" /> : <Save size={13} className="mr-1" />}
+                      Guardar
+                    </Button>
+                  )}
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  Metas desportivas e formativas para a época.
+                </p>
+              </CardHeader>
+              <CardContent>
+                <textarea
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-emerald-300 focus:outline-none focus:ring-1 focus:ring-emerald-300 min-h-[120px] resize-y"
+                  value={seasonObjectives}
+                  onChange={(e) => setSeasonObjectives(e.target.value)}
+                  placeholder="Ex: Desenvolver o jogo posicional, melhorar a transição defensiva, promover a formação integral dos atletas..."
+                  readOnly={!canManage}
+                />
+              </CardContent>
+            </Card>
+
+            {/* Microciclo & Mesociclo — future sprint */}
             {[
               { title: "Microciclo", desc: "Planeamento semanal de treinos com carga e objectivos." },
               { title: "Mesociclo", desc: "Planeamento periódico (blocos de 4–6 semanas)." },
-              { title: "Objectivos da Época", desc: "Metas desportivas e formativas para a época." },
             ].map((section) => (
               <Card key={section.title} className="opacity-60">
                 <CardContent className="pt-5 pb-5">

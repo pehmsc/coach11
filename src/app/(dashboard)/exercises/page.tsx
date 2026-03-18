@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Loader2, Plus, Search, BookOpen, Clock, Users } from "lucide-react";
@@ -13,13 +13,11 @@ import {
   CATEGORY_COLORS,
   CATEGORY_OPTIONS,
 } from "@/components/exercises/category-labels";
-import { createClient } from "@/lib/supabase/client";
 import type { Exercise, ExerciseCategory } from "@/types/database";
 import { toast } from "sonner";
 
 export default function ExercisesPage() {
   const router = useRouter();
-  const supabase = useMemo(() => createClient(), []);
 
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [loading, setLoading] = useState(true);

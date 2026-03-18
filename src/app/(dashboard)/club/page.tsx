@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, ImageIcon, ChevronDown, ChevronUp } from "lucide-react";
+import { Loader2, ImageIcon, ChevronDown, ChevronUp, Save, Palette } from "lucide-react";
 import { toast } from "sonner";
 import {
   isValidManualShortName,
@@ -87,6 +87,12 @@ export default function ClubPage() {
   const [savingKit, setSavingKit] = useState<string | null>(null);
   const [kitsExpanded, setKitsExpanded] = useState(false);
 
+  // Branding
+  const [clubId, setClubId] = useState<string | null>(null);
+  const [primaryColor, setPrimaryColor] = useState("#1A7F4B");
+  const [secondaryColor, setSecondaryColor] = useState("#0F172A");
+  const [savingBranding, setSavingBranding] = useState(false);
+
   useEffect(() => {
     void loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -143,6 +149,26 @@ export default function ClubPage() {
       tid = newTeam?.id ?? null;
     }
     setTeamId(tid);
+
+    // Load branding from clubs table
+    const { data: agRow } = await supabase
+      .from("age_groups")
+      .select("club_id")
+      .eq("id", ag.id)
+      .maybeSingle();
+    if (agRow?.club_id) {
+      setClubId(agRow.club_id);
+      const { data: club } = await supabase
+        .from("clubs")
+        .select("primary_color, secondary_color")
+        .eq("id", agRow.club_id)
+        .maybeSingle();
+      if (club) {
+        setPrimaryColor(club.primary_color || "#1A7F4B");
+        setSecondaryColor(club.secondary_color || "#0F172A");
+      }
+    }
+
     setLoading(false);
   }
 
@@ -214,6 +240,18 @@ export default function ClubPage() {
         ? current
         : latest,
     );
+  }
+
+  async function handleSaveBranding() {
+    if (!clubId || !canManage) return;
+    setSavingBranding(true);
+    const { error } = await supabase
+      .from("clubs")
+      .update({ primary_color: primaryColor, secondary_color: secondaryColor })
+      .eq("id", clubId);
+    if (error) toast.error("Erro ao guardar personalização.");
+    else toast.success("Personalização guardada");
+    setSavingBranding(false);
   }
 
   async function handleKitColorChange(
@@ -482,15 +520,75 @@ export default function ClubPage() {
         </Card>
       )}
 
-      {/* Personalização (placeholder) */}
-      <Card className="opacity-60">
+      {/* Personalização */}
+      <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base text-slate-400">Personalização</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Palette size={16} className="text-slate-500" />
+              Personalização
+            </CardTitle>
+            {canManage && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={savingBranding}
+                onClick={() => void handleSaveBranding()}
+              >
+                {savingBranding ? <Loader2 size={13} className="mr-1 animate-spin" /> : <Save size={13} className="mr-1" />}
+                Guardar
+              </Button>
+            )}
+          </div>
         </CardHeader>
-        <CardContent>
-          <p className="text-sm text-slate-400">
-            Cores do clube e domínio personalizado — em breve.
-          </p>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <Label className="text-sm text-slate-600">Cor primária</Label>
+              <div className="flex items-center gap-3 mt-1.5">
+                <input
+                  type="color"
+                  value={primaryColor}
+                  onChange={(e) => setPrimaryColor(e.target.value)}
+                  disabled={!canManage}
+                  className="h-10 w-14 rounded-lg border border-slate-200 cursor-pointer"
+                />
+                <Input
+                  value={primaryColor}
+                  onChange={(e) => setPrimaryColor(e.target.value)}
+                  readOnly={!canManage}
+                  className="uppercase font-mono text-sm w-28"
+                  maxLength={7}
+                />
+              </div>
+            </div>
+            <div>
+              <Label className="text-sm text-slate-600">Cor secundária</Label>
+              <div className="flex items-center gap-3 mt-1.5">
+                <input
+                  type="color"
+                  value={secondaryColor}
+                  onChange={(e) => setSecondaryColor(e.target.value)}
+                  disabled={!canManage}
+                  className="h-10 w-14 rounded-lg border border-slate-200 cursor-pointer"
+                />
+                <Input
+                  value={secondaryColor}
+                  onChange={(e) => setSecondaryColor(e.target.value)}
+                  readOnly={!canManage}
+                  className="uppercase font-mono text-sm w-28"
+                  maxLength={7}
+                />
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 pt-2">
+            <span className="text-xs text-slate-500">Preview:</span>
+            <div className="flex gap-2">
+              <div className="h-8 w-16 rounded-md border border-slate-200" style={{ backgroundColor: primaryColor }} />
+              <div className="h-8 w-16 rounded-md border border-slate-200" style={{ backgroundColor: secondaryColor }} />
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>
