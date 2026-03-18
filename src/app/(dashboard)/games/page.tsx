@@ -142,62 +142,69 @@ export default function GamesPage() {
     setLoadError(null);
     setHasContext(true);
 
-    const res = await fetch("/api/games");
-    const payload = (await res.json().catch(() => null)) as
-      | {
-          success?: boolean;
-          linked?: boolean;
-          games?: GameRow[];
-          ageGroupId?: string | null;
-          error?: string;
-        }
-      | null;
+    try {
+      const res = await fetch("/api/games");
+      const payload = (await res.json().catch(() => null)) as
+        | {
+            success?: boolean;
+            linked?: boolean;
+            games?: GameRow[];
+            ageGroupId?: string | null;
+            error?: string;
+          }
+        | null;
 
-    if (!res.ok || !payload) {
-      setLoadError(payload?.error || "Erro ao carregar jogos.");
-      setAgeGroupId(null);
+      if (!res.ok || !payload) {
+        setLoadError(payload?.error || "Erro ao carregar jogos.");
+        setAgeGroupId(null);
+        return;
+      }
+
+      if (payload.linked === false) {
+        setHasContext(false);
+        setGames([]);
+        setAgeGroupId(null);
+        return;
+      }
+
+      setGames(Array.isArray(payload.games) ? payload.games : []);
+      setAgeGroupId(
+        typeof payload.ageGroupId === "string"
+          ? payload.ageGroupId
+          : Array.isArray(payload.games) && payload.games.length > 0
+            ? payload.games[0]?.age_group_id ?? null
+            : null,
+      );
+    } catch {
+      setLoadError("Erro de ligação ao carregar jogos.");
+    } finally {
       setLoading(false);
-      return;
     }
-
-    if (payload.linked === false) {
-      setHasContext(false);
-      setGames([]);
-      setAgeGroupId(null);
-      setLoading(false);
-      return;
-    }
-
-    setGames(Array.isArray(payload.games) ? payload.games : []);
-    setAgeGroupId(
-      typeof payload.ageGroupId === "string"
-        ? payload.ageGroupId
-        : Array.isArray(payload.games) && payload.games.length > 0
-          ? payload.games[0]?.age_group_id ?? null
-          : null,
-    );
-    setLoading(false);
   }
 
   async function loadCompetitions() {
-    const res = await fetch("/api/competitions");
-    const payload = (await res.json().catch(() => null)) as CompetitionsResponse | null;
-    if (!res.ok || !payload?.success) {
+    try {
+      const res = await fetch("/api/competitions");
+      const payload = (await res.json().catch(() => null)) as CompetitionsResponse | null;
+      if (!res.ok || !payload?.success) {
+        setCompetitionOptions([]);
+        return;
+      }
+
+      const options = (payload.competitions || [])
+        .filter((competition) => !!competition.id)
+        .map((competition) => ({
+          id: competition.id as string,
+          name: competition.name || "Competição",
+          season: competition.season || null,
+          team_label: competition.team_label || null,
+          inactive: competition.is_active === false,
+        }));
+
+      setCompetitionOptions(options);
+    } catch {
       setCompetitionOptions([]);
-      return;
     }
-
-    const options = (payload.competitions || [])
-      .filter((competition) => !!competition.id)
-      .map((competition) => ({
-        id: competition.id as string,
-        name: competition.name || "Competição",
-        season: competition.season || null,
-        team_label: competition.team_label || null,
-        inactive: competition.is_active === false,
-      }));
-
-    setCompetitionOptions(options);
   }
 
   function resetCreateForm() {

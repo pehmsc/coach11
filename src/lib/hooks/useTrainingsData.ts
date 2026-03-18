@@ -30,39 +30,41 @@ export function useTrainingsData() {
   const loadData = useCallback(async function loadData() {
     setLoading(true);
 
-    const res = await fetch("/api/me/context");
-    const ctx = await res.json().catch(() => ({}));
-    setCanDeleteTrainings(ctx?.canManageStaff === true);
-    if (!res.ok || !ctx?.ageGroup?.id) {
+    try {
+      const res = await fetch("/api/me/context");
+      const ctx = await res.json().catch(() => ({}));
+      setCanDeleteTrainings(ctx?.canManageStaff === true);
+      if (!res.ok || !ctx?.ageGroup?.id) {
+        return;
+      }
+
+      const agId: string = (ctx.ageGroup as { id: string }).id;
+      setAgeGroupId(agId);
+
+      const trainingsRes = await fetch("/api/trainings", { cache: "no-store" });
+      const trainingsPayload = (await trainingsRes.json().catch(() => null)) as
+        | {
+            success?: boolean;
+            linked?: boolean;
+            sessions?: TrainingRow[];
+            summaries?: AttendanceSummary[];
+            error?: string;
+          }
+        | null;
+
+      if (!trainingsRes.ok || !trainingsPayload?.success) {
+        setSessions([]);
+        setAttendance([]);
+        return;
+      }
+
+      setSessions(trainingsPayload.sessions || []);
+      setAttendance(trainingsPayload.summaries || []);
+    } catch {
+      // Network error — stop loading so the page doesn't hang.
+    } finally {
       setLoading(false);
-      return;
     }
-
-    const agId: string = (ctx.ageGroup as { id: string }).id;
-    setAgeGroupId(agId);
-
-    const trainingsRes = await fetch("/api/trainings", { cache: "no-store" });
-    const trainingsPayload = (await trainingsRes.json().catch(() => null)) as
-      | {
-          success?: boolean;
-          linked?: boolean;
-          sessions?: TrainingRow[];
-          summaries?: AttendanceSummary[];
-          error?: string;
-        }
-      | null;
-
-    if (!trainingsRes.ok || !trainingsPayload?.success) {
-      setSessions([]);
-      setAttendance([]);
-      setLoading(false);
-      return;
-    }
-
-    setSessions(trainingsPayload.sessions || []);
-    setAttendance(trainingsPayload.summaries || []);
-
-    setLoading(false);
   }, []);
 
   useEffect(() => {
