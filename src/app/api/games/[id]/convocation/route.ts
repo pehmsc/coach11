@@ -105,27 +105,45 @@ export async function GET(_request: Request, { params }: RouteContext) {
       return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
     }
 
-    const { data: game, error: gameError } = await supabase
-      .from("games")
-      .select("*")
-      .eq("id", gameId)
-      .maybeSingle();
+    // Phase 1: Load game + access + convocations + external players + checkpoint in parallel
+    const [gameResult, accessResult, convocationResult, externalResult, checkpointResult] =
+      await Promise.all([
+        supabase.from("games").select("*").eq("id", gameId).maybeSingle(),
+        fetchGameAccessContext(supabase, gameId).catch((error) => {
+          console.error("[api.games.convocation.access]", { gameId, error });
+          return null;
+        }),
+        supabase
+          .from("convocations")
+          .select(
+            "id, status, created_at, fp_jersey_kit_id, fp_shorts_kit_id, fp_socks_kit_id, gk_jersey_kit_id, gk_shorts_kit_id, gk_socks_kit_id",
+          )
+          .eq("game_id", gameId)
+          .order("created_at", { ascending: false })
+          .order("id", { ascending: false }),
+        supabase
+          .from("external_player_convocations")
+          .select("id, name, jersey_number, position, lineup_status, created_at")
+          .eq("game_id", gameId)
+          .order("created_at", { ascending: true }),
+        supabase
+          .from("game_live_checkpoints")
+          .select("phase, base_seconds, running_since_ms, updated_at")
+          .eq("game_id", gameId)
+          .in("phase", ["first_half", "second_half"])
+          .gte("updated_at", new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString())
+          .maybeSingle(),
+      ]);
 
+    const { data: game, error: gameError } = gameResult;
     if (gameError) {
       return NextResponse.json({ error: "Erro ao carregar jogo." }, { status: 500 });
     }
-
     if (!game) {
       return NextResponse.json({ error: "Jogo não encontrado." }, { status: 404 });
     }
 
-    let access = null;
-    try {
-      access = await fetchGameAccessContext(supabase, gameId);
-    } catch {
-      return NextResponse.json({ error: "Erro ao validar jogo." }, { status: 500 });
-    }
-
+    const access = accessResult;
     if (!access?.exists || !access.canAccess) {
       return NextResponse.json(
         { error: "Sem permissões para ver esta convocatória." },
@@ -136,18 +154,21 @@ export async function GET(_request: Request, { params }: RouteContext) {
     const isCoordinator = access.isCoordinator;
     const teamId = access.teamId ?? game.team_id ?? null;
 
-    const { data: convocations, error: convocationError } = await supabase
-      .from("convocations")
-      .select(
-        "id, status, created_at, fp_jersey_kit_id, fp_shorts_kit_id, fp_socks_kit_id, gk_jersey_kit_id, gk_shorts_kit_id, gk_socks_kit_id",
-      )
-      .eq("game_id", gameId)
-      .order("created_at", { ascending: false })
-      .order("id", { ascending: false });
-
+    const { data: convocations, error: convocationError } = convocationResult;
     if (convocationError) {
       return NextResponse.json(
         { error: "Erro ao carregar convocatória." },
+        { status: 500 },
+      );
+    }
+
+    const { data: externalRowsRaw, error: externalRowsError } = externalResult;
+    if (
+      externalRowsError &&
+      !isMissingRelationError(externalRowsError.message, "external_player_convocations")
+    ) {
+      return NextResponse.json(
+        { error: "Erro ao carregar jogadores externos da convocatória." },
         { status: 500 },
       );
     }
@@ -160,75 +181,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
       { responseStatus: string | null; isPresent: boolean | null }
     > = {};
 
-    const selectedIds = new Set<string>();
-    if (convocationIds.length > 0) {
-      const { data: selectedRows, error: selectedError } = await supabase
-        .from("convocation_players")
-        .select("player_id")
-        .in("convocation_id", convocationIds);
-
-      if (selectedError) {
-        return NextResponse.json(
-          { error: "Erro ao carregar jogadores convocados." },
-          { status: 500 },
-        );
-      }
-
-      (selectedRows || []).forEach((row) => {
-        selectedIds.add(row.player_id);
-      });
-    }
-
-    if (latestConvocation?.id) {
-      const { data: latestSelectionRows, error: latestSelectionRowsError } = await supabase
-        .from("convocation_players")
-        .select("player_id, response_status, is_present")
-        .eq("convocation_id", latestConvocation.id);
-
-      if (latestSelectionRowsError) {
-        return NextResponse.json(
-          { error: "Erro ao carregar estados de presença da convocatória." },
-          { status: 500 },
-        );
-      }
-
-      (latestSelectionRows || []).forEach((row) => {
-        if (!row.player_id) return;
-        convocationSelections[row.player_id] = {
-          responseStatus:
-            typeof row.response_status === "string" ? row.response_status : null,
-          isPresent:
-            typeof row.is_present === "boolean" ? row.is_present : null,
-        };
-      });
-    }
-
-    // Ensure all convocated players have a game_stats_live row (bench by default).
-    // This keeps lineup/states consistent after refresh and across devices.
-    if (selectedIds.size > 0) {
-      const { data: existingLiveRows, error: existingLiveRowsError } = await supabase
-        .from("game_stats_live")
-        .select("player_id")
-        .eq("game_id", gameId);
-
-      if (!existingLiveRowsError) {
-        const existingLiveIds = new Set((existingLiveRows || []).map((row) => row.player_id));
-        const missingLiveRows = Array.from(selectedIds)
-          .filter((playerId) => !existingLiveIds.has(playerId))
-          .map((playerId) => ({
-            game_id: gameId,
-            player_id: playerId,
-            status: "on_bench",
-            start_minute: null,
-            end_minute: null,
-          }));
-
-        if (missingLiveRows.length > 0) {
-          await supabase.from("game_stats_live").insert(missingLiveRows);
-        }
-      }
-    }
-
+    // Phase 2: Parallel queries that depend on convocation results + game data
     const playersQuery = supabase
       .from("players")
       .select("*")
@@ -242,8 +195,46 @@ export async function GET(_request: Request, { params }: RouteContext) {
       playersQuery.limit(0);
     }
 
-    const { data: activePlayers, error: playersError } = await playersQuery;
+    const phase2Promises = [
+      playersQuery,
+      supabase
+        .from("game_stats_live")
+        .select("player_id, status, start_minute")
+        .eq("game_id", gameId),
+      game.age_group_id
+        ? supabase
+            .from("age_groups")
+            .select("football_format, club_name, club_short_name, tactical_system")
+            .eq("id", game.age_group_id)
+            .maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
+      teamId
+        ? supabase
+            .from("kit_pieces")
+            .select("*")
+            .eq("team_id", teamId)
+            .order("kit_number")
+            .order("player_type")
+            .order("piece_type")
+        : Promise.resolve({ data: null, error: null }),
+      convocationIds.length > 0
+        ? supabase
+            .from("convocation_players")
+            .select("player_id")
+            .in("convocation_id", convocationIds)
+        : Promise.resolve({ data: null, error: null }),
+      latestConvocation?.id
+        ? supabase
+            .from("convocation_players")
+            .select("player_id, response_status, is_present")
+            .eq("convocation_id", latestConvocation.id)
+        : Promise.resolve({ data: null, error: null }),
+    ] as const;
 
+    const [playersResult, liveStatsResult, ageGroupResult, kitsResult, selectedResult, latestSelResult] =
+      await Promise.all(phase2Promises);
+
+    const { data: activePlayers, error: playersError } = playersResult;
     if (playersError) {
       return NextResponse.json(
         { error: "Erro ao carregar os jogadores do escalão." },
@@ -251,20 +242,51 @@ export async function GET(_request: Request, { params }: RouteContext) {
       );
     }
 
-    const { data: externalRowsRaw, error: externalRowsError } = await supabase
-      .from("external_player_convocations")
-      .select("id, name, jersey_number, position, lineup_status, created_at")
-      .eq("game_id", gameId)
-      .order("created_at", { ascending: true });
-
-    if (
-      externalRowsError &&
-      !isMissingRelationError(externalRowsError.message, "external_player_convocations")
-    ) {
+    const selectedIds = new Set<string>();
+    if (selectedResult.error) {
       return NextResponse.json(
-        { error: "Erro ao carregar jogadores externos da convocatória." },
+        { error: "Erro ao carregar jogadores convocados." },
         { status: 500 },
       );
+    }
+    (selectedResult.data || []).forEach((row) => {
+      if ("player_id" in row) selectedIds.add(row.player_id as string);
+    });
+
+    if (latestSelResult.error) {
+      return NextResponse.json(
+        { error: "Erro ao carregar estados de presença da convocatória." },
+        { status: 500 },
+      );
+    }
+    ((latestSelResult.data || []) as Array<{ player_id?: string; response_status?: string; is_present?: boolean }>).forEach((row) => {
+      if (!row.player_id) return;
+      convocationSelections[row.player_id] = {
+        responseStatus:
+          typeof row.response_status === "string" ? row.response_status : null,
+        isPresent:
+          typeof row.is_present === "boolean" ? row.is_present : null,
+      };
+    });
+
+    // Ensure all convocated players have a game_stats_live row (bench by default).
+    if (selectedIds.size > 0 && !liveStatsResult.error) {
+      const existingLiveIds = new Set(
+        ((liveStatsResult.data || []) as Array<{ player_id?: string }>).map((row) => row.player_id),
+      );
+      const missingLiveRows = Array.from(selectedIds)
+        .filter((playerId) => !existingLiveIds.has(playerId))
+        .map((playerId) => ({
+          game_id: gameId,
+          player_id: playerId,
+          status: "on_bench",
+          start_minute: null,
+          end_minute: null,
+        }));
+
+      if (missingLiveRows.length > 0) {
+        await supabase.from("game_stats_live").insert(missingLiveRows);
+      }
     }
 
     const externalRows = ((externalRowsRaw || []) as Array<{
@@ -275,6 +297,66 @@ export async function GET(_request: Request, { params }: RouteContext) {
       lineup_status: string | null;
       created_at: string;
     }>).filter((row) => row?.id && row?.name);
+
+    // Extract age group info from parallelized result
+    const ag = ageGroupResult.data as { football_format?: string; club_name?: string; club_short_name?: string | null; tactical_system?: string | null } | null;
+    const footballFormat = ag?.football_format ?? null;
+    const homeClubName = ag?.club_name ?? null;
+    const homeClubShortName = ag?.club_short_name ?? null;
+    const ageGroupTacticalSystem = ag?.tactical_system ?? null;
+
+    // Extract lineup statuses from parallelized result
+    const liveStats = liveStatsResult.data;
+    const lineupStatuses: Record<string, string> = {};
+    const starterIdsSet = getStarterPlayerIdsFromLiveStats(
+      ((liveStats || []) as Array<{
+        player_id?: string | null;
+        status?: string | null;
+        start_minute?: number | null;
+      }>),
+    );
+    (liveStats || []).forEach((row) => {
+      const r = row as unknown as { player_id?: string; status?: string; start_minute?: number | null };
+      if (!r.player_id) return;
+      const normalized = normalizeLiveStatusForUi(r.status);
+      if (normalized) lineupStatuses[r.player_id] = normalized;
+    });
+
+    // Extract kits from parallelized result
+    let kits: Record<string, unknown>[] = [];
+    if (kitsResult.error) {
+      return NextResponse.json(
+        { error: "Erro ao carregar equipamentos da equipa." },
+        { status: 500 },
+      );
+    }
+    kits = ((kitsResult.data || []) as unknown as Record<string, unknown>[]).map((row) =>
+      normalizeKitRowForUi(row),
+    );
+
+    // Extract checkpoint from parallelized result
+    let liveCheckpoint: {
+      phase: MatchPhase;
+      baseSeconds: number;
+      runningSinceMs: number | null;
+      updatedAt: string;
+    } | null = null;
+
+    const { data: checkpointRow, error: checkpointError } = checkpointResult;
+    if (checkpointError && !isMissingCheckpointTableError(checkpointError.message)) {
+      console.error("Erro ao carregar checkpoint live:", checkpointError);
+    }
+    if (checkpointRow && game.status !== "completed") {
+      liveCheckpoint = {
+        phase: checkpointRow.phase as MatchPhase,
+        baseSeconds: Math.max(0, Math.floor(checkpointRow.base_seconds ?? 0)),
+        runningSinceMs:
+          typeof checkpointRow.running_since_ms === "number"
+            ? checkpointRow.running_since_ms
+            : null,
+        updatedAt: checkpointRow.updated_at,
+      };
+    }
 
     const blockedIds = new Set<string>();
     const sameDayConflictLabelByPlayerId = new Map<string, string>();
@@ -409,46 +491,6 @@ export async function GET(_request: Request, { params }: RouteContext) {
       })),
     ];
 
-    // Football format from age_group
-    let footballFormat: string | null = null;
-    let homeClubName: string | null = null;
-    let homeClubShortName: string | null = null;
-    let ageGroupTacticalSystem: string | null = null;
-    if (game.age_group_id) {
-      const { data: ag } = await supabase
-        .from("age_groups")
-        .select("football_format, club_name, club_short_name, tactical_system")
-        .eq("id", game.age_group_id)
-        .maybeSingle();
-      footballFormat =
-        (ag as unknown as { football_format?: string } | null)?.football_format ?? null;
-      homeClubName = (ag as { club_name?: string } | null)?.club_name ?? null;
-      homeClubShortName =
-        (ag as { club_short_name?: string | null } | null)?.club_short_name ?? null;
-      ageGroupTacticalSystem =
-        (ag as { tactical_system?: string | null } | null)?.tactical_system ?? null;
-    }
-
-    // Lineup statuses from game_stats_live
-    const { data: liveStats } = await supabase
-      .from("game_stats_live")
-      .select("player_id, status, start_minute")
-      .eq("game_id", gameId);
-    const lineupStatuses: Record<string, string> = {};
-    const starterIdsSet = getStarterPlayerIdsFromLiveStats(
-      ((liveStats || []) as Array<{
-        player_id?: string | null;
-        status?: string | null;
-        start_minute?: number | null;
-      }>),
-    );
-    (liveStats || []).forEach((row) => {
-      const r = row as unknown as { player_id?: string; status?: string; start_minute?: number | null };
-      if (!r.player_id) return;
-      const normalized = normalizeLiveStatusForUi(r.status);
-      if (normalized) lineupStatuses[r.player_id] = normalized;
-    });
-
     externalRows.forEach((row) => {
       const externalPlayerId = `external:${row.id}`;
       const normalized =
@@ -458,60 +500,6 @@ export async function GET(_request: Request, { params }: RouteContext) {
         starterIdsSet.add(externalPlayerId);
       }
     });
-
-    let kits: Record<string, unknown>[] = [];
-    if (teamId) {
-      const { data: kitRows, error: kitsError } = await supabase
-        .from("kit_pieces")
-        .select("*")
-        .eq("team_id", teamId)
-        .order("kit_number")
-        .order("player_type")
-        .order("piece_type");
-
-      if (kitsError) {
-        return NextResponse.json(
-          { error: "Erro ao carregar equipamentos da equipa." },
-          { status: 500 },
-        );
-      }
-
-      kits = ((kitRows || []) as unknown as Record<string, unknown>[]).map((row) =>
-        normalizeKitRowForUi(row),
-      );
-    }
-
-    let liveCheckpoint: {
-      phase: MatchPhase;
-      baseSeconds: number;
-      runningSinceMs: number | null;
-      updatedAt: string;
-    } | null = null;
-
-    const activityCutoffIso = new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString();
-    const { data: checkpointRow, error: checkpointError } = await supabase
-      .from("game_live_checkpoints")
-      .select("phase, base_seconds, running_since_ms, updated_at")
-      .eq("game_id", gameId)
-      .in("phase", ["first_half", "second_half"])
-      .gte("updated_at", activityCutoffIso)
-      .maybeSingle();
-
-    if (checkpointError && !isMissingCheckpointTableError(checkpointError.message)) {
-      console.error("Erro ao carregar checkpoint live:", checkpointError);
-    }
-
-    if (checkpointRow && game.status !== "completed") {
-      liveCheckpoint = {
-        phase: checkpointRow.phase as MatchPhase,
-        baseSeconds: Math.max(0, Math.floor(checkpointRow.base_seconds ?? 0)),
-        runningSinceMs:
-          typeof checkpointRow.running_since_ms === "number"
-            ? checkpointRow.running_since_ms
-            : null,
-        updatedAt: checkpointRow.updated_at,
-      };
-    }
 
     return NextResponse.json({
       success: true,

@@ -6,6 +6,7 @@ import {
   bulkApplyNotificationAction,
   listUserNotifications,
 } from "@/lib/notifications/store";
+import { z } from "zod";
 
 function normalizeLimit(value: string | null) {
   const parsed = Number.parseInt(value || "", 10);
@@ -69,16 +70,20 @@ export async function POST(request: Request) {
     }
 
     const admin = createAdminClient();
-    const body = await request.json().catch(() => null);
-    const action =
-      typeof body?.action === "string" ? body.action : "mark_all_read";
-    const type = typeof body?.type === "string" ? body.type : null;
-    const onlyRead = body?.onlyRead === true;
-    const onlyUnread = body?.onlyUnread === true;
 
-    if (!["mark_all_read", "mark_all_unread", "delete_all", "clear_all"].includes(action)) {
+    const NotificationActionSchema = z.object({
+      action: z.enum(["mark_all_read", "mark_all_unread", "delete_all", "clear_all"]).default("mark_all_read"),
+      type: z.string().nullable().optional(),
+      onlyRead: z.boolean().optional().default(false),
+      onlyUnread: z.boolean().optional().default(false),
+    });
+
+    const rawBody = await request.json().catch(() => ({}));
+    const parsed = NotificationActionSchema.safeParse(rawBody);
+    if (!parsed.success) {
       return NextResponse.json({ error: "Ação inválida." }, { status: 400 });
     }
+    const { action, type, onlyRead, onlyUnread } = parsed.data;
 
     if (action === "delete_all" || action === "clear_all") {
       const deleted = await bulkApplyNotificationAction(admin, {

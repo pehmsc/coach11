@@ -38,7 +38,8 @@ export async function GET() {
     let db = supabase;
     try {
       db = createAdminClient();
-    } catch {
+    } catch (error) {
+      console.warn("[api.me.context] admin client unavailable", error);
       db = supabase;
     }
 

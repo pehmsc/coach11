@@ -90,7 +90,8 @@ export async function GET(request: Request) {
     let db = supabase;
     try {
       db = createAdminClient();
-    } catch {
+    } catch (error) {
+      console.warn("[api.trainings] admin client unavailable", error);
       db = supabase;
     }
 
@@ -240,14 +241,21 @@ export async function GET(request: Request) {
       );
     }
 
-    const { data: sessionsData, error: sessionsError } = await db
+    // Pagination: ?limit=100&offset=0
+    const url = new URL(request.url);
+    const limit = Math.min(Number(url.searchParams.get("limit")) || 100, 200);
+    const offset = Math.max(Number(url.searchParams.get("offset")) || 0, 0);
+
+    const { data: sessionsData, error: sessionsError, count: sessionsCount } = await db
       .from("training_sessions")
       .select(
         "id, session_date, start_time, end_time, title, ut_number, week_start_date, microcycle_number, mesocycle_number, period_type, initial_instruction, objective, complementary_objectives, focus, intensity, material, field_area, location, location_address, formatted_address, latitude, longitude, osm_place_id, location_source, notes, image_url, status, age_group_id, team_id",
+        { count: "exact" },
       )
       .eq("age_group_id", context.ageGroup.id)
       .order("session_date", { ascending: true })
-      .order("start_time", { ascending: true, nullsFirst: false });
+      .order("start_time", { ascending: true, nullsFirst: false })
+      .range(offset, offset + limit - 1);
 
     if (sessionsError) {
       throw sessionsError;
@@ -302,6 +310,7 @@ export async function GET(request: Request) {
         linked: true,
         sessions,
         summaries: Array.from(summaryMap.values()),
+        pagination: { limit, offset, total: sessionsCount ?? 0 },
       },
       {
         headers: {

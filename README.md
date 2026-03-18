@@ -50,7 +50,7 @@ Se o backend devolver `PGRST205` / `Could not find the table 'public.push_subscr
 5. Testar envio manual:
 
 ```bash
-curl -X POST https://coach11.vercel.app/api/push/test \
+curl -X POST https://coach11.app/api/push/test \
   -H "x-push-test-secret: $PUSH_TEST_SECRET" \
   -H "Content-Type: application/json" \
   --cookie "..." \

@@ -32,7 +32,8 @@ export async function GET(_request: Request, { params }: RouteContext) {
     let access = null;
     try {
       access = await fetchGameAccessContext(supabase, gameId);
-    } catch {
+    } catch (error) {
+      console.error("[api.games.summary.access]", { gameId, error });
       return NextResponse.json({ error: "Erro ao validar jogo." }, { status: 500 });
     }
 

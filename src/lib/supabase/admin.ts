@@ -20,19 +20,27 @@ export function createAdminClient(): SupabaseClient {
   const url = (
     process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL
   )?.trim();
-  const key = (
-    process.env.SUPABASE_SERVICE_ROLE_KEY ??
-    process.env.SUPABASE_SERVICE_KEY ??
-    process.env.SUPABASE_SERVICE_ROLE
+  // Canonical name: SUPABASE_SERVICE_ROLE_KEY
+  // Legacy fallbacks kept for backward compatibility
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  const legacyKey = (
+    process.env.SUPABASE_SERVICE_KEY ?? process.env.SUPABASE_SERVICE_ROLE
   )?.trim();
 
-  if (!url || !key) {
-    throw new Error(
-      "Configuração em falta: SUPABASE_SERVICE_ROLE_KEY (ou alias SUPABASE_SERVICE_KEY / SUPABASE_SERVICE_ROLE).",
+  const resolvedKey = key || legacyKey;
+  if (legacyKey && !key) {
+    console.warn(
+      "[supabase.admin] Using legacy env var name. Please rename to SUPABASE_SERVICE_ROLE_KEY.",
     );
   }
 
-  _cached = createClient(url, key, {
+  if (!url || !resolvedKey) {
+    throw new Error(
+      "Configuração em falta: SUPABASE_SERVICE_ROLE_KEY.",
+    );
+  }
+
+  _cached = createClient(url, resolvedKey, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,

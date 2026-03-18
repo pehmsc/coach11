@@ -20,7 +20,8 @@ export async function GET() {
     let db = supabase;
     try {
       db = createAdminClient();
-    } catch {
+    } catch (error) {
+      console.warn("[api.competitions] admin client unavailable", error);
       db = supabase;
     }
 

@@ -82,7 +82,8 @@ export async function POST(request: Request) {
     let db = supabase;
     try {
       db = createAdminClient();
-    } catch {
+    } catch (error) {
+      console.warn("[api.team.kits] admin client unavailable", error);
       db = supabase;
     }
     const {
