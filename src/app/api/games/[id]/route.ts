@@ -7,6 +7,7 @@ import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { fetchGameAccessContext } from "@/lib/games/access";
 import { normalizeLocationSource, normalizeNullableNumber } from "@/lib/location";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -25,10 +26,30 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
     }
 
-    const body = await request.json().catch(() => null);
-    if (!body || typeof body !== "object") {
-      return NextResponse.json({ error: "Dados inválidos." }, { status: 400 });
+    const GamePatchSchema = z.object({
+      title: z.string().nullable().optional(),
+      opponent_name: z.string().optional(),
+      opponent_short_name: z.string().nullable().optional(),
+      location: z.string().nullable().optional(),
+      location_address: z.string().nullable().optional(),
+      formatted_address: z.string().nullable().optional(),
+      notes: z.string().nullable().optional(),
+      image_url: z.string().nullable().optional(),
+      latitude: z.number().nullable().optional(),
+      longitude: z.number().nullable().optional(),
+      osm_place_id: z.string().nullable().optional(),
+      location_source: z.string().nullable().optional(),
+      game_datetime: z.string().optional(),
+      end_time: z.string().nullable().optional(),
+      is_home: z.boolean().optional(),
+    }).strict();
+
+    const rawBody = await request.json().catch(() => null);
+    const parsed = GamePatchSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Dados inválidos.", details: parsed.error.issues }, { status: 400 });
     }
+    const body = parsed.data;
 
     const { data: game } = await supabase
       .from("games")
@@ -59,12 +80,12 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       );
     }
 
-    // Only allow safe fields to be updated
+    // Build update payload from validated body
     const updates: Record<string, unknown> = {};
-    if (typeof body.title === "string" || body.title === null) updates.title = body.title || null;
-    if (typeof body.opponent_name === "string") updates.opponent_name = body.opponent_name;
-    if (typeof body.opponent_short_name === "string" || body.opponent_short_name === null) {
-      if (!isValidManualShortName(body.opponent_short_name, 2, 5)) {
+    if (body.title !== undefined) updates.title = body.title || null;
+    if (body.opponent_name !== undefined) updates.opponent_name = body.opponent_name;
+    if (body.opponent_short_name !== undefined) {
+      if (body.opponent_short_name !== null && !isValidManualShortName(body.opponent_short_name, 2, 5)) {
         return NextResponse.json(
           { error: "A sigla do adversário deve ter entre 2 e 5 caracteres." },
           { status: 400 },
@@ -73,39 +94,18 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       updates.opponent_short_name =
         normalizeManualShortName(body.opponent_short_name, 5) || null;
     }
-    if (typeof body.location === "string" || body.location === null) updates.location = body.location || null;
-    if (typeof body.location_address === "string" || body.location_address === null) {
-      updates.location_address = body.location_address || null;
-    }
-    if (
-      typeof body.formatted_address === "string" ||
-      body.formatted_address === null
-    ) {
-      updates.formatted_address = body.formatted_address || null;
-    }
-    if (typeof body.notes === "string" || body.notes === null) {
-      updates.notes = body.notes || null;
-    }
-    if (typeof body.image_url === "string" || body.image_url === null) {
-      updates.image_url = body.image_url || null;
-    }
-    if (body.latitude !== undefined || body.latitude === null) {
-      updates.latitude = normalizeNullableNumber(body.latitude);
-    }
-    if (body.longitude !== undefined || body.longitude === null) {
-      updates.longitude = normalizeNullableNumber(body.longitude);
-    }
-    if (typeof body.osm_place_id === "string" || body.osm_place_id === null) {
-      updates.osm_place_id = body.osm_place_id || null;
-    }
-    if (body.location_source !== undefined || body.location_source === null) {
-      updates.location_source = normalizeLocationSource(body.location_source);
-    }
-    if (typeof body.game_datetime === "string") updates.game_datetime = body.game_datetime;
-    if (typeof body.end_time === "string" || body.end_time === null) {
-      updates.end_time = body.end_time || null;
-    }
-    if (typeof body.is_home === "boolean") updates.is_home = body.is_home;
+    if (body.location !== undefined) updates.location = body.location || null;
+    if (body.location_address !== undefined) updates.location_address = body.location_address || null;
+    if (body.formatted_address !== undefined) updates.formatted_address = body.formatted_address || null;
+    if (body.notes !== undefined) updates.notes = body.notes || null;
+    if (body.image_url !== undefined) updates.image_url = body.image_url || null;
+    if (body.latitude !== undefined) updates.latitude = normalizeNullableNumber(body.latitude);
+    if (body.longitude !== undefined) updates.longitude = normalizeNullableNumber(body.longitude);
+    if (body.osm_place_id !== undefined) updates.osm_place_id = body.osm_place_id || null;
+    if (body.location_source !== undefined) updates.location_source = normalizeLocationSource(body.location_source);
+    if (body.game_datetime !== undefined) updates.game_datetime = body.game_datetime;
+    if (body.end_time !== undefined) updates.end_time = body.end_time || null;
+    if (body.is_home !== undefined) updates.is_home = body.is_home;
 
     if (Object.keys(updates).length === 0) {
       return NextResponse.json({ error: "Sem campos para atualizar." }, { status: 400 });
