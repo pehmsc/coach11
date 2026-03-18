@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -37,9 +38,11 @@ export function ClubLogoUpload({
       <CardContent>
         <div className="flex items-center gap-4">
           {logoUrl ? (
-            <img
+            <Image
               src={logoUrl}
               alt="Logo do clube"
+              width={80}
+              height={80}
               className="w-20 h-20 object-contain rounded-xl border border-slate-200 bg-white p-1"
             />
           ) : (

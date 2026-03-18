@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -462,7 +463,7 @@ export default function StaffPage() {
             staff.map((member) => (
               <div key={member.id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
                 {member.avatar_url ? (
-                  <img src={member.avatar_url} alt={member.full_name} className="w-9 h-9 rounded-full object-cover" />
+                  <Image src={member.avatar_url} alt={member.full_name} width={36} height={36} className="w-9 h-9 rounded-full object-cover" />
                 ) : (
                   <div className="w-9 h-9 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 font-bold text-sm">
                     {member.full_name[0]?.toUpperCase()}
