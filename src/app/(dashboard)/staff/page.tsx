@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import Image from "next/image";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,7 +25,15 @@ import {
   Pencil,
   ChevronDown,
   ChevronUp,
+  Shield,
 } from "lucide-react";
+import {
+  ALL_PERMISSION_AREAS,
+  type PermissionArea,
+  type AreaPermissions,
+  type PermissionTemplateKey,
+} from "@/lib/auth/permissions-shared";
+import { PermissionsGrid, type PermissionsMap, templateToPermissions } from "@/components/staff/PermissionsGrid";
 import { toast } from "sonner";
 import {
   AGE_GROUP_STAFF_ROLE_LABELS,
@@ -80,6 +88,11 @@ type TechnicalStaffUsage = {
   overLimit: boolean;
 };
 
+const ROLE_TO_TEMPLATE: Record<string, PermissionTemplateKey> = {
+  coach: "principal",
+  assistant_coach: "adjunto",
+};
+
 const EMPTY_FORM = {
   firstName: "",
   lastName: "",
@@ -106,6 +119,9 @@ export default function StaffPage() {
 
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [invitePermissions, setInvitePermissions] = useState<PermissionsMap>(() =>
+    templateToPermissions(ROLE_TO_TEMPLATE["assistant_coach"]),
+  );
   const [sending, setSending] = useState(false);
   const [inviteResult, setInviteResult] = useState<{ code: string; emailSent: boolean; name: string } | null>(null);
 
@@ -117,6 +133,12 @@ export default function StaffPage() {
   const [editingMember, setEditingMember] = useState<StaffMember | null>(null);
   const [editForm, setEditForm] = useState(EMPTY_EDIT_FORM);
   const [savingEdit, setSavingEdit] = useState(false);
+
+  // Permissions modal state
+  const [managingPermissionsFor, setManagingPermissionsFor] = useState<StaffMember | null>(null);
+  const [loadingPermissions, setLoadingPermissions] = useState(false);
+  const [permissions, setPermissions] = useState<Record<PermissionArea, AreaPermissions> | null>(null);
+  const [savingPermissions, setSavingPermissions] = useState(false);
 
   useEffect(() => {
     void loadData();
@@ -204,16 +226,29 @@ export default function StaffPage() {
     setSending(true);
     setInviteResult(null);
 
+    const permissionsArray = ALL_PERMISSION_AREAS.map((area) => ({
+      area,
+      ...invitePermissions[area],
+    }));
+
     const res = await fetch("/api/invite/staff", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ firstName: form.firstName, lastName: form.lastName, email: form.email, phone: form.phone, role: form.role }),
+      body: JSON.stringify({
+        firstName: form.firstName,
+        lastName: form.lastName,
+        email: form.email,
+        phone: form.phone,
+        role: form.role,
+        permissions: permissionsArray,
+      }),
     });
     const data = await res.json().catch(() => ({}));
 
     if (data.success) {
       setInviteResult({ code: data.inviteCode, emailSent: data.emailSent, name: form.firstName });
       setForm(EMPTY_FORM);
+      setInvitePermissions(templateToPermissions(ROLE_TO_TEMPLATE["assistant_coach"]));
       setShowForm(false);
       setInvitesExpanded(true);
       if (data.emailSent) {
@@ -340,6 +375,79 @@ export default function StaffPage() {
     setTimeout(() => setCopiedCode(null), 2000);
   }
 
+  async function openPermissionsModal(member: StaffMember) {
+    setManagingPermissionsFor(member);
+    setPermissions(null);
+    setLoadingPermissions(true);
+
+    try {
+      const res = await fetch(`/api/permissions/${member.id}`);
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || !data) {
+        toast.error(data?.error || "Erro ao carregar permissões.");
+        setManagingPermissionsFor(null);
+        return;
+      }
+
+      // Build a complete permissions map
+      const permMap: Record<PermissionArea, AreaPermissions> = {} as Record<PermissionArea, AreaPermissions>;
+      const defaultPerm: AreaPermissions = { can_read: true, can_write: false, can_edit: false, can_delete: false };
+
+      for (const area of ALL_PERMISSION_AREAS) {
+        const existing = (data.permissions as Array<{ area: string } & AreaPermissions>)
+          ?.find((p) => p.area === area);
+        permMap[area] = existing
+          ? { can_read: existing.can_read, can_write: existing.can_write, can_edit: existing.can_edit, can_delete: existing.can_delete }
+          : { ...defaultPerm };
+      }
+
+      setPermissions(permMap);
+    } catch {
+      toast.error("Erro de ligação ao carregar permissões.");
+      setManagingPermissionsFor(null);
+    } finally {
+      setLoadingPermissions(false);
+    }
+  }
+
+  function closePermissionsModal() {
+    setManagingPermissionsFor(null);
+    setPermissions(null);
+  }
+
+  async function handleSavePermissions(e: { preventDefault(): void }) {
+    e.preventDefault();
+    if (!managingPermissionsFor || !permissions) return;
+
+    setSavingPermissions(true);
+    try {
+      const permArray = ALL_PERMISSION_AREAS.map((area) => ({
+        area,
+        ...permissions[area],
+      }));
+
+      const res = await fetch(`/api/permissions/${managingPermissionsFor.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ permissions: permArray }),
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        toast.error(data?.error || "Erro ao guardar permissões.");
+        return;
+      }
+
+      toast.success("Permissões guardadas.");
+      closePermissionsModal();
+    } catch {
+      toast.error("Erro de ligação ao guardar permissões.");
+    } finally {
+      setSavingPermissions(false);
+    }
+  }
+
   async function copyContact(value: string, label: "email" | "telefone") {
     try {
       await navigator.clipboard.writeText(value);
@@ -463,7 +571,13 @@ export default function StaffPage() {
             staff.map((member) => (
               <div key={member.id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
                 {member.avatar_url ? (
-                  <Image src={member.avatar_url} alt={member.full_name} width={36} height={36} className="w-9 h-9 rounded-full object-cover" />
+                  <Image
+                    src={member.avatar_url}
+                    alt={member.full_name}
+                    width={36}
+                    height={36}
+                    className="h-9 w-9 rounded-full object-cover"
+                  />
                 ) : (
                   <div className="w-9 h-9 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 font-bold text-sm">
                     {member.full_name[0]?.toUpperCase()}
@@ -500,6 +614,16 @@ export default function StaffPage() {
                 </div>
                 {canManageStaff && !member.is_coordinator && (
                   <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => void openPermissionsModal(member)}
+                      className="p-1.5 hover:bg-violet-50 rounded-lg group"
+                      title="Gerir permissões"
+                    >
+                      <Shield
+                        size={14}
+                        className="text-slate-300 group-hover:text-violet-500 transition-colors"
+                      />
+                    </button>
                     <button
                       onClick={() => openEditMember(member)}
                       className="p-1.5 hover:bg-blue-50 rounded-lg group"
@@ -719,7 +843,14 @@ export default function StaffPage() {
                 </div>
                 <div className="space-y-1.5">
                   <Label>Função *</Label>
-                  <Select value={form.role} onValueChange={(v) => setForm((f) => ({ ...f, role: v }))}>
+                  <Select
+                    value={form.role}
+                    onValueChange={(v) => {
+                      setForm((f) => ({ ...f, role: v }));
+                      const tplKey = ROLE_TO_TEMPLATE[v];
+                      if (tplKey) setInvitePermissions(templateToPermissions(tplKey));
+                    }}
+                  >
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {INVITE_ROLE_OPTIONS.map((opt) => (
@@ -728,6 +859,16 @@ export default function StaffPage() {
                     </SelectContent>
                   </Select>
                 </div>
+                <div className="space-y-1.5">
+                  <Label>Permissões</Label>
+                  <div className="rounded-lg border border-slate-100 p-3">
+                    <PermissionsGrid
+                      permissions={invitePermissions}
+                      onChange={setInvitePermissions}
+                      showTemplateSelector
+                    />
+                  </div>
+                </div>
               </div>
               <div className="flex gap-2 p-5 pt-3 border-t bg-white shrink-0 pb-[max(1rem,env(safe-area-inset-bottom))]">
                 <Button type="submit" className="flex-1 bg-emerald-600 hover:bg-emerald-700" disabled={sending}>
@@ -735,6 +876,67 @@ export default function StaffPage() {
                 </Button>
                 <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>
               </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Gerir Permissões */}
+      {managingPermissionsFor && (
+        <div
+          className="fixed inset-0 bg-black/50 z-50 flex items-end md:items-center justify-center p-4"
+          onClick={closePermissionsModal}
+        >
+          <div
+            className="bg-white rounded-2xl w-full max-w-lg shadow-xl max-h-[calc(100dvh-1rem)] md:max-h-[90vh] overflow-hidden flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center p-5 border-b shrink-0">
+              <div>
+                <h3 className="font-bold text-slate-900">Permissões</h3>
+                <p className="text-xs text-slate-400 mt-0.5">{managingPermissionsFor.full_name}</p>
+              </div>
+              <button onClick={closePermissionsModal}>
+                <X size={20} className="text-slate-400" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSavePermissions} className="flex flex-col min-h-0">
+              <div
+                className="p-5 overflow-y-auto flex-1 space-y-4"
+                style={{ WebkitOverflowScrolling: "touch" }}
+              >
+                {loadingPermissions ? (
+                  <div className="flex items-center justify-center py-10">
+                    <Loader2 size={24} className="animate-spin text-slate-400" />
+                  </div>
+                ) : permissions ? (
+                  <PermissionsGrid
+                    permissions={permissions}
+                    onChange={setPermissions}
+                    showTemplateSelector
+                  />
+                ) : null}
+              </div>
+
+              {!loadingPermissions && permissions && (
+                <div className="flex gap-2 p-5 pt-3 border-t bg-white shrink-0 pb-[max(1rem,env(safe-area-inset-bottom))]">
+                  <Button
+                    type="submit"
+                    className="flex-1 bg-violet-600 hover:bg-violet-700"
+                    disabled={savingPermissions || !permissions}
+                  >
+                    {savingPermissions ? (
+                      <Loader2 size={16} className="animate-spin" />
+                    ) : (
+                      "Guardar permissões"
+                    )}
+                  </Button>
+                  <Button type="button" variant="outline" onClick={closePermissionsModal}>
+                    Cancelar
+                  </Button>
+                </div>
+              )}
             </form>
           </div>
         </div>

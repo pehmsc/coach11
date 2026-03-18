@@ -404,7 +404,6 @@ export async function deleteAgeGroupCascade(
 
   await optionalDeleteByIn(admin, "pse_records", "player_id", playerIds);
   await optionalDeleteByIn(admin, "training_attendance", "player_id", playerIds);
-  await optionalDeleteByIn(admin, "attendance_records", "player_id", playerIds);
   await optionalDeleteByIn(admin, "convocation_players", "player_id", playerIds);
   await optionalDeleteByIn(admin, "game_events", "player_id", playerIds);
   await optionalDeleteByIn(admin, "game_events", "related_player_id", playerIds);

@@ -70,7 +70,7 @@ export default async function DashboardPage() {
 
   // Fetch profile + age groups in parallel (both only depend on user.id)
   const [{ data: profile }, { data: managedAgeGroups }] = await Promise.all([
-    supabase.from("profiles").select("full_name").eq("id", user.id).single(),
+    supabase.from("profiles").select("full_name, role").eq("id", user.id).single(),
     (admin ?? supabase)
       .from("age_groups")
       .select("id, club_name, name, club_logo_url, teams(id)")
@@ -403,7 +403,7 @@ export default async function DashboardPage() {
               <p className="text-emerald-700 text-sm mb-4">
                 Cria o escalão, equipas e adiciona os atletas.
               </p>
-              <Link href="/team/setup">
+              <Link href="/onboarding">
                 <Button
                   className="bg-emerald-600 hover:bg-emerald-700"
                   size="sm"

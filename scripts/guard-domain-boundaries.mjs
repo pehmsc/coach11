@@ -13,6 +13,14 @@ const SRC_ALLOWED_EXCEPTIONS = new Map([
     "src/lib/team/delete-age-group.ts",
     new Set(["src-club-memberships-query", "src-club-id-filter"]),
   ],
+  [
+    "src/app/api/exercises/route.ts",
+    new Set(["src-club-id-filter"]), // exercícios partilhados ao nível do clube
+  ],
+  [
+    "src/app/api/exercises/[id]/route.ts",
+    new Set(["src-club-id-filter"]), // leitura de exercício ao nível do clube
+  ],
 ]);
 
 const MIGRATION_ALLOWED_EXCEPTIONS = new Map([

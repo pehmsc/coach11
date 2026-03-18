@@ -176,13 +176,26 @@ export async function POST() {
 
     const onboarding = await getBetaOnboardingState(user.id, normalizedEmail, admin);
 
+    // Alargado: qualquer coordenador sem escalão criado vai para /onboarding,
+    // independentemente do tipo de convite (beta, legacy, super_coordinator).
+    let requiresOnboarding = onboarding.requiresOnboarding;
+    if (!requiresOnboarding && resolvedRole === "coordinator") {
+      const { data: existingAgeGroup } = await admin
+        .from("age_groups")
+        .select("id")
+        .eq("coordinator_id", user.id)
+        .limit(1)
+        .maybeSingle();
+      requiresOnboarding = !existingAgeGroup;
+    }
+
     return NextResponse.json({
       success: true,
       betaAllowed: true,
       reason: betaAccess.reason,
       inviteType: activeBetaInvite?.invite_type ?? null,
-      requiresOnboarding: onboarding.requiresOnboarding,
-      redirectTo: onboarding.requiresOnboarding ? "/team/setup" : "/dashboard",
+      requiresOnboarding,
+      redirectTo: requiresOnboarding ? "/onboarding" : "/dashboard",
     });
   } catch (error) {
     if (isSuperCoordinatorEmail(normalizedEmail)) {

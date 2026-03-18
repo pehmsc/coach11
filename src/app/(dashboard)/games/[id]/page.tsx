@@ -62,7 +62,7 @@ export default function GameDetailPage() {
     kitDraftSelection, setKitDraftSelection,
     kitEditorOpen, setKitEditorOpen,
     savingKitSelection, setSavingKitSelection,
-    setError, buildConvocationPayload, markConvocationDirty,
+    setError, buildConvocationPayload,
   });
 
   const editor = useGameEditor({
@@ -120,6 +120,7 @@ export default function GameDetailPage() {
     hasPlayers: convocatedCount > 0, confirming: confirmingConvocation,
   });
   const canEditConvocationContent = ces.canEditContent && !isLiveInProgress;
+  const canEditKit = ces.baseEditable && !isLiveInProgress;
   const canConfirmConvocation = ces.canConfirm && !isLiveInProgress;
   const gameLocationLabel = resolveLocationLabel(game.location, game.formatted_address, game.location_address);
 
@@ -207,7 +208,7 @@ export default function GameDetailPage() {
         kitById={kit.kitById}
         savingKitSelection={savingKitSelection}
         hasKitDraftChanges={kit.hasKitDraftChanges}
-        canEditConvocationContent={canEditConvocationContent}
+        canEditKit={canEditKit}
         onOpenEditor={() => { setKitDraftSelection(kitSelection); setKitEditorOpen(true); }}
         onCloseEditor={kit.closeKitEditor}
         onDraftChange={kit.handleKitDraftChange}
@@ -215,37 +216,39 @@ export default function GameDetailPage() {
         getKitOptions={kit.getKitOptions}
       />
 
-      <ConvocationSection
-        players={players}
-        lineupStatuses={lineupStatuses}
-        footballFormat={footballFormat}
-        tacticalSystem={tacticalSystem}
-        saving={saving}
-        savingLineupPlayer={savingLineupPlayer}
-        savingTactical={savingTactical}
-        convocatedCount={convocatedCount}
-        effectiveConvocationStatus={ces.effectiveStatus}
-        isEditingConfirmedConvocation={isEditingConfirmedConvocation}
-        canEditConvocationContent={canEditConvocationContent}
-        canReopenConfirmedConvocation={ces.canReopenConfirmed && !isLiveInProgress}
-        convocationEditable={ces.baseEditable}
-        isCompetition={isCompetition}
-        error={error}
-        onTogglePlayer={convocation.togglePlayer}
-        onToggleLineup={(playerId) => void convocation.handleLineupToggle(playerId)}
-        onTacticalChange={(f) => void convocation.handleTacticalChange(f)}
-        onReopenConvocation={() => { setError(null); setIsEditingConfirmedConvocation(true); }}
-        onShowExternalPlayerModal={() => editor.setShowExternalPlayerModal(true)}
-      />
-
-      {!ces.isConfirmed && (
-        <ConfirmConvocationBar
-          confirmingConvocation={confirmingConvocation}
-          canConfirmConvocation={canConfirmConvocation}
-          isCompleted={game.status === "completed"}
-          onConfirm={convocation.handleConfirmConvocation}
+      <div className={!ces.isConfirmed ? "pb-28 md:pb-0" : ""}>
+        <ConvocationSection
+          players={players}
+          lineupStatuses={lineupStatuses}
+          footballFormat={footballFormat}
+          tacticalSystem={tacticalSystem}
+          saving={saving}
+          savingLineupPlayer={savingLineupPlayer}
+          savingTactical={savingTactical}
+          convocatedCount={convocatedCount}
+          effectiveConvocationStatus={ces.effectiveStatus}
+          isEditingConfirmedConvocation={isEditingConfirmedConvocation}
+          canEditConvocationContent={canEditConvocationContent}
+          canReopenConfirmedConvocation={ces.canReopenConfirmed && !isLiveInProgress}
+          convocationEditable={ces.baseEditable}
+          isCompetition={isCompetition}
+          error={error}
+          onTogglePlayer={convocation.togglePlayer}
+          onToggleLineup={(playerId) => void convocation.handleLineupToggle(playerId)}
+          onTacticalChange={(f) => void convocation.handleTacticalChange(f)}
+          onReopenConvocation={() => { setError(null); setIsEditingConfirmedConvocation(true); }}
+          onShowExternalPlayerModal={() => editor.setShowExternalPlayerModal(true)}
         />
-      )}
+
+        {!ces.isConfirmed && (
+          <ConfirmConvocationBar
+            confirmingConvocation={confirmingConvocation}
+            canConfirmConvocation={canConfirmConvocation}
+            isCompleted={game.status === "completed"}
+            onConfirm={convocation.handleConfirmConvocation}
+          />
+        )}
+      </div>
     </div>
   );
 }

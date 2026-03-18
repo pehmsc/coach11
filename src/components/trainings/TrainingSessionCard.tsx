@@ -4,6 +4,7 @@ import { format, parseISO, isToday, isFuture } from "date-fns";
 import { pt } from "date-fns/locale";
 import { Clock, MapPin, Copy, Users } from "lucide-react";
 import { resolveLocationLabel } from "@/lib/location";
+import { getTrainingDisplayTitle } from "@/lib/trainings/ut-numbering";
 import type { TrainingRow, AttendanceSummary } from "./types";
 
 interface TrainingSessionCardProps {
@@ -28,6 +29,7 @@ export function TrainingSessionCard({
     session.formatted_address,
     session.location_address,
   );
+  const displayTitle = getTrainingDisplayTitle(session);
 
   if (variant === "closed") {
     return (
@@ -42,7 +44,7 @@ export function TrainingSessionCard({
         </div>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-slate-800">
-            {session.title || "Treino"}
+            {displayTitle}
             <span className="ml-2 rounded px-1.5 py-0.5 text-[10px] font-bold bg-slate-100 text-slate-500">
               Fechado
             </span>
@@ -97,7 +99,7 @@ export function TrainingSessionCard({
       {/* Info */}
       <div className="flex-1 min-w-0">
         <p className="text-sm font-semibold text-slate-800 truncate">
-          {session.title || "Treino"}
+          {displayTitle}
           {isToday(dt) && (
             <span className="ml-2 text-[10px] font-bold bg-amber-100 text-amber-700 rounded px-1.5 py-0.5">Hoje</span>
           )}

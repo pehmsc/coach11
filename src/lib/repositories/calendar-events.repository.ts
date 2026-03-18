@@ -6,6 +6,8 @@ type TrainingWritePayload = {
   age_group_id: string;
   team_id: string;
   title: string;
+  ut_number?: number | null | undefined;
+  week_start_date?: string | null | undefined;
   session_date: string;
   start_time: string;
   end_time: string | null | undefined;
@@ -18,6 +20,17 @@ type TrainingWritePayload = {
   location_source: string | null | undefined;
   notes: string | null | undefined;
   image_url: string | null | undefined;
+  // UT metadata
+  microcycle_number?: number | null | undefined;
+  mesocycle_number?: number | null | undefined;
+  period_type?: string | null | undefined;
+  focus?: string | null | undefined;
+  intensity?: string | null | undefined;
+  field_area?: string | null | undefined;
+  objective?: string | null | undefined;
+  complementary_objectives?: string | null | undefined;
+  initial_instruction?: string | null | undefined;
+  material?: string | null | undefined;
 };
 
 type GameWritePayload = {
@@ -55,7 +68,7 @@ export async function getAgeGroupLabelById(
 // Perf: campos específicos — evitar transferir club_id, updated_at e outros
 // campos internos não usados pela UI do calendário.
 const TRAINING_SESSION_CALENDAR_FIELDS =
-  "id, age_group_id, team_id, title, session_date, start_time, end_time, location, location_address, formatted_address, latitude, longitude, osm_place_id, location_source, notes, image_url, status, created_at";
+  "id, age_group_id, team_id, title, ut_number, week_start_date, session_date, start_time, end_time, location, location_address, formatted_address, latitude, longitude, osm_place_id, location_source, notes, image_url, status, created_at";
 
 // Perf: campos específicos — evitar transferir club_id e outros campos
 // internos não usados pela UI do calendário.

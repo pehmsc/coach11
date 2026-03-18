@@ -17,6 +17,7 @@ import { LocationMapPreview } from "@/components/maps/LocationMapPreview";
 import { resolveLocationLabel } from "@/lib/location";
 import { portugalDateTimeToUtc } from "@/lib/events/presence-window";
 import { useTrainingForm } from "@/lib/hooks/useTrainingForm";
+import { getTrainingDisplayTitle } from "@/lib/trainings/ut-numbering";
 import type { SessionDetail, TrainingRow, TrainingFormFields } from "./types";
 import { getAttendanceStatusClasses } from "./utils";
 import { TrainingFormFieldsComponent } from "./TrainingFormFields";
@@ -76,6 +77,7 @@ export function TrainingDetailModal({
   const canEditSelectedSession = computeCanEdit(selectedSession.session);
   const canCorrectSelectedSessionAttendance =
     canDeleteTrainings && selectedSession.session.status === "completed";
+  const displayTitle = getTrainingDisplayTitle(selectedSession.session);
 
   function handleStartEdit() {
     editForm.populateFromSource(selectedSession.session, "edit");
@@ -115,7 +117,7 @@ export function TrainingDetailModal({
           <div className="flex items-center justify-between p-5 border-b">
             <div>
               <h3 className="font-bold text-slate-900">
-                {selectedSession.session.title || "Treino"} —{" "}
+                {displayTitle} —{" "}
                 {format(parseISO(selectedSession.session.session_date), "d 'de' MMMM", { locale: pt })}
               </h3>
               {selectedSession.session.start_time && (
@@ -196,6 +198,8 @@ export function TrainingDetailModal({
                 <TrainingFormFieldsComponent
                   title={editForm.title}
                   onTitleChange={editForm.setTitle}
+                  utNumber={editForm.utNumber}
+                  onUtNumberChange={editForm.setUtNumber}
                   date={editForm.date}
                   onDateChange={editForm.setDate}
                   startTime={editForm.startTime}
@@ -342,7 +346,7 @@ export function TrainingDetailModal({
 
       {showDeleteConfirm && (
         <div
-          className="fixed inset-0 bg-black/55 z-[60] flex items-end md:items-center justify-center p-4"
+          className="fixed inset-0 bg-black/55 z-[100] flex items-end md:items-center justify-center p-4"
           onClick={() => {
             if (deletingTraining) return;
             onHideDeleteConfirm();

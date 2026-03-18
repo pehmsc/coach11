@@ -37,8 +37,8 @@ jobs:
       - name: Typecheck
         run: pnpm exec tsc --noEmit
 
-      - name: Unit Tests
-        run: pnpm test -- --run
+      - name: Tests
+        run: pnpm exec vitest run
 
   build:
     name: Production Build

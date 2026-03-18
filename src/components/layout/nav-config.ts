@@ -2,7 +2,9 @@ import type { LucideIcon } from "lucide-react";
 import {
   BarChart2,
   Bell,
+  BookOpen,
   Briefcase,
+  Building2,
   Calendar,
   Dumbbell,
   Home,
@@ -83,10 +85,22 @@ const NAV_ITEMS = {
     label: "Treinos",
     icon: Dumbbell,
   },
-  team: {
-    id: "team",
-    href: "/team",
-    label: "Equipa",
+  exercises: {
+    id: "exercises",
+    href: "/exercises",
+    label: "Exercícios",
+    icon: BookOpen,
+  },
+  club: {
+    id: "club",
+    href: "/club",
+    label: "Clube",
+    icon: Building2,
+  },
+  teams: {
+    id: "teams",
+    href: "/teams",
+    label: "Equipas",
     icon: Shield,
   },
   staff: {
@@ -124,14 +138,13 @@ const BASE_APP_NAV_SECTIONS: AppNavSection[] = [
     items: [
       NAV_ITEMS.dashboard,
       NAV_ITEMS.calendar,
-      NAV_ITEMS.messages,
       NAV_ITEMS.notifications,
-      NAV_ITEMS.players,
       NAV_ITEMS.competitions,
       NAV_ITEMS.games,
       NAV_ITEMS.trainings,
-      NAV_ITEMS.team,
-      NAV_ITEMS.staff,
+      NAV_ITEMS.exercises,
+      NAV_ITEMS.club,
+      NAV_ITEMS.teams,
       NAV_ITEMS.statistics,
     ],
   },
@@ -145,12 +158,12 @@ const BASE_MOBILE_APP_NAV_SECTIONS: AppNavSection[] = [
   {
     id: "main",
     items: [
-      NAV_ITEMS.players,
       NAV_ITEMS.competitions,
       NAV_ITEMS.games,
       NAV_ITEMS.trainings,
-      NAV_ITEMS.team,
-      NAV_ITEMS.staff,
+      NAV_ITEMS.exercises,
+      NAV_ITEMS.club,
+      NAV_ITEMS.teams,
       NAV_ITEMS.notifications,
     ],
   },
@@ -163,7 +176,6 @@ const BASE_MOBILE_APP_NAV_SECTIONS: AppNavSection[] = [
 export const MOBILE_FOOTER_NAV_ITEMS: AppNavItem[] = [
   NAV_ITEMS.dashboard,
   NAV_ITEMS.calendar,
-  NAV_ITEMS.messages,
   NAV_ITEMS.statistics,
 ];
 

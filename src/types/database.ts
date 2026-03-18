@@ -20,6 +20,20 @@ export type KitNumber = 1 | 2 | 3;
 export type PlayerType = "field" | "goalkeeper";
 export type PieceType = "shirt" | "shorts" | "socks";
 export type LocationSource = "google" | "osm" | "manual";
+export type ExerciseCategory =
+  | "attb"
+  | "esquemas_taticos"
+  | "estrategia"
+  | "finalizacao"
+  | "organizacao_defensiva"
+  | "organizacao_ofensiva"
+  | "principios_de_jogo"
+  | "qualidades_fisicas"
+  | "transicao_defensiva"
+  | "transicao_ofensiva";
+export type ExerciseOrientation = "recovery" | "strength" | "endurance" | "speed" | "flexibility" | "other";
+export type ExerciseRegime = "aerobic" | "anaerobic_lactic" | "anaerobic_alactic";
+export type ExerciseStatus = "active" | "archived";
 
 export interface Profile {
   id: string;
@@ -38,7 +52,10 @@ export interface AgeGroup {
   club_name: string;
   club_short_name?: string;
   club_logo_url?: string;
+  /** Nome da equipa, ex: "Infantis A". Historicamente guardava o escalão. */
   name: string;
+  /** Escalão/faixa etária, ex: "Sub-13". Campo adicionado em 2026-03-15. */
+  age_level?: string | null;
   public_slug?: string | null;
   public_access_enabled?: boolean;
   public_access_count?: number;
@@ -94,6 +111,7 @@ export interface Player {
 export interface TrainingSession {
   id: string;
   age_group_id?: string;
+  club_id?: string;
   team_id: string;
   title?: string;
   session_date: string;
@@ -106,6 +124,14 @@ export interface TrainingSession {
   longitude?: number | null;
   osm_place_id?: string;
   location_source?: LocationSource | null;
+  ut_number?: number | null;
+  week_start_date?: string | null;
+  objective?: string | null;
+  complementary_objectives?: string | null;
+  focus?: string | null;
+  intensity?: string | null;
+  material?: string | null;
+  field_area?: string | null;
   notes?: string;
   image_url?: string;
   status: EventStatus;
@@ -295,4 +321,71 @@ export interface TeamStaff {
   profile_id: string;
   role: string;
   created_at: string;
+}
+
+export interface Exercise {
+  id: string;
+  club_id: string;
+  age_group_id: string;
+  created_by: string;
+  name: string;
+  description?: string | null;
+  objectives?: string | null;
+  success_criteria?: string | null;
+  category: ExerciseCategory;
+  subcategory?: string | null;
+  game_format?: string | null;
+  duration_minutes?: number | null;
+  rest_minutes: number;
+  min_players?: number | null;
+  max_players?: number | null;
+  field_dimensions?: string | null;
+  material?: string | null;
+  diagram_url?: string | null;
+  orientation?: ExerciseOrientation | null;
+  regime?: ExerciseRegime | null;
+  notes?: string | null;
+  status?: ExerciseStatus;
+  is_shared: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type PhaseType = "initial" | "main" | "final" | "custom";
+
+export interface TrainingPhase {
+  id: string;
+  training_session_id: string;
+  club_id: string;
+  phase_type: PhaseType;
+  phase_name?: string | null;
+  phase_order: number;
+  duration_minutes?: number | null;
+  notes?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TrainingPhaseExercise {
+  id: string;
+  phase_id: string;
+  exercise_id?: string | null;
+  club_id: string;
+  exercise_order: number;
+  custom_name?: string | null;
+  custom_description?: string | null;
+  custom_objectives?: string | null;
+  custom_game_format?: string | null;
+  custom_duration_minutes?: number | null;
+  custom_rest_minutes?: number | null;
+  custom_num_players?: number | null;
+  custom_field_dimensions?: string | null;
+  custom_material?: string | null;
+  custom_diagram_url?: string | null;
+  planned_time_minutes?: number | null;
+  repetitions: number;
+  total_athletes?: number | null;
+  notes?: string | null;
+  created_at: string;
+  exercise?: Exercise | null;
 }

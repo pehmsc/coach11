@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { parseISO } from "date-fns";
 import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { resolveUserTeamContext } from "@/lib/auth/team-context";
@@ -33,9 +34,15 @@ import {
   updateTrainingSession,
 } from "@/lib/repositories/calendar-events.repository";
 import { createClient } from "@/lib/supabase/server";
+import {
+  getNextUtNumber,
+  getWeekStartDate,
+  toIsoDate,
+} from "@/lib/trainings/ut-numbering";
 
 type CalendarPayload = {
   title?: string | null;
+  ut_number?: number | null;
   date?: string | null;
   start_time?: string | null;
   end_time?: string | null;
@@ -52,6 +59,17 @@ type CalendarPayload = {
   is_home?: boolean;
   notes?: string | null;
   image_url?: string | null;
+  // UT metadata fields
+  microcycle_number?: number | null;
+  mesocycle_number?: number | null;
+  period_type?: string | null;
+  focus?: string | null;
+  intensity?: string | null;
+  field_area?: string | null;
+  objective?: string | null;
+  complementary_objectives?: string | null;
+  initial_instruction?: string | null;
+  material?: string | null;
 };
 
 type RouteContextData = {
@@ -72,6 +90,7 @@ const CalendarLocationSchema = z.object({
 
 const CalendarPayloadSchema = CalendarLocationSchema.extend({
   title: z.string().nullable().optional(),
+  ut_number: z.number().int().positive().nullable().optional(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida.").nullable().optional(),
   start_time: z.string().nullable().optional(),
   end_time: z.string().nullable().optional(),
@@ -81,6 +100,17 @@ const CalendarPayloadSchema = CalendarLocationSchema.extend({
   is_home: z.boolean().optional(),
   notes: z.string().nullable().optional(),
   image_url: z.string().nullable().optional(),
+  // UT metadata fields
+  microcycle_number: z.number().int().positive().nullable().optional(),
+  mesocycle_number: z.number().int().positive().nullable().optional(),
+  period_type: z.string().nullable().optional(),
+  focus: z.string().nullable().optional(),
+  intensity: z.string().nullable().optional(),
+  field_area: z.string().nullable().optional(),
+  objective: z.string().nullable().optional(),
+  complementary_objectives: z.string().nullable().optional(),
+  initial_instruction: z.string().nullable().optional(),
+  material: z.string().nullable().optional(),
 });
 
 const CalendarCreateSchema = z.object({
@@ -125,6 +155,28 @@ function normalizeOptionalId(value: unknown) {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+function normalizeOptionalUtNumber(value: unknown) {
+  if (typeof value === "number" && Number.isInteger(value) && value > 0) {
+    return value;
+  }
+
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const parsed = Number(trimmed);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    return null;
+  }
+
+  return parsed;
+}
+
 function normalizeOptionalLocationSource(value: unknown) {
   return normalizeLocationSource(value);
 }
@@ -150,6 +202,7 @@ function normalizePayload(value: unknown): CalendarPayload {
   const opponentShortNameRaw = normalizeOptionalText(row.opponent_short_name);
   return {
     title: normalizeOptionalText(row.title),
+    ut_number: normalizeOptionalUtNumber(row.ut_number),
     date: normalizeDate(row.date),
     start_time: normalizeTime(row.start_time),
     end_time: normalizeTime(row.end_time),
@@ -284,6 +337,36 @@ async function resolveCompetitionId(
   }
 
   return { id: data.id as string, error: null as string | null };
+}
+
+async function resolveAgeGroupClubId(
+  db: SupabaseClient,
+  ageGroupId: string,
+) {
+  const { data, error } = await db
+    .from("age_groups")
+    .select("club_id")
+    .eq("id", ageGroupId)
+    .maybeSingle();
+
+  if (error) {
+    return {
+      clubId: null as string | null,
+      error: "Não foi possível determinar o clube do escalão.",
+    };
+  }
+
+  if (!data?.club_id) {
+    return {
+      clubId: null as string | null,
+      error: "O escalão não tem clube associado.",
+    };
+  }
+
+  return {
+    clubId: data.club_id as string,
+    error: null as string | null,
+  };
 }
 
 function hasAccessToEvent(
@@ -440,10 +523,21 @@ export async function handleCalendarEventsPost(request: Request) {
     }
 
     if (eventType === "training") {
+      const { clubId, error: clubError } = await resolveAgeGroupClubId(db, targetAgeGroupId);
+      if (clubError || !clubId) {
+        return NextResponse.json({ error: clubError }, { status: 400 });
+      }
+
+      const utNumber =
+        payload.ut_number ?? await getNextUtNumber(db, clubId, targetAgeGroupId);
+      const weekStartDate = toIsoDate(getWeekStartDate(parseISO(payload.date!)));
+
       const { data, error } = await insertTrainingSession(db, {
         age_group_id: targetAgeGroupId,
         team_id: targetTeamId,
         title: payload.title || "Treino",
+        ut_number: utNumber,
+        week_start_date: weekStartDate,
         session_date: payload.date!,
         start_time: payload.start_time || "00:00",
         end_time: payload.end_time,
@@ -456,6 +550,16 @@ export async function handleCalendarEventsPost(request: Request) {
         location_source: payload.location_source,
         notes: payload.notes,
         image_url: payload.image_url,
+        microcycle_number: payload.microcycle_number,
+        mesocycle_number: payload.mesocycle_number,
+        period_type: payload.period_type,
+        focus: payload.focus,
+        intensity: payload.intensity,
+        field_area: payload.field_area,
+        objective: payload.objective,
+        complementary_objectives: payload.complementary_objectives,
+        initial_instruction: payload.initial_instruction,
+        material: payload.material,
       });
 
       if (error) {
@@ -605,6 +709,8 @@ export async function handleCalendarEventsPatch(request: Request) {
         age_group_id: targetAgeGroupId,
         team_id: targetTeamId,
         title: payload.title || "Treino",
+        ut_number: payload.ut_number ?? null,
+        week_start_date: toIsoDate(getWeekStartDate(parseISO(payload.date!))),
         session_date: payload.date!,
         start_time: payload.start_time || "00:00",
         end_time: payload.end_time,
@@ -617,6 +723,16 @@ export async function handleCalendarEventsPatch(request: Request) {
         location_source: payload.location_source,
         notes: payload.notes,
         image_url: payload.image_url,
+        microcycle_number: payload.microcycle_number,
+        mesocycle_number: payload.mesocycle_number,
+        period_type: payload.period_type,
+        focus: payload.focus,
+        intensity: payload.intensity,
+        field_area: payload.field_area,
+        objective: payload.objective,
+        complementary_objectives: payload.complementary_objectives,
+        initial_instruction: payload.initial_instruction,
+        material: payload.material,
       });
 
       if (error) {

@@ -17,8 +17,9 @@ export function ConfirmConvocationBar({
   onConfirm,
 }: ConfirmConvocationBarProps) {
   return (
-    <div className="sticky bottom-[calc(var(--mobile-footer-height)+env(safe-area-inset-bottom)+0.5rem)] z-20 mt-5 md:bottom-4">
-      <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-lg">
+    <div className="pointer-events-none fixed bottom-[calc(var(--mobile-footer-height)+env(safe-area-inset-bottom))] left-0 right-0 z-40 border-t border-slate-200 bg-white p-4 shadow-lg md:pointer-events-auto md:relative md:bottom-auto md:left-auto md:right-auto md:border-0 md:bg-transparent md:p-0 md:shadow-none md:mt-5">
+      <div className="pointer-events-auto max-w-2xl mx-auto">
+        <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-lg">
         <Button
           type="button"
           onClick={onConfirm}
@@ -39,6 +40,7 @@ export function ConfirmConvocationBar({
               ? "Guardar correção"
               : "Guardar convocatória"}
         </Button>
+        </div>
       </div>
     </div>
   );

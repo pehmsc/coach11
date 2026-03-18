@@ -76,6 +76,8 @@ export function TrainingCreateModal({
             <TrainingFormFieldsComponent
               title={form.title}
               onTitleChange={form.setTitle}
+              utNumber={form.utNumber}
+              onUtNumberChange={form.setUtNumber}
               date={form.date}
               onDateChange={form.setDate}
               startTime={form.startTime}
@@ -103,6 +105,20 @@ export function TrainingCreateModal({
               notes={form.notes}
               onNotesChange={form.setNotes}
               ageGroupId={ageGroupId}
+              utFocus={form.utFocus}
+              onUtFocusChange={form.setUtFocus}
+              utIntensity={form.utIntensity}
+              onUtIntensityChange={form.setUtIntensity}
+              utPeriodType={form.utPeriodType}
+              onUtPeriodTypeChange={form.setUtPeriodType}
+              utFieldArea={form.utFieldArea}
+              onUtFieldAreaChange={form.setUtFieldArea}
+              utObjective={form.utObjective}
+              onUtObjectiveChange={form.setUtObjective}
+              utMaterial={form.utMaterial}
+              onUtMaterialChange={form.setUtMaterial}
+              utInitialInstruction={form.utInitialInstruction}
+              onUtInitialInstructionChange={form.setUtInitialInstruction}
             />
             {createError && <p className="text-sm text-red-600">{createError}</p>}
           </div>

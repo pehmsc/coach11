@@ -49,8 +49,11 @@ function resolvePostAuthRedirect(
   next: string,
   payload: { redirectTo?: string } | null,
 ) {
-  if (payload?.redirectTo === "/team/setup") {
-    return "/team/setup";
+  const dest = payload?.redirectTo;
+  // Honrar qualquer redirect explícito (ex: /onboarding, /team/setup)
+  // excepto /dashboard que é tratado abaixo com preservação do next.
+  if (dest && dest !== "/dashboard") {
+    return dest;
   }
 
   return next;
@@ -176,9 +179,34 @@ function OAuthCallbackClientContent() {
         return;
       }
 
+      // Bug fix: se o invite/sync consumiu o convite de staff (linked: true),
+      // limpar o código de localStorage e do URL de redirect para que o
+      // RedeemInviteGate no dashboard não tente fazer redeem novamente
+      // (causaria "Código inválido ou já utilizado").
+      let finalRedirect = resolvePostAuthRedirect(next, ensureProfilePayload);
+      if (inviteSyncRes?.ok) {
+        const inviteSyncPayload = await inviteSyncRes.json().catch(() => null) as
+          | { linked?: boolean }
+          | null;
+        if (inviteSyncPayload?.linked) {
+          localStorage.removeItem("inviteCode");
+          localStorage.removeItem("inviteEmail");
+          // Strip qualquer ?code= do redirect para não activar o RedeemInviteGate
+          try {
+            const url = new URL(finalRedirect, window.location.origin);
+            url.searchParams.delete("code");
+            url.searchParams.delete("inviteCode");
+            url.searchParams.delete("invite_code");
+            finalRedirect = url.pathname + (url.search !== "?" ? url.search : "");
+          } catch {
+            finalRedirect = "/dashboard";
+          }
+        }
+      }
+
       if (!cancelled) {
         markIOSInstallPromptAfterLogin();
-        window.location.replace(resolvePostAuthRedirect(next, ensureProfilePayload));
+        window.location.replace(finalRedirect);
       }
     };
 

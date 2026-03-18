@@ -2,7 +2,13 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import type { TrainingRow, AttendanceSummary, SessionDetail } from "@/components/trainings/types";
+import type {
+  TrainingRow,
+  AttendanceSummary,
+  SessionDetail,
+  TrainingFormFields,
+} from "@/components/trainings/types";
+import { parseUtNumberInput } from "@/lib/trainings/ut-numbering";
 import type { Player } from "@/types/database";
 
 export function useTrainingsData() {
@@ -182,6 +188,7 @@ export function useTrainingsData() {
   async function handleSaveSelectedSession(
     editFields: {
       title: string;
+      utNumber: string;
       date: string;
       startTime: string;
       endTime: string;
@@ -214,6 +221,7 @@ export function useTrainingsData() {
           ageGroupId,
           payload: {
             title: editFields.title.trim() || "Treino",
+            ut_number: parseUtNumberInput(editFields.utNumber),
             date: editFields.date,
             start_time: editFields.startTime,
             end_time: editFields.endTime || null,
@@ -264,21 +272,9 @@ export function useTrainingsData() {
     }
   }
 
-  async function handleCreateTraining(fields: {
-    title: string;
-    date: string;
-    startTime: string;
-    endTime: string;
-    location: string;
-    locationAddress: string;
-    formattedAddress: string;
-    latitude: number | null;
-    longitude: number | null;
-    osmPlaceId: string;
-    locationSource: "google" | "osm" | "manual" | null;
-    notes: string;
-    imageUrl: string;
-  }): Promise<{ success: boolean; error?: string }> {
+  async function handleCreateTraining(
+    fields: TrainingFormFields,
+  ): Promise<{ success: boolean; error?: string }> {
     if (!fields.date || !fields.startTime) {
       return { success: false, error: "Preenche data e hora de início." };
     }
@@ -291,6 +287,7 @@ export function useTrainingsData() {
           type: "training",
           payload: {
             title: fields.title.trim() || "Treino",
+            ut_number: parseUtNumberInput(fields.utNumber),
             date: fields.date,
             start_time: fields.startTime,
             end_time: fields.endTime || null,
@@ -303,6 +300,13 @@ export function useTrainingsData() {
             location_source: fields.locationSource,
             notes: fields.notes.trim() || null,
             image_url: fields.imageUrl.trim() || null,
+            focus: fields.utFocus || null,
+            intensity: fields.utIntensity || null,
+            period_type: fields.utPeriodType || null,
+            field_area: fields.utFieldArea || null,
+            objective: fields.utObjective?.trim() || null,
+            material: fields.utMaterial?.trim() || null,
+            initial_instruction: fields.utInitialInstruction?.trim() || null,
           },
         }),
       });
@@ -318,23 +322,32 @@ export function useTrainingsData() {
     }
   }
 
-  // Auto-open session from URL
+  // Redirecionar URLs com ?open=<id> para a página de detalhe /trainings/<id>
   useEffect(() => {
     const requestedSessionId = searchParams.get("open");
-    if (!requestedSessionId || loading || loadingDetail || selectedSession) {
+    if (!requestedSessionId || loading) {
       return;
     }
 
     const targetSession = sessions.find((session) => session.id === requestedSessionId);
     if (targetSession) {
-      void handleSessionClick(targetSession);
+      router.replace(`/trainings/${requestedSessionId}`);
       return;
     }
 
     if (sessions.length > 0) {
       router.replace("/trainings", { scroll: false });
     }
-  }, [loading, loadingDetail, router, searchParams, selectedSession, sessions]);
+  }, [loading, router, searchParams, sessions]);
+
+  const nextUtNumber =
+    sessions.reduce((maxValue, session) => {
+      if (typeof session.ut_number !== "number") {
+        return maxValue;
+      }
+
+      return Math.max(maxValue, session.ut_number);
+    }, 0) + 1;
 
   return {
     loading,
@@ -354,6 +367,7 @@ export function useTrainingsData() {
     setDetailError,
     editingSelectedSession,
     setEditingSelectedSession,
+    nextUtNumber,
     getSummary,
     clearOpenSessionQuery,
     handleSessionClick,

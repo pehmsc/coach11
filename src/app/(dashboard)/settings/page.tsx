@@ -507,7 +507,7 @@ export default function SettingsPage() {
                     )}
                     {hasManagedAgeGroups ? (
                       <Button asChild variant="outline" className="mt-3 w-full">
-                        <Link href="/team">Ir para Equipa</Link>
+                        <Link href="/teams">Ir para Equipas</Link>
                       </Button>
                     ) : (
                       <Button

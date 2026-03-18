@@ -232,7 +232,7 @@ export default function AttendancePage() {
       await queryClient.invalidateQueries({
         queryKey: queryKeys.attendance.today(selectedDate),
       });
-      router.refresh(); // Invalidar cache RSC do dashboard
+      router.push("/dashboard"); // Invalidar cache RSC do dashboard
     } catch (mutationError) {
       const message =
         mutationError instanceof ApiFetchError
@@ -285,9 +285,7 @@ export default function AttendancePage() {
   });
   const saving = saveAttendanceMutation.isPending;
   const saveDisabled =
-    saving ||
-    (sessionClosed && !canManageClosedAttendance) ||
-    (!hasAttendanceChanges && !isClosingWindow);
+    saving || (sessionClosed && !canManageClosedAttendance);
 
   // ── Header de navegação de datas ──
   const dateNav = (
@@ -453,7 +451,7 @@ export default function AttendancePage() {
         Toca num atleta para alternar estado: Presente → Atrasado → Ausente → Lesionado
       </p>
 
-      <div className="space-y-2 mb-6">
+      <div className="space-y-2 pb-32 md:pb-6">
         {players.map((player) => {
           const status = attendance[player.id] ?? "present";
           const config = statusConfig[status];
@@ -492,36 +490,42 @@ export default function AttendancePage() {
         })}
       </div>
 
-      <div className="sticky bottom-[calc(var(--mobile-footer-height)+env(safe-area-inset-bottom)+0.5rem)] z-40 md:bottom-4">
-        {saved && (
-          <div className="bg-emerald-50 border-2 border-emerald-200 text-emerald-700 p-3 rounded-xl text-center font-semibold text-sm mb-2">
-            ✓ {sessionClosed ? "Atualizado" : "Presenças guardadas"}! ({counts.present} presentes · {counts.late} atrasados · {counts.absent} ausentes ·{" "}
-            {counts.injured} lesionados)
-          </div>
-        )}
-        <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-lg">
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="h-12 flex-1"
-              onClick={() => router.back()}
-              disabled={saving}
-            >
-              Cancelar
-            </Button>
-            <Button
-              onClick={handleSave}
-              className={`h-12 flex-1 text-base font-semibold ${
-                isClosingWindow
-                  ? "bg-amber-600 hover:bg-amber-700"
-                  : "bg-emerald-600 hover:bg-emerald-700"
-              }`}
-              disabled={saveDisabled}
-            >
-              <Save size={18} className="mr-2" />
-              {saving ? "A guardar..." : "Guardar"}
-            </Button>
+      <div className="fixed bottom-[calc(var(--mobile-footer-height)+env(safe-area-inset-bottom))] left-0 right-0 z-40 border-t border-slate-200 bg-white p-4 shadow-lg md:relative md:bottom-auto md:left-auto md:right-auto md:border-0 md:bg-transparent md:p-0 md:shadow-none md:mt-4">
+        <div className="max-w-lg mx-auto">
+          {saved && (
+            <div className="bg-emerald-50 border-2 border-emerald-200 text-emerald-700 p-3 rounded-xl text-center font-semibold text-sm mb-2">
+              ✓ {sessionClosed ? "Atualizado" : "Presenças guardadas"}! ({counts.present} presentes · {counts.late} atrasados · {counts.absent} ausentes ·{" "}
+              {counts.injured} lesionados)
+            </div>
+          )}
+          <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-lg">
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-12 flex-1"
+                onClick={() => router.back()}
+                disabled={saving}
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleSave}
+                className={`h-12 flex-1 text-base font-semibold ${
+                  isClosingWindow
+                    ? "bg-amber-600 hover:bg-amber-700"
+                    : "bg-emerald-600 hover:bg-emerald-700"
+                }`}
+                disabled={saveDisabled}
+              >
+                <Save size={18} className="mr-2" />
+                {saving
+                  ? "A guardar..."
+                  : hasAttendanceChanges
+                    ? "Guardar alterações"
+                    : "Confirmar presenças"}
+              </Button>
+            </div>
           </div>
         </div>
       </div>

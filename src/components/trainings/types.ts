@@ -7,6 +7,8 @@ export interface TrainingRow {
   start_time?: string;
   end_time?: string;
   title?: string;
+  ut_number?: number | null;
+  week_start_date?: string | null;
   location?: string;
   location_address?: string;
   formatted_address?: string;
@@ -14,6 +16,16 @@ export interface TrainingRow {
   longitude?: number | null;
   osm_place_id?: string;
   location_source?: LocationSource | null;
+  microcycle_number?: number | null;
+  mesocycle_number?: number | null;
+  period_type?: string | null;
+  initial_instruction?: string | null;
+  objective?: string | null;
+  complementary_objectives?: string | null;
+  focus?: string | null;
+  intensity?: string | null;
+  material?: string | null;
+  field_area?: string | null;
   notes?: string;
   image_url?: string | null;
   status: string;
@@ -39,6 +51,7 @@ export interface SessionDetail {
 
 export interface TrainingFormFields {
   title: string;
+  utNumber: string;
   date: string;
   startTime: string;
   endTime: string;
@@ -51,4 +64,12 @@ export interface TrainingFormFields {
   locationSource: "google" | "osm" | "manual" | null;
   notes: string;
   imageUrl: string;
+  // UT metadata
+  utFocus: string;
+  utIntensity: string;
+  utPeriodType: string;
+  utFieldArea: string;
+  utObjective: string;
+  utMaterial: string;
+  utInitialInstruction: string;
 }
