@@ -61,5 +61,12 @@ export async function GET(request: Request) {
   if (tokenHash) clientUrl.searchParams.set("token_hash", tokenHash);
   if (tokenType) clientUrl.searchParams.set("type", tokenType);
   clientUrl.searchParams.set("next", next);
+
+  // Preservar invite_code/invite_email do fluxo de convite para o client callback
+  const inviteCode = searchParams.get("invite_code");
+  const inviteEmail = searchParams.get("invite_email");
+  if (inviteCode) clientUrl.searchParams.set("invite_code", inviteCode);
+  if (inviteEmail) clientUrl.searchParams.set("invite_email", inviteEmail);
+
   return NextResponse.redirect(clientUrl.toString());
 }
