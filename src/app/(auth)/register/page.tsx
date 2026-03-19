@@ -142,7 +142,8 @@ function RegisterForm() {
 
     const supabase = createClient();
     const next = inviteCode ? `/dashboard?code=${inviteCode}` : "/dashboard";
-    const callbackUrl = new URL("/auth/callback", window.location.origin);
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || window.location.origin;
+    const callbackUrl = new URL("/auth/callback", baseUrl);
     callbackUrl.searchParams.set("next", next);
 
     const { error } = await supabase.auth.signInWithOAuth({
