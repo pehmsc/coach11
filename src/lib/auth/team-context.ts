@@ -1,3 +1,4 @@
+import { cache } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type TeamContextAgeGroup = {
@@ -260,3 +261,19 @@ export async function resolveUserTeamContext(
     accessibleTeams: [],
   };
 }
+
+/**
+ * Versão com cache por request para Server Components (React `cache()`).
+ *
+ * Deduplica chamadas com o mesmo `userId` dentro da mesma render tree.
+ * Cria o seu próprio Supabase client (user-scoped via cookies).
+ *
+ * Usar APENAS em Server Components (layout, page).
+ * API routes devem continuar a usar `resolveUserTeamContext()` directamente
+ * para controlar qual client (user vs admin) é passado.
+ */
+export const getCachedUserTeamContext = cache(async (userId: string) => {
+  const { createClient } = await import("@/lib/supabase/server");
+  const supabase = await createClient();
+  return resolveUserTeamContext(supabase, userId);
+});
