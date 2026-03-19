@@ -7,7 +7,7 @@ import { BottomNav } from "@/components/layout/BottomNav";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { UnreadBadgeRuntime } from "@/components/layout/UnreadBadgeRuntime";
 import { AuthenticatedAnalyticsProvider } from "@/components/observability/AuthenticatedAnalyticsProvider";
-import { resolveUserTeamContext } from "@/lib/auth/team-context";
+import { getCachedUserTeamContext, type UserTeamContext } from "@/lib/auth/team-context";
 
 export default async function DashboardLayout({
   children,
@@ -44,10 +44,10 @@ export default async function DashboardLayout({
       ? profile.avatar_url
       : null) || metadataAvatar;
   const topInset = "max(env(safe-area-inset-top, 0px), env(titlebar-area-height, 0px))";
-  let analyticsContext: Awaited<ReturnType<typeof resolveUserTeamContext>> | null = null;
+  let analyticsContext: UserTeamContext | null = null;
 
   try {
-    analyticsContext = await resolveUserTeamContext(supabase, user.id);
+    analyticsContext = await getCachedUserTeamContext(user.id);
   } catch (error) {
     console.error("[dashboard.layout.analytics-context]", error);
   }
