@@ -77,6 +77,15 @@ export default async function DashboardPage() {
       .eq("coordinator_id", user.id),
   ]);
 
+  // Onboarding guard: coordinator sem escalão → redirecionar
+  // Usa dados já carregados (managedAgeGroups) — zero queries extra.
+  if (
+    profile?.role === "coordinator" &&
+    (!managedAgeGroups || managedAgeGroups.length === 0)
+  ) {
+    redirect("/onboarding");
+  }
+
   let firstTeamId: string | null = managedAgeGroups?.[0]?.teams?.[0]?.id ?? null;
   const managedTeamIds = (managedAgeGroups || [])
     .flatMap((ageGroup) => (ageGroup.teams || []).map((team) => team?.id).filter(Boolean))

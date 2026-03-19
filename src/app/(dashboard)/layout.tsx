@@ -27,25 +27,12 @@ export default async function DashboardLayout({
     redirect("/login");
   }
 
-  // Buscar perfil do utilizador
+  // Buscar perfil do utilizador — campos específicos consumidos pelo layout
   const { data: profile } = await supabase
     .from("profiles")
-    .select("*")
+    .select("id, full_name, role, email, avatar_url, is_super_coordinator, created_at")
     .eq("id", user.id)
     .single();
-
-  // Onboarding guard: coordinator sem escalão criado → redirecionar para /onboarding
-  if (profile && "role" in profile && profile.role === "coordinator") {
-    const { data: ageGroup } = await supabase
-      .from("age_groups")
-      .select("id")
-      .eq("coordinator_id", user.id)
-      .limit(1)
-      .maybeSingle();
-    if (!ageGroup) {
-      redirect("/onboarding");
-    }
-  }
 
   const metadata = (user.user_metadata ?? {}) as Record<string, unknown>;
   const metadataAvatar =
