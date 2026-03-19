@@ -78,6 +78,15 @@ export default function InviteClient() {
 
   async function handleGoogleLogin() {
     setGoogleLoading(true);
+
+    // Definir cookie HTTP-only ANTES do redirect OAuth
+    // Garante que o invite_code sobrevive a qualquer cadeia de redirects
+    await fetch("/api/invite/set-pending-cookie", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code, email }),
+    }).catch(() => null);
+
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || window.location.origin;
     const callbackUrl = new URL("/auth/callback", baseUrl);
     callbackUrl.searchParams.set(

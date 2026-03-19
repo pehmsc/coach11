@@ -184,18 +184,40 @@ function OAuthCallbackClientContent() {
       // RedeemInviteGate no dashboard não tente fazer redeem novamente
       // (causaria "Código inválido ou já utilizado").
       let finalRedirect = resolvePostAuthRedirect(next, ensureProfilePayload);
+      let inviteLinked = false;
+
       if (inviteSyncRes?.ok) {
         const inviteSyncPayload = await inviteSyncRes.json().catch(() => null) as
           | { linked?: boolean }
           | null;
         if (inviteSyncPayload?.linked) {
-          localStorage.removeItem("inviteCode");
-          localStorage.removeItem("inviteEmail");
-          sessionStorage.removeItem("pending_invite_code");
-          sessionStorage.removeItem("pending_invite_email");
-          // Staff convidado: sempre ir para /dashboard (nunca /onboarding)
-          finalRedirect = "/dashboard";
+          inviteLinked = true;
         }
+      }
+
+      // Fallback: se invite/sync não linkou, tentar via cookie HTTP-only
+      // (definido em /api/invite/set-pending-cookie antes do OAuth)
+      if (!inviteLinked) {
+        const cookieRes = await fetch("/api/invite/consume-pending-cookie", {
+          method: "POST",
+        }).catch(() => null);
+        if (cookieRes?.ok) {
+          const cookiePayload = await cookieRes.json().catch(() => null) as
+            | { linked?: boolean }
+            | null;
+          if (cookiePayload?.linked) {
+            inviteLinked = true;
+          }
+        }
+      }
+
+      if (inviteLinked) {
+        localStorage.removeItem("inviteCode");
+        localStorage.removeItem("inviteEmail");
+        sessionStorage.removeItem("pending_invite_code");
+        sessionStorage.removeItem("pending_invite_email");
+        // Staff convidado: sempre ir para /dashboard (nunca /onboarding)
+        finalRedirect = "/dashboard";
       }
 
       if (!cancelled) {
