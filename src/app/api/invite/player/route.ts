@@ -170,7 +170,7 @@ export async function POST(request: Request) {
             </a>
 
             <p style="color: #94a3b8; font-size: 12px; text-align: center; margin: 0;">
-              Ou usa o código ao registares-te em coach11.app
+              Ou usa o código ao registares-te em ${new URL(appUrl).hostname}
             </p>
           </div>
 

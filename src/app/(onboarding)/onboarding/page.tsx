@@ -32,8 +32,15 @@ const AGE_GROUPS = [
 ];
 
 const INVITE_ROLES = [
+  { value: "head_coach", label: "Treinador Principal" },
   { value: "assistant_coach", label: "Treinador Adjunto" },
-  { value: "coach", label: "Treinador Principal" },
+  { value: "intern_coach", label: "Treinador Estagiário" },
+  { value: "goalkeeper_coach", label: "Treinador de Guarda-Redes" },
+  { value: "fitness_coach", label: "Preparador Físico" },
+  { value: "physiotherapist", label: "Fisioterapeuta" },
+  { value: "doctor", label: "Médico" },
+  { value: "analyst", label: "Analista / Observador" },
+  { value: "team_manager", label: "Team Manager" },
 ];
 
 const CURRENT_SEASON = "2025/2026";
@@ -97,6 +104,7 @@ export default function OnboardingPage() {
   const [clubShortName, setClubShortName] = useState("");
 
   // Step 2: Escalão
+  const [ageLevel, setAgeLevel] = useState("");
   const [ageGroupName, setAgeGroupName] = useState("");
   const [footballFormat, setFootballFormat] = useState("11");
   const [season, setSeason] = useState(CURRENT_SEASON);
@@ -127,6 +135,10 @@ export default function OnboardingPage() {
 
   async function handleStep2(e: { preventDefault(): void }) {
     e.preventDefault();
+    if (!ageLevel) {
+      toast.error("Seleciona o escalão.");
+      return;
+    }
     if (!ageGroupName.trim()) {
       toast.error("Introduz o nome do escalão.");
       return;
@@ -171,6 +183,7 @@ export default function OnboardingPage() {
           club_name: clubName.trim(),
           club_short_name: normalizedShortName || null,
           name: ageGroupName.trim(),
+          age_level: ageLevel,
           football_format: footballFormat,
           season,
         })
@@ -325,8 +338,8 @@ export default function OnboardingPage() {
               </div>
               <form onSubmit={handleStep2} className="space-y-4">
                 <div className="space-y-1.5">
-                  <Label>Nome do escalão *</Label>
-                  <Select value={ageGroupName} onValueChange={setAgeGroupName}>
+                  <Label>Escalão *</Label>
+                  <Select value={ageLevel} onValueChange={setAgeLevel}>
                     <SelectTrigger>
                       <SelectValue placeholder="Seleciona o escalão" />
                     </SelectTrigger>
@@ -336,6 +349,15 @@ export default function OnboardingPage() {
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Nome do escalão *</Label>
+                  <Input
+                    value={ageGroupName}
+                    onChange={(e) => setAgeGroupName(e.target.value)}
+                    placeholder="Ex: Iniciados B, Sub-13 Azul..."
+                    required
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label>Formato de jogo *</Label>
