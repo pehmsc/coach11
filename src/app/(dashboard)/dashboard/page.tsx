@@ -79,11 +79,21 @@ export default async function DashboardPage() {
 
   // Onboarding guard: coordinator sem escalão → redirecionar
   // Usa dados já carregados (managedAgeGroups) — zero queries extra.
+  // Staff convidado (role = 'coach') NUNCA é redirecionado para onboarding.
   if (
     profile?.role === "coordinator" &&
     (!managedAgeGroups || managedAgeGroups.length === 0)
   ) {
-    redirect("/onboarding");
+    // Verificar se é staff de algum escalão antes de forçar onboarding
+    const { data: staffLink } = await (admin ?? supabase)
+      .from("age_group_staff")
+      .select("id")
+      .eq("profile_id", user.id)
+      .limit(1)
+      .maybeSingle();
+    if (!staffLink) {
+      redirect("/onboarding");
+    }
   }
 
   let firstTeamId: string | null = managedAgeGroups?.[0]?.teams?.[0]?.id ?? null;

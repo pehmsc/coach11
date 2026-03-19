@@ -191,16 +191,10 @@ function OAuthCallbackClientContent() {
         if (inviteSyncPayload?.linked) {
           localStorage.removeItem("inviteCode");
           localStorage.removeItem("inviteEmail");
-          // Strip qualquer ?code= do redirect para não activar o RedeemInviteGate
-          try {
-            const url = new URL(finalRedirect, window.location.origin);
-            url.searchParams.delete("code");
-            url.searchParams.delete("inviteCode");
-            url.searchParams.delete("invite_code");
-            finalRedirect = url.pathname + (url.search !== "?" ? url.search : "");
-          } catch {
-            finalRedirect = "/dashboard";
-          }
+          sessionStorage.removeItem("pending_invite_code");
+          sessionStorage.removeItem("pending_invite_email");
+          // Staff convidado: sempre ir para /dashboard (nunca /onboarding)
+          finalRedirect = "/dashboard";
         }
       }
 
