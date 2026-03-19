@@ -17,6 +17,15 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Loader2, Plus, X, Check, ArrowRight, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { normalizeManualShortName, isValidManualShortName } from "@/lib/football/short-name";
+import {
+  ALL_PERMISSION_AREAS,
+  type PermissionTemplateKey,
+} from "@/lib/auth/permissions-shared";
+import {
+  PermissionsGrid,
+  type PermissionsMap,
+  templateToPermissions,
+} from "@/components/staff/PermissionsGrid";
 
 const FOOTBALL_FORMATS = [
   { value: "5", label: "Futebol 5" },
@@ -45,11 +54,24 @@ const INVITE_ROLES = [
 
 const CURRENT_SEASON = "2025/2026";
 
+const ROLE_TO_TEMPLATE: Record<string, PermissionTemplateKey> = {
+  head_coach: "principal",
+  assistant_coach: "adjunto",
+  intern_coach: "estagiario",
+  goalkeeper_coach: "adjunto",
+  fitness_coach: "adjunto",
+  physiotherapist: "estagiario",
+  doctor: "estagiario",
+  analyst: "estagiario",
+  team_manager: "estagiario",
+};
+
 interface PendingInvite {
   firstName: string;
   lastName: string;
   email: string;
   role: string;
+  permissions: PermissionsMap;
   sending?: boolean;
   sent?: boolean;
   error?: string;
@@ -116,6 +138,7 @@ export default function OnboardingPage() {
     lastName: "",
     email: "",
     role: "assistant_coach",
+    permissions: templateToPermissions(ROLE_TO_TEMPLATE["assistant_coach"]),
   });
   const [showInviteForm, setShowInviteForm] = useState(false);
   const [finishingUp, setFinishingUp] = useState(false);
@@ -221,7 +244,13 @@ export default function OnboardingPage() {
       return;
     }
     setInvites((prev) => [...prev, { ...newInvite }]);
-    setNewInvite({ firstName: "", lastName: "", email: "", role: "assistant_coach" });
+    setNewInvite({
+      firstName: "",
+      lastName: "",
+      email: "",
+      role: "assistant_coach",
+      permissions: templateToPermissions(ROLE_TO_TEMPLATE["assistant_coach"]),
+    });
     setShowInviteForm(false);
   }
 
@@ -251,6 +280,10 @@ export default function OnboardingPage() {
               lastName: inv.lastName,
               email: inv.email,
               role: inv.role,
+              permissions: ALL_PERMISSION_AREAS.map((area) => ({
+                area,
+                ...inv.permissions[area],
+              })),
             }),
           });
           const data = await res.json().catch(() => ({}));
@@ -500,7 +533,14 @@ export default function OnboardingPage() {
                     <Label className="text-xs">Função</Label>
                     <Select
                       value={newInvite.role}
-                      onValueChange={(v) => setNewInvite((p) => ({ ...p, role: v }))}
+                      onValueChange={(v) => {
+                        const tpl = ROLE_TO_TEMPLATE[v];
+                        setNewInvite((p) => ({
+                          ...p,
+                          role: v,
+                          permissions: tpl ? templateToPermissions(tpl) : p.permissions,
+                        }));
+                      }}
                     >
                       <SelectTrigger>
                         <SelectValue />
@@ -511,6 +551,16 @@ export default function OnboardingPage() {
                         ))}
                       </SelectContent>
                     </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Permissões</Label>
+                    <div className="rounded-lg border border-slate-100 p-2">
+                      <PermissionsGrid
+                        permissions={newInvite.permissions}
+                        onChange={(next) => setNewInvite((p) => ({ ...p, permissions: next }))}
+                        showTemplateSelector
+                      />
+                    </div>
                   </div>
                   <div className="flex gap-2">
                     <Button type="submit" size="sm" className="flex-1 bg-emerald-600 hover:bg-emerald-700">

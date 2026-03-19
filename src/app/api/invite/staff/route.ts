@@ -144,6 +144,20 @@ export async function POST(request: Request) {
       );
     }
     const { firstName, lastName, email, phone, role, permissions } = parsed.data;
+
+    // Validação server-side: coordenador de escalão só pode convidar staff técnico
+    // (não pode convidar coordenadores de clube nem de escalão)
+    const COORDINATOR_INVITABLE_ROLES = [
+      "head_coach", "assistant_coach", "intern_coach", "goalkeeper_coach",
+      "fitness_coach", "physiotherapist", "doctor", "analyst", "team_manager",
+    ];
+    if (!COORDINATOR_INVITABLE_ROLES.includes(role)) {
+      return NextResponse.json(
+        { error: "Cargo inválido para convite." },
+        { status: 400 },
+      );
+    }
+
     const normalizedEmail = normalizeEmail(email);
 
     // 🔑 Gerar código único
