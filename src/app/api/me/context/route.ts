@@ -38,7 +38,8 @@ export async function GET() {
     let db = supabase;
     try {
       db = createAdminClient();
-    } catch {
+    } catch (error) {
+      console.error("[me/context] Admin client falhou, a usar client standard:", error);
       db = supabase;
     }
 
@@ -149,27 +150,37 @@ export async function GET() {
 
     const authAvatarUrlByProfileId = new Map<string, string>();
 
+    // Perf: cap de 5 lookups auth + timeout individual de 2s para evitar
+    // N+1 sem limite que causou spinner infinito em produção (19/03).
+    const AUTH_AVATAR_LOOKUP_CAP = 5;
+    const AUTH_AVATAR_TIMEOUT_MS = 2000;
+
     if (missingAvatarProfileIds.length > 0) {
+      const cappedIds = missingAvatarProfileIds.slice(0, AUTH_AVATAR_LOOKUP_CAP);
+
       const authUsers = await Promise.allSettled(
-        missingAvatarProfileIds.map(async (profileId) => {
-          const { data, error } = await db.auth.admin.getUserById(profileId);
-          if (error || !data.user) {
-            return {
-              profileId,
-              avatarUrl: null as string | null,
-            };
+        cappedIds.map(async (profileId) => {
+          const result = await Promise.race([
+            db.auth.admin.getUserById(profileId),
+            new Promise<{ data: null; error: Error }>((resolve) =>
+              setTimeout(
+                () => resolve({ data: null, error: new Error("timeout") }),
+                AUTH_AVATAR_TIMEOUT_MS,
+              ),
+            ),
+          ]);
+
+          if (result.error || !result.data?.user) {
+            return { profileId, avatarUrl: null as string | null };
           }
 
-          const metadata = (data.user.user_metadata ?? {}) as Record<string, unknown>;
+          const metadata = (result.data.user.user_metadata ?? {}) as Record<string, unknown>;
           const avatarUrl =
             (typeof metadata.avatar_url === "string" && metadata.avatar_url) ||
             (typeof metadata.picture === "string" && metadata.picture) ||
             null;
 
-          return {
-            profileId,
-            avatarUrl,
-          };
+          return { profileId, avatarUrl };
         }),
       );
 
@@ -177,7 +188,6 @@ export async function GET() {
         if (result.status !== "fulfilled" || !result.value.avatarUrl) {
           continue;
         }
-
         authAvatarUrlByProfileId.set(result.value.profileId, result.value.avatarUrl);
       }
     }

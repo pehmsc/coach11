@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
   subscribeToUnreadCountPatch,
@@ -31,12 +31,19 @@ export function useUnreadNotifications(
   // Re-fetch imediato ao ganhar foco (handleFocusRefresh) mantém UX responsiva.
   const pollingIntervalMs = typeFilter === "message" ? 60000 : 120000;
 
+  // Dedup: evita fetches concorrentes quando múltiplas instâncias do hook
+  // disparam refreshCount() em simultâneo (Sidebar + MobileFooterNav + UnreadBadgeRuntime).
+  const pendingRef = useRef(false);
+
   const refreshCount = useCallback(async () => {
     if (!profileId) {
       setUnreadCount(0);
       setMessageTeamId(null);
       return;
     }
+
+    if (pendingRef.current) return;
+    pendingRef.current = true;
 
     try {
       const requestPath = isMessageScope
@@ -75,6 +82,8 @@ export function useUnreadNotifications(
       setUnreadCount(payload.unreadCount || 0);
     } catch (error) {
       console.error("Erro de rede ao atualizar badge de notificações.", error);
+    } finally {
+      pendingRef.current = false;
     }
   }, [isMessageScope, profileId]);
 
