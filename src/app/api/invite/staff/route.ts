@@ -39,13 +39,30 @@ const StaffInviteSchema = z.object({
   lastName: z.string().trim().min(2, "O apelido deve ter pelo menos 2 caracteres.").max(100),
   email: z.string().email().max(254),
   phone: z.string().max(20).nullable().optional(),
-  role: z.enum(["coach", "assistant_coach"]),
+  role: z.enum([
+    "head_coach",
+    "assistant_coach",
+    "intern_coach",
+    "goalkeeper_coach",
+    "fitness_coach",
+    "physiotherapist",
+    "doctor",
+    "analyst",
+    "team_manager",
+  ]),
   permissions: z.array(AreaPermissionsSchema).max(20).optional(),
 });
 
 const roleLabel: Record<string, string> = {
-  coach: "Treinador Principal",
+  head_coach: "Treinador Principal",
   assistant_coach: "Treinador Adjunto",
+  intern_coach: "Treinador Estagiário",
+  goalkeeper_coach: "Treinador de Guarda-Redes",
+  fitness_coach: "Preparador Físico",
+  physiotherapist: "Fisioterapeuta",
+  doctor: "Médico",
+  analyst: "Analista / Observador",
+  team_manager: "Team Manager",
 };
 
 export async function POST(request: Request) {

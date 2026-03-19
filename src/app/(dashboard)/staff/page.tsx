@@ -41,18 +41,11 @@ import {
   normalizeAgeGroupStaffRole,
 } from "@/lib/team/staff-role";
 
-const INVITE_ROLE_OPTIONS = [
-  { value: "coach", label: "Treinador Principal" },
-  { value: "assistant_coach", label: "Treinador Adjunto" },
-];
+const INVITE_ROLE_OPTIONS = Object.entries(AGE_GROUP_STAFF_ROLE_LABELS).map(
+  ([value, label]) => ({ value, label }),
+);
 
-const STAFF_ROLE_OPTIONS = [
-  { value: "coach", label: AGE_GROUP_STAFF_ROLE_LABELS.coach },
-  {
-    value: "assistant_coach",
-    label: AGE_GROUP_STAFF_ROLE_LABELS.assistant_coach,
-  },
-];
+const STAFF_ROLE_OPTIONS = INVITE_ROLE_OPTIONS;
 
 interface StaffMember {
   id: string; // age_group_staff.id
@@ -89,8 +82,15 @@ type TechnicalStaffUsage = {
 };
 
 const ROLE_TO_TEMPLATE: Record<string, PermissionTemplateKey> = {
-  coach: "principal",
+  head_coach: "principal",
   assistant_coach: "adjunto",
+  intern_coach: "estagiario",
+  goalkeeper_coach: "adjunto",
+  fitness_coach: "adjunto",
+  physiotherapist: "estagiario",
+  doctor: "estagiario",
+  analyst: "estagiario",
+  team_manager: "estagiario",
 };
 
 const EMPTY_FORM = {
