@@ -12,6 +12,7 @@ interface PdfExportCardProps {
   exportingPdf: Tab | null;
   onExport: () => void;
   onClearSelection: () => void;
+  onExportCsv?: () => void;
 }
 
 export function PdfExportCard({
@@ -21,6 +22,7 @@ export function PdfExportCard({
   exportingPdf,
   onExport,
   onClearSelection,
+  onExportCsv,
 }: PdfExportCardProps) {
   return (
     <Card>
@@ -28,7 +30,7 @@ export function PdfExportCard({
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-sm font-semibold text-slate-900">
-              Exportação PDF da vista atual
+              Exportar dados
             </p>
             <p className="text-xs text-slate-500 mt-1">
               Sem seleção exporta a informação geral. Se selecionares atletas,
@@ -49,6 +51,17 @@ export function PdfExportCard({
                 Limpar seleção
               </Button>
             )}
+            {onExportCsv && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onExportCsv}
+                disabled={currentTabPlayerIds.length === 0}
+              >
+                <Download size={16} className="mr-2" />
+                CSV
+              </Button>
+            )}
             <Button
               type="button"
               onClick={onExport}
@@ -59,9 +72,7 @@ export function PdfExportCard({
               ) : (
                 <Download size={16} className="mr-2" />
               )}
-              {activeTab === "attendance"
-                ? "Exportar mapa de presenças"
-                : "Exportar estatísticas de jogo"}
+              PDF
             </Button>
           </div>
         </div>
