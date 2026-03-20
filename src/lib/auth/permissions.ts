@@ -169,10 +169,20 @@ export async function hasPermission(
   // 2. Master Admin → tudo
   if (userEmail && isMasterAdmin(userEmail)) return true;
 
-  // 3. Coordenador do escalão → tudo
+  // 3. Coordenador de clube (club_memberships) → tudo no clube
+  const { data: clubCoord } = await admin
+    .from("club_memberships")
+    .select("club_id")
+    .eq("profile_id", userId)
+    .in("role", ["club_coordinator", "coordinator", "owner", "admin"])
+    .limit(1)
+    .maybeSingle();
+  if (clubCoord) return true;
+
+  // 4. Coordenador do escalão → tudo no escalão
   if (await isClubCoordinator(admin, userId, ageGroupId)) return true;
 
-  // 4. Todos os outros (incluindo Principal e Adjuntos) → consultar staff_permissions
+  // 5. Todos os outros (incluindo Principal e Adjuntos) → consultar staff_permissions
   const { data: staffLink } = await admin
     .from("age_group_staff")
     .select("id")
