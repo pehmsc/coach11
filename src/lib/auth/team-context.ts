@@ -31,7 +31,7 @@ type StaffLinkRow = {
 };
 
 export type UserTeamContext = {
-  source: "coordinator" | "staff" | "none";
+  source: "club_coordinator" | "coordinator" | "staff" | "none";
   teamId: string | null;
   teamRole: string | null;
   ageGroup: TeamContextAgeGroup | null;
@@ -242,7 +242,7 @@ export async function resolveUserTeamContext(
       null;
 
     return {
-      source: "coordinator",
+      source: clubRole === "club_coordinator" ? "club_coordinator" : "coordinator",
       teamId: resolvedTeam?.id ?? null,
       teamRole: "coordinator",
       ageGroup: resolvedAgeGroup,
@@ -288,7 +288,7 @@ export async function resolveUserTeamContext(
       null;
 
     return {
-      source: "staff",
+      source: clubRole === "club_coordinator" ? "club_coordinator" : "staff",
       teamId: resolvedTeam?.id ?? null,
       teamRole: typeof resolvedRole === "string" ? resolvedRole : null,
       ageGroup: resolvedAgeGroup,
@@ -303,7 +303,7 @@ export async function resolveUserTeamContext(
   }
 
   return {
-    source: "none",
+    source: clubRole === "club_coordinator" ? "club_coordinator" : "none",
     teamId: null,
     teamRole: null,
     ageGroup: null,
@@ -315,6 +315,11 @@ export async function resolveUserTeamContext(
     club,
     clubRole,
   };
+}
+
+/** Verifica se o source indica um coordenador (de clube ou de escalão). */
+export function isCoordinatorSource(source: UserTeamContext["source"]): boolean {
+  return source === "club_coordinator" || source === "coordinator";
 }
 
 /**

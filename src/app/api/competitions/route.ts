@@ -20,7 +20,7 @@ export async function GET() {
     const db = supabase;
 
     const context = await resolveUserTeamContext(db, user.id);
-    const isCoordinator = context.source === "coordinator";
+    const isCoordinator = context.source === "coordinator" || context.source === "club_coordinator";
 
     if (!context.ageGroup || !context.teamId) {
       return NextResponse.json(

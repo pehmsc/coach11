@@ -93,7 +93,7 @@ export async function POST(request: Request) {
     }
 
     const context = await resolveUserTeamContext(admin, user.id);
-    if (context.source !== "coordinator" || !context.ageGroup?.id) {
+    if ((context.source !== "coordinator" && context.source !== "club_coordinator") || !context.ageGroup?.id) {
       return NextResponse.json(
         { error: "Apenas o coordenador pode enviar convites." },
         { status: 403 },

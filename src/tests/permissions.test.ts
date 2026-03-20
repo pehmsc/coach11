@@ -55,7 +55,13 @@ function createMockAdmin(seed: TableSeed = {}) {
     filters: Array<{ column: string; value: unknown }>,
   ) =>
     readRows(table).filter((row) =>
-      filters.every(({ column, value }) => row[column] === value),
+      filters.every(({ column, value }) => {
+        if (value && typeof value === "object" && "$in" in (value as Record<string, unknown>)) {
+          const arr = (value as { $in: unknown[] }).$in;
+          return Array.isArray(arr) && arr.includes(row[column]);
+        }
+        return row[column] === value;
+      }),
     );
 
   const createBuilder = (table: string) => {
@@ -68,6 +74,14 @@ function createMockAdmin(seed: TableSeed = {}) {
       },
       eq(column: string, value: unknown) {
         filters.push({ column, value });
+        return builder;
+      },
+      in(column: string, values: unknown[]) {
+        // Filter: row[column] must be in values array
+        filters.push({ column, value: { $in: values } });
+        return builder;
+      },
+      limit(_n: number) {
         return builder;
       },
       async maybeSingle() {
