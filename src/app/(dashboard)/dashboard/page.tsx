@@ -77,24 +77,32 @@ export default async function DashboardPage() {
       .eq("coordinator_id", user.id),
   ]);
 
-  // Onboarding guard: coordinator sem clube/escalão → redirecionar
-  // Staff convidado (role = 'coach') NUNCA é redirecionado para onboarding.
-  // Conceptualmente o requisito mínimo é ter clube, mas na prática
-  // verificamos age_groups + age_group_staff (dados já carregados).
+  // Onboarding guard: só redirecionar se não tem clube NEM escalão NEM staff link.
+  // Prioridade: club_memberships → age_groups → age_group_staff
   if (
     profile?.role === "coordinator" &&
     (!managedAgeGroups || managedAgeGroups.length === 0)
   ) {
-    // Verificar se é staff de algum escalão antes de forçar onboarding
-    const { data: staffLink } = await (admin ?? supabase)
-      .from("age_group_staff")
-      .select("id")
+    const { data: clubMembership } = await (admin ?? supabase)
+      .from("club_memberships")
+      .select("club_id")
       .eq("profile_id", user.id)
       .limit(1)
       .maybeSingle();
-    if (!staffLink) {
-      redirect("/onboarding");
+
+    if (!clubMembership) {
+      // Sem clube — verificar se é staff convidado
+      const { data: staffLink } = await (admin ?? supabase)
+        .from("age_group_staff")
+        .select("id")
+        .eq("profile_id", user.id)
+        .limit(1)
+        .maybeSingle();
+      if (!staffLink) {
+        redirect("/onboarding");
+      }
     }
+    // Tem clube (via membership) mas sem escalão → dashboard normalmente
   }
 
   let firstTeamId: string | null = managedAgeGroups?.[0]?.teams?.[0]?.id ?? null;
