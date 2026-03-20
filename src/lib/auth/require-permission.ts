@@ -1,7 +1,6 @@
 import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import {
   hasPermission,
   type PermissionArea,
@@ -22,31 +21,18 @@ export type PermissionCheckFailure = {
   response: NextResponse;
 };
 
+export type ReadAccessResult =
+  | {
+      allowed: true;
+      userId: string;
+      ageGroupId: string;
+      clubId: string;
+      teamId: string | null;
+    }
+  | { allowed: false; response: NextResponse };
+
 export type PermissionCheckResult = PermissionCheckSuccess | PermissionCheckFailure;
 
-/**
- * Verifica se o utilizador autenticado tem permissão para uma área e operação.
- * Usar em API routes para proteger endpoints por permissão granular.
- *
- * @example
- * const check = await checkPermission("players", "write");
- * if (!check.allowed) return check.response;
- * // check.userId, check.ageGroupId disponíveis
- */
-export type ReadAccessSuccess = {
-  allowed: true;
-  userId: string;
-  ageGroupId: string;
-  clubId: string;
-  teamId: string | null;
-};
-
-export type ReadAccessResult = ReadAccessSuccess | PermissionCheckFailure;
-
-/**
- * Verifica apenas autenticação + pertença ao clube.
- * Para endpoints GET — todo o staff do clube pode ler, sem verificação de permissões.
- */
 export async function checkReadAccess(): Promise<ReadAccessResult> {
   const supabase = await createClient();
   const {
@@ -60,8 +46,7 @@ export async function checkReadAccess(): Promise<ReadAccessResult> {
     };
   }
 
-  const admin = createAdminClient();
-  const context = await resolveUserTeamContext(admin, user.id);
+  const context = await resolveUserTeamContext(supabase, user.id);
 
   if (!context.ageGroup?.id) {
     return {
@@ -70,7 +55,7 @@ export async function checkReadAccess(): Promise<ReadAccessResult> {
     };
   }
 
-  const { data: ageGroup } = await admin
+  const { data: ageGroup } = await supabase
     .from("age_groups")
     .select("club_id")
     .eq("id", context.ageGroup.id)
@@ -108,8 +93,7 @@ export async function checkPermission(
     };
   }
 
-  const admin = createAdminClient();
-  const context = await resolveUserTeamContext(admin, user.id);
+  const context = await resolveUserTeamContext(supabase, user.id);
 
   if (!context.ageGroup?.id) {
     return {
@@ -118,7 +102,7 @@ export async function checkPermission(
     };
   }
 
-  const allowed = await hasPermission(admin, {
+  const allowed = await hasPermission(supabase, {
     userId: user.id,
     userEmail: user.email,
     ageGroupId: context.ageGroup.id,

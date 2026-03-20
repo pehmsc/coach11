@@ -59,6 +59,9 @@ const SRC_RULES = [
       "Não filtrar runtime por club_id como boundary funcional. Usa age_group_id/team_id/game_id/training_session_id.",
     regex: /\.(?:eq|neq|gt|gte|lt|lte|in|is|match)\(\s*["']club_id["']/g,
   },
+  // TODO (próximo sprint): adicionar regra src-admin-client-usage
+  // quando maioria dos ficheiros estiver limpa (43 ficheiros restantes).
+  // createAdminClient permitido apenas em: auth management, SSR público, admin routes.
 ];
 
 const MIGRATION_RULES = [
