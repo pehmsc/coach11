@@ -77,6 +77,16 @@ interface PendingInvite {
   error?: string;
 }
 
+function generateSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 60) || "clube";
+}
+
 const TOTAL_STEPS = 3;
 
 function StepIndicator({ current, total }: { current: number; total: number }) {
@@ -119,13 +129,13 @@ export default function OnboardingPage() {
 
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
-  const [ageGroupId, setAgeGroupId] = useState<string | null>(null);
+  const [clubId, setClubId] = useState<string | null>(null);
 
   // Step 1: Clube
   const [clubName, setClubName] = useState("");
   const [clubShortName, setClubShortName] = useState("");
 
-  // Step 2: Escalão
+  // Step 2: Escalão (opcional)
   const [ageLevel, setAgeLevel] = useState("");
   const [ageGroupName, setAgeGroupName] = useState("");
   const [footballFormat, setFootballFormat] = useState("11");
@@ -153,7 +163,114 @@ export default function OnboardingPage() {
       toast.error("A sigla deve ter entre 2 e 5 caracteres.");
       return;
     }
-    setStep(2);
+
+    setSaving(true);
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        toast.error("Sessão expirada. Faz login novamente.");
+        router.push("/login");
+        return;
+      }
+
+      // Verificar se já tem clube (backward compat)
+      const { data: existingMembership } = await supabase
+        .from("club_memberships")
+        .select("club_id")
+        .eq("profile_id", user.id)
+        .limit(1)
+        .maybeSingle();
+
+      if (existingMembership?.club_id) {
+        setClubId(existingMembership.club_id);
+        setStep(2);
+        setSaving(false);
+        return;
+      }
+
+      // Verificar se já tem age_group (backward compat)
+      const { data: existingAgeGroup } = await supabase
+        .from("age_groups")
+        .select("id")
+        .eq("coordinator_id", user.id)
+        .limit(1)
+        .maybeSingle();
+
+      if (existingAgeGroup) {
+        router.push("/dashboard");
+        return;
+      }
+
+      const normalizedShortName = normalizeManualShortName(clubShortName, 5);
+      const baseSlug = generateSlug(clubName.trim());
+
+      // Tentar criar clube com slug base, adicionar sufixo se duplicado
+      let attempt = 0;
+      let createdClub: { id: string } | null = null;
+
+      while (attempt < 5 && !createdClub) {
+        const candidateSlug = attempt === 0 ? baseSlug : `${baseSlug}-${attempt + 1}`;
+        const { data, error } = await supabase
+          .from("clubs")
+          .insert({
+            name: clubName.trim(),
+            slug: candidateSlug,
+            short_name: normalizedShortName || null,
+          })
+          .select("id")
+          .single();
+
+        if (!error && data) {
+          createdClub = data;
+          break;
+        }
+
+        // Se erro de slug duplicado, tentar com sufixo
+        if (error?.code === "23505") {
+          attempt++;
+          continue;
+        }
+
+        // Outro erro — falhar
+        console.error("[onboarding] Erro ao criar clube:", error);
+        toast.error("Erro ao criar clube. Tenta novamente.");
+        setSaving(false);
+        return;
+      }
+
+      if (!createdClub) {
+        toast.error("Não foi possível criar o clube. Tenta um nome diferente.");
+        setSaving(false);
+        return;
+      }
+
+      // Criar club_membership para o coordenador
+      const { error: membershipError } = await supabase
+        .from("club_memberships")
+        .insert({
+          club_id: createdClub.id,
+          profile_id: user.id,
+          role: "club_coordinator",
+        });
+
+      if (membershipError) {
+        console.error("[onboarding] Erro ao criar membership:", membershipError);
+        toast.error("Erro ao associar ao clube. Tenta novamente.");
+        setSaving(false);
+        return;
+      }
+
+      setClubId(createdClub.id);
+      setStep(2);
+    } catch (error) {
+      console.error("[onboarding] Erro de ligação:", error);
+      toast.error("Erro de ligação. Tenta novamente.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function handleStep2(e: { preventDefault(): void }) {
@@ -171,6 +288,15 @@ export default function OnboardingPage() {
       return;
     }
 
+    await createAgeGroup();
+  }
+
+  async function createAgeGroup() {
+    if (!clubId) {
+      toast.error("Clube não encontrado. Volta ao passo anterior.");
+      return;
+    }
+
     setSaving(true);
     try {
       const {
@@ -183,28 +309,13 @@ export default function OnboardingPage() {
         return;
       }
 
-      // Verify this coordinator doesn't already have an age group
-      const { data: existing } = await supabase
-        .from("age_groups")
-        .select("id")
-        .eq("coordinator_id", user.id)
-        .limit(1)
-        .maybeSingle();
-
-      if (existing) {
-        // Already has an age group — skip to dashboard
-        router.push("/dashboard");
-        return;
-      }
-
-      const normalizedShortName = normalizeManualShortName(clubShortName, 5);
-
       const { data: ag, error: agError } = await supabase
         .from("age_groups")
         .insert({
           coordinator_id: user.id,
+          club_id: clubId,
           club_name: clubName.trim(),
-          club_short_name: normalizedShortName || null,
+          club_short_name: normalizeManualShortName(clubShortName, 5) || null,
           name: ageGroupName.trim(),
           age_level: ageLevel,
           football_format: footballFormat,
@@ -214,11 +325,10 @@ export default function OnboardingPage() {
         .single();
 
       if (agError || !ag) {
+        console.error("[onboarding] Erro ao criar escalão:", agError);
         toast.error("Erro ao criar escalão. Tenta novamente.");
         return;
       }
-
-      setAgeGroupId(ag.id);
 
       // Criar equipa padrão
       await supabase
@@ -230,11 +340,17 @@ export default function OnboardingPage() {
         });
 
       setStep(3);
-    } catch {
+    } catch (error) {
+      console.error("[onboarding] Erro de ligação:", error);
       toast.error("Erro de ligação. Tenta novamente.");
     } finally {
       setSaving(false);
     }
+  }
+
+  function handleSkipAgeGroup() {
+    // Avançar para convites (ou dashboard se não quiser convidar)
+    setStep(3);
   }
 
   function addInviteToList(e: { preventDefault(): void }) {
@@ -262,7 +378,6 @@ export default function OnboardingPage() {
     setFinishingUp(true);
 
     if (!skip && invites.length > 0) {
-      // Send all invites
       const updated = [...invites];
       for (let i = 0; i < updated.length; i++) {
         const inv = updated[i];
@@ -307,7 +422,6 @@ export default function OnboardingPage() {
   return (
     <div className="min-h-dvh bg-slate-50 flex flex-col items-center justify-start p-4 pt-8">
       <div className="w-full max-w-md">
-        {/* Logo */}
         <div className="text-center mb-6">
           <h1 className="text-3xl font-black text-slate-900">
             COACH<span className="text-emerald-500">11</span>
@@ -351,15 +465,20 @@ export default function OnboardingPage() {
                 <Button
                   type="submit"
                   className="w-full bg-emerald-600 hover:bg-emerald-700 h-12 text-base"
+                  disabled={saving}
                 >
-                  Continuar <ArrowRight size={16} className="ml-2" />
+                  {saving ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : (
+                    <>Continuar <ArrowRight size={16} className="ml-2" /></>
+                  )}
                 </Button>
               </form>
             </CardContent>
           </Card>
         )}
 
-        {/* ─────── STEP 2: ESCALÃO ─────── */}
+        {/* ─────── STEP 2: ESCALÃO (OPCIONAL) ─────── */}
         {step === 2 && (
           <Card>
             <CardContent className="pt-6 space-y-5">
@@ -367,6 +486,9 @@ export default function OnboardingPage() {
                 <h2 className="text-lg font-bold text-slate-900">Cria o primeiro escalão</h2>
                 <p className="text-sm text-slate-500 mt-0.5">
                   Clube: <span className="font-semibold text-slate-700">{clubName}</span>
+                </p>
+                <p className="text-xs text-slate-400 mt-1">
+                  Podes adicionar mais escalões depois em Equipas.
                 </p>
               </div>
               <form onSubmit={handleStep2} className="space-y-4">
@@ -435,6 +557,13 @@ export default function OnboardingPage() {
                     )}
                   </Button>
                 </div>
+                <button
+                  type="button"
+                  onClick={handleSkipAgeGroup}
+                  className="w-full text-center text-sm text-slate-400 hover:text-slate-600 transition-colors py-1"
+                >
+                  Adicionar escalão depois →
+                </button>
               </form>
             </CardContent>
           </Card>
@@ -451,7 +580,6 @@ export default function OnboardingPage() {
                 </p>
               </div>
 
-              {/* Invited list */}
               {invites.length > 0 && (
                 <div className="space-y-2">
                   {invites.map((inv, i) => (
@@ -495,7 +623,6 @@ export default function OnboardingPage() {
                 </div>
               )}
 
-              {/* Add invite form */}
               {showInviteForm ? (
                 <form onSubmit={addInviteToList} className="space-y-3 p-4 bg-slate-50 rounded-xl border">
                   <div className="grid grid-cols-2 gap-2">
@@ -585,12 +712,6 @@ export default function OnboardingPage() {
                   <Plus size={16} />
                   Adicionar treinador
                 </button>
-              )}
-
-              {ageGroupId && (
-                <p className="text-xs text-slate-400 text-center">
-                  Escalão criado com sucesso. Os convites serão enviados por email.
-                </p>
               )}
 
               <div className="flex gap-2">
