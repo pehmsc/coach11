@@ -245,6 +245,14 @@ export async function GET(_request: Request, { params }: RouteContext) {
     const { data: activePlayers, error: playersError } = await playersQuery;
 
     if (playersError) {
+      console.error("[convocation] players query failed:", {
+        code: playersError.code,
+        message: playersError.message,
+        details: playersError.details,
+        hint: playersError.hint,
+        gameId,
+        ageGroupId: game.age_group_id,
+      });
       return NextResponse.json(
         { error: "Erro ao carregar os jogadores do escalão." },
         { status: 500 },
