@@ -75,10 +75,11 @@ export default async function DashboardPage() {
   // Guard + empty state: verificar contexto do user quando não tem age_groups
   if (!managedAgeGroups || managedAgeGroups.length === 0) {
     // Verificar club_memberships, age_group_staff em paralelo
+    // Nota: query simples sem join (evita problemas de RLS circular em clubs)
     const [{ data: clubMembership }, { data: staffLink }] = await Promise.all([
       db
         .from("club_memberships")
-        .select("club_id, clubs(name)")
+        .select("club_id")
         .eq("profile_id", user.id)
         .limit(1)
         .maybeSingle(),
@@ -92,12 +93,29 @@ export default async function DashboardPage() {
 
     if (!clubMembership && !staffLink) {
       // Sem clube, sem escalão, sem staff → onboarding
+      console.error("[dashboard] guard: redirect to onboarding", {
+        userId: user.id,
+        email: user.email,
+        profileRole: profile?.role,
+        managedAgeGroupsCount: managedAgeGroups?.length ?? 0,
+        clubMembership,
+        staffLink,
+      });
       redirect("/onboarding");
     }
 
     if (clubMembership && !staffLink) {
       // Tem clube mas sem escalão → empty state
-      const clubName = (clubMembership.clubs as { name?: string } | null)?.name ?? null;
+      // Buscar nome do clube separadamente (evita join com RLS)
+      let clubName: string | null = null;
+      if (clubMembership.club_id) {
+        const { data: club } = await db
+          .from("clubs")
+          .select("name")
+          .eq("id", clubMembership.club_id)
+          .maybeSingle();
+        clubName = club?.name ?? null;
+      }
       return <DashboardEmptyState clubName={clubName} />;
     }
 
