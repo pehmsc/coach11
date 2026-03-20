@@ -12,7 +12,9 @@ import { PdfExportCard } from "@/components/statistics/PdfExportCard";
 import { AttendanceTable } from "@/components/statistics/AttendanceTable";
 import { GameStatsSummaryCards } from "@/components/statistics/GameStatsSummaryCards";
 import { GameStatsTable } from "@/components/statistics/GameStatsTable";
+import { AttendanceHeatmap } from "@/components/statistics/AttendanceHeatmap";
 import { useStatisticsData } from "@/lib/hooks/useStatisticsData";
+import { exportAttendanceCsv, exportGameStatsCsv } from "@/lib/csv/statistics";
 import { useStatisticsSorting } from "@/lib/hooks/useStatisticsSorting";
 import { usePlayerSelection } from "@/lib/hooks/usePlayerSelection";
 import { useStatisticsExport } from "@/lib/hooks/useStatisticsExport";
@@ -101,19 +103,29 @@ export default function StatisticsPage() {
           )
         }
         onClearSelection={clearSelectedPlayers}
+        onExportCsv={() => {
+          if (activeTab === "attendance") {
+            exportAttendanceCsv(sortedAttendance, ageGroupName);
+          } else {
+            exportGameStatsCsv(sortedGameStats, ageGroupName);
+          }
+        }}
       />
 
       {/* ── TAB: MAPA DE PRESENÇAS ── */}
       {activeTab === "attendance" && (
-        <AttendanceTable
-          sortedAttendance={sortedAttendance}
-          attendanceSort={attendanceSort}
-          toggleAttendanceSort={toggleAttendanceSort}
-          allCurrentTabSelected={allCurrentTabSelected}
-          toggleSelectAllCurrentTab={toggleSelectAllCurrentTab}
-          selectedPlayerIds={selectedPlayerIds}
-          toggleSelectedPlayer={toggleSelectedPlayer}
-        />
+        <>
+          <AttendanceHeatmap ageGroupId={ageGroupId} />
+          <AttendanceTable
+            sortedAttendance={sortedAttendance}
+            attendanceSort={attendanceSort}
+            toggleAttendanceSort={toggleAttendanceSort}
+            allCurrentTabSelected={allCurrentTabSelected}
+            toggleSelectAllCurrentTab={toggleSelectAllCurrentTab}
+            selectedPlayerIds={selectedPlayerIds}
+            toggleSelectedPlayer={toggleSelectedPlayer}
+          />
+        </>
       )}
 
       {/* ── TAB: ESTATÍSTICAS DE JOGO ── */}
