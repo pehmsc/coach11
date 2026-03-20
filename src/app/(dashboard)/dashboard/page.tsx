@@ -72,57 +72,36 @@ export default async function DashboardPage() {
       .eq("coordinator_id", user.id),
   ]);
 
-  // Onboarding guard: só redirecionar se não tem clube NEM escalão NEM staff link.
-  // Prioridade: club_memberships → age_groups → age_group_staff
-  if (
-    profile?.role === "coordinator" &&
-    (!managedAgeGroups || managedAgeGroups.length === 0)
-  ) {
-    const { data: clubMembership } = await db
-      .from("club_memberships")
-      .select("club_id")
-      .eq("profile_id", user.id)
-      .limit(1)
-      .maybeSingle();
-
-    if (!clubMembership) {
-      // Sem clube — verificar se é staff convidado
-      const { data: staffLink } = await db
+  // Guard + empty state: verificar contexto do user quando não tem age_groups
+  if (!managedAgeGroups || managedAgeGroups.length === 0) {
+    // Verificar club_memberships, age_group_staff em paralelo
+    const [{ data: clubMembership }, { data: staffLink }] = await Promise.all([
+      db
+        .from("club_memberships")
+        .select("club_id, clubs(name)")
+        .eq("profile_id", user.id)
+        .limit(1)
+        .maybeSingle(),
+      db
         .from("age_group_staff")
         .select("id")
         .eq("profile_id", user.id)
         .limit(1)
-        .maybeSingle();
-      if (!staffLink) {
-        redirect("/onboarding");
-      }
-    }
-    // Tem clube (via membership) mas sem escalão → empty state
-  }
+        .maybeSingle(),
+    ]);
 
-  // Club coordinator sem escalão → mostrar CTA
-  if (
-    profile?.role === "coordinator" &&
-    (!managedAgeGroups || managedAgeGroups.length === 0)
-  ) {
-    // Verificar se tem staff link (se sim, é staff — não empty state)
-    const { data: staffCheck } = await db
-      .from("age_group_staff")
-      .select("id")
-      .eq("profile_id", user.id)
-      .limit(1)
-      .maybeSingle();
-    if (!staffCheck) {
-      // Coordinator com clube mas sem escalão — buscar nome do clube
-      const { data: membership } = await db
-        .from("club_memberships")
-        .select("clubs(name)")
-        .eq("profile_id", user.id)
-        .limit(1)
-        .maybeSingle();
-      const clubName = (membership?.clubs as { name?: string } | null)?.name ?? null;
+    if (!clubMembership && !staffLink) {
+      // Sem clube, sem escalão, sem staff → onboarding
+      redirect("/onboarding");
+    }
+
+    if (clubMembership && !staffLink) {
+      // Tem clube mas sem escalão → empty state
+      const clubName = (clubMembership.clubs as { name?: string } | null)?.name ?? null;
       return <DashboardEmptyState clubName={clubName} />;
     }
+
+    // staffLink existe → continuar para dashboard normal (staff convidado)
   }
 
   let firstTeamId: string | null = managedAgeGroups?.[0]?.teams?.[0]?.id ?? null;
