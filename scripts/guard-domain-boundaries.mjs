@@ -21,6 +21,32 @@ const SRC_ALLOWED_EXCEPTIONS = new Map([
     "src/app/api/exercises/[id]/route.ts",
     new Set(["src-club-id-filter"]), // leitura de exercício ao nível do clube
   ],
+  // createAdminClient — ficheiros legítimos que precisam de service_role.
+  // AUTH_MGMT: auth.admin.createUser/deleteUser/updateUser
+  ["src/app/api/auth/ensure-profile/route.ts", new Set(["src-admin-client"])],
+  ["src/app/api/auth/register/route.ts", new Set(["src-admin-client"])],
+  ["src/app/api/me/account/route.ts", new Set(["src-admin-client"])],
+  ["src/app/api/admin/beta-invites/create-coordinator/route.ts", new Set(["src-admin-client"])],
+  ["src/app/api/invite/staff/route.ts", new Set(["src-admin-client"])],
+  ["src/app/api/staff/[id]/route.ts", new Set(["src-admin-client"])],
+  ["src/app/api/messages/route.ts", new Set(["src-admin-client"])],
+  ["src/lib/auth/invite-auth-user.ts", new Set(["src-admin-client"])],
+  ["src/lib/auth/beta-access.server.ts", new Set(["src-admin-client"])],
+  ["src/lib/auth/super-user.server.ts", new Set(["src-admin-client"])],
+  // PUBLIC_SSR: SSR sem sessão auth
+  ["src/app/public/[token]/page.tsx", new Set(["src-admin-client"])],
+  ["src/app/public/[token]/games/[gameId]/page.tsx", new Set(["src-admin-client"])],
+  ["src/app/public/[token]/trainings/[trainingId]/page.tsx", new Set(["src-admin-client"])],
+  ["src/app/api/public-gate/[segment]/route.ts", new Set(["src-admin-client"])],
+  ["src/app/api/public-share/route.ts", new Set(["src-admin-client"])],
+  ["src/app/api/public/games/[identifier]/[gameRef]/live/route.ts", new Set(["src-admin-client"])],
+  ["src/app/api/invite/info/route.ts", new Set(["src-admin-client"])],
+  // CRON/SERVICE: sem sessão de utilizador
+  ["src/app/api/maintenance/prune-notifications/route.ts", new Set(["src-admin-client"])],
+  ["src/lib/games/convocation-guard.ts", new Set(["src-admin-client"])],
+  ["src/lib/notifications/service.ts", new Set(["src-admin-client"])],
+  ["src/lib/supabase/admin.ts", new Set(["src-admin-client"])], // definição
+  ["src/app/api/push/test/route.ts", new Set(["src-admin-client"])], // rota de teste push
 ]);
 
 const MIGRATION_ALLOWED_EXCEPTIONS = new Map();
@@ -59,9 +85,12 @@ const SRC_RULES = [
       "Não filtrar runtime por club_id como boundary funcional. Usa age_group_id/team_id/game_id/training_session_id.",
     regex: /\.(?:eq|neq|gt|gte|lt|lte|in|is|match)\(\s*["']club_id["']/g,
   },
-  // TODO (próximo sprint): adicionar regra src-admin-client-usage
-  // quando maioria dos ficheiros estiver limpa (43 ficheiros restantes).
-  // createAdminClient permitido apenas em: auth management, SSR público, admin routes.
+  {
+    id: "src-admin-client",
+    description:
+      "createAdminClient não autorizado. Usar session client + RLS policies. Se genuinamente necessário (auth.admin API, SSR público, cron), adicionar à allowlist.",
+    regex: /createAdminClient\s*\(\)/g,
+  },
 ];
 
 const MIGRATION_RULES = [

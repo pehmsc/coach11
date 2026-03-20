@@ -1,5 +1,4 @@
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveUserTeamContext } from "@/lib/auth/team-context";
 import { getTeamMembersDetailed } from "@/lib/team/members";
 import { NextResponse } from "next/server";
@@ -35,13 +34,7 @@ export async function GET() {
       return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
     }
 
-    let db = supabase;
-    try {
-      db = createAdminClient();
-    } catch (error) {
-      console.error("[me/context] Admin client falhou, a usar client standard:", error);
-      db = supabase;
-    }
+    const db = supabase;
 
     const { data: profile } = await db
       .from("profiles")
