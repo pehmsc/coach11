@@ -312,7 +312,7 @@ export default function OnboardingPage() {
           <h1 className="text-3xl font-black text-slate-900">
             COACH<span className="text-emerald-500">11</span>
           </h1>
-          <p className="text-sm text-slate-500 mt-1">Bem-vindo! Vamos configurar o teu escalão.</p>
+          <p className="text-sm text-slate-500 mt-1">Bem-vindo! Vamos configurar o teu clube.</p>
         </div>
 
         <StepIndicator current={step} total={TOTAL_STEPS} />

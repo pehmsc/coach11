@@ -120,7 +120,7 @@ export async function POST(request: Request) {
     }
 
     const appUrl = getCanonicalAppUrl();
-    const onboardingUrl = `${appUrl}/register?email=${encodeURIComponent(email)}`;
+    const onboardingUrl = `${appUrl}/beta-invite?email=${encodeURIComponent(email)}`;
 
     let emailSent = false;
     let warning: string | null = null;
@@ -145,7 +145,7 @@ export async function POST(request: Request) {
               <div style="padding:32px;">
                 <p>Olá!</p>
                 <p>Recebeste um convite para entrares no beta privado do Coach11 como coordenador.</p>
-                <p>Na primeira entrada vais criar o teu escalão e passar a ser o coordenador desse contexto.</p>
+                <p>Na primeira entrada vais configurar o teu clube e as tuas equipas.</p>
                 <a href="${onboardingUrl}"
                   style="display:block;background:#059669;color:white;text-decoration:none;text-align:center;padding:12px;border-radius:10px;margin-top:20px;">
                   Entrar no beta
