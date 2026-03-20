@@ -11,7 +11,7 @@ const MIGRATION_BASELINE = 20260308060001;
 const SRC_ALLOWED_EXCEPTIONS = new Map([
   [
     "src/lib/team/delete-age-group.ts",
-    new Set(["src-club-memberships-query", "src-club-id-filter"]),
+    new Set(["src-club-id-filter"]),
   ],
   [
     "src/app/api/exercises/route.ts",
@@ -45,12 +45,8 @@ const SRC_RULES = [
       "Não usar team_staff diretamente no runtime. Usa age_group_staff / resolveUserTeamContext.",
     regex: /\.from\(\s*["']team_staff["']\s*\)/g,
   },
-  {
-    id: "src-club-memberships-query",
-    description:
-      "Não usar club_memberships como fonte de autorização no runtime. Só cleanup técnico explícito é permitido.",
-    regex: /\.from\(\s*["']club_memberships["']\s*\)/g,
-  },
+  // club_memberships é tabela de primeira classe na arquitectura club-first (PR #53 + PR #57).
+  // Queries a club_memberships são permitidas para resolver o clube principal do utilizador.
   {
     id: "src-club-wrapper-call",
     description:
@@ -110,12 +106,8 @@ const MIGRATION_RULES = [
       "Novas migrations não devem usar user_can_access_club/user_can_manage_club como boundary funcional.",
     regex: /\buser_can_(?:access|manage)_club\s*\(/g,
   },
-  {
-    id: "sql-club-memberships-auth",
-    description:
-      "Novas migrations não devem usar club_memberships como regra funcional de autorização.",
-    regex: /\b(?:from|join)\s+public\.club_memberships\b/gi,
-  },
+  // club_memberships é tabela de primeira classe na arquitectura club-first.
+  // Migrations podem referenciar club_memberships em RLS policies e auth logic.
   {
     id: "sql-club-boundary-policy",
     description:
@@ -243,8 +235,8 @@ if (violations.length > 0) {
   console.error(
     [
       "Domain boundary guard failed.",
-      "club/club_memberships are technical compatibility only.",
-      "Use age_groups, age_group_staff and teams as the functional boundary.",
+      "team_staff is deprecated. club_memberships is first-class (club-first architecture).",
+      "Use age_groups, age_group_staff, club_memberships and teams as the functional boundary.",
       "",
       ...violations.map(formatViolation),
       "",
