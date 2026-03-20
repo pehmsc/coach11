@@ -1,5 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "github": {
+    "silent": true
+  },
   "crons": [
     {
       "path": "/api/maintenance/prune-notifications",

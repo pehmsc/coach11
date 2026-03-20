@@ -1,0 +1,14 @@
+# Documentacao e ficheiros de planeamento
+*.md
+!README.md
+AUDITORIA_COACH11.md
+
+# Scripts de desenvolvimento
+scripts/
+
+# Ficheiros de teste
+src/tests/
+
+# Ficheiros temporarios
+*.log
+.DS_Store
