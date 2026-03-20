@@ -9,17 +9,14 @@ import {
 import { YellowCardAlert } from "@/components/statistics/YellowCardAlert";
 import { StatisticsTabs } from "@/components/statistics/StatisticsTabs";
 import { PdfExportCard } from "@/components/statistics/PdfExportCard";
-import { AttendanceTable } from "@/components/statistics/AttendanceTable";
 import { GameStatsSummaryCards } from "@/components/statistics/GameStatsSummaryCards";
 import { GameStatsTable } from "@/components/statistics/GameStatsTable";
 import { AttendanceHeatmap } from "@/components/statistics/AttendanceHeatmap";
 import { useStatisticsData } from "@/lib/hooks/useStatisticsData";
-import { exportAttendanceCsv, exportGameStatsCsv } from "@/lib/csv/statistics";
+import { exportGameStatsCsv } from "@/lib/csv/statistics";
 import { useStatisticsSorting } from "@/lib/hooks/useStatisticsSorting";
 import { usePlayerSelection } from "@/lib/hooks/usePlayerSelection";
 import { useStatisticsExport } from "@/lib/hooks/useStatisticsExport";
-
-// ── Component ────────────────────────────────────────────────────────────────
 
 export default function StatisticsPage() {
   const [activeTab, setActiveTab] = useState<Tab>("attendance");
@@ -35,18 +32,11 @@ export default function StatisticsPage() {
   } = useStatisticsData();
 
   const {
-    attendanceSort,
     gameSort,
-    toggleAttendanceSort,
     toggleGameSort,
-    sortedAttendance,
     sortedGameStats,
   } = useStatisticsSorting(attendanceStats, gameStats);
 
-  const sortedAttendanceIds = useMemo(
-    () => sortedAttendance.map((row) => row.player.id),
-    [sortedAttendance],
-  );
   const sortedGameStatsIds = useMemo(
     () => sortedGameStats.map((row) => row.player.id),
     [sortedGameStats],
@@ -59,14 +49,12 @@ export default function StatisticsPage() {
     toggleSelectedPlayer,
     toggleSelectAllCurrentTab,
     clearSelectedPlayers,
-  } = usePlayerSelection(players, activeTab, sortedAttendanceIds, sortedGameStatsIds);
+  } = usePlayerSelection(players, activeTab, [], sortedGameStatsIds);
 
   const { exportingPdf, handleExportActiveTabPdf } = useStatisticsExport(
     ageGroupId,
     ageGroupName,
   );
-
-  // ── Render ──
 
   if (loading) {
     return <StatisticsLoadingSkeleton />;
@@ -78,60 +66,40 @@ export default function StatisticsPage() {
 
   return (
     <div className="p-4 md:p-8 max-w-4xl mx-auto space-y-5">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Estatísticas</h1>
-      </div>
+      <h1 className="text-2xl font-bold text-slate-900">Estatísticas</h1>
 
-      {/* Yellow card alert — only shown in game tab */}
       {activeTab === "game" && <YellowCardAlert yellowAlerts={yellowAlerts} />}
 
-      {/* Tabs */}
       <StatisticsTabs activeTab={activeTab} setActiveTab={setActiveTab} />
-
-      <PdfExportCard
-        activeTab={activeTab}
-        selectedPlayerIds={selectedPlayerIds}
-        currentTabPlayerIds={currentTabPlayerIds}
-        exportingPdf={exportingPdf}
-        onExport={() =>
-          void handleExportActiveTabPdf(
-            activeTab,
-            selectedPlayerIds,
-            currentTabPlayerIds,
-            sortedAttendance,
-            sortedGameStats,
-          )
-        }
-        onClearSelection={clearSelectedPlayers}
-        onExportCsv={() => {
-          if (activeTab === "attendance") {
-            exportAttendanceCsv(sortedAttendance, ageGroupName);
-          } else {
-            exportGameStatsCsv(sortedGameStats, ageGroupName);
-          }
-        }}
-      />
 
       {/* ── TAB: MAPA DE PRESENÇAS ── */}
       {activeTab === "attendance" && (
-        <>
-          <AttendanceHeatmap ageGroupId={ageGroupId} />
-          <AttendanceTable
-            sortedAttendance={sortedAttendance}
-            attendanceSort={attendanceSort}
-            toggleAttendanceSort={toggleAttendanceSort}
-            allCurrentTabSelected={allCurrentTabSelected}
-            toggleSelectAllCurrentTab={toggleSelectAllCurrentTab}
-            selectedPlayerIds={selectedPlayerIds}
-            toggleSelectedPlayer={toggleSelectedPlayer}
-          />
-        </>
+        <AttendanceHeatmap ageGroupId={ageGroupId} />
       )}
 
       {/* ── TAB: ESTATÍSTICAS DE JOGO ── */}
       {activeTab === "game" && (
         <>
           <GameStatsSummaryCards gameStats={gameStats} />
+
+          <PdfExportCard
+            activeTab={activeTab}
+            selectedPlayerIds={selectedPlayerIds}
+            currentTabPlayerIds={currentTabPlayerIds}
+            exportingPdf={exportingPdf}
+            onExport={() =>
+              void handleExportActiveTabPdf(
+                activeTab,
+                selectedPlayerIds,
+                currentTabPlayerIds,
+                [],
+                sortedGameStats,
+              )
+            }
+            onClearSelection={clearSelectedPlayers}
+            onExportCsv={() => exportGameStatsCsv(sortedGameStats, ageGroupName)}
+          />
+
           <GameStatsTable
             sortedGameStats={sortedGameStats}
             gameSort={gameSort}
