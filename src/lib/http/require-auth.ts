@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import {
   resolveUserTeamContext,
   type UserTeamContext,
@@ -9,7 +9,7 @@ import {
 type AuthResult =
   | {
       userId: string;
-      db: ReturnType<typeof createAdminClient>;
+      db: SupabaseClient;
       context: UserTeamContext;
       error?: never;
     }
@@ -19,7 +19,8 @@ type AuthResult =
  * Authenticate the request and resolve the user's team context.
  * Returns `{ userId, db, context }` on success or `{ error }` with a 401/403 NextResponse on failure.
  *
- * The returned `db` uses the admin client when available, falling back to the session client.
+ * O `db` é o session client com RLS activo — as policies permissivas nas tabelas
+ * core (training_sessions, games, players, etc.) garantem acesso legítimo.
  */
 export async function requireAuth(): Promise<AuthResult> {
   const supabase = await createClient();
@@ -33,14 +34,7 @@ export async function requireAuth(): Promise<AuthResult> {
     };
   }
 
-  let db: ReturnType<typeof createAdminClient>;
-  try {
-    db = createAdminClient();
-  } catch {
-    db = supabase as unknown as ReturnType<typeof createAdminClient>;
-  }
-
-  const context = await resolveUserTeamContext(db, user.id);
+  const context = await resolveUserTeamContext(supabase, user.id);
 
   if (context.accessibleAgeGroupIds.length === 0) {
     return {
@@ -51,5 +45,5 @@ export async function requireAuth(): Promise<AuthResult> {
     };
   }
 
-  return { userId: user.id, db, context };
+  return { userId: user.id, db: supabase, context };
 }
