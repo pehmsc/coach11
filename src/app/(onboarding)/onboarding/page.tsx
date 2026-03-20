@@ -176,94 +176,43 @@ export default function OnboardingPage() {
         return;
       }
 
-      // Verificar se já tem clube (backward compat)
-      const { data: existingMembership } = await supabase
-        .from("club_memberships")
-        .select("club_id")
-        .eq("profile_id", user.id)
-        .limit(1)
-        .maybeSingle();
-
-      if (existingMembership?.club_id) {
-        setClubId(existingMembership.club_id);
-        setStep(2);
-        setSaving(false);
-        return;
-      }
-
-      // Verificar se já tem age_group (backward compat)
-      const { data: existingAgeGroup } = await supabase
-        .from("age_groups")
-        .select("id")
-        .eq("coordinator_id", user.id)
-        .limit(1)
-        .maybeSingle();
-
-      if (existingAgeGroup) {
-        router.push("/dashboard");
-        return;
-      }
-
+      // Criar clube via RPC SECURITY DEFINER (resolve bootstrap RLS)
       const normalizedShortName = normalizeManualShortName(clubShortName, 5);
       const baseSlug = generateSlug(clubName.trim());
 
-      // Tentar criar clube com slug base, adicionar sufixo se duplicado
-      let attempt = 0;
-      let createdClub: { id: string } | null = null;
+      const { data: rpcResult, error: rpcError } = await supabase.rpc(
+        "create_club_onboarding",
+        {
+          p_name: clubName.trim(),
+          p_short_name: normalizedShortName || null,
+          p_slug: baseSlug,
+          p_logo_url: null,
+        },
+      );
 
-      while (attempt < 5 && !createdClub) {
-        const candidateSlug = attempt === 0 ? baseSlug : `${baseSlug}-${attempt + 1}`;
-        const { data, error } = await supabase
-          .from("clubs")
-          .insert({
-            name: clubName.trim(),
-            slug: candidateSlug,
-            short_name: normalizedShortName || null,
-          })
-          .select("id")
-          .single();
-
-        if (!error && data) {
-          createdClub = data;
-          break;
-        }
-
-        // Se erro de slug duplicado, tentar com sufixo
-        if (error?.code === "23505") {
-          attempt++;
-          continue;
-        }
-
-        // Outro erro — falhar
-        console.error("[onboarding] Erro ao criar clube:", error);
+      if (rpcError) {
+        console.error("[onboarding] RPC create_club_onboarding falhou:", rpcError);
         toast.error("Erro ao criar clube. Tenta novamente.");
         setSaving(false);
         return;
       }
 
-      if (!createdClub) {
-        toast.error("Não foi possível criar o clube. Tenta um nome diferente.");
+      const result = rpcResult as { club_id?: string; already_existed?: boolean } | null;
+      if (!result?.club_id) {
+        toast.error("Erro ao criar clube. Tenta novamente.");
         setSaving(false);
         return;
       }
 
-      // Criar club_membership para o coordenador
-      const { error: membershipError } = await supabase
-        .from("club_memberships")
-        .insert({
-          club_id: createdClub.id,
-          profile_id: user.id,
-          role: "club_coordinator",
-        });
-
-      if (membershipError) {
-        console.error("[onboarding] Erro ao criar membership:", membershipError);
-        toast.error("Erro ao associar ao clube. Tenta novamente.");
+      if (result.already_existed) {
+        // Já tem clube — avançar para escalão
+        setClubId(result.club_id);
+        setStep(2);
         setSaving(false);
         return;
       }
 
-      setClubId(createdClub.id);
+      setClubId(result.club_id);
       setStep(2);
     } catch (error) {
       console.error("[onboarding] Erro de ligação:", error);

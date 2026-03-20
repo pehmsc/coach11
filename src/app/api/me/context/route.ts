@@ -150,45 +150,20 @@ export async function GET() {
 
     const authAvatarUrlByProfileId = new Map<string, string>();
 
-    // Perf: cap de 5 lookups auth + timeout individual de 2s para evitar
-    // N+1 sem limite que causou spinner infinito em produção (19/03).
-    const AUTH_AVATAR_LOOKUP_CAP = 5;
-    const AUTH_AVATAR_TIMEOUT_MS = 2000;
-
+    // Buscar avatares em falta via profiles (não auth.admin.getUserById).
+    // Eliminado: N+1 getUserById que causou spinner infinito em produção (19/03).
     if (missingAvatarProfileIds.length > 0) {
-      const cappedIds = missingAvatarProfileIds.slice(0, AUTH_AVATAR_LOOKUP_CAP);
+      const { data: avatarProfiles } = await db
+        .from("profiles")
+        .select("id, avatar_url")
+        .in("id", missingAvatarProfileIds.slice(0, 20));
 
-      const authUsers = await Promise.allSettled(
-        cappedIds.map(async (profileId) => {
-          const result = await Promise.race([
-            db.auth.admin.getUserById(profileId),
-            new Promise<{ data: null; error: Error }>((resolve) =>
-              setTimeout(
-                () => resolve({ data: null, error: new Error("timeout") }),
-                AUTH_AVATAR_TIMEOUT_MS,
-              ),
-            ),
-          ]);
-
-          if (result.error || !result.data?.user) {
-            return { profileId, avatarUrl: null as string | null };
+      if (avatarProfiles) {
+        for (const p of avatarProfiles) {
+          if (typeof p.avatar_url === "string" && p.avatar_url.length > 0) {
+            authAvatarUrlByProfileId.set(p.id, p.avatar_url);
           }
-
-          const metadata = (result.data.user.user_metadata ?? {}) as Record<string, unknown>;
-          const avatarUrl =
-            (typeof metadata.avatar_url === "string" && metadata.avatar_url) ||
-            (typeof metadata.picture === "string" && metadata.picture) ||
-            null;
-
-          return { profileId, avatarUrl };
-        }),
-      );
-
-      for (const result of authUsers) {
-        if (result.status !== "fulfilled" || !result.value.avatarUrl) {
-          continue;
         }
-        authAvatarUrlByProfileId.set(result.value.profileId, result.value.avatarUrl);
       }
     }
 

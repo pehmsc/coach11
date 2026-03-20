@@ -318,13 +318,8 @@ export async function POST(request: Request) {
       .maybeSingle();
     let senderDisplayName = normalizeDisplayName(senderProfile?.full_name);
     if (!senderDisplayName) {
-      try {
-        senderDisplayName =
-          (await loadAuthDisplayNamesById(createAdminClient(), [user.id])).get(user.id) || null;
-      } catch (error) {
-        console.error("[/api/messages POST] Sender display name lookup falhou:", error);
-        senderDisplayName = null;
-      }
+      // Fallback: usar email do user como display name
+      senderDisplayName = user.email?.split("@")[0] ?? null;
     }
 
     const profileMap = new Map<string, ProfileRow>();
