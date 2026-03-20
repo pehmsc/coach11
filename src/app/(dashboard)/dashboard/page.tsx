@@ -77,9 +77,10 @@ export default async function DashboardPage() {
       .eq("coordinator_id", user.id),
   ]);
 
-  // Onboarding guard: coordinator sem escalão → redirecionar
-  // Usa dados já carregados (managedAgeGroups) — zero queries extra.
+  // Onboarding guard: coordinator sem clube/escalão → redirecionar
   // Staff convidado (role = 'coach') NUNCA é redirecionado para onboarding.
+  // Conceptualmente o requisito mínimo é ter clube, mas na prática
+  // verificamos age_groups + age_group_staff (dados já carregados).
   if (
     profile?.role === "coordinator" &&
     (!managedAgeGroups || managedAgeGroups.length === 0)
