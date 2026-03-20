@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -80,7 +79,6 @@ interface TeamStats {
 }
 
 export default function TeamsPage() {
-  const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
 
   const [loading, setLoading] = useState(true);
@@ -396,15 +394,12 @@ export default function TeamsPage() {
       {teams.length === 0 ? (
         <Card>
           <CardContent className="pt-8 pb-8 text-center">
-            <p className="text-slate-500 text-sm mb-4">Sem equipas associadas.</p>
+            <p className="text-slate-500 text-sm mb-4">Ainda não tens equipas criadas.</p>
             {canCreate && (
               <Button
                 size="sm"
                 className="bg-emerald-600 hover:bg-emerald-700"
-                onClick={() => {
-                  setShowAddForm(true);
-                  router.push("/onboarding");
-                }}
+                onClick={() => setShowAddForm(true)}
               >
                 <Plus size={15} className="mr-1.5" />
                 Criar primeira equipa

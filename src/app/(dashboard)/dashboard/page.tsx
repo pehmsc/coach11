@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
+import { DashboardEmptyState } from "@/components/dashboard/DashboardEmptyState";
 import { format, addDays, parseISO, isToday, isTomorrow } from "date-fns";
 import { pt } from "date-fns/locale";
 import {
@@ -96,7 +97,32 @@ export default async function DashboardPage() {
         redirect("/onboarding");
       }
     }
-    // Tem clube (via membership) mas sem escalão → dashboard normalmente
+    // Tem clube (via membership) mas sem escalão → empty state
+  }
+
+  // Club coordinator sem escalão → mostrar CTA
+  if (
+    profile?.role === "coordinator" &&
+    (!managedAgeGroups || managedAgeGroups.length === 0)
+  ) {
+    // Verificar se tem staff link (se sim, é staff — não empty state)
+    const { data: staffCheck } = await db
+      .from("age_group_staff")
+      .select("id")
+      .eq("profile_id", user.id)
+      .limit(1)
+      .maybeSingle();
+    if (!staffCheck) {
+      // Coordinator com clube mas sem escalão — buscar nome do clube
+      const { data: membership } = await db
+        .from("club_memberships")
+        .select("clubs(name)")
+        .eq("profile_id", user.id)
+        .limit(1)
+        .maybeSingle();
+      const clubName = (membership?.clubs as { name?: string } | null)?.name ?? null;
+      return <DashboardEmptyState clubName={clubName} />;
+    }
   }
 
   let firstTeamId: string | null = managedAgeGroups?.[0]?.teams?.[0]?.id ?? null;
