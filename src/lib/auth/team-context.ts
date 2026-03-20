@@ -1,6 +1,13 @@
 import { cache } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+export type TeamContextClub = {
+  id: string;
+  name: string;
+  slug: string;
+  logo_url: string | null;
+};
+
 export type TeamContextAgeGroup = {
   id: string;
   club_name: string;
@@ -33,6 +40,10 @@ export type UserTeamContext = {
   managedTeamIds: string[];
   staffTeamIds: string[];
   accessibleTeams: TeamContextTeam[];
+  /** Clube principal do utilizador (resolvido via club_memberships ou age_group.club_id). */
+  club: TeamContextClub | null;
+  /** Role do utilizador no contexto de clube. */
+  clubRole: "club_coordinator" | "age_coordinator" | "staff" | null;
 };
 
 async function pickPreferredTeamId(
@@ -73,19 +84,25 @@ export async function resolveUserTeamContext(
   admin: SupabaseClient,
   userId: string,
 ): Promise<UserTeamContext> {
-  const [managedAgeGroupsRes, staffLinksRes] = await Promise.all([
+  const [managedAgeGroupsRes, staffLinksRes, clubMembershipRes] = await Promise.all([
     admin
       .from("age_groups")
-      .select("id, club_name, club_short_name, club_logo_url, name, football_format, tactical_system, season")
+      .select("id, club_name, club_short_name, club_logo_url, name, football_format, tactical_system, season, club_id")
       .eq("coordinator_id", userId)
       .order("created_at", { ascending: true })
       .limit(20),
     admin
       .from("age_group_staff")
-      .select("age_group_id, linked_team_id, role, created_at")
+      .select("age_group_id, linked_team_id, role, created_at, club_id")
       .eq("profile_id", userId)
       .order("created_at", { ascending: false })
       .limit(20),
+    admin
+      .from("club_memberships")
+      .select("club_id, role")
+      .eq("profile_id", userId)
+      .limit(1)
+      .maybeSingle(),
   ]);
 
   if (managedAgeGroupsRes.error) {
@@ -179,6 +196,38 @@ export async function resolveUserTeamContext(
     .map((teamId) => teamMap.get(teamId))
     .filter((team): team is TeamContextTeam => !!team);
 
+  // Resolver clube: club_memberships > age_group.club_id > staff.club_id
+  let club: TeamContextClub | null = null;
+  let clubRole: UserTeamContext["clubRole"] = null;
+
+  const clubMembership = clubMembershipRes.data;
+  const managedClubId: string | null = (managedAgeGroupsRes.data?.[0] as Record<string, unknown>)?.club_id as string ?? null;
+  const staffClubId: string | null = (staffLinksRes.data?.[0] as Record<string, unknown>)?.club_id as string ?? null;
+
+  const targetClubId = clubMembership?.club_id ?? managedClubId ?? staffClubId ?? null;
+
+  if (targetClubId) {
+    const { data: clubData } = await admin
+      .from("clubs")
+      .select("id, name, slug, logo_url")
+      .eq("id", targetClubId)
+      .maybeSingle();
+    if (clubData) {
+      club = clubData as TeamContextClub;
+    }
+  }
+
+  if (clubMembership) {
+    const memberRole = clubMembership.role;
+    clubRole = memberRole === "coordinator" || memberRole === "club_coordinator" || memberRole === "owner" || memberRole === "admin"
+      ? "club_coordinator"
+      : "staff";
+  } else if (managedAgeGroups.length > 0) {
+    clubRole = "age_coordinator";
+  } else if (staffLinks.length > 0) {
+    clubRole = "staff";
+  }
+
   if (managedAgeGroups.length > 0) {
     const preferredManagedTeamId = await pickPreferredTeamId(admin, managedTeamIds);
     const resolvedTeam =
@@ -202,6 +251,8 @@ export async function resolveUserTeamContext(
       managedTeamIds,
       staffTeamIds,
       accessibleTeams,
+      club,
+      clubRole,
     };
   }
 
@@ -246,6 +297,8 @@ export async function resolveUserTeamContext(
       managedTeamIds,
       staffTeamIds,
       accessibleTeams,
+      club,
+      clubRole,
     };
   }
 
@@ -259,6 +312,8 @@ export async function resolveUserTeamContext(
     managedTeamIds: [],
     staffTeamIds: [],
     accessibleTeams: [],
+    club,
+    clubRole,
   };
 }
 
