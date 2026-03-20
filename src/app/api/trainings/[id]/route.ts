@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { checkPermission } from "@/lib/auth/require-permission";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 
 const TrainingMetadataSchema = z.object({
@@ -36,9 +36,9 @@ export async function PUT(request: Request, { params }: RouteParams) {
       );
     }
 
-    const admin = createAdminClient();
+    const supabase = await createClient();
 
-    const { data, error } = await admin
+    const { data, error } = await supabase
       .from("training_sessions")
       .update(parsed.data)
       .eq("id", id)

@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { parseBody } from "@/lib/http/validate";
 import {
@@ -36,13 +35,11 @@ export async function PATCH(
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
 
-    const admin = createAdminClient();
-
     const parsed = await parseBody(request, NotificationPatchSchema);
     if (parsed.error) return parsed.error;
     const { action } = parsed.data;
 
-    const updatedId = await setNotificationReadState(admin, {
+    const updatedId = await setNotificationReadState(supabase, {
       userId: user.id,
       notificationId: id,
       readAt: action === "mark_read" ? new Date().toISOString() : null,
@@ -54,7 +51,7 @@ export async function PATCH(
       );
     }
 
-    const notification = await getUserNotification(admin, {
+    const notification = await getUserNotification(supabase, {
       userId: user.id,
       notificationId: id,
     });
@@ -96,8 +93,7 @@ export async function DELETE(
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
 
-    const admin = createAdminClient();
-    const clearedId = await clearNotificationForUser(admin, {
+    const clearedId = await clearNotificationForUser(supabase, {
       userId: user.id,
       notificationId: id,
       clearedAt: new Date().toISOString(),

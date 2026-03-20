@@ -1,5 +1,4 @@
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import {
   ALL_PERMISSION_AREAS,
   PERMISSION_TEMPLATES,
@@ -13,30 +12,29 @@ import { respondInternalError } from "@/lib/http/respond-internal-error";
 export const runtime = "nodejs";
 
 async function resolveStaffAccess(
+  supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
   userEmail: string | null | undefined,
   staffId: string,
 ) {
-  const admin = createAdminClient();
-
-  const { data: staffRecord } = await admin
+  const { data: staffRecord } = await supabase
     .from("age_group_staff")
     .select("id, age_group_id, profile_id, role, club_id")
     .eq("id", staffId)
     .maybeSingle();
 
   if (!staffRecord) {
-    return { ok: false as const, status: 404, error: "Membro não encontrado", admin };
+    return { ok: false as const, status: 404, error: "Membro não encontrado" };
   }
 
-  const { data: ageGroup } = await admin
+  const { data: ageGroup } = await supabase
     .from("age_groups")
     .select("id, coordinator_id")
     .eq("id", staffRecord.age_group_id)
     .maybeSingle();
 
   if (!ageGroup) {
-    return { ok: false as const, status: 404, error: "Escalão não encontrado", admin };
+    return { ok: false as const, status: 404, error: "Escalão não encontrado" };
   }
 
   const isSuperAdmin = isSuperCoordinatorEmail(userEmail ?? null);
@@ -44,12 +42,12 @@ async function resolveStaffAccess(
   const isSelf = staffRecord.profile_id === userId;
 
   if (!isSuperAdmin && !isCoordinator && !isSelf) {
-    return { ok: false as const, status: 403, error: "Sem permissão", admin };
+    return { ok: false as const, status: 403, error: "Sem permissão" };
   }
 
   return {
     ok: true as const,
-    admin,
+    supabase,
     staffRecord: staffRecord as {
       id: string;
       age_group_id: string;
@@ -78,14 +76,14 @@ export async function GET(
       return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
     }
 
-    const access = await resolveStaffAccess(user.id, user.email, staffId);
+    const access = await resolveStaffAccess(supabase, user.id, user.email, staffId);
     if (!access.ok) {
       return NextResponse.json({ error: access.error }, { status: access.status });
     }
 
-    const { admin, staffRecord, isCoordinator, isSuperAdmin } = access;
+    const { supabase: sb, staffRecord, isCoordinator, isSuperAdmin } = access;
 
-    const { data: permissions } = await admin
+    const { data: permissions } = await sb
       .from("staff_permissions")
       .select("area, can_read, can_write, can_edit, can_delete")
       .eq("staff_id", staffId);
@@ -115,12 +113,12 @@ export async function PUT(
       return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
     }
 
-    const access = await resolveStaffAccess(user.id, user.email, staffId);
+    const access = await resolveStaffAccess(supabase, user.id, user.email, staffId);
     if (!access.ok) {
       return NextResponse.json({ error: access.error }, { status: access.status });
     }
 
-    const { admin, staffRecord, isCoordinator, isSuperAdmin } = access;
+    const { supabase: sb, staffRecord, isCoordinator, isSuperAdmin } = access;
 
     if (!isCoordinator && !isSuperAdmin) {
       return NextResponse.json(
@@ -162,7 +160,7 @@ export async function PUT(
       return NextResponse.json({ error: "Dados inválidos" }, { status: 400 });
     }
 
-    const { error: upsertError } = await admin
+    const { error: upsertError } = await sb
       .from("staff_permissions")
       .upsert(rows, { onConflict: "staff_id,area" });
 

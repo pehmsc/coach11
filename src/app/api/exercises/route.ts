@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { checkPermission, checkReadAccess } from "@/lib/auth/require-permission";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import { SHORT_PRIVATE_CACHE_CONTROL } from "@/lib/http/cache";
 import {
   createExerciseSchema,
@@ -20,9 +20,9 @@ export async function GET(request: Request) {
     const category = searchParams.get("category");
     const search = searchParams.get("search");
 
-    const admin = createAdminClient();
+    const supabase = await createClient();
 
-    let query = admin
+    let query = supabase
       .from("exercises")
       .select(SELECT_FIELDS)
       .eq("club_id", clubId)
@@ -74,9 +74,9 @@ export async function POST(request: Request) {
       );
     }
 
-    const admin = createAdminClient();
+    const supabase = await createClient();
 
-    const { data: ageGroup } = await admin
+    const { data: ageGroup } = await supabase
       .from("age_groups")
       .select("club_id")
       .eq("id", ageGroupId)
@@ -89,7 +89,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const { data, error } = await admin
+    const { data, error } = await supabase
       .from("exercises")
       .insert({
         ...parsed.data,

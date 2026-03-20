@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { isWebPushConfiguredOnServer } from "@/lib/pwa/web-push-server";
 import {
@@ -50,9 +49,8 @@ export async function POST(request: Request) {
       );
     }
 
-    const admin = createAdminClient();
     const nowIso = new Date().toISOString();
-    const { error } = await admin
+    const { error } = await supabase
       .from("push_subscriptions")
       .upsert(
         {
@@ -83,7 +81,7 @@ export async function POST(request: Request) {
       throw error;
     }
 
-    const { count, error: countError } = await admin
+    const { count, error: countError } = await supabase
       .from("push_subscriptions")
       .select("id", { count: "exact", head: true })
       .eq("user_id", user.id)

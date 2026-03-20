@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveUserTeamContext } from "@/lib/auth/team-context";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 
@@ -17,12 +16,12 @@ function resolveExtension(fileName: string) {
 }
 
 async function uploadLogoWithRetry(
-  admin: ReturnType<typeof createAdminClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   filePath: string,
   fileData: Uint8Array,
   contentType: string,
 ) {
-  let { error: uploadError } = await admin.storage
+  let { error: uploadError } = await supabase.storage
     .from("club-logos")
     .upload(filePath, fileData, {
       upsert: true,
@@ -34,7 +33,7 @@ async function uploadLogoWithRetry(
     typeof uploadError.message === "string" &&
     uploadError.message.toLowerCase().includes("bucket")
   ) {
-    const { error: createBucketError } = await admin.storage.createBucket("club-logos", {
+    const { error: createBucketError } = await supabase.storage.createBucket("club-logos", {
       public: true,
       fileSizeLimit: MAX_FILE_SIZE_BYTES,
       allowedMimeTypes: [
@@ -47,7 +46,7 @@ async function uploadLogoWithRetry(
     });
 
     if (!createBucketError) {
-      const retry = await admin.storage.from("club-logos").upload(filePath, fileData, {
+      const retry = await supabase.storage.from("club-logos").upload(filePath, fileData, {
         upsert: true,
         contentType,
       });
@@ -59,10 +58,10 @@ async function uploadLogoWithRetry(
 }
 
 async function removeExistingLogoVariants(
-  admin: ReturnType<typeof createAdminClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   ageGroupId: string,
 ) {
-  const { data, error } = await admin.storage.from("club-logos").list(ageGroupId, {
+  const { data, error } = await supabase.storage.from("club-logos").list(ageGroupId, {
     limit: 100,
   });
 
@@ -82,7 +81,7 @@ async function removeExistingLogoVariants(
     return;
   }
 
-  const { error: removeError } = await admin.storage.from("club-logos").remove(paths);
+  const { error: removeError } = await supabase.storage.from("club-logos").remove(paths);
   if (removeError) {
     throw removeError;
   }
@@ -133,10 +132,9 @@ export async function POST(request: Request) {
       );
     }
 
-    const admin = createAdminClient();
-    const context = await resolveUserTeamContext(admin, user.id);
+    const context = await resolveUserTeamContext(supabase, user.id);
 
-    const { data: ageGroup, error: ageGroupError } = await admin
+    const { data: ageGroup, error: ageGroupError } = await supabase
       .from("age_groups")
       .select("id, coordinator_id")
       .eq("id", ageGroupId)
@@ -168,7 +166,7 @@ export async function POST(request: Request) {
     const fileBytes = new Uint8Array(await file.arrayBuffer());
 
     try {
-      await removeExistingLogoVariants(admin, ageGroup.id);
+      await removeExistingLogoVariants(supabase, ageGroup.id);
     } catch (cleanupError) {
       console.error("Erro ao limpar logos antigos:", cleanupError);
       return NextResponse.json(
@@ -178,7 +176,7 @@ export async function POST(request: Request) {
     }
 
     const uploadError = await uploadLogoWithRetry(
-      admin,
+      supabase,
       filePath,
       fileBytes,
       file.type || `image/${extension}`,
@@ -192,10 +190,10 @@ export async function POST(request: Request) {
       );
     }
 
-    const { data: publicUrlData } = admin.storage.from("club-logos").getPublicUrl(filePath);
+    const { data: publicUrlData } = supabase.storage.from("club-logos").getPublicUrl(filePath);
     const logoUrl = publicUrlData.publicUrl;
 
-    const { error: updateAgeGroupError } = await admin
+    const { error: updateAgeGroupError } = await supabase
       .from("age_groups")
       .update({ club_logo_url: logoUrl })
       .eq("id", ageGroup.id);
