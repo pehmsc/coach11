@@ -231,7 +231,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
 
     const playersQuery = supabase
       .from("players")
-      .select("id, age_group_id, first_name, last_name, short_name, photo_url, jersey_number, preferred_position, status, created_at")
+      .select("id, age_group_id, first_name, last_name, photo_url, jersey_number, preferred_position, status, created_at")
       .eq("status", "active")
       .order("first_name", { ascending: true })
       .order("last_name", { ascending: true });

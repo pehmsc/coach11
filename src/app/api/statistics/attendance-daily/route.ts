@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
       .in("training_session_id", sessionIds),
     supabase
       .from("players")
-      .select("id, first_name, last_name, short_name, jersey_number")
+      .select("id, first_name, last_name, jersey_number")
       .eq("age_group_id", ageGroupId)
       .eq("status", "active")
       .order("first_name"),
@@ -86,7 +86,7 @@ export async function GET(request: NextRequest) {
       })),
       players: (players || []).map((p) => ({
         id: p.id,
-        name: p.short_name || `${p.first_name} ${p.last_name}`.trim(),
+        name: `${p.first_name} ${p.last_name}`.trim(),
         number: p.jersey_number,
       })),
     },
