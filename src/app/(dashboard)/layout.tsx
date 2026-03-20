@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseAuthCookies } from "@/lib/supabase/auth-cookie";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { Sidebar } from "@/components/layout/Sidebar";
-import { UnreadBadgeRuntime } from "@/components/layout/UnreadBadgeRuntime";
+import { UnreadNotificationsProvider } from "@/contexts/UnreadNotificationsContext";
 import { AuthenticatedAnalyticsProvider } from "@/components/observability/AuthenticatedAnalyticsProvider";
 import { getCachedUserTeamContext, type UserTeamContext } from "@/lib/auth/team-context";
 
@@ -78,26 +78,26 @@ export default async function DashboardLayout({
           : null,
       }}
     >
-      <div
-        className="min-h-screen bg-slate-50"
-        style={{ ["--coach11-top-inset" as string]: topInset }}
-      >
-        <UnreadBadgeRuntime profileId={profile?.id ?? null} />
-
-        {/* Sidebar — visível apenas em desktop */}
-        <Sidebar profile={profile} avatarUrl={avatarUrl} />
-
-        {/* Conteúdo principal */}
-        <main
-          className="min-w-0 pb-[calc(var(--mobile-footer-height)+env(safe-area-inset-bottom)+1rem)] md:ml-64 md:pb-0"
-          style={{ paddingTop: "var(--coach11-top-inset, 0px)" }}
+      <UnreadNotificationsProvider profileId={profile?.id ?? null}>
+        <div
+          className="min-h-screen bg-slate-50"
+          style={{ ["--coach11-top-inset" as string]: topInset }}
         >
-          {children}
-        </main>
+          {/* Sidebar — visível apenas em desktop */}
+          <Sidebar profile={profile} avatarUrl={avatarUrl} />
 
-        {/* Navegação inferior — visível apenas em mobile */}
-        <BottomNav profile={profile} avatarUrl={avatarUrl} />
-      </div>
+          {/* Conteúdo principal */}
+          <main
+            className="min-w-0 pb-[calc(var(--mobile-footer-height)+env(safe-area-inset-bottom)+1rem)] md:ml-64 md:pb-0"
+            style={{ paddingTop: "var(--coach11-top-inset, 0px)" }}
+          >
+            {children}
+          </main>
+
+          {/* Navegação inferior — visível apenas em mobile */}
+          <BottomNav profile={profile} avatarUrl={avatarUrl} />
+        </div>
+      </UnreadNotificationsProvider>
     </AuthenticatedAnalyticsProvider>
   );
 }

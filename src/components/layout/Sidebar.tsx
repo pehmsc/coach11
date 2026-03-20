@@ -7,7 +7,7 @@ import { LogOut } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { clearClientCaches } from "@/lib/query/cache-clear";
 import type { Profile } from "@/types/database";
-import { useUnreadNotifications } from "@/components/layout/use-unread-notifications";
+import { useUnreadCounts } from "@/contexts/UnreadNotificationsContext";
 import {
   getAppNavSections,
   getRoleLabel,
@@ -24,10 +24,7 @@ export function Sidebar({ profile, avatarUrl }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const unreadMessagesCount = useUnreadNotifications(profile?.id ?? null, {
-    type: "message",
-  });
-  const unreadNotificationsCount = useUnreadNotifications(profile?.id ?? null);
+  const { unreadMessages: unreadMessagesCount, unreadNotifications: unreadNotificationsCount } = useUnreadCounts();
   const navSections = getAppNavSections();
   const mainSection = navSections.find((section) => section.id === "main");
   const settingsSection = navSections.find((section) => section.id === "settings");

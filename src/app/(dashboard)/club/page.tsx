@@ -88,7 +88,9 @@ export default function ClubPage() {
   const [kitsExpanded, setKitsExpanded] = useState(false);
 
   useEffect(() => {
-    void loadData();
+    const controller = new AbortController();
+    void loadData(controller.signal);
+    return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -101,9 +103,9 @@ export default function ClubPage() {
     setKitColors(colorMap);
   }, [kitPieces]);
 
-  async function loadData() {
+  async function loadData(signal?: AbortSignal) {
     setLoading(true);
-    const res = await fetch("/api/me/context");
+    const res = await fetch("/api/me/context", { signal });
     const payload = await res.json().catch(() => ({}));
 
     if (!res.ok) {
