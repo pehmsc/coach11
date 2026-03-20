@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+
 import { resolveUserTeamContext } from "@/lib/auth/team-context";
 import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
@@ -79,12 +79,7 @@ function toUiPiece<T extends Record<string, unknown>>(piece: T) {
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
-    let db = supabase;
-    try {
-      db = createAdminClient();
-    } catch {
-      db = supabase;
-    }
+    const db = supabase;
     const {
       data: { user },
     } = await supabase.auth.getUser();

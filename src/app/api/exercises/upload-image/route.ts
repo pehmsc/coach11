@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { checkPermission } from "@/lib/auth/require-permission";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import {
   MAX_EXERCISE_IMAGE_BYTES,
   validateExerciseImageUpload,
@@ -46,12 +46,12 @@ export async function POST(request: Request) {
       );
     }
 
-    const admin = createAdminClient();
+    const supabase = await createClient();
     const fileBytes = new Uint8Array(await file.arrayBuffer());
     const fileName = `${check.ageGroupId}/${crypto.randomUUID()}.${validation.extension}`;
     const contentType = validation.contentType;
 
-    let { error: uploadError } = await admin.storage
+    let { error: uploadError } = await supabase.storage
       .from(BUCKET_NAME)
       .upload(fileName, fileBytes, { upsert: false, contentType });
 
@@ -60,13 +60,13 @@ export async function POST(request: Request) {
       typeof uploadError.message === "string" &&
       uploadError.message.toLowerCase().includes("bucket")
     ) {
-      await admin.storage.createBucket(BUCKET_NAME, {
+      await supabase.storage.createBucket(BUCKET_NAME, {
         public: true,
         fileSizeLimit: MAX_EXERCISE_IMAGE_BYTES,
         allowedMimeTypes: ["image/png", "image/jpeg", "image/webp"],
       });
 
-      const retry = await admin.storage
+      const retry = await supabase.storage
         .from(BUCKET_NAME)
         .upload(fileName, fileBytes, { upsert: false, contentType });
       uploadError = retry.error;
@@ -79,7 +79,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const { data: publicUrlData } = admin.storage
+    const { data: publicUrlData } = supabase.storage
       .from(BUCKET_NAME)
       .getPublicUrl(fileName);
 

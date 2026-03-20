@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+
 import { resolveUserTeamContext } from "@/lib/auth/team-context";
 import { PRIVATE_SWR_CACHE_CONTROL } from "@/lib/http/cache";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
@@ -39,12 +39,7 @@ async function getRouteContext() {
     };
   }
 
-  let db = supabase;
-  try {
-    db = createAdminClient();
-  } catch {
-    db = supabase;
-  }
+  const db = supabase;
 
   const context = await resolveUserTeamContext(db, user.id);
 

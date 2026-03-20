@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 import {
   bulkApplyNotificationAction,
@@ -24,14 +23,13 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
 
-    const admin = createAdminClient();
     const { searchParams } = new URL(request.url);
     const limit = normalizeLimit(searchParams.get("limit"));
     const unreadOnly = searchParams.get("unreadOnly") === "true";
     const type = typeof searchParams.get("type") === "string"
       ? searchParams.get("type")
       : null;
-    const { notifications, unreadCount } = await listUserNotifications(admin, {
+    const { notifications, unreadCount } = await listUserNotifications(supabase, {
       userId: user.id,
       limit,
       unreadOnly,
@@ -68,7 +66,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
 
-    const admin = createAdminClient();
     const body = await request.json().catch(() => null);
     const action =
       typeof body?.action === "string" ? body.action : "mark_all_read";
@@ -81,7 +78,7 @@ export async function POST(request: Request) {
     }
 
     if (action === "delete_all" || action === "clear_all") {
-      const deleted = await bulkApplyNotificationAction(admin, {
+      const deleted = await bulkApplyNotificationAction(supabase, {
         userId: user.id,
         type,
         onlyRead,
@@ -94,7 +91,7 @@ export async function POST(request: Request) {
       });
     }
 
-    const updated = await bulkApplyNotificationAction(admin, {
+    const updated = await bulkApplyNotificationAction(supabase, {
       userId: user.id,
       type,
       onlyRead,

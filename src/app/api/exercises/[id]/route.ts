@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { checkPermission, checkReadAccess } from "@/lib/auth/require-permission";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 
 const EXERCISE_CATEGORIES = [
@@ -49,9 +49,9 @@ export async function GET(_request: Request, { params }: RouteParams) {
     if (!access.allowed) return access.response;
 
     const { id } = await params;
-    const admin = createAdminClient();
+    const supabase = await createClient();
 
-    const { data, error } = await admin
+    const { data, error } = await supabase
       .from("exercises")
       .select(SELECT_FIELDS)
       .eq("id", id)
@@ -90,9 +90,9 @@ export async function PUT(request: Request, { params }: RouteParams) {
       );
     }
 
-    const admin = createAdminClient();
+    const supabase = await createClient();
 
-    const { data, error } = await admin
+    const { data, error } = await supabase
       .from("exercises")
       .update(parsed.data)
       .eq("id", id)
@@ -119,10 +119,10 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
     if (!check.allowed) return check.response;
 
     const { id } = await params;
-    const admin = createAdminClient();
+    const supabase = await createClient();
 
     // DELETE restringe ao age_group_id do user (só apaga exercícios do próprio escalão)
-    const { error } = await admin
+    const { error } = await supabase
       .from("exercises")
       .delete()
       .eq("id", id)

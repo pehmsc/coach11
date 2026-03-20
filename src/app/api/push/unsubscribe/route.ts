@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 import {
   getPushSubscriptionsSchemaHint,
@@ -31,8 +30,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const admin = createAdminClient();
-    const { error } = await admin
+    const { error } = await supabase
       .from("push_subscriptions")
       .update({
         revoked_at: new Date().toISOString(),
@@ -54,7 +52,7 @@ export async function POST(request: Request) {
       throw error;
     }
 
-    const { count, error: countError } = await admin
+    const { count, error: countError } = await supabase
       .from("push_subscriptions")
       .select("id", { count: "exact", head: true })
       .eq("user_id", user.id)

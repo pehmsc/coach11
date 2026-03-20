@@ -168,9 +168,8 @@ async function loadCheckPermissionModule(options: {
   });
   const createClient = vi.fn(async () => ({
     auth: { getUser: authGetUser },
+    from: vi.fn(),
   }));
-  const admin = { from: vi.fn() };
-  const createAdminClient = vi.fn(() => admin);
   const resolveUserTeamContext = vi.fn().mockResolvedValue(
     options.context ?? {
       ageGroup: { id: "age-1" },
@@ -182,7 +181,6 @@ async function loadCheckPermissionModule(options: {
     .mockResolvedValue(options.allowed ?? true);
 
   vi.doMock("@/lib/supabase/server", () => ({ createClient }));
-  vi.doMock("@/lib/supabase/admin", () => ({ createAdminClient }));
   vi.doMock("@/lib/auth/team-context", () => ({
     resolveUserTeamContext,
   }));
@@ -194,9 +192,7 @@ async function loadCheckPermissionModule(options: {
 
   return {
     ...permissionModule,
-    admin,
     authGetUser,
-    createAdminClient,
     createClient,
     hasPermission,
     resolveUserTeamContext,
@@ -219,8 +215,8 @@ async function loadPermissionsRouteModule(options: {
   });
   const createClient = vi.fn(async () => ({
     auth: { getUser: authGetUser },
+    from: options.admin.from,
   }));
-  const createAdminClient = vi.fn(() => options.admin);
   const respondInternalError = vi.fn((_scope: string, error: unknown) =>
     Response.json(
       { error: error instanceof Error ? error.message : String(error) },
@@ -229,7 +225,6 @@ async function loadPermissionsRouteModule(options: {
   );
 
   vi.doMock("@/lib/supabase/server", () => ({ createClient }));
-  vi.doMock("@/lib/supabase/admin", () => ({ createAdminClient }));
   vi.doMock("@/lib/auth/permissions", () => ({
     ALL_PERMISSION_AREAS,
     PERMISSION_TEMPLATES,
@@ -244,7 +239,6 @@ async function loadPermissionsRouteModule(options: {
   return {
     ...routeModule,
     authGetUser,
-    createAdminClient,
     createClient,
     respondInternalError,
   };
@@ -871,7 +865,7 @@ describe("checkPermission", () => {
   });
 
   it("retorna allowed:false com response 401 para user não autenticado", async () => {
-    const { checkPermission, createAdminClient } =
+    const { checkPermission } =
       await loadCheckPermissionModule({
         user: null,
       });
@@ -887,7 +881,6 @@ describe("checkPermission", () => {
     await expect(result.response.json()).resolves.toEqual({
       error: "Não autenticado",
     });
-    expect(createAdminClient).not.toHaveBeenCalled();
   });
 });
 

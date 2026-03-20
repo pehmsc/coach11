@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { checkPermission, checkReadAccess } from "@/lib/auth/require-permission";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 
 const PHASE_TYPES = ["initial", "main", "final", "custom"] as const;
@@ -46,9 +46,9 @@ export async function GET(_request: Request, { params }: RouteParams) {
     if (!access.allowed) return access.response;
 
     const { id: trainingSessionId } = await params;
-    const admin = createAdminClient();
+    const supabase = await createClient();
 
-    const { data: phases, error: phasesError } = await admin
+    const { data: phases, error: phasesError } = await supabase
       .from("training_phases")
       .select("id, training_session_id, club_id, phase_type, phase_name, phase_order, duration_minutes, notes, created_at, updated_at")
       .eq("training_session_id", trainingSessionId)
@@ -64,7 +64,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
 
     const phaseIds = phases.map((p) => p.id);
 
-    const { data: exerciseRows, error: exError } = await admin
+    const { data: exerciseRows, error: exError } = await supabase
       .from("training_phase_exercises")
       .select(
         "id, phase_id, exercise_id, club_id, exercise_order, custom_name, custom_description, custom_objectives, custom_game_format, custom_duration_minutes, custom_rest_minutes, custom_num_players, custom_field_dimensions, custom_material, custom_diagram_url, planned_time_minutes, repetitions, total_athletes, notes, created_at",
@@ -84,7 +84,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     let exerciseMap = new Map<string, Record<string, unknown>>();
     if (exerciseIds.length > 0) {
       const uniqueIds = [...new Set(exerciseIds)];
-      const { data: exercises } = await admin
+      const { data: exercises } = await supabase
         .from("exercises")
         .select(
           "id, name, description, objectives, success_criteria, category, game_format, duration_minutes, rest_minutes, min_players, max_players, field_dimensions, material, diagram_url",
@@ -129,10 +129,10 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
-    const admin = createAdminClient();
+    const supabase = await createClient();
 
     // Get club_id from the training session
-    const { data: session } = await admin
+    const { data: session } = await supabase
       .from("training_sessions")
       .select("id, club_id, age_group_id")
       .eq("id", trainingSessionId)
@@ -143,7 +143,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     // Delete existing phases (cascades to exercises)
-    await admin
+    await supabase
       .from("training_phases")
       .delete()
       .eq("training_session_id", trainingSessionId);
@@ -151,7 +151,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     // Insert new phases
     const createdPhases = [];
     for (const phase of parsed.data.phases) {
-      const { data: createdPhase, error: phaseError } = await admin
+      const { data: createdPhase, error: phaseError } = await supabase
         .from("training_phases")
         .insert({
           training_session_id: trainingSessionId,
@@ -175,7 +175,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       // Insert exercises for this phase
       const phaseExercises = [];
       for (const ex of phase.exercises) {
-        const { data: createdEx, error: exError } = await admin
+        const { data: createdEx, error: exError } = await supabase
           .from("training_phase_exercises")
           .insert({
             phase_id: createdPhase.id,

@@ -1,5 +1,4 @@
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -56,12 +55,7 @@ function toTimestampFromDateTime(dateTimeValue: string | null | undefined) {
 
 export default async function DashboardPage() {
   const supabase = await createClient();
-  let admin: ReturnType<typeof createAdminClient> | null = null;
-  try {
-    admin = createAdminClient();
-  } catch {
-    admin = null;
-  }
+  const db = supabase;
 
   const {
     data: { user },
@@ -71,7 +65,7 @@ export default async function DashboardPage() {
   // Fetch profile + age groups in parallel (both only depend on user.id)
   const [{ data: profile }, { data: managedAgeGroups }] = await Promise.all([
     supabase.from("profiles").select("full_name, role").eq("id", user.id).single(),
-    (admin ?? supabase)
+    db
       .from("age_groups")
       .select("id, club_name, name, club_logo_url, teams(id)")
       .eq("coordinator_id", user.id),
@@ -83,7 +77,7 @@ export default async function DashboardPage() {
     profile?.role === "coordinator" &&
     (!managedAgeGroups || managedAgeGroups.length === 0)
   ) {
-    const { data: clubMembership } = await (admin ?? supabase)
+    const { data: clubMembership } = await db
       .from("club_memberships")
       .select("club_id")
       .eq("profile_id", user.id)
@@ -92,7 +86,7 @@ export default async function DashboardPage() {
 
     if (!clubMembership) {
       // Sem clube — verificar se é staff convidado
-      const { data: staffLink } = await (admin ?? supabase)
+      const { data: staffLink } = await db
         .from("age_group_staff")
         .select("id")
         .eq("profile_id", user.id)
@@ -125,7 +119,7 @@ export default async function DashboardPage() {
 
   // Conta de staff convidado (não coordenador) — single query com join (era N+1)
   if (!firstTeamId) {
-    const { data: staffEntry } = await (admin ?? supabase)
+    const { data: staffEntry } = await db
       .from("age_group_staff")
       .select(
         "linked_team_id, age_group_id, age_groups(id, club_name, name, club_logo_url)",
@@ -149,7 +143,7 @@ export default async function DashboardPage() {
     }
   }
 
-  const { data: staffTeamRows } = await (admin ?? supabase)
+  const { data: staffTeamRows } = await db
     .from("age_group_staff")
     .select("linked_team_id")
     .eq("profile_id", user.id);
@@ -173,7 +167,7 @@ export default async function DashboardPage() {
   let timelineGames: Game[] = [];
   if (accessibleTeamIds.length > 0) {
     const [{ data: trainingsData }, { data: gamesData }] = await Promise.all([
-      (admin ?? supabase)
+      db
         .from("training_sessions")
         .select("*")
         .in("team_id", accessibleTeamIds)
@@ -184,7 +178,7 @@ export default async function DashboardPage() {
         .order("start_time", { ascending: true, nullsFirst: false })
         .order("created_at", { ascending: true })
         .limit(80),
-      (admin ?? supabase)
+      db
         .from("games")
         .select("*")
         .in("team_id", accessibleTeamIds)
@@ -216,7 +210,7 @@ export default async function DashboardPage() {
 
   if (accessibleTeamIds.length > 0) {
     const activityCutoffIso = new Date(now.getTime() - 8 * 60 * 60 * 1000).toISOString();
-    const { data: checkpointRows, error: checkpointError } = await (admin ?? supabase)
+    const { data: checkpointRows, error: checkpointError } = await db
       .from("game_live_checkpoints")
       .select("game_id, phase, base_seconds, running_since_ms, updated_at")
       .in("phase", ["first_half", "second_half"])
@@ -226,7 +220,7 @@ export default async function DashboardPage() {
 
     if (!checkpointError && checkpointRows && checkpointRows.length > 0) {
       const checkpointGameIds = checkpointRows.map((row) => row.game_id);
-      const { data: liveGames } = await (admin ?? supabase)
+      const { data: liveGames } = await db
         .from("games")
         .select("id, team_id, opponent_name, opponent_short_name, game_datetime, location, status, is_home")
         .in("id", checkpointGameIds)
@@ -268,7 +262,7 @@ export default async function DashboardPage() {
     // Fallback: if checkpoint query doesn't produce a live game,
     // still show games explicitly marked as "live".
     if (!activeLiveGame) {
-      const { data: fallbackLiveGames } = await (admin ?? supabase)
+      const { data: fallbackLiveGames } = await db
         .from("games")
         .select("id, opponent_name, opponent_short_name, game_datetime, location, status, updated_at, is_home")
         .in("team_id", accessibleTeamIds)
@@ -296,7 +290,7 @@ export default async function DashboardPage() {
   const gamesWithConvocationIds = new Set<string>();
   if (timelineGames.length > 0) {
     const upcomingGameIds = timelineGames.map((g) => g.id);
-    const { data: existingConvocations } = await (admin ?? supabase)
+    const { data: existingConvocations } = await db
       .from("convocations")
       .select("game_id, status")
       .in("game_id", upcomingGameIds)

@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 import {
   deleteAgeGroupCascade,
@@ -25,8 +24,7 @@ export async function GET() {
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
 
-    const admin = createAdminClient();
-    const managedAgeGroups = await listManagedAgeGroups(admin, user.id);
+    const managedAgeGroups = await listManagedAgeGroups(supabase, user.id);
 
     return NextResponse.json({
       success: true,
@@ -61,8 +59,7 @@ export async function DELETE(request: Request) {
         ? body.ageGroupId.trim()
         : null;
 
-    const admin = createAdminClient();
-    const managedAgeGroups = await listManagedAgeGroups(admin, user.id);
+    const managedAgeGroups = await listManagedAgeGroups(supabase, user.id);
 
     if (managedAgeGroups.length === 0) {
       return NextResponse.json(
@@ -83,7 +80,7 @@ export async function DELETE(request: Request) {
       );
     }
 
-    await deleteAgeGroupCascade(admin, targetAgeGroup.id, {
+    await deleteAgeGroupCascade(supabase, targetAgeGroup.id, {
       retainClubMembershipProfileIds: [user.id],
     });
 

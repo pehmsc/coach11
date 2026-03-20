@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { isWebPushConfiguredOnServer } from "@/lib/pwa/web-push-server";
 import {
@@ -19,8 +18,7 @@ export async function GET() {
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
 
-    const admin = createAdminClient();
-    const { count, error } = await admin
+    const { count, error } = await supabase
       .from("push_subscriptions")
       .select("id", { count: "exact", head: true })
       .eq("user_id", user.id)

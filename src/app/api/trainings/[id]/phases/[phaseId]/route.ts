@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { checkPermission } from "@/lib/auth/require-permission";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 
 type RouteParams = { params: Promise<{ id: string; phaseId: string }> };
@@ -11,9 +11,9 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
     if (!check.allowed) return check.response;
 
     const { phaseId } = await params;
-    const admin = createAdminClient();
+    const supabase = await createClient();
 
-    const { error } = await admin
+    const { error } = await supabase
       .from("training_phases")
       .delete()
       .eq("id", phaseId);

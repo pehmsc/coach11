@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveUserTeamContext } from "@/lib/auth/team-context";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 
@@ -36,8 +35,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Sem permissões." }, { status: 403 });
     }
 
-    const admin = createAdminClient();
-    const { data, error } = await admin.storage
+    const { data, error } = await supabase.storage
       .from("event-images")
       .list(ageGroupId, {
         limit: 48,
@@ -55,7 +53,7 @@ export async function GET(request: Request) {
       .filter((item) => !!item.name && !item.name.endsWith("/"))
       .map((item) => {
         const path = `${ageGroupId}/${item.name}`;
-        const { data: publicUrl } = admin.storage
+        const { data: publicUrl } = supabase.storage
           .from("event-images")
           .getPublicUrl(path);
 

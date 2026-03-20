@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createAdminClient } from "@/lib/supabase/admin";
+
 import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { parseBody } from "@/lib/http/validate";
@@ -248,12 +248,7 @@ export async function POST(request: Request) {
     sessionIdForError = sessionId;
     const entries = Object.entries(attendancePayload);
 
-    let db = supabase;
-    try {
-      db = createAdminClient();
-    } catch {
-      db = supabase;
-    }
+    const db = supabase;
 
     const sessionAccessRpc = await supabase.rpc("rpc_training_session_access_context", {
       p_training_session_id: sessionId,

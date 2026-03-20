@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+
 import { resolveUserTeamContext } from "@/lib/auth/team-context";
 import { NextResponse } from "next/server";
 import { SHORT_PRIVATE_CACHE_CONTROL } from "@/lib/http/cache";
@@ -17,12 +17,7 @@ export async function GET() {
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
 
-    let db = supabase;
-    try {
-      db = createAdminClient();
-    } catch {
-      db = supabase;
-    }
+    const db = supabase;
 
     const context = await resolveUserTeamContext(db, user.id);
     const isCoordinator = context.source === "coordinator";
