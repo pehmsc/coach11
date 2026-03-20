@@ -97,7 +97,11 @@ export async function POST() {
       );
     }
 
-    const rpcResult = await supabase.rpc("rpc_redeem_staff_invite_auth", {
+    // Usar RPC específico para coordenador de clube vs staff
+    const rpcName = invite.role === "club_coordinator"
+      ? "rpc_redeem_club_coordinator_invite"
+      : "rpc_redeem_staff_invite_auth";
+    const rpcResult = await supabase.rpc(rpcName, {
       p_invite_code: invite.invite_code,
       p_user_email: user.email ?? null,
     });

@@ -40,6 +40,7 @@ const StaffInviteSchema = z.object({
   email: z.string().email().max(254),
   phone: z.string().max(20).nullable().optional(),
   role: z.enum([
+    "club_coordinator",
     "head_coach",
     "assistant_coach",
     "intern_coach",
@@ -54,6 +55,7 @@ const StaffInviteSchema = z.object({
 });
 
 const roleLabel: Record<string, string> = {
+  club_coordinator: "Coordenador de Clube",
   head_coach: "Treinador Principal",
   assistant_coach: "Treinador Adjunto",
   intern_coach: "Treinador Estagiário",
@@ -145,13 +147,20 @@ export async function POST(request: Request) {
     }
     const { firstName, lastName, email, phone, role, permissions } = parsed.data;
 
-    // Validação server-side: coordenador de escalão só pode convidar staff técnico
-    // (não pode convidar coordenadores de clube nem de escalão)
-    const COORDINATOR_INVITABLE_ROLES = [
+    // Validação server-side de quem pode convidar quem
+    const STAFF_ROLES = [
       "head_coach", "assistant_coach", "intern_coach", "goalkeeper_coach",
       "fitness_coach", "physiotherapist", "doctor", "analyst", "team_manager",
     ];
-    if (!COORDINATOR_INVITABLE_ROLES.includes(role)) {
+    if (role === "club_coordinator") {
+      // Só club_coordinator pode convidar outro club_coordinator
+      if (context.source !== "club_coordinator") {
+        return NextResponse.json(
+          { error: "Apenas o coordenador de clube pode convidar coordenadores de clube." },
+          { status: 403 },
+        );
+      }
+    } else if (!STAFF_ROLES.includes(role)) {
       return NextResponse.json(
         { error: "Cargo inválido para convite." },
         { status: 400 },
@@ -192,9 +201,9 @@ export async function POST(request: Request) {
     const { data: createdInvite, error: dbError } = await admin
       .from("staff_invites")
       .insert({
-        // Compatibilidade técnica/FK apenas. O boundary funcional do convite é age_group_id.
         club_id: ageGroup.club_id,
-        age_group_id: ageGroup.id,
+        // club_coordinator não precisa de age_group — âmbito é o clube inteiro
+        age_group_id: role === "club_coordinator" ? null : ageGroup.id,
         invited_by: user.id,
         first_name: firstName,
         last_name: lastName,

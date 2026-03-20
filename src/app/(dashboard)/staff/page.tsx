@@ -41,6 +41,8 @@ import {
   normalizeAgeGroupStaffRole,
 } from "@/lib/team/staff-role";
 
+const CLUB_COORDINATOR_OPTION = { value: "club_coordinator", label: "Coordenador de Clube" };
+
 const INVITE_ROLE_OPTIONS = Object.entries(AGE_GROUP_STAFF_ROLE_LABELS).map(
   ([value, label]) => ({ value, label }),
 );
@@ -110,6 +112,7 @@ const EMPTY_EDIT_FORM = {
 export default function StaffPage() {
   const [loading, setLoading] = useState(true);
   const [canManageStaff, setCanManageStaff] = useState(false);
+  const [isClubCoordinator, setIsClubCoordinator] = useState(false);
 
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [invites, setInvites] = useState<StaffInvite[]>([]);
@@ -157,6 +160,7 @@ export default function StaffPage() {
     }
 
     setCanManageStaff(ctx?.canManageStaff === true);
+    setIsClubCoordinator(ctx?.source === "club_coordinator");
     setTechnicalStaffUsage(
       ctx?.technicalStaffUsage &&
         typeof ctx.technicalStaffUsage === "object"
@@ -853,6 +857,11 @@ export default function StaffPage() {
                   >
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
+                      {isClubCoordinator && (
+                        <SelectItem key={CLUB_COORDINATOR_OPTION.value} value={CLUB_COORDINATOR_OPTION.value}>
+                          {CLUB_COORDINATOR_OPTION.label}
+                        </SelectItem>
+                      )}
                       {INVITE_ROLE_OPTIONS.map((opt) => (
                         <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                       ))}
