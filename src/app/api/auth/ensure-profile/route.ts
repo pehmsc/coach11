@@ -176,17 +176,27 @@ export async function POST() {
 
     const onboarding = await getBetaOnboardingState(user.id, normalizedEmail, admin);
 
-    // Alargado: qualquer coordenador sem escalão criado vai para /onboarding,
-    // independentemente do tipo de convite (beta, legacy, super_coordinator).
+    // Verificar se precisa de onboarding:
+    // - Beta coordinator sem age_group → onboarding
+    // - MAS se já tem club_memberships → NÃO precisa (club-first, escalão opcional)
     let requiresOnboarding = onboarding.requiresOnboarding;
     if (!requiresOnboarding && resolvedRole === "coordinator") {
-      const { data: existingAgeGroup } = await admin
-        .from("age_groups")
-        .select("id")
-        .eq("coordinator_id", user.id)
-        .limit(1)
-        .maybeSingle();
-      requiresOnboarding = !existingAgeGroup;
+      const [{ data: existingAgeGroup }, { data: existingClubMembership }] = await Promise.all([
+        admin
+          .from("age_groups")
+          .select("id")
+          .eq("coordinator_id", user.id)
+          .limit(1)
+          .maybeSingle(),
+        admin
+          .from("club_memberships")
+          .select("club_id")
+          .eq("profile_id", user.id)
+          .limit(1)
+          .maybeSingle(),
+      ]);
+      // Só precisa de onboarding se não tem age_group NEM club_membership
+      requiresOnboarding = !existingAgeGroup && !existingClubMembership;
     }
 
     return NextResponse.json({
