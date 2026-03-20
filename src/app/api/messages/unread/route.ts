@@ -19,7 +19,8 @@ export async function GET() {
     let db = supabase;
     try {
       db = createAdminClient();
-    } catch {
+    } catch (error) {
+      console.error("[/api/messages/unread] Admin client falhou, a usar client standard:", error);
       db = supabase;
     }
 

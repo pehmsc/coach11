@@ -107,7 +107,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
 
     const { data: game, error: gameError } = await supabase
       .from("games")
-      .select("*")
+      .select("id, team_id, age_group_id, competition_id, game_datetime, status")
       .eq("id", gameId)
       .maybeSingle();
 
@@ -231,7 +231,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
 
     const playersQuery = supabase
       .from("players")
-      .select("*")
+      .select("id, age_group_id, first_name, last_name, short_name, photo_url, jersey_number, preferred_position, status, created_at")
       .eq("status", "active")
       .order("first_name", { ascending: true })
       .order("last_name", { ascending: true });
@@ -463,7 +463,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
     if (teamId) {
       const { data: kitRows, error: kitsError } = await supabase
         .from("kit_pieces")
-        .select("*")
+        .select("id, team_id, kit_number, player_type, piece_type, color_hex, color_name, image_url, created_at")
         .eq("team_id", teamId)
         .order("kit_number")
         .order("player_type")

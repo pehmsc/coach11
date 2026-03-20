@@ -57,11 +57,13 @@ export default function SettingsPage() {
   const [managedAgeGroups, setManagedAgeGroups] = useState<ManagedAgeGroup[]>([]);
 
   useEffect(() => {
-    void loadProfile();
+    const controller = new AbortController();
+    void loadProfile(controller.signal);
+    return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function loadProfile() {
+  async function loadProfile(signal?: AbortSignal) {
     setLoading(true);
     const {
       data: { user },
@@ -102,8 +104,8 @@ export default function SettingsPage() {
 
     try {
       const [contextRes, managedAgeGroupsRes] = await Promise.all([
-        fetch("/api/me/context", { cache: "no-store" }),
-        fetch("/api/me/age-group", { cache: "no-store" }),
+        fetch("/api/me/context", { cache: "no-store", signal }),
+        fetch("/api/me/age-group", { cache: "no-store", signal }),
       ]);
       const contextPayload = await contextRes.json().catch(() => ({}));
       const managedAgeGroupsPayload = await managedAgeGroupsRes.json().catch(() => ({}));

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { usePathname } from "next/navigation";
-import { useUnreadNotifications } from "@/components/layout/use-unread-notifications";
+import { useUnreadCounts } from "@/contexts/UnreadNotificationsContext";
 import { MobileSideNavDrawer } from "@/components/layout/MobileSideNavDrawer";
 import {
   MOBILE_FOOTER_NAV_ITEMS,
@@ -21,10 +21,7 @@ export function MobileFooterNav({
   avatarUrl?: string | null;
 }) {
   const pathname = usePathname();
-  const unreadMessagesCount = useUnreadNotifications(profile?.id ?? null, {
-    type: "message",
-  });
-  const unreadNotificationsCount = useUnreadNotifications(profile?.id ?? null);
+  const { unreadMessages: unreadMessagesCount, unreadNotifications: unreadNotificationsCount } = useUnreadCounts();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   return (

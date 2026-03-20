@@ -143,7 +143,8 @@ export async function GET(request: Request) {
     let admin: SupabaseClient | null = null;
     try {
       admin = createAdminClient();
-    } catch {
+    } catch (error) {
+      console.error("[/api/messages GET] Admin client falhou:", error);
       admin = null;
     }
     const {
@@ -275,7 +276,8 @@ export async function POST(request: Request) {
     let db = supabase;
     try {
       db = createAdminClient();
-    } catch {
+    } catch (error) {
+      console.error("[/api/messages POST] Admin client falhou, a usar client standard:", error);
       db = supabase;
     }
 
@@ -319,7 +321,8 @@ export async function POST(request: Request) {
       try {
         senderDisplayName =
           (await loadAuthDisplayNamesById(createAdminClient(), [user.id])).get(user.id) || null;
-      } catch {
+      } catch (error) {
+        console.error("[/api/messages POST] Sender display name lookup falhou:", error);
         senderDisplayName = null;
       }
     }
