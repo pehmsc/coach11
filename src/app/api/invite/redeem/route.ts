@@ -106,7 +106,19 @@ export async function POST(request: Request) {
     }
 
     const code = inviteCode.trim().toUpperCase();
-    const rpcResult = await supabase.rpc("rpc_redeem_staff_invite_auth", {
+
+    // Verificar o role do convite para usar o RPC correcto
+    const { data: inviteRow } = await supabase
+      .from("staff_invites")
+      .select("role")
+      .eq("invite_code", code)
+      .limit(1)
+      .maybeSingle();
+
+    const rpcName = inviteRow?.role === "club_coordinator"
+      ? "rpc_redeem_club_coordinator_invite"
+      : "rpc_redeem_staff_invite_auth";
+    const rpcResult = await supabase.rpc(rpcName, {
       p_invite_code: code,
       p_user_email: user.email ?? null,
     });
