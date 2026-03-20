@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { format, parse } from "date-fns";
 import { pt } from "date-fns/locale";
@@ -11,15 +10,15 @@ type Session = { id: string; date: string; time: string | null };
 type AttendanceRow = { sessionId: string; playerId: string; status: string };
 type Player = { id: string; name: string; number: number | null };
 
-const STATUS_COLORS: Record<string, string> = {
-  present: "bg-emerald-500 text-white",
-  late: "bg-amber-400 text-white",
-  absent: "bg-red-500 text-white",
-  injured: "bg-orange-400 text-white",
+const STATUS_STYLES: Record<string, string> = {
+  present: "bg-green-100 text-green-700",
+  late: "bg-yellow-100 text-yellow-700",
+  absent: "bg-red-100 text-red-700",
+  injured: "bg-orange-100 text-orange-700",
 };
 
 const STATUS_LABELS: Record<string, string> = {
-  present: "P",
+  present: "✓",
   late: "AT",
   absent: "A",
   injured: "L",
@@ -83,8 +82,7 @@ export function AttendanceHeatmap({ ageGroupId }: { ageGroupId: string | null })
     lookup.get(row.playerId)!.set(row.sessionId, row.status);
   }
 
-  // Calculate attendance rate per player
-  function getRate(playerId: string): number {
+  function getPlayerRate(playerId: string): number {
     const playerMap = lookup.get(playerId);
     if (!playerMap || sessions.length === 0) return 0;
     const present = sessions.filter((s) => {
@@ -94,108 +92,141 @@ export function AttendanceHeatmap({ ageGroupId }: { ageGroupId: string | null })
     return Math.round((present / sessions.length) * 100);
   }
 
+  function getSessionRate(sessionId: string): number {
+    if (players.length === 0) return 0;
+    const present = players.filter((p) => {
+      const st = lookup.get(p.id)?.get(sessionId);
+      return st === "present" || st === "late";
+    }).length;
+    return Math.round((present / players.length) * 100);
+  }
+
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-base">Mapa de Presenças</CardTitle>
-          <div className="flex items-center gap-1">
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => changeMonth(-1)}>
-              <ChevronLeft size={16} />
-            </Button>
-            <span className="text-sm font-medium text-slate-700 min-w-[120px] text-center capitalize">
-              {monthLabel}
-            </span>
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => changeMonth(1)}>
-              <ChevronRight size={16} />
-            </Button>
-          </div>
+    <div className="space-y-3">
+      {/* Navegação de mês */}
+      <div className="flex items-center justify-center gap-1">
+        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => changeMonth(-1)}>
+          <ChevronLeft size={16} />
+        </Button>
+        <span className="text-sm font-semibold text-slate-800 min-w-[140px] text-center capitalize">
+          {monthLabel}
+        </span>
+        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => changeMonth(1)}>
+          <ChevronRight size={16} />
+        </Button>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-10">
+          <Loader2 size={24} className="animate-spin text-slate-400" />
         </div>
-      </CardHeader>
-      <CardContent>
-        {loading ? (
-          <div className="flex justify-center py-8">
-            <Loader2 size={24} className="animate-spin text-slate-400" />
-          </div>
-        ) : sessions.length === 0 ? (
-          <p className="text-sm text-slate-400 text-center py-6">
-            Sem treinos neste mês.
-          </p>
-        ) : (
-          <>
-            <div className="overflow-x-auto -mx-4 px-4">
-              <table className="w-full text-xs border-collapse min-w-[400px]">
-                <thead>
-                  <tr>
-                    <th className="text-left py-1.5 pr-2 text-slate-500 font-medium sticky left-0 bg-white z-10 min-w-[100px]">
-                      Atleta
-                    </th>
-                    {sessions.map((s) => (
-                      <th key={s.id} className="text-center py-1.5 px-0.5 text-slate-400 font-medium w-8">
-                        {parseInt(s.date.split("-")[2], 10)}
+      ) : sessions.length === 0 ? (
+        <p className="text-sm text-slate-400 text-center py-8">
+          Sem treinos neste mês.
+        </p>
+      ) : (
+        <>
+          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+            <table className="w-full text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-50">
+                  <th className="text-left py-2 px-3 text-slate-600 font-semibold sticky left-0 bg-slate-50 z-10 min-w-[120px] border-b border-slate-200">
+                    Atleta
+                  </th>
+                  {sessions.map((s) => {
+                    const d = parse(s.date, "yyyy-MM-dd", new Date());
+                    return (
+                      <th key={s.id} className="text-center py-2 px-1 text-slate-500 font-medium min-w-[40px] border-b border-slate-200">
+                        <div className="text-[10px] leading-tight">
+                          {format(d, "d")}
+                        </div>
+                        <div className="text-[8px] text-slate-400 uppercase">
+                          {format(d, "MMM", { locale: pt })}
+                        </div>
                       </th>
-                    ))}
-                    <th className="text-center py-1.5 px-1 text-slate-500 font-medium w-12">%</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {players.map((player) => (
-                    <tr key={player.id} className="border-t border-slate-50">
-                      <td className="py-1 pr-2 text-slate-700 font-medium truncate max-w-[120px] sticky left-0 bg-white z-10">
-                        {player.number != null && (
-                          <span className="text-slate-400 mr-1">{player.number}</span>
-                        )}
-                        {player.name}
-                      </td>
-                      {sessions.map((s) => {
-                        const status = lookup.get(player.id)?.get(s.id);
+                    );
+                  })}
+                  <th className="text-center py-2 px-2 text-slate-600 font-semibold min-w-[44px] border-b border-slate-200">
+                    %
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {players.map((player, i) => (
+                  <tr key={player.id} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
+                    <td className="py-1.5 px-3 text-slate-700 font-medium truncate max-w-[140px] sticky left-0 z-10" style={{ backgroundColor: i % 2 === 0 ? "white" : "rgb(248 250 252 / 0.5)" }}>
+                      {player.number != null && (
+                        <span className="text-slate-400 tabular-nums mr-1.5">{player.number}</span>
+                      )}
+                      {player.name}
+                    </td>
+                    {sessions.map((s) => {
+                      const status = lookup.get(player.id)?.get(s.id);
+                      return (
+                        <td key={s.id} className="text-center py-1.5 px-0.5">
+                          {status ? (
+                            <span
+                              className={`inline-flex h-6 w-6 items-center justify-center rounded-md text-[10px] font-bold ${STATUS_STYLES[status] ?? "bg-slate-100 text-slate-400"}`}
+                            >
+                              {STATUS_LABELS[status] ?? "?"}
+                            </span>
+                          ) : (
+                            <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-slate-50 text-[10px] text-slate-300">
+                              —
+                            </span>
+                          )}
+                        </td>
+                      );
+                    })}
+                    <td className="text-center py-1.5 px-2">
+                      {(() => {
+                        const rate = getPlayerRate(player.id);
                         return (
-                          <td key={s.id} className="text-center py-1 px-0.5">
-                            {status ? (
-                              <span
-                                className={`inline-flex h-5 w-5 items-center justify-center rounded text-[9px] font-bold ${STATUS_COLORS[status] ?? "bg-slate-100 text-slate-400"}`}
-                              >
-                                {STATUS_LABELS[status] ?? "?"}
-                              </span>
-                            ) : (
-                              <span className="inline-flex h-5 w-5 items-center justify-center rounded bg-slate-50 text-[9px] text-slate-300">
-                                -
-                              </span>
-                            )}
-                          </td>
+                          <span className={`text-xs font-bold ${rate >= 80 ? "text-green-600" : rate >= 50 ? "text-amber-600" : "text-red-600"}`}>
+                            {rate}%
+                          </span>
                         );
-                      })}
-                      <td className="text-center py-1 px-1">
-                        <span className={`text-xs font-semibold ${getRate(player.id) >= 80 ? "text-emerald-600" : getRate(player.id) >= 50 ? "text-amber-600" : "text-red-600"}`}>
-                          {getRate(player.id)}%
+                      })()}
+                    </td>
+                  </tr>
+                ))}
+
+                {/* Linha de totais por sessão */}
+                <tr className="border-t-2 border-slate-200 bg-slate-50">
+                  <td className="py-2 px-3 text-slate-600 font-semibold text-[10px] uppercase sticky left-0 bg-slate-50 z-10">
+                    % Sessão
+                  </td>
+                  {sessions.map((s) => {
+                    const rate = getSessionRate(s.id);
+                    return (
+                      <td key={s.id} className="text-center py-2 px-0.5">
+                        <span className={`text-[10px] font-bold ${rate >= 80 ? "text-green-600" : rate >= 50 ? "text-amber-600" : "text-red-600"}`}>
+                          {rate}%
                         </span>
                       </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                    );
+                  })}
+                  <td />
+                </tr>
+              </tbody>
+            </table>
+          </div>
 
-            {/* Legenda */}
-            <div className="flex flex-wrap gap-3 mt-4 pt-3 border-t border-slate-100">
-              {Object.entries(STATUS_LABELS).map(([key, label]) => (
-                <div key={key} className="flex items-center gap-1">
-                  <span className={`inline-flex h-4 w-4 items-center justify-center rounded text-[8px] font-bold ${STATUS_COLORS[key]}`}>
-                    {label}
-                  </span>
-                  <span className="text-[10px] text-slate-500">
-                    {key === "present" ? "Presente" : key === "late" ? "Atrasado" : key === "absent" ? "Ausente" : "Lesionado"}
-                  </span>
-                </div>
-              ))}
-              <div className="flex items-center gap-1">
-                <span className="inline-flex h-4 w-4 items-center justify-center rounded bg-slate-50 text-[8px] text-slate-300">-</span>
-                <span className="text-[10px] text-slate-500">Sem treino</span>
+          {/* Legenda */}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-1">
+            {(["present", "late", "absent", "injured"] as const).map((key) => (
+              <div key={key} className="flex items-center gap-1.5">
+                <span className={`inline-flex h-4 w-4 items-center justify-center rounded text-[8px] font-bold ${STATUS_STYLES[key]}`}>
+                  {STATUS_LABELS[key]}
+                </span>
+                <span className="text-[10px] text-slate-500">
+                  {key === "present" ? "Presente" : key === "late" ? "Atrasado" : key === "absent" ? "Ausente" : "Lesionado"}
+                </span>
               </div>
-            </div>
-          </>
-        )}
-      </CardContent>
-    </Card>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
