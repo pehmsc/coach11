@@ -208,23 +208,16 @@ export default function InviteClient() {
                   fill="#EA4335"
                 />
               </svg>
-              Entrar com Google
+              Continuar com Google
             </>
           )}
         </Button>
 
         <Link
-          href={`/register?${qs.toString()}`}
-          className="rounded-2xl bg-emerald-600 px-4 py-3 text-center font-semibold text-white hover:bg-emerald-700 transition-colors"
-        >
-          Criar conta com email →
-        </Link>
-
-        <Link
           href={`/login?${qs.toString()}`}
           className="rounded-2xl border px-4 py-3 text-center font-semibold hover:bg-slate-50 transition-colors"
         >
-          Já tenho conta — entrar →
+          Continuar com email →
         </Link>
       </div>
     </main>
