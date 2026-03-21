@@ -7,6 +7,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
+import { toast } from "sonner";
 import { format, addDays, subDays, parseISO, isToday } from "date-fns";
 import { pt } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
@@ -232,7 +233,8 @@ export default function AttendancePage() {
       await queryClient.invalidateQueries({
         queryKey: queryKeys.attendance.today(selectedDate),
       });
-      router.push("/dashboard"); // Invalidar cache RSC do dashboard
+      toast.success("Presenças guardadas com sucesso");
+      router.push("/dashboard");
     } catch (mutationError) {
       const message =
         mutationError instanceof ApiFetchError

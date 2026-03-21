@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -479,6 +480,12 @@ export default function StaffPage() {
 
   return (
     <div className="p-4 md:p-8 max-w-2xl mx-auto space-y-6">
+      <Link
+        href="/dashboard"
+        className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700 transition-colors mb-2"
+      >
+        ← Voltar
+      </Link>
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-slate-900">Equipa Técnica</h1>
         {canManageStaff && (
@@ -669,7 +676,7 @@ export default function StaffPage() {
       </Card>
 
       {/* Convites pendentes */}
-      {canManageStaff && invites.length > 0 && (
+      {canManageStaff && invites.filter((inv) => !inv.accepted_at || !activeStaffProfileIds.includes(inv.accepted_by ?? "")).length > 0 && (
         <Card>
           <CardHeader className="pb-3">
             <button
@@ -683,7 +690,7 @@ export default function StaffPage() {
                   Convites enviados
                 </CardTitle>
                 <p className="text-xs text-slate-400 mt-1">
-                  {invites.length} convite{invites.length !== 1 ? "s" : ""}
+                  {invites.filter((inv) => !inv.accepted_at || !activeStaffProfileIds.includes(inv.accepted_by ?? "")).length} convite{invites.filter((inv) => !inv.accepted_at || !activeStaffProfileIds.includes(inv.accepted_by ?? "")).length !== 1 ? "s" : ""} pendente{invites.filter((inv) => !inv.accepted_at || !activeStaffProfileIds.includes(inv.accepted_by ?? "")).length !== 1 ? "s" : ""}
                 </p>
               </div>
               {invitesExpanded ? (
@@ -695,7 +702,7 @@ export default function StaffPage() {
           </CardHeader>
           {invitesExpanded && (
             <CardContent className="space-y-2">
-              {invites.map((invite) => (
+              {invites.filter((inv) => !inv.accepted_at || !activeStaffProfileIds.includes(inv.accepted_by ?? "")).map((invite) => (
                 (() => {
                   const isActiveMember =
                     !!invite.accepted_at &&
