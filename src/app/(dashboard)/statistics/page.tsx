@@ -11,6 +11,7 @@ import { StatisticsTabs } from "@/components/statistics/StatisticsTabs";
 import { PdfExportCard } from "@/components/statistics/PdfExportCard";
 import { GameStatsSummaryCards } from "@/components/statistics/GameStatsSummaryCards";
 import { GameStatsTable } from "@/components/statistics/GameStatsTable";
+import { AttendanceTable } from "@/components/statistics/AttendanceTable";
 import { AttendanceHeatmap } from "@/components/statistics/AttendanceHeatmap";
 import { useStatisticsData } from "@/lib/hooks/useStatisticsData";
 import { exportGameStatsCsv } from "@/lib/csv/statistics";
@@ -32,11 +33,18 @@ export default function StatisticsPage() {
   } = useStatisticsData();
 
   const {
+    attendanceSort,
     gameSort,
+    toggleAttendanceSort,
     toggleGameSort,
+    sortedAttendance,
     sortedGameStats,
   } = useStatisticsSorting(attendanceStats, gameStats);
 
+  const sortedAttendanceIds = useMemo(
+    () => sortedAttendance.map((row) => row.player.id),
+    [sortedAttendance],
+  );
   const sortedGameStatsIds = useMemo(
     () => sortedGameStats.map((row) => row.player.id),
     [sortedGameStats],
@@ -49,7 +57,7 @@ export default function StatisticsPage() {
     toggleSelectedPlayer,
     toggleSelectAllCurrentTab,
     clearSelectedPlayers,
-  } = usePlayerSelection(players, activeTab, [], sortedGameStatsIds);
+  } = usePlayerSelection(players, activeTab, sortedAttendanceIds, sortedGameStatsIds);
 
   const { exportingPdf, handleExportActiveTabPdf } = useStatisticsExport(
     ageGroupId,
@@ -74,7 +82,18 @@ export default function StatisticsPage() {
 
       {/* ── TAB: MAPA DE PRESENÇAS ── */}
       {activeTab === "attendance" && (
-        <AttendanceHeatmap ageGroupId={ageGroupId} />
+        <>
+          <AttendanceHeatmap ageGroupId={ageGroupId} />
+          <AttendanceTable
+            sortedAttendance={sortedAttendance}
+            attendanceSort={attendanceSort}
+            toggleAttendanceSort={toggleAttendanceSort}
+            allCurrentTabSelected={allCurrentTabSelected}
+            toggleSelectAllCurrentTab={toggleSelectAllCurrentTab}
+            selectedPlayerIds={selectedPlayerIds}
+            toggleSelectedPlayer={toggleSelectedPlayer}
+          />
+        </>
       )}
 
       {/* ── TAB: ESTATÍSTICAS DE JOGO ── */}
