@@ -7,6 +7,14 @@
     {
       "path": "/api/maintenance/prune-notifications",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/notifications/cron/trainings",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/notifications/cron/games",
+      "schedule": "*/5 * * * *"
     }
   ]
 }
