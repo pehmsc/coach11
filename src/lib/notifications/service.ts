@@ -15,7 +15,11 @@ export type AppNotificationType =
   | "new_training"
   | "attendance_pending"
   | "attendance_closed"
+  | "attendance_reminder"
   | "convocation_confirmed"
+  | "convocation_reminder"
+  | "game_concentration"
+  | "game_starting_soon"
   | "game_live_started";
 
 export type CreateTeamNotificationInput = {

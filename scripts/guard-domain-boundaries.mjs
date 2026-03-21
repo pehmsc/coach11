@@ -43,6 +43,8 @@ const SRC_ALLOWED_EXCEPTIONS = new Map([
   ["src/app/api/invite/info/route.ts", new Set(["src-admin-client"])],
   // CRON/SERVICE: sem sessão de utilizador
   ["src/app/api/maintenance/prune-notifications/route.ts", new Set(["src-admin-client"])],
+  ["src/app/api/notifications/cron/trainings/route.ts", new Set(["src-admin-client"])],
+  ["src/app/api/notifications/cron/games/route.ts", new Set(["src-admin-client"])],
   ["src/lib/games/convocation-guard.ts", new Set(["src-admin-client"])],
   ["src/lib/notifications/service.ts", new Set(["src-admin-client"])],
   ["src/lib/supabase/admin.ts", new Set(["src-admin-client"])], // definição
