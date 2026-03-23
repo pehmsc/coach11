@@ -5,8 +5,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>COACH11 — Área do Treinador</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script>
+  function loadScript(src, cb) {
+    var s = document.createElement('script');
+    s.src = src;
+    s.onload = cb;
+    s.onerror = function() { console.error('Failed to load: ' + src); };
+    document.head.appendChild(s);
+  }
+  window._scriptsReady = false;
+  loadScript('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js', function() {
+    loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js', function() {
+      window._scriptsReady = true;
+      if (typeof init === 'function') init();
+    });
+  });
+  </script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Inter', sans-serif; background: #F5F5F5; color: #111827; font-size: 14px; min-height: 100vh; }
@@ -667,7 +681,7 @@
   }
 
   // ── Boot ─────────────────────────────────────────────────────────────────────
-  init();
+  // init() is called by the dynamic script loader once both CDN scripts are ready
 </script>
 </body>
 </html>
