@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Loader2, ImageIcon, ChevronDown, ChevronUp, Plus, Copy, Check, X, Mail, Trash2 } from "lucide-react";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { toast } from "sonner";
 import {
   isValidManualShortName,
@@ -230,6 +231,8 @@ export default function ClubPage() {
         if (c) {
           resolvedLogoFromClub = c.logo_url || "";
           if (c.name && !ag) setClubName(c.name);
+          // BUG-2: pre-popular sigla a partir de clubs.slug
+          if (!ag && c.slug) setClubShortName(c.slug);
           setClubMorada(c.morada || "");
           setClubTelefone(c.telefone || "");
           setClubEmailContacto(c.email_contacto || "");
@@ -301,7 +304,37 @@ export default function ClubPage() {
 
   async function handleSaveClub(e: { preventDefault(): void }) {
     e.preventDefault();
-    if (!ageGroup) return;
+
+    // BUG-3: club_coordinator sem escalão guarda directamente em clubs via PATCH
+    if (!ageGroup) {
+      if (!isClubCoordinator && !isSuperCoordinator) return;
+      if (clubShortName && !isValidManualShortName(clubShortName, 2, 5)) {
+        toast.error("A sigla deve ter entre 2 e 5 caracteres.");
+        return;
+      }
+      setSaving(true);
+      const normalizedShort = normalizeManualShortName(clubShortName, 5);
+      const res = await fetch("/api/club", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          name: clubName || null,
+          slug: normalizedShort || null,
+        }),
+      });
+      const patchPayload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(patchPayload?.error || "Erro ao guardar.");
+      } else {
+        if (normalizedShort) setClubShortName(normalizedShort);
+        setIsEditing(false);
+        toast.success("Clube atualizado");
+      }
+      setSaving(false);
+      return;
+    }
+
     if (!isValidManualShortName(clubShortName, 2, 5)) {
       toast.error("A sigla deve ter entre 2 e 5 caracteres.");
       return;
@@ -967,9 +1000,12 @@ export default function ClubPage() {
               ) : (
                 staffMembers.map((member) => (
                   <div key={member.id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
-                    <div className="w-9 h-9 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 font-bold text-sm shrink-0">
-                      {(member.full_name || "?")[0]?.toUpperCase()}
-                    </div>
+                    <Avatar className="w-9 h-9 shrink-0">
+                      <AvatarImage src={member.avatar_url ?? undefined} alt={member.full_name ?? ""} />
+                      <AvatarFallback className="bg-slate-200 text-slate-500 font-bold text-sm">
+                        {(member.full_name || "?")[0]?.toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-slate-800 truncate">
                         {member.full_name || "Sem nome"}

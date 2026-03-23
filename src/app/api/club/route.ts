@@ -8,6 +8,7 @@ export const runtime = "nodejs";
 
 const CLUB_EDITABLE_FIELDS = [
   "name",
+  "slug",
   "morada",
   "telefone",
   "email_contacto",
