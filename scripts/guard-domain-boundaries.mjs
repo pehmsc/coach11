@@ -27,7 +27,8 @@ const SRC_ALLOWED_EXCEPTIONS = new Map([
   ["src/app/api/auth/register/route.ts", new Set(["src-admin-client"])],
   ["src/app/api/me/account/route.ts", new Set(["src-admin-client"])],
   ["src/app/api/admin/beta-invites/create-coordinator/route.ts", new Set(["src-admin-client"])],
-  ["src/app/api/invite/staff/route.ts", new Set(["src-admin-client"])],
+  // src-club-id-filter: verifica que age_group pertence ao clube do club_coordinator (correcção BUG C-1)
+  ["src/app/api/invite/staff/route.ts", new Set(["src-admin-client", "src-club-id-filter"])],
   ["src/app/api/staff/[id]/route.ts", new Set(["src-admin-client"])],
   ["src/app/api/messages/route.ts", new Set(["src-admin-client"])],
   ["src/lib/auth/invite-auth-user.ts", new Set(["src-admin-client"])],

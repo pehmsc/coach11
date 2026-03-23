@@ -105,12 +105,26 @@ export async function POST(request: Request) {
     }
 
     // 🏟 Buscar escalão ativo do coordenador
-    const { data: ageGroup, error: ageGroupError } = await admin
+    // club_coordinator: pode convidar para qualquer escalão do seu clube
+    // coordinator (age_group): só pode convidar para o seu próprio escalão
+    let ageGroupBaseQuery = admin
       .from("age_groups")
       .select("id, name, club_name, club_id")
-      .eq("id", context.ageGroup.id)
-      .eq("coordinator_id", user.id)
-      .maybeSingle();
+      .eq("id", context.ageGroup.id);
+
+    if (context.source === "club_coordinator") {
+      if (!context.club?.id) {
+        return NextResponse.json(
+          { error: "Clube não encontrado para este coordenador." },
+          { status: 404 },
+        );
+      }
+      ageGroupBaseQuery = ageGroupBaseQuery.eq("club_id", context.club.id);
+    } else {
+      ageGroupBaseQuery = ageGroupBaseQuery.eq("coordinator_id", user.id);
+    }
+
+    const { data: ageGroup, error: ageGroupError } = await ageGroupBaseQuery.maybeSingle();
 
     if (ageGroupError || !ageGroup) {
       return NextResponse.json(

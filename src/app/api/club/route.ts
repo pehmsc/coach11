@@ -54,11 +54,19 @@ export async function DELETE(request: Request) {
       );
     }
 
+    const clubId = clubMembership?.club_id ?? null;
+    if (!clubId) {
+      return NextResponse.json(
+        { error: "Clube não encontrado para este utilizador." },
+        { status: 404 },
+      );
+    }
+
     // Obter todos os escalões do clube
     const { data: ageGroups, error: ageGroupsError } = await admin
       .from("age_groups")
       .select("id, name, club_name, club_id")
-      .eq("club_id", clubMembership!.club_id)
+      .eq("club_id", clubId)
       .order("created_at", { ascending: true });
 
     if (ageGroupsError) {
@@ -97,7 +105,7 @@ export async function DELETE(request: Request) {
     await admin
       .from("club_memberships")
       .delete()
-      .eq("club_id", clubMembership!.club_id);
+      .eq("club_id", clubId);
 
     return NextResponse.json({
       success: true,
