@@ -222,3 +222,20 @@ export function getRoleLabel(role?: string | null) {
   if (!role) return "Utilizador";
   return ROLE_LABELS[role] || role;
 }
+
+/**
+ * Retorna o label de role tendo em conta o source do contexto.
+ * O `source` vem de resolveUserTeamContext() e distingue
+ * club_coordinator de age_group_coordinator, ambos com profiles.role = "coordinator".
+ */
+export function getContextRoleLabel(
+  role?: string | null,
+  source?: string | null,
+  isSuperCoordinator?: boolean | null,
+): string {
+  if (isSuperCoordinator) return "Super Admin";
+  if (source === "club_coordinator") return "Coordenador do Clube";
+  if (source === "coordinator") return "Coordenador de Escalão";
+  if (source === "staff") return ROLE_LABELS["coach"] ?? "Staff Técnico";
+  return getRoleLabel(role);
+}

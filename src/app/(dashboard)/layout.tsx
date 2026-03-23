@@ -84,7 +84,7 @@ export default async function DashboardLayout({
           style={{ ["--coach11-top-inset" as string]: topInset }}
         >
           {/* Sidebar — visível apenas em desktop */}
-          <Sidebar profile={profile} avatarUrl={avatarUrl} />
+          <Sidebar profile={profile} avatarUrl={avatarUrl} source={analyticsContext?.source ?? null} />
 
           {/* Conteúdo principal */}
           <main

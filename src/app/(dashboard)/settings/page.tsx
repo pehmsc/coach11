@@ -3,6 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useState, useEffect, useMemo } from "react";
+import { getContextRoleLabel } from "@/components/layout/nav-config";
 import { useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -40,6 +41,7 @@ export default function SettingsPage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [contextSource, setContextSource] = useState<string | null>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [authEmail, setAuthEmail] = useState("");
   const [nextEmail, setNextEmail] = useState("");
@@ -119,6 +121,10 @@ export default function SettingsPage() {
           setProfile((prev) =>
             prev ? { ...prev, is_super_coordinator: true } : prev,
           );
+        }
+
+        if (typeof contextPayload?.source === "string") {
+          setContextSource(contextPayload.source);
         }
       }
 
@@ -372,7 +378,7 @@ export default function SettingsPage() {
                     <div>
                       <p className="font-semibold text-slate-900">{profile?.full_name || "—"}</p>
                       <p className="text-sm text-slate-500">
-                        {ROLE_LABELS[profile?.role || ""] || profile?.role || "—"}
+                        {getContextRoleLabel(profile?.role, contextSource, profile?.is_super_coordinator)}
                       </p>
                     </div>
                   </div>
@@ -401,7 +407,7 @@ export default function SettingsPage() {
                     <div className="space-y-1.5">
                       <Label>Função</Label>
                       <Input
-                        value={ROLE_LABELS[profile?.role || ""] || profile?.role || "—"}
+                        value={getContextRoleLabel(profile?.role, contextSource, profile?.is_super_coordinator)}
                         disabled
                         className="bg-slate-50 text-slate-500"
                       />
