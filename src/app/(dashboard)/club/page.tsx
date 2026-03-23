@@ -151,6 +151,18 @@ export default function ClubPage() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deletingClub, setDeletingClub] = useState(false);
 
+  // Dados adicionais do clube (clubs table)
+  const [clubMorada, setClubMorada] = useState("");
+  const [clubTelefone, setClubTelefone] = useState("");
+  const [clubEmailContacto, setClubEmailContacto] = useState("");
+  const [clubWebsite, setClubWebsite] = useState("");
+  const [clubCorPrimaria, setClubCorPrimaria] = useState("#000000");
+  const [clubCorSecundaria, setClubCorSecundaria] = useState("#FFFFFF");
+  const [clubDistrito, setClubDistrito] = useState("");
+  const [clubAssociacao, setClubAssociacao] = useState("");
+  const [isEditingClubDetails, setIsEditingClubDetails] = useState(false);
+  const [savingClubDetails, setSavingClubDetails] = useState(false);
+
   useEffect(() => {
     const controller = new AbortController();
     void loadData(controller.signal);
@@ -188,20 +200,59 @@ export default function ClubPage() {
     setIsClubCoordinator(isClubCoord);
     setIsSuperCoordinator(isSuper);
 
-    const rawMembers = (payload?.staffMembers as StaffMember[]) || [];
-    setStaffMembers(
-      rawMembers
-        .map((m) => ({
+    // BUG-1: para club_coordinator, buscar membros directamente de club_memberships
+    let resolvedLogoFromClub = "";
+    if (isClubCoord || isSuper) {
+      const [membersRes, clubInfoRes] = await Promise.all([
+        fetch("/api/club/members", { signal }).catch(() => null),
+        fetch("/api/club", { signal }).catch(() => null),
+      ]);
+
+      if (membersRes?.ok) {
+        const mp = await membersRes.json().catch(() => ({}));
+        const clubMembers = ((mp?.members as StaffMember[]) || []).map((m) => ({
           ...m,
           full_name: m.full_name || "Sem nome",
-        }))
-        .sort((a, b) => {
-          const aPriority = a.is_coordinator ? 0 : 1;
-          const bPriority = b.is_coordinator ? 0 : 1;
-          if (aPriority !== bPriority) return aPriority - bPriority;
-          return (a.full_name || "").localeCompare(b.full_name || "", "pt");
-        }),
-    );
+        }));
+        setStaffMembers(
+          clubMembers.sort((a, b) => {
+            const ap = a.is_coordinator ? 0 : 1;
+            const bp = b.is_coordinator ? 0 : 1;
+            if (ap !== bp) return ap - bp;
+            return (a.full_name || "").localeCompare(b.full_name || "", "pt");
+          }),
+        );
+      }
+
+      if (clubInfoRes?.ok) {
+        const cp = await clubInfoRes.json().catch(() => ({}));
+        const c = cp?.club;
+        if (c) {
+          resolvedLogoFromClub = c.logo_url || "";
+          if (c.name && !ag) setClubName(c.name);
+          setClubMorada(c.morada || "");
+          setClubTelefone(c.telefone || "");
+          setClubEmailContacto(c.email_contacto || "");
+          setClubWebsite(c.website || "");
+          setClubCorPrimaria(c.cor_primaria || "#000000");
+          setClubCorSecundaria(c.cor_secundaria || "#FFFFFF");
+          setClubDistrito(c.distrito || "");
+          setClubAssociacao(c.associacao || "");
+        }
+      }
+    } else {
+      const rawMembers = (payload?.staffMembers as StaffMember[]) || [];
+      setStaffMembers(
+        rawMembers
+          .map((m) => ({ ...m, full_name: m.full_name || "Sem nome" }))
+          .sort((a, b) => {
+            const aPriority = a.is_coordinator ? 0 : 1;
+            const bPriority = b.is_coordinator ? 0 : 1;
+            if (aPriority !== bPriority) return aPriority - bPriority;
+            return (a.full_name || "").localeCompare(b.full_name || "", "pt");
+          }),
+      );
+    }
 
     const rawInvites = (payload?.staffInvites as Array<Record<string, unknown>>) || [];
     setStaffInvites(
@@ -220,6 +271,7 @@ export default function ClubPage() {
     );
 
     if (!ag) {
+      if (resolvedLogoFromClub) setLogoUrl(resolvedLogoFromClub);
       setLoading(false);
       return;
     }
@@ -227,7 +279,7 @@ export default function ClubPage() {
     setAgeGroup(ag);
     setClubName(ag.club_name);
     setClubShortName(normalizeManualShortName(ag.club_short_name, 5) || "");
-    setLogoUrl(ag.club_logo_url || "");
+    setLogoUrl(resolvedLogoFromClub || ag.club_logo_url || "");
     setKitPieces((payload?.kits as KitPiece[]) || []);
 
     let tid = typeof payload?.teamId === "string" ? payload.teamId : null;
@@ -276,16 +328,54 @@ export default function ClubPage() {
     setSaving(false);
   }
 
+  async function handleSaveClubDetails(e: { preventDefault(): void }) {
+    e.preventDefault();
+    setSavingClubDetails(true);
+    const res = await fetch("/api/club", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        morada: clubMorada || null,
+        telefone: clubTelefone || null,
+        email_contacto: clubEmailContacto || null,
+        website: clubWebsite || null,
+        cor_primaria: clubCorPrimaria || null,
+        cor_secundaria: clubCorSecundaria || null,
+        distrito: clubDistrito || null,
+        associacao: clubAssociacao || null,
+      }),
+    });
+    const resPayload = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      toast.error(resPayload?.error || "Erro ao guardar dados do clube.");
+    } else {
+      setIsEditingClubDetails(false);
+      toast.success("Dados do clube actualizados");
+    }
+    setSavingClubDetails(false);
+  }
+
   async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (!file || !ageGroup) return;
+    if (!file) return;
+    // BUG-2: permitir upload mesmo sem ageGroup (club_coordinator sem escalão)
+    if (!ageGroup && !isClubCoordinator && !isSuperCoordinator) return;
     setUploadingLogo(true);
 
     const formData = new FormData();
-    formData.set("ageGroupId", ageGroup.id);
-    formData.set("file", file);
+    let endpoint = "/api/team/logo";
 
-    const res = await fetch("/api/team/logo", {
+    if (ageGroup) {
+      formData.set("ageGroupId", ageGroup.id);
+      formData.set("file", file);
+    } else {
+      // Sem ageGroup: usar endpoint específico do clube (actualiza clubs.logo_url)
+      formData.set("file", file);
+      endpoint = "/api/club/logo";
+    }
+
+    const res = await fetch(endpoint, {
       method: "POST",
       body: formData,
       credentials: "include",
@@ -683,17 +773,168 @@ export default function ClubPage() {
             </Card>
           )}
 
-          {/* Personalização (placeholder) */}
-          <Card className="opacity-60">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base text-slate-400">Personalização</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-slate-400">
-                Cores do clube e domínio personalizado — em breve.
-              </p>
-            </CardContent>
-          </Card>
+          {/* Dados adicionais do clube — apenas para club_coordinator e super */}
+          {canDangerZone && (
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base">Dados de Contacto</CardTitle>
+                  {!isEditingClubDetails && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsEditingClubDetails(true)}
+                    >
+                      Editar
+                    </Button>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent>
+                {isEditingClubDetails ? (
+                  <form onSubmit={handleSaveClubDetails} className="space-y-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <Label>Morada</Label>
+                        <Input
+                          value={clubMorada}
+                          onChange={(e) => setClubMorada(e.target.value)}
+                          placeholder="Rua, número, código postal"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Distrito</Label>
+                        <Input
+                          value={clubDistrito}
+                          onChange={(e) => setClubDistrito(e.target.value)}
+                          placeholder="ex: Lisboa"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Telefone</Label>
+                        <Input
+                          value={clubTelefone}
+                          onChange={(e) => setClubTelefone(e.target.value)}
+                          placeholder="+351 21 000 0000"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Email de Contacto</Label>
+                        <Input
+                          type="email"
+                          value={clubEmailContacto}
+                          onChange={(e) => setClubEmailContacto(e.target.value)}
+                          placeholder="secretaria@clube.pt"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Website</Label>
+                        <Input
+                          value={clubWebsite}
+                          onChange={(e) => setClubWebsite(e.target.value)}
+                          placeholder="https://www.clube.pt"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Associação</Label>
+                        <Input
+                          value={clubAssociacao}
+                          onChange={(e) => setClubAssociacao(e.target.value)}
+                          placeholder="ex: AF Lisboa"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Cor Primária</Label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="color"
+                            value={clubCorPrimaria || "#000000"}
+                            onChange={(e) => setClubCorPrimaria(e.target.value)}
+                            className="w-10 h-10 rounded-lg cursor-pointer border border-slate-200 p-0.5"
+                          />
+                          <Input
+                            value={clubCorPrimaria}
+                            onChange={(e) => setClubCorPrimaria(e.target.value)}
+                            placeholder="#000000"
+                            maxLength={7}
+                            className="font-mono"
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Cor Secundária</Label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="color"
+                            value={clubCorSecundaria || "#FFFFFF"}
+                            onChange={(e) => setClubCorSecundaria(e.target.value)}
+                            className="w-10 h-10 rounded-lg cursor-pointer border border-slate-200 p-0.5"
+                          />
+                          <Input
+                            value={clubCorSecundaria}
+                            onChange={(e) => setClubCorSecundaria(e.target.value)}
+                            placeholder="#FFFFFF"
+                            maxLength={7}
+                            className="font-mono"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex gap-2 pt-1">
+                      <Button
+                        type="submit"
+                        className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                        disabled={savingClubDetails}
+                      >
+                        {savingClubDetails ? (
+                          <Loader2 size={16} className="animate-spin" />
+                        ) : (
+                          "Guardar"
+                        )}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setIsEditingClubDetails(false)}
+                      >
+                        Cancelar
+                      </Button>
+                    </div>
+                  </form>
+                ) : (
+                  <div className="space-y-2 text-sm text-slate-600">
+                    {clubMorada && <p><span className="font-medium">Morada:</span> {clubMorada}{clubDistrito ? `, ${clubDistrito}` : ""}</p>}
+                    {clubTelefone && <p><span className="font-medium">Telefone:</span> {clubTelefone}</p>}
+                    {clubEmailContacto && <p><span className="font-medium">Email:</span> {clubEmailContacto}</p>}
+                    {clubWebsite && <p><span className="font-medium">Website:</span> {clubWebsite}</p>}
+                    {clubAssociacao && <p><span className="font-medium">Associação:</span> {clubAssociacao}</p>}
+                    {(clubCorPrimaria || clubCorSecundaria) && (
+                      <div className="flex items-center gap-3 mt-1">
+                        <span className="font-medium">Cores:</span>
+                        {clubCorPrimaria && (
+                          <span
+                            className="w-5 h-5 rounded-full border border-slate-200 inline-block"
+                            style={{ background: clubCorPrimaria }}
+                            title={clubCorPrimaria}
+                          />
+                        )}
+                        {clubCorSecundaria && (
+                          <span
+                            className="w-5 h-5 rounded-full border border-slate-200 inline-block"
+                            style={{ background: clubCorSecundaria }}
+                            title={clubCorSecundaria}
+                          />
+                        )}
+                      </div>
+                    )}
+                    {!clubMorada && !clubTelefone && !clubEmailContacto && !clubWebsite && !clubAssociacao && (
+                      <p className="text-slate-400">Sem dados de contacto preenchidos.</p>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </>
       )}
 
