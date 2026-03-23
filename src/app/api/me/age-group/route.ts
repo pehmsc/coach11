@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 import {
   deleteAgeGroupCascade,
@@ -38,6 +39,7 @@ export async function GET() {
 export async function DELETE(request: Request) {
   try {
     const supabase = await createClient();
+    const admin = createAdminClient();
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -59,7 +61,27 @@ export async function DELETE(request: Request) {
         ? body.ageGroupId.trim()
         : null;
 
-    const managedAgeGroups = await listManagedAgeGroups(supabase, user.id);
+    // Check if user is a club_coordinator — they can delete any age_group in their club
+    const { data: clubMembership } = await admin
+      .from("club_memberships")
+      .select("club_id")
+      .eq("profile_id", user.id)
+      .eq("role", "club_coordinator")
+      .limit(1)
+      .maybeSingle();
+
+    let managedAgeGroups = await listManagedAgeGroups(admin, user.id);
+
+    if (managedAgeGroups.length === 0 && clubMembership?.club_id) {
+      // club_coordinator: find all age_groups for this club
+      const { data: clubAgeGroups } = await admin
+        .from("age_groups")
+        .select("id, name, club_id, coordinator_id")
+        .eq("club_id", clubMembership.club_id)
+        .order("created_at", { ascending: true })
+        .limit(50);
+      managedAgeGroups = (clubAgeGroups || []) as typeof managedAgeGroups;
+    }
 
     if (managedAgeGroups.length === 0) {
       return NextResponse.json(
@@ -80,7 +102,7 @@ export async function DELETE(request: Request) {
       );
     }
 
-    await deleteAgeGroupCascade(supabase, targetAgeGroup.id, {
+    await deleteAgeGroupCascade(admin, targetAgeGroup.id, {
       retainClubMembershipProfileIds: [user.id],
     });
 

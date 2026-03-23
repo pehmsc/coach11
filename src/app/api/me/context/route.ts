@@ -119,8 +119,7 @@ export async function GET() {
       canManageStaff
         ? db
             .from("staff_invites")
-            // Perf: campos específicos — exclui campos internos não usados pela UI.
-            .select("id, age_group_id, club_id, email, invited_by, status, created_at")
+            .select("id, age_group_id, club_id, email, role, first_name, last_name, invite_code, invited_by, status, accepted_at, accepted_by, created_at")
             .eq("age_group_id", context.ageGroup.id)
             .order("created_at", { ascending: false })
         : Promise.resolve({ data: [], error: null }),
@@ -128,6 +127,22 @@ export async function GET() {
         ? getAgeGroupTechnicalStaffUsage(db, context.ageGroup.id).catch(() => null)
         : Promise.resolve(null),
     ]);
+
+    // Detectar quais membros são club_coordinators (para label correcto na UI)
+    const clubCoordinatorProfileIds = new Set<string>();
+    if (staffContext.members.length > 0) {
+      const memberProfileIds = staffContext.members.map((m) => m.profileId);
+      const { data: clubCoordRows } = await db
+        .from("club_memberships")
+        .select("profile_id")
+        .in("profile_id", memberProfileIds)
+        .eq("role", "club_coordinator");
+      if (clubCoordRows) {
+        for (const row of clubCoordRows as Array<{ profile_id: string }>) {
+          clubCoordinatorProfileIds.add(row.profile_id);
+        }
+      }
+    }
 
     const missingAvatarProfileIds = Array.from(
       new Set(
@@ -165,6 +180,7 @@ export async function GET() {
       profile_id: member.profileId,
       role: member.role,
       is_coordinator: member.isCoordinator,
+      is_club_coordinator: clubCoordinatorProfileIds.has(member.profileId),
       full_name: member.fullName,
       email: member.email,
       phone: member.phone,

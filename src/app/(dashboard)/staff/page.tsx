@@ -43,6 +43,7 @@ import {
 } from "@/lib/team/staff-role";
 
 const CLUB_COORDINATOR_OPTION = { value: "club_coordinator", label: "Coordenador de Clube" };
+const AGE_GROUP_COORDINATOR_OPTION = { value: "age_group_coordinator", label: "Coordenador de Escalão" };
 
 const INVITE_ROLE_OPTIONS = Object.entries(AGE_GROUP_STAFF_ROLE_LABELS).map(
   ([value, label]) => ({ value, label }),
@@ -56,6 +57,7 @@ interface StaffMember {
   role: string;
   full_name: string;
   is_coordinator?: boolean;
+  is_club_coordinator?: boolean;
   email?: string;
   phone?: string;
   avatar_url?: string;
@@ -186,6 +188,7 @@ export default function StaffPage() {
       profile_id: string;
       role: string;
       is_coordinator?: boolean;
+      is_club_coordinator?: boolean;
       full_name: string | null;
       email: string | null;
       phone: string | null;
@@ -198,6 +201,7 @@ export default function StaffPage() {
       role: s.role || "staff",
       full_name: s.full_name || "Sem nome",
       is_coordinator: s.is_coordinator === true,
+      is_club_coordinator: s.is_club_coordinator === true,
       email: s.email || undefined,
       phone: s.phone || undefined,
       avatar_url: s.avatar_url || undefined,
@@ -598,7 +602,11 @@ export default function StaffPage() {
                   <p className="text-sm font-semibold text-slate-800 truncate">{member.full_name}</p>
                   <p className="text-xs text-slate-500">
                     {getStaffRoleLabel(member.role)}
-                    {member.is_coordinator ? " · Coordenador do escalão" : ""}
+                    {member.is_club_coordinator
+                      ? " · Coordenador do Clube"
+                      : member.is_coordinator
+                        ? " · Coordenador do escalão"
+                        : ""}
                   </p>
                   {(member.email || member.phone) && (
                     <div className="mt-1 flex flex-wrap gap-2 text-xs">
@@ -869,6 +877,9 @@ export default function StaffPage() {
                           {CLUB_COORDINATOR_OPTION.label}
                         </SelectItem>
                       )}
+                      <SelectItem key={AGE_GROUP_COORDINATOR_OPTION.value} value={AGE_GROUP_COORDINATOR_OPTION.value}>
+                        {AGE_GROUP_COORDINATOR_OPTION.label}
+                      </SelectItem>
                       {INVITE_ROLE_OPTIONS.map((opt) => (
                         <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                       ))}
