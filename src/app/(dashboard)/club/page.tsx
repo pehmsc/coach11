@@ -438,11 +438,13 @@ export default function ClubPage() {
     );
   }
 
-  if (!ageGroup) {
+  const hasClubAccess = isClubCoordinator || isSuperCoordinator || ageGroup != null;
+
+  if (!hasClubAccess) {
     return (
       <div className="p-4 md:p-8 max-w-2xl mx-auto">
         <div className="bg-amber-50 text-amber-800 text-sm p-4 rounded-xl border border-amber-200">
-          Sem escalão associado. Completa o onboarding primeiro.
+          Sem acesso ao clube. Completa o onboarding primeiro.
         </div>
       </div>
     );
@@ -487,10 +489,10 @@ export default function ClubPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle className="text-base">Informações do Clube</CardTitle>
-                  {!isEditing && (
+                  {!isEditing && (ageGroup?.club_name || clubName) && (
                     <p className="text-sm text-slate-500 mt-1">
-                      {ageGroup.club_name}
-                      {ageGroup.club_short_name ? ` (${ageGroup.club_short_name})` : ""}
+                      {ageGroup?.club_name ?? clubName}
+                      {ageGroup?.club_short_name ? ` (${ageGroup.club_short_name})` : ""}
                     </p>
                   )}
                 </div>
@@ -954,7 +956,7 @@ export default function ClubPage() {
             <div className="p-6 space-y-4">
               <h3 className="font-bold text-slate-900 text-lg">Apagar todos os dados do clube</h3>
               <p className="text-sm text-slate-600">
-                Esta acção apaga permanentemente todos os escalões, jogadores, jogos, treinos e dados associados ao clube <strong>{ageGroup.club_name}</strong>.
+                Esta acção apaga permanentemente todos os escalões, jogadores, jogos, treinos e dados associados ao clube <strong>{ageGroup?.club_name ?? clubName}</strong>.
               </p>
               <p className="text-sm text-slate-600">
                 Para confirmar, escreve o nome do clube:
@@ -963,7 +965,7 @@ export default function ClubPage() {
                 <Input
                   value={deleteConfirmName}
                   onChange={(e) => setDeleteConfirmName(e.target.value)}
-                  placeholder={ageGroup.club_name}
+                  placeholder={ageGroup?.club_name ?? clubName}
                   autoFocus
                 />
                 <div className="flex gap-2">
@@ -972,7 +974,7 @@ export default function ClubPage() {
                     className="flex-1 bg-red-600 hover:bg-red-700 text-white"
                     disabled={
                       deletingClub ||
-                      deleteConfirmName.trim().toLowerCase() !== ageGroup.club_name.trim().toLowerCase()
+                      deleteConfirmName.trim().toLowerCase() !== (ageGroup?.club_name ?? clubName).trim().toLowerCase()
                     }
                   >
                     {deletingClub ? <Loader2 size={16} className="animate-spin" /> : "Apagar tudo"}
