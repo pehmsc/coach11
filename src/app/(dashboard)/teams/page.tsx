@@ -127,7 +127,6 @@ export default function TeamsPage() {
 
     const isSuperCoord = !!profile?.is_super_coordinator;
     const isCoord = profile?.role === "coordinator" || isSuperCoord;
-    setCanCreate(!!isCoord);
     setIsSuperAdmin(isSuperCoord);
 
     if (isCoord) {
@@ -141,23 +140,31 @@ export default function TeamsPage() {
       .eq("coordinator_id", user.id)
       .order("created_at", { ascending: true });
 
-    // Resolve existing club for the create form (hidden for normal users)
+    // Resolve existing club + determine se o utilizador é club_coordinator
+    // (tem entrada em club_memberships) ou apenas age_group_coordinator.
+    // Só club_coordinator (e super admin) pode criar novos escalões.
     if (!isSuperCoord && isCoord) {
+      const { data: membership } = await supabase
+        .from("club_memberships")
+        .select("club_id")
+        .eq("profile_id", user.id)
+        .limit(1)
+        .maybeSingle();
+
+      const isClubCoord = !!membership?.club_id;
+      setCanCreate(isClubCoord);
+
       type AgeGroupWithClub = { club_id?: string | null; club_name: string; club_short_name?: string | null };
       const firstGroup = (coordAgeGroups ?? [])[0] as AgeGroupWithClub | undefined;
-      if (firstGroup?.club_id) {
-        setExistingClubId(firstGroup.club_id);
-        setExistingClubName(firstGroup.club_name);
-        setExistingClubShortName(firstGroup.club_short_name ?? "");
-      } else {
-        // No existing age_group — try club_memberships (club_coordinator with no age_groups yet)
-        const { data: membership } = await supabase
-          .from("club_memberships")
-          .select("club_id")
-          .eq("profile_id", user.id)
-          .limit(1)
-          .maybeSingle();
-        if (membership?.club_id) {
+
+      if (membership?.club_id) {
+        // Fonte primária: club_memberships → clubs
+        if (firstGroup && firstGroup.club_id === membership.club_id) {
+          // Reutiliza dados denormalizados do age_group (tem club_short_name)
+          setExistingClubId(firstGroup.club_id!);
+          setExistingClubName(firstGroup.club_name);
+          setExistingClubShortName(firstGroup.club_short_name ?? "");
+        } else {
           const { data: clubRow } = await supabase
             .from("clubs")
             .select("name")
@@ -167,7 +174,14 @@ export default function TeamsPage() {
           setExistingClubName((clubRow as { name?: string } | null)?.name ?? "");
           setExistingClubShortName("");
         }
+      } else if (firstGroup?.club_id) {
+        // age_group_coordinator sem club_membership: mostra o clube do escalão mas não pode criar
+        setExistingClubId(firstGroup.club_id);
+        setExistingClubName(firstGroup.club_name);
+        setExistingClubShortName(firstGroup.club_short_name ?? "");
       }
+    } else if (isSuperCoord) {
+      setCanCreate(true);
     }
 
     // Fetch age_groups where user is staff

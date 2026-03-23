@@ -10,7 +10,7 @@ import type { Profile } from "@/types/database";
 import { useUnreadCounts } from "@/contexts/UnreadNotificationsContext";
 import {
   getAppNavSections,
-  getRoleLabel,
+  getContextRoleLabel,
   isNavItemActive,
 } from "@/components/layout/nav-config";
 import { UserAvatar } from "@/components/layout/UserAvatar";
@@ -18,9 +18,10 @@ import { UserAvatar } from "@/components/layout/UserAvatar";
 interface SidebarProps {
   profile: Profile | null;
   avatarUrl?: string | null;
+  source?: string | null;
 }
 
-export function Sidebar({ profile, avatarUrl }: SidebarProps) {
+export function Sidebar({ profile, avatarUrl, source }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -58,7 +59,7 @@ export function Sidebar({ profile, avatarUrl }: SidebarProps) {
             <div className="min-w-0">
               <p className="text-slate-300 text-sm truncate">{profile.full_name}</p>
               <p className="text-slate-500 text-xs truncate">
-                {getRoleLabel(profile.role)}
+                {getContextRoleLabel(profile.role, source, profile.is_super_coordinator)}
               </p>
             </div>
           </div>

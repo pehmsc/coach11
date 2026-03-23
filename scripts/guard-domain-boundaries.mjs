@@ -51,7 +51,14 @@ const SRC_ALLOWED_EXCEPTIONS = new Map([
   ["src/app/api/push/test/route.ts", new Set(["src-admin-client"])], // rota de teste push
 ]);
 
-const MIGRATION_ALLOWED_EXCEPTIONS = new Map();
+const MIGRATION_ALLOWED_EXCEPTIONS = new Map([
+  [
+    // BUG-3: substitui rpc_redeem_staff_invite para corrigir dead code no mapeamento de role.
+    // A função usa team_staff por compatibilidade com o schema legado — não é nova escrita funcional.
+    "supabase/migrations/20260323100000_fix_rpc_staff_invite_role_mapping.sql",
+    new Set(["sql-team-staff-write", "sql-team-staff-source"]),
+  ],
+]);
 
 const SRC_RULES = [
   {

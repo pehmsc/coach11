@@ -232,11 +232,16 @@ export async function POST(request: Request) {
       );
     }
 
+    // club_coordinator → profiles.role = "coordinator" (umbrella correcto)
+    // staff técnico → profiles.role = "coach"
+    const profileRole: "coordinator" | "coach" =
+      role === "club_coordinator" ? "coordinator" : "coach";
+
     try {
       await ensureInviteAuthUser(admin, {
         email: normalizedEmail,
         fullName: `${firstName} ${lastName}`.trim(),
-        role: "coach",
+        role: profileRole,
       });
     } catch (error) {
       await admin.from("staff_invites").delete().eq("id", createdInvite?.id ?? "");
