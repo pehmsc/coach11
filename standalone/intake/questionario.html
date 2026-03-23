@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>COACH11 — Ficha de Atleta</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', sans-serif; background: #F5F5F5; color: #111827; font-size: 14px; }
+
+    /* TOPBAR */
+    .topbar { background: #1A1A2E; padding: 14px 24px; display: flex; align-items: center; gap: 10px; }
+    .logo-text { font-weight: 800; font-size: 17px; color: #fff; letter-spacing: -0.3px; }
+    .logo-text span { color: #22C55E; }
+    .topbar-sub { color: #94a3b8; font-size: 12px; margin-left: auto; }
+
+    /* CONTAINER */
+    .container { max-width: 680px; margin: 32px auto; padding: 0 16px 64px; }
+
+    /* SECTION */
+    .section { background: #fff; border: 1px solid #E5E7EB; border-radius: 14px; padding: 24px; margin-bottom: 20px; }
+    .section-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: #6B7280; margin-bottom: 18px; display: flex; align-items: center; gap-8px; }
+    .section-title::before { content: ''; display: inline-block; width: 3px; height: 14px; background: #1A7F4B; border-radius: 2px; margin-right: 8px; }
+
+    /* FIELDS */
+    .field { margin-bottom: 16px; }
+    .field:last-child { margin-bottom: 0; }
+    label { display: block; font-size: 13px; font-weight: 500; color: #374151; margin-bottom: 5px; }
+    label .req { color: #ef4444; margin-left: 2px; }
+    input[type=text], input[type=date], input[type=number], input[type=email],
+    select, textarea {
+      width: 100%; padding: 9px 12px; border: 1.5px solid #D1D5DB; border-radius: 9px;
+      font-family: 'Inter', sans-serif; font-size: 14px; color: #111827; background: #fff;
+      transition: border-color .15s;
+      outline: none;
+    }
+    input:focus, select:focus, textarea:focus { border-color: #1A7F4B; }
+    textarea { resize: vertical; min-height: 72px; }
+    .hint { font-size: 11px; color: #9CA3AF; margin-top: 4px; }
+
+    /* GRID */
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    @media(max-width: 480px) { .grid2 { grid-template-columns: 1fr; } }
+
+    /* RADIO / CHECKBOX GROUPS */
+    .radio-group, .check-group { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+    .radio-group label, .check-group label {
+      display: flex; align-items: center; gap: 6px; cursor: pointer;
+      font-size: 13px; font-weight: 400; color: #374151;
+      background: #F9FAFB; border: 1.5px solid #E5E7EB; border-radius: 8px;
+      padding: 6px 12px; transition: border-color .15s, background .15s;
+    }
+    .radio-group label:has(input:checked), .check-group label:has(input:checked) {
+      border-color: #1A7F4B; background: #f0fdf4; color: #166534;
+    }
+    .radio-group input, .check-group input { accent-color: #1A7F4B; }
+
+    /* SCALE */
+    .scale-row { display: flex; gap: 6px; flex-wrap: wrap; }
+    .scale-row label {
+      display: flex; flex-direction: column; align-items: center; gap: 3px;
+      font-size: 11px; font-weight: 500; color: #6B7280; cursor: pointer;
+      background: #F9FAFB; border: 1.5px solid #E5E7EB; border-radius: 8px;
+      padding: 6px 10px; min-width: 36px; transition: border-color .15s, background .15s;
+    }
+    .scale-row label:has(input:checked) { border-color: #1A7F4B; background: #f0fdf4; color: #166534; }
+    .scale-row input[type=radio] { accent-color: #1A7F4B; }
+
+    /* SUBMIT */
+    .btn-submit {
+      width: 100%; padding: 14px; background: #1A7F4B; color: #fff; border: none;
+      border-radius: 12px; font-family: 'Inter', sans-serif; font-size: 15px; font-weight: 700;
+      cursor: pointer; transition: background .15s;
+    }
+    .btn-submit:hover { background: #15653c; }
+    .btn-submit:disabled { background: #9CA3AF; cursor: not-allowed; }
+
+    /* SUCCESS */
+    #success { display: none; }
+    .success-card { background: #fff; border: 1px solid #E5E7EB; border-radius: 16px; padding: 40px 32px; text-align: center; }
+    .success-icon { font-size: 48px; margin-bottom: 16px; }
+    .success-title { font-size: 22px; font-weight: 800; color: #111827; margin-bottom: 8px; }
+    .success-sub { font-size: 14px; color: #6B7280; margin-bottom: 28px; }
+    .btn-row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+    .btn-action {
+      padding: 11px 22px; border-radius: 10px; font-family: 'Inter', sans-serif;
+      font-size: 14px; font-weight: 600; cursor: pointer; border: none; transition: background .15s;
+    }
+    .btn-pdf { background: #1A1A2E; color: #fff; }
+    .btn-pdf:hover { background: #111125; }
+    .btn-copy { background: #F3F4F6; color: #374151; border: 1.5px solid #E5E7EB; }
+    .btn-copy:hover { background: #E5E7EB; }
+
+    /* ERROR */
+    .err { color: #dc2626; font-size: 13px; margin-top: 8px; display: none; }
+    .err.show { display: block; }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo-text">COACH<span>11</span></div>
+  <div class="topbar-sub">Ficha de Atleta</div>
+</div>
+
+<!-- FORM -->
+<div class="container" id="formWrap">
+  <form id="intakeForm" novalidate>
+
+    <!-- 1. IDENTIFICAÇÃO -->
+    <div class="section">
+      <div class="section-title">1. Identificação</div>
+
+      <div class="grid2">
+        <div class="field">
+          <label>Primeiro nome <span class="req">*</span></label>
+          <input type="text" name="first_name" required placeholder="João" />
+        </div>
+        <div class="field">
+          <label>Apelido</label>
+          <input type="text" name="last_name" placeholder="Silva" />
+        </div>
+      </div>
+
+      <div class="grid2">
+        <div class="field">
+          <label>Data de nascimento</label>
+          <input type="date" name="dob" />
+        </div>
+        <div class="field">
+          <label>Nome do pai/mãe/responsável</label>
+          <input type="text" name="parent_name" placeholder="Maria Silva" />
+        </div>
+      </div>
+
+      <div class="grid2">
+        <div class="field">
+          <label>Altura (cm)</label>
+          <input type="number" name="height_cm" min="100" max="220" step="0.5" placeholder="168" />
+        </div>
+        <div class="field">
+          <label>Peso (kg)</label>
+          <input type="number" name="weight_kg" min="30" max="120" step="0.5" placeholder="65" />
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Pé dominante</label>
+        <div class="radio-group">
+          <label><input type="radio" name="dominant_foot" value="right" /> Direito</label>
+          <label><input type="radio" name="dominant_foot" value="left" /> Esquerdo</label>
+          <label><input type="radio" name="dominant_foot" value="both" /> Ambos</label>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Posição preferida</label>
+        <select name="preferred_position">
+          <option value="">Seleccionar…</option>
+          <option>Guarda-redes</option>
+          <option>Defesa Central</option>
+          <option>Defesa Lateral</option>
+          <option>Médio Defensivo</option>
+          <option>Médio</option>
+          <option>Médio Ofensivo</option>
+          <option>Extremo</option>
+          <option>Avançado Centro</option>
+          <option>Sem preferência</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- 2. HISTORIAL -->
+    <div class="section">
+      <div class="section-title">2. Historial Desportivo</div>
+
+      <div class="field">
+        <label>Clubes anteriores</label>
+        <textarea name="previous_clubs" placeholder="Sporting CP (Sub-14, 2021-2023), Belenenses (Sub-15, 2023-2024)…"></textarea>
+      </div>
+
+      <div class="grid2">
+        <div class="field">
+          <label>Anos federado</label>
+          <select name="years_federated">
+            <option value="">Seleccionar…</option>
+            <option>Nunca</option>
+            <option>1-2 anos</option>
+            <option>3-5 anos</option>
+            <option>6-8 anos</option>
+            <option>9+ anos</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Tempo sem clube</label>
+          <select name="time_without_club">
+            <option value="">Seleccionar…</option>
+            <option>Nunca estive sem clube</option>
+            <option>Menos de 3 meses</option>
+            <option>3-6 meses</option>
+            <option>6-12 meses</option>
+            <option>Mais de 1 ano</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Treinas individualmente fora do clube?</label>
+        <div class="radio-group">
+          <label><input type="radio" name="individual_training" value="sim_regular" /> Sim, regularmente</label>
+          <label><input type="radio" name="individual_training" value="sim_ocasional" /> Sim, às vezes</label>
+          <label><input type="radio" name="individual_training" value="nao" /> Não</label>
+        </div>
+      </div>
+
+      <div class="field" id="indivDetailField" style="display:none">
+        <label>O que treinas individualmente?</label>
+        <textarea name="individual_detail" placeholder="Controlo de bola, remate, velocidade…"></textarea>
+      </div>
+    </div>
+
+    <!-- 3. SAÚDE -->
+    <div class="section">
+      <div class="section-title">3. Saúde e Físico</div>
+
+      <div class="field">
+        <label>Nível de dor no calcanhar (0 = sem dor, 10 = muita dor)</label>
+        <div class="scale-row" id="heelScale"></div>
+        <p class="hint">Doença de Sever é comum em atletas em crescimento.</p>
+      </div>
+
+      <div class="field" id="heelWhenField" style="display:none">
+        <label>Quando sentes essa dor?</label>
+        <div class="check-group">
+          <label><input type="checkbox" name="heel_when" value="repouso" /> Em repouso</label>
+          <label><input type="checkbox" name="heel_when" value="treino" /> Durante o treino</label>
+          <label><input type="checkbox" name="heel_when" value="apos_treino" /> Após treino</label>
+          <label><input type="checkbox" name="heel_when" value="manha" /> De manhã ao acordar</label>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Lesões actuais</label>
+        <textarea name="current_injuries" placeholder="Entorse tornozelo direito em recuperação…"></textarea>
+      </div>
+
+      <div class="field">
+        <label>Lesões passadas relevantes</label>
+        <textarea name="past_injuries" placeholder="Fractura no metatarso (2022)…"></textarea>
+      </div>
+
+      <div class="field">
+        <label>Estado de fisioterapia</label>
+        <div class="radio-group">
+          <label><input type="radio" name="physiotherapy_status" value="nao" /> Não faço</label>
+          <label><input type="radio" name="physiotherapy_status" value="fazendo" /> Em curso</label>
+          <label><input type="radio" name="physiotherapy_status" value="alta" /> Alta recente</label>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4. AUTO-AVALIAÇÃO -->
+    <div class="section">
+      <div class="section-title">4. Auto-avaliação (1 = Fraco · 5 = Excelente)</div>
+      <p class="hint" style="margin-bottom:16px">Sê honesto — esta informação ajuda-nos a criar o teu plano personalizado.</p>
+
+      <div class="field">
+        <label>Controlo de bola</label>
+        <div class="scale-row" id="scaleBallControl"></div>
+      </div>
+      <div class="field">
+        <label>Velocidade</label>
+        <div class="scale-row" id="scaleSpeed"></div>
+      </div>
+      <div class="field">
+        <label>Drible</label>
+        <div class="scale-row" id="scaleDribbling"></div>
+      </div>
+      <div class="field">
+        <label>Finalização / Remate</label>
+        <div class="scale-row" id="scaleFinishing"></div>
+      </div>
+      <div class="field">
+        <label>Resistência aeróbica</label>
+        <div class="scale-row" id="scaleAerobic"></div>
+      </div>
+      <div class="field">
+        <label>Leitura de jogo</label>
+        <div class="scale-row" id="scaleGameReading"></div>
+      </div>
+
+      <div class="field" style="margin-top:8px">
+        <label>O teu ponto mais forte (uma frase)</label>
+        <input type="text" name="strongest_point" placeholder="Sou muito rápido e bom no 1v1" />
+      </div>
+      <div class="field">
+        <label>Área onde mais precisas melhorar</label>
+        <input type="text" name="improvement_area" placeholder="Passe longo e jogo de cabeça" />
+      </div>
+    </div>
+
+    <!-- 5. OBJECTIVOS -->
+    <div class="section">
+      <div class="section-title">5. Objectivos</div>
+
+      <div class="field">
+        <label>Objectivo principal a 1 ano</label>
+        <textarea name="main_objective" placeholder="Entrar na equipa principal do sub-17 e fazer 5 golos…"></textarea>
+      </div>
+
+      <div class="field">
+        <label>Clubes alvo / sonho</label>
+        <input type="text" name="target_clubs" placeholder="Sporting B, SL Benfica sub-19…" />
+      </div>
+
+      <div class="grid2">
+        <div class="field">
+          <label>Ídolo / jogador de referência</label>
+          <input type="text" name="idol_player" placeholder="Cristiano Ronaldo" />
+        </div>
+        <div class="field">
+          <label>Porquê esse jogador?</label>
+          <input type="text" name="idol_reason" placeholder="Mentalidade e trabalho" />
+        </div>
+      </div>
+
+      <div class="field">
+        <label>O que te motivou a vir treinar connosco?</label>
+        <textarea name="motivation_text" placeholder="Vi um vídeo no Instagram…"></textarea>
+      </div>
+
+      <div class="field">
+        <label>Nível de motivação (1 = baixo · 10 = máximo)</label>
+        <div class="scale-row" id="scaleMotivation"></div>
+      </div>
+    </div>
+
+    <!-- 6. LOGÍSTICA -->
+    <div class="section">
+      <div class="section-title">6. Logística</div>
+
+      <div class="field">
+        <label>Dias disponíveis</label>
+        <div class="check-group">
+          <label><input type="checkbox" name="available_days" value="seg" /> Seg</label>
+          <label><input type="checkbox" name="available_days" value="ter" /> Ter</label>
+          <label><input type="checkbox" name="available_days" value="qua" /> Qua</label>
+          <label><input type="checkbox" name="available_days" value="qui" /> Qui</label>
+          <label><input type="checkbox" name="available_days" value="sex" /> Sex</label>
+          <label><input type="checkbox" name="available_days" value="sab" /> Sáb</label>
+          <label><input type="checkbox" name="available_days" value="dom" /> Dom</label>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <div class="field">
+          <label>Horário preferido</label>
+          <select name="preferred_time">
+            <option value="">Seleccionar…</option>
+            <option>Manhã (8h-12h)</option>
+            <option>Almoço (12h-14h)</option>
+            <option>Tarde (14h-17h)</option>
+            <option>Final de tarde (17h-19h)</option>
+            <option>Noite (19h-21h)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Sessões por semana</label>
+          <select name="sessions_per_week">
+            <option value="">Seleccionar…</option>
+            <option>1</option>
+            <option>2</option>
+            <option>3</option>
+            <option>4+</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Localização preferida para treinar</label>
+        <input type="text" name="training_location" placeholder="Campo da Luz, Lisboa" />
+      </div>
+
+      <div class="field">
+        <label>Pai/mãe/responsável presente nos treinos?</label>
+        <div class="radio-group">
+          <label><input type="radio" name="parent_present" value="sempre" /> Sempre</label>
+          <label><input type="radio" name="parent_present" value="as_vezes" /> Às vezes</label>
+          <label><input type="radio" name="parent_present" value="nunca" /> Nunca</label>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Notas adicionais</label>
+        <textarea name="additional_notes" placeholder="Qualquer informação relevante que queiras partilhar…"></textarea>
+      </div>
+    </div>
+
+    <div id="submitErr" class="err"></div>
+    <button type="submit" class="btn-submit" id="submitBtn">Enviar Ficha →</button>
+
+  </form>
+</div>
+
+<!-- SUCCESS -->
+<div class="container" id="success">
+  <div class="success-card">
+    <div class="success-icon">✅</div>
+    <div class="success-title">Ficha enviada com sucesso!</div>
+    <div class="success-sub">Entraremos em contacto em breve. Bem-vindo ao COACH11.</div>
+    <div class="btn-row">
+      <button class="btn-action btn-pdf" onclick="_exportPDF()">⬇ Exportar PDF</button>
+      <button class="btn-action btn-copy" onclick="_copySummary()">📋 Copiar resumo</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const SUPABASE_URL      = 'https://hqlqgviiafqfefukodpe.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxbHFndmlpYWZxZmVmdWtvZHBlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE0NDcwNTYsImV4cCI6MjA4NzAyMzA1Nn0.Yk0mC55Okr0qcrKHNHBEO42qERDy6632ULkNGq9di-g';
+  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // ── Build scale widgets ─────────────────────────────────────────────────────
+  function buildScale(containerId, name, min, max, labels) {
+    const c = document.getElementById(containerId);
+    for (let i = min; i <= max; i++) {
+      const lbl = document.createElement('label');
+      const inp = document.createElement('input');
+      inp.type = 'radio'; inp.name = name; inp.value = i;
+      lbl.appendChild(inp);
+      lbl.appendChild(document.createTextNode(labels ? labels[i - min] : String(i)));
+      c.appendChild(lbl);
+    }
+  }
+
+  // heel pain 0-10
+  (function() {
+    const c = document.getElementById('heelScale');
+    for (let i = 0; i <= 10; i++) {
+      const lbl = document.createElement('label');
+      const inp = document.createElement('input');
+      inp.type = 'radio'; inp.name = 'heel_pain_level'; inp.value = i;
+      inp.addEventListener('change', () => {
+        document.getElementById('heelWhenField').style.display = i > 0 ? 'block' : 'none';
+      });
+      lbl.appendChild(inp);
+      lbl.appendChild(document.createTextNode(String(i)));
+      c.appendChild(lbl);
+    }
+  })();
+
+  buildScale('scaleBallControl',  'self_ball_control',  1, 5);
+  buildScale('scaleSpeed',        'self_speed',         1, 5);
+  buildScale('scaleDribbling',    'self_dribbling',     1, 5);
+  buildScale('scaleFinishing',    'self_finishing',     1, 5);
+  buildScale('scaleAerobic',      'self_aerobic',       1, 5);
+  buildScale('scaleGameReading',  'self_game_reading',  1, 5);
+  buildScale('scaleMotivation',   'motivation_level',   1, 10);
+
+  // show individual detail when training yes
+  document.querySelectorAll('[name=individual_training]').forEach(r => {
+    r.addEventListener('change', () => {
+      document.getElementById('indivDetailField').style.display =
+        r.value !== 'nao' && r.checked ? 'block' : 'none';
+    });
+  });
+
+  // ── Collect form data ───────────────────────────────────────────────────────
+  let _lastData = null;
+
+  function collectFormData() {
+    const fd = new FormData(document.getElementById('intakeForm'));
+    const d = {};
+    const multiFields = new Set(['available_days', 'heel_when']);
+
+    // initialize multi-value arrays
+    multiFields.forEach(f => { d[f] = []; });
+
+    for (const [k, v] of fd.entries()) {
+      if (multiFields.has(k)) {
+        d[k].push(v);
+      } else if (v !== '') {
+        d[k] = v;
+      }
+    }
+
+    // numeric conversions
+    ['height_cm', 'weight_kg'].forEach(f => {
+      if (d[f]) d[f] = parseFloat(d[f]);
+    });
+    ['heel_pain_level','self_ball_control','self_speed','self_dribbling',
+     'self_finishing','self_aerobic','self_game_reading','motivation_level'].forEach(f => {
+      if (d[f] !== undefined) d[f] = parseInt(d[f], 10);
+    });
+
+    // empty arrays → null
+    multiFields.forEach(f => {
+      if (!d[f].length) d[f] = null;
+    });
+
+    d.lang = 'pt';
+    return d;
+  }
+
+  // ── Submit ──────────────────────────────────────────────────────────────────
+  document.getElementById('intakeForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const btn = document.getElementById('submitBtn');
+    const err = document.getElementById('submitErr');
+    err.classList.remove('show');
+
+    if (!document.querySelector('[name=first_name]').value.trim()) {
+      err.textContent = 'O primeiro nome é obrigatório.';
+      err.classList.add('show');
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'A enviar…';
+
+    const data = collectFormData();
+    _lastData = data;
+
+    const { error } = await sb.from('athlete_intake_submissions').insert(data);
+
+    if (error) {
+      err.textContent = 'Erro ao enviar: ' + error.message;
+      err.classList.add('show');
+      btn.disabled = false;
+      btn.textContent = 'Enviar Ficha →';
+      return;
+    }
+
+    document.getElementById('formWrap').style.display = 'none';
+    document.getElementById('success').style.display = 'block';
+    window.scrollTo(0, 0);
+  });
+
+  // ── PDF builder ─────────────────────────────────────────────────────────────
+  function _buildPDF(data) {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+    const W = 210, ml = 18, mr = 192, lh = 7;
+    let y = 18;
+
+    // Header
+    doc.setFillColor(26, 26, 46);
+    doc.rect(0, 0, W, 28, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(18); doc.setTextColor(255, 255, 255);
+    doc.text('COACH', ml, 17);
+    doc.setTextColor(34, 197, 94);
+    doc.text('11', ml + doc.getTextWidth('COACH') + 1, 17);
+    doc.setFontSize(10); doc.setFont('helvetica', 'normal'); doc.setTextColor(148, 163, 184);
+    doc.text('Ficha de Atleta', mr, 17, { align: 'right' });
+    y = 38;
+
+    doc.setTextColor(17, 24, 39);
+
+    function section(title) {
+      if (y > 265) { doc.addPage(); y = 18; }
+      doc.setFillColor(240, 253, 244);
+      doc.rect(ml, y - 5, mr - ml, 8, 'F');
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(9);
+      doc.setTextColor(22, 101, 52);
+      doc.text(title.toUpperCase(), ml + 2, y);
+      doc.setTextColor(17, 24, 39);
+      y += lh + 2;
+    }
+
+    function row(label, value) {
+      if (!value && value !== 0) return;
+      const v = Array.isArray(value) ? value.join(', ') : String(value);
+      if (y > 275) { doc.addPage(); y = 18; }
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5);
+      doc.text(label + ':', ml, y);
+      doc.setFont('helvetica', 'normal');
+      const lines = doc.splitTextToSize(v, mr - ml - 42);
+      doc.text(lines, ml + 42, y);
+      y += lh * Math.max(1, lines.length);
+    }
+
+    section('1. Identificação');
+    row('Nome',              [data.first_name, data.last_name].filter(Boolean).join(' '));
+    row('Nascimento',        data.dob);
+    row('Responsável',       data.parent_name);
+    row('Altura / Peso',     (data.height_cm ? data.height_cm + ' cm' : '') + (data.weight_kg ? ' · ' + data.weight_kg + ' kg' : ''));
+    row('Pé dominante',      data.dominant_foot);
+    row('Posição',           data.preferred_position);
+
+    section('2. Historial');
+    row('Clubes anteriores', data.previous_clubs);
+    row('Anos federado',     data.years_federated);
+    row('Sem clube',         data.time_without_club);
+    row('Treino individual', data.individual_training);
+    row('Detalhe treino',    data.individual_detail);
+
+    section('3. Saúde');
+    row('Dor calcanhar',     data.heel_pain_level !== undefined ? data.heel_pain_level + '/10' : null);
+    row('Quando dói',        data.heel_when);
+    row('Lesões actuais',    data.current_injuries);
+    row('Lesões passadas',   data.past_injuries);
+    row('Fisioterapia',      data.physiotherapy_status);
+
+    section('4. Auto-avaliação (1-5)');
+    row('Controlo de bola',  data.self_ball_control);
+    row('Velocidade',        data.self_speed);
+    row('Drible',            data.self_dribbling);
+    row('Finalização',       data.self_finishing);
+    row('Aeróbica',          data.self_aerobic);
+    row('Leitura de jogo',   data.self_game_reading);
+    row('Ponto forte',       data.strongest_point);
+    row('Área a melhorar',   data.improvement_area);
+
+    section('5. Objectivos');
+    row('Objectivo 1 ano',   data.main_objective);
+    row('Clubes alvo',       data.target_clubs);
+    row('Ídolo',             data.idol_player ? data.idol_player + (data.idol_reason ? ' — ' + data.idol_reason : '') : null);
+    row('Motivação',         data.motivation_text);
+    row('Nível motivação',   data.motivation_level !== undefined ? data.motivation_level + '/10' : null);
+
+    section('6. Logística');
+    row('Dias disponíveis',  data.available_days);
+    row('Horário',           data.preferred_time);
+    row('Sessões/semana',    data.sessions_per_week);
+    row('Localização',       data.training_location);
+    row('Responsável treino',data.parent_present);
+    row('Notas adicionais',  data.additional_notes);
+
+    // Footer
+    const pages = doc.internal.getNumberOfPages();
+    for (let p = 1; p <= pages; p++) {
+      doc.setPage(p);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(156, 163, 175);
+      doc.text('COACH11 · Ficha de Atleta · ' + new Date().toLocaleDateString('pt-PT'), W / 2, 292, { align: 'center' });
+    }
+
+    return doc;
+  }
+
+  function _exportPDF() {
+    if (!_lastData) return;
+    const doc = _buildPDF(_lastData);
+    const name = [_lastData.first_name, _lastData.last_name].filter(Boolean).join('_') || 'atleta';
+    doc.save('ficha_' + name + '.pdf');
+  }
+
+  function _copySummary() {
+    if (!_lastData) return;
+    const d = _lastData;
+    const lines = [
+      '── FICHA DE ATLETA COACH11 ──',
+      'Nome: ' + [d.first_name, d.last_name].filter(Boolean).join(' '),
+      d.dob ? 'Nascimento: ' + d.dob : '',
+      d.preferred_position ? 'Posição: ' + d.preferred_position : '',
+      d.dominant_foot ? 'Pé: ' + d.dominant_foot : '',
+      d.height_cm ? 'Altura: ' + d.height_cm + ' cm' : '',
+      d.weight_kg ? 'Peso: ' + d.weight_kg + ' kg' : '',
+      '',
+      '── Auto-avaliação ──',
+      d.self_ball_control ? 'Controlo: ' + d.self_ball_control + '/5' : '',
+      d.self_speed ? 'Velocidade: ' + d.self_speed + '/5' : '',
+      d.self_dribbling ? 'Drible: ' + d.self_dribbling + '/5' : '',
+      d.self_finishing ? 'Finalização: ' + d.self_finishing + '/5' : '',
+      d.self_aerobic ? 'Aeróbica: ' + d.self_aerobic + '/5' : '',
+      d.self_game_reading ? 'Leitura: ' + d.self_game_reading + '/5' : '',
+      '',
+      d.main_objective ? 'Objectivo: ' + d.main_objective : '',
+      d.motivation_level ? 'Motivação: ' + d.motivation_level + '/10' : '',
+    ].filter(Boolean).join('\n');
+    navigator.clipboard.writeText(lines).then(() => {
+      const btn = document.querySelector('.btn-copy');
+      btn.textContent = '✓ Copiado!';
+      setTimeout(() => btn.textContent = '📋 Copiar resumo', 2000);
+    });
+  }
+</script>
+</body>
+</html>

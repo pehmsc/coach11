@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>COACH11 — Área do Treinador</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', sans-serif; background: #F5F5F5; color: #111827; font-size: 14px; min-height: 100vh; }
+
+    /* TOPBAR */
+    .topbar {
+      background: #1A1A2E; padding: 14px 24px; display: flex;
+      align-items: center; gap: 12px; position: sticky; top: 0; z-index: 50;
+    }
+    .logo-text { font-weight: 800; font-size: 17px; color: #fff; letter-spacing: -0.3px; }
+    .logo-text span { color: #22C55E; }
+    .topbar-title { color: #94a3b8; font-size: 13px; }
+    .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+    .user-pill { color: #94a3b8; font-size: 12px; }
+    .btn-signout {
+      padding: 6px 14px; background: transparent; border: 1.5px solid #334155;
+      color: #94a3b8; border-radius: 8px; cursor: pointer; font-size: 12px;
+      font-family: 'Inter', sans-serif; transition: border-color .15s, color .15s;
+    }
+    .btn-signout:hover { border-color: #64748b; color: #cbd5e1; }
+
+    /* SCREENS */
+    .screen { display: none; }
+    .screen.active { display: block; }
+
+    /* ── LOGIN ── */
+    #screenLogin {
+      display: none; min-height: calc(100vh - 50px); place-items: center;
+    }
+    #screenLogin.active { display: grid; }
+    .login-card {
+      background: #fff; border: 1px solid #E5E7EB; border-radius: 18px;
+      padding: 40px 36px; width: 100%; max-width: 380px; text-align: center;
+      margin: 32px 16px;
+    }
+    .login-logo { font-weight: 800; font-size: 28px; color: #1A1A2E; margin-bottom: 6px; }
+    .login-logo span { color: #22C55E; }
+    .login-title { font-size: 15px; font-weight: 600; color: #374151; margin-bottom: 24px; }
+    .login-field { margin-bottom: 14px; text-align: left; }
+    .login-field label { display: block; font-size: 12px; font-weight: 600; color: #6B7280; margin-bottom: 5px; text-transform: uppercase; letter-spacing: .4px; }
+    .login-field input {
+      width: 100%; padding: 10px 14px; border: 1.5px solid #D1D5DB; border-radius: 10px;
+      font-family: 'Inter', sans-serif; font-size: 14px; outline: none; transition: border-color .15s;
+    }
+    .login-field input:focus { border-color: #1A7F4B; }
+    .btn-login {
+      width: 100%; padding: 12px; background: #1A7F4B; color: #fff; border: none;
+      border-radius: 10px; font-family: 'Inter', sans-serif; font-size: 15px; font-weight: 700;
+      cursor: pointer; margin-top: 6px; transition: background .15s;
+    }
+    .btn-login:hover { background: #15653c; }
+    .btn-login:disabled { background: #9CA3AF; cursor: not-allowed; }
+    .login-err { color: #dc2626; font-size: 13px; margin-top: 10px; display: none; }
+    .login-err.show { display: block; }
+
+    /* ── LIST ── */
+    .list-wrap { max-width: 900px; margin: 0 auto; padding: 28px 16px 64px; }
+    .list-header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+    .list-header h1 { font-size: 20px; font-weight: 800; }
+    .badge-unreviewed {
+      background: #fef3c7; color: #92400e; font-size: 12px; font-weight: 700;
+      padding: 3px 10px; border-radius: 20px;
+    }
+    .search-wrap { flex: 1; min-width: 180px; }
+    .search-input {
+      width: 100%; padding: 9px 14px; border: 1.5px solid #D1D5DB; border-radius: 10px;
+      font-family: 'Inter', sans-serif; font-size: 14px; outline: none; background: #fff;
+    }
+    .search-input:focus { border-color: #1A7F4B; }
+
+    .filter-row { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+    .filter-btn {
+      padding: 6px 16px; border-radius: 8px; border: 1.5px solid #E5E7EB;
+      background: #fff; font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 500;
+      cursor: pointer; color: #6B7280; transition: all .15s;
+    }
+    .filter-btn.active { border-color: #1A7F4B; background: #f0fdf4; color: #166534; font-weight: 600; }
+
+    .cards-list { display: flex; flex-direction: column; gap: 10px; }
+    .ficha-card {
+      background: #fff; border: 1px solid #E5E7EB; border-radius: 12px;
+      padding: 16px 20px; cursor: pointer; transition: border-color .15s, box-shadow .15s;
+      display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 12px;
+    }
+    .ficha-card:hover { border-color: #1A7F4B; box-shadow: 0 2px 8px rgba(26,127,75,.1); }
+    .ficha-name { font-size: 15px; font-weight: 700; color: #111827; }
+    .ficha-meta { font-size: 12px; color: #6B7280; margin-top: 3px; }
+    .ficha-meta span { margin-right: 14px; }
+    .badge {
+      font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 20px;
+      white-space: nowrap;
+    }
+    .badge-new { background: #fef3c7; color: #92400e; }
+    .badge-done { background: #dcfce7; color: #166534; }
+
+    .empty-state { text-align: center; padding: 60px 20px; color: #9CA3AF; }
+    .empty-state p { font-size: 15px; margin-top: 8px; }
+    .loading-state { text-align: center; padding: 60px 20px; color: #9CA3AF; font-size: 14px; }
+
+    /* ── DETAIL ── */
+    .detail-wrap { max-width: 720px; margin: 0 auto; padding: 28px 16px 64px; }
+    .detail-toprow { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; }
+    .btn-back {
+      padding: 8px 16px; background: #fff; border: 1.5px solid #E5E7EB;
+      border-radius: 10px; cursor: pointer; font-family: 'Inter', sans-serif;
+      font-size: 13px; font-weight: 600; color: #374151; transition: border-color .15s;
+    }
+    .btn-back:hover { border-color: #6B7280; }
+    .detail-name { font-size: 20px; font-weight: 800; }
+    .detail-actions { margin-left: auto; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+    .btn-toggle {
+      padding: 8px 16px; border: 1.5px solid #E5E7EB; border-radius: 10px;
+      background: #fff; cursor: pointer; font-family: 'Inter', sans-serif;
+      font-size: 13px; font-weight: 600; color: #374151; transition: all .15s;
+    }
+    .btn-toggle.reviewed { border-color: #16a34a; background: #f0fdf4; color: #166534; }
+    .btn-toggle:hover { border-color: #6B7280; }
+
+    .btn-pdf-detail {
+      padding: 8px 16px; background: #1A1A2E; color: #fff; border: none;
+      border-radius: 10px; cursor: pointer; font-family: 'Inter', sans-serif;
+      font-size: 13px; font-weight: 600; transition: background .15s;
+    }
+    .btn-pdf-detail:hover { background: #111125; }
+
+    .detail-section { background: #fff; border: 1px solid #E5E7EB; border-radius: 14px; padding: 22px; margin-bottom: 16px; }
+    .dsect-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: #6B7280; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+    .dsect-title::before { content: ''; display: inline-block; width: 3px; height: 12px; background: #1A7F4B; border-radius: 2px; }
+    .dfield { margin-bottom: 10px; display: flex; gap: 10px; }
+    .dfield:last-child { margin-bottom: 0; }
+    .dfield-label { font-size: 12px; font-weight: 600; color: #6B7280; min-width: 140px; flex-shrink: 0; padding-top: 1px; }
+    .dfield-value { font-size: 14px; color: #111827; word-break: break-word; }
+
+    .stars-row { display: flex; gap: 10px; flex-wrap: wrap; }
+    .star-item { text-align: center; }
+    .star-label { font-size: 11px; color: #6B7280; margin-bottom: 3px; }
+    .star-val { font-size: 22px; font-weight: 800; color: #1A7F4B; }
+
+    /* NOTES */
+    .notes-section { background: #fff; border: 1px solid #E5E7EB; border-radius: 14px; padding: 22px; margin-bottom: 16px; }
+    .notes-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: #6B7280; margin-bottom: 12px; }
+    .notes-textarea {
+      width: 100%; padding: 10px 13px; border: 1.5px solid #D1D5DB; border-radius: 10px;
+      font-family: 'Inter', sans-serif; font-size: 14px; min-height: 100px; resize: vertical;
+      outline: none; transition: border-color .15s;
+    }
+    .notes-textarea:focus { border-color: #1A7F4B; }
+    .btn-save-notes {
+      margin-top: 10px; padding: 9px 20px; background: #1A7F4B; color: #fff; border: none;
+      border-radius: 9px; font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 600;
+      cursor: pointer; transition: background .15s;
+    }
+    .btn-save-notes:hover { background: #15653c; }
+    .btn-save-notes:disabled { background: #9CA3AF; cursor: not-allowed; }
+    .notes-saved { font-size: 12px; color: #16a34a; margin-left: 10px; display: none; }
+    .notes-saved.show { display: inline; }
+  </style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="logo-text">COACH<span>11</span></div>
+  <div class="topbar-title" id="topbarTitle"></div>
+  <div class="topbar-right" id="topbarRight" style="display:none">
+    <span class="user-pill" id="userPill"></span>
+    <button class="btn-signout" onclick="handleSignOut()">Sair</button>
+  </div>
+</div>
+
+<!-- ── STATE A: LOGIN ── -->
+<div id="screenLogin" class="screen">
+  <div class="login-card">
+    <div class="login-logo">COACH<span>11</span></div>
+    <div class="login-title">Área Reservada</div>
+    <div class="login-field">
+      <label>Email</label>
+      <input type="email" id="loginEmail" placeholder="treinador@exemplo.pt" />
+    </div>
+    <div class="login-field">
+      <label>Password</label>
+      <input type="password" id="loginPassword" placeholder="••••••••" />
+    </div>
+    <button class="btn-login" id="btnLogin" onclick="handleLogin()">Entrar →</button>
+    <div class="login-err" id="loginErr"></div>
+  </div>
+</div>
+
+<!-- ── STATE B: LIST ── -->
+<div id="screenList" class="screen">
+  <div class="list-wrap">
+    <div class="list-header">
+      <h1 id="listTitle">Fichas de Atletas</h1>
+      <span class="badge-unreviewed" id="unreviewedBadge" style="display:none"></span>
+      <div class="search-wrap">
+        <input type="text" class="search-input" id="searchInput" placeholder="Pesquisar por nome…" oninput="renderList()" />
+      </div>
+    </div>
+    <div class="filter-row">
+      <button class="filter-btn active" data-filter="all" onclick="setFilter('all', this)">Todas</button>
+      <button class="filter-btn" data-filter="unreviewed" onclick="setFilter('unreviewed', this)">Por rever</button>
+      <button class="filter-btn" data-filter="reviewed" onclick="setFilter('reviewed', this)">Revistas</button>
+    </div>
+    <div id="listContent" class="cards-list">
+      <div class="loading-state">A carregar…</div>
+    </div>
+  </div>
+</div>
+
+<!-- ── STATE C: DETAIL ── -->
+<div id="screenDetail" class="screen">
+  <div class="detail-wrap">
+    <div class="detail-toprow">
+      <button class="btn-back" onclick="showList()">← Voltar</button>
+      <div class="detail-name" id="detailName"></div>
+      <div class="detail-actions">
+        <button class="btn-toggle" id="btnToggleReviewed" onclick="toggleReviewed()"></button>
+        <button class="btn-pdf-detail" onclick="exportDetailPDF()">⬇ Exportar PDF</button>
+      </div>
+    </div>
+    <div id="detailContent"></div>
+    <div class="notes-section">
+      <div class="notes-title">Notas do Treinador</div>
+      <textarea class="notes-textarea" id="notesTextarea" placeholder="Adiciona as tuas notas sobre este atleta…"></textarea>
+      <div style="display:flex;align-items:center;">
+        <button class="btn-save-notes" id="btnSaveNotes" onclick="saveNotes()">Guardar notas</button>
+        <span class="notes-saved" id="notesSaved">✓ Guardado</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const SUPABASE_URL      = 'https://hqlqgviiafqfefukodpe.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxbHFndmlpYWZxZmVmdWtvZHBlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE0NDcwNTYsImV4cCI6MjA4NzAyMzA1Nn0.Yk0mC55Okr0qcrKHNHBEO42qERDy6632ULkNGq9di-g';
+  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  let _submissions = [];
+  let _currentFilter = 'all';
+  let _currentDetail = null;
+
+  // ── Screen switcher ──────────────────────────────────────────────────────────
+  function showScreen(id, title) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    document.getElementById('topbarTitle').textContent = title || '';
+  }
+
+  // ── Init ─────────────────────────────────────────────────────────────────────
+  async function init() {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) {
+      showScreen('screenLogin', '');
+      document.getElementById('topbarRight').style.display = 'none';
+    } else {
+      document.getElementById('topbarRight').style.display = 'flex';
+      document.getElementById('userPill').textContent = session.user.email;
+      await loadSubmissions();
+      showScreen('screenList', 'Fichas de Atletas');
+    }
+  }
+
+  // ── LOGIN ────────────────────────────────────────────────────────────────────
+  async function handleLogin() {
+    const email    = document.getElementById('loginEmail').value.trim();
+    const password = document.getElementById('loginPassword').value;
+    const btn      = document.getElementById('btnLogin');
+    const err      = document.getElementById('loginErr');
+
+    err.classList.remove('show');
+    if (!email || !password) {
+      err.textContent = 'Preenche o email e a password.';
+      err.classList.add('show');
+      return;
+    }
+
+    btn.disabled = true; btn.textContent = 'A entrar…';
+
+    const { error } = await sb.auth.signInWithPassword({ email, password });
+
+    if (error) {
+      err.textContent = 'Credenciais inválidas. Tenta novamente.';
+      err.classList.add('show');
+      btn.disabled = false; btn.textContent = 'Entrar →';
+      return;
+    }
+
+    const { data: { session } } = await sb.auth.getSession();
+    document.getElementById('topbarRight').style.display = 'flex';
+    document.getElementById('userPill').textContent = session?.user?.email || '';
+    await loadSubmissions();
+    showScreen('screenList', 'Fichas de Atletas');
+    btn.disabled = false; btn.textContent = 'Entrar →';
+  }
+
+  document.getElementById('loginPassword').addEventListener('keydown', e => {
+    if (e.key === 'Enter') handleLogin();
+  });
+
+  // ── SIGN OUT ─────────────────────────────────────────────────────────────────
+  async function handleSignOut() {
+    await sb.auth.signOut();
+    document.getElementById('topbarRight').style.display = 'none';
+    showScreen('screenLogin', '');
+  }
+
+  // ── LOAD SUBMISSIONS ─────────────────────────────────────────────────────────
+  async function loadSubmissions() {
+    const { data, error } = await sb
+      .from('athlete_intake_submissions')
+      .select('id, first_name, last_name, preferred_position, dominant_foot, heel_pain_level, main_objective, submitted_at, reviewed')
+      .order('submitted_at', { ascending: false });
+
+    if (error) {
+      console.error('Erro ao carregar fichas:', error.message);
+      document.getElementById('listContent').innerHTML =
+        '<div class="empty-state"><p>Erro ao carregar fichas: ' + error.message + '</p></div>';
+      return;
+    }
+
+    _submissions = data || [];
+    updateUnreviewedBadge();
+    renderList();
+  }
+
+  function updateUnreviewedBadge() {
+    const count = _submissions.filter(s => !s.reviewed).length;
+    const badge = document.getElementById('unreviewedBadge');
+    if (count > 0) {
+      badge.textContent = count + ' por rever';
+      badge.style.display = 'inline';
+    } else {
+      badge.style.display = 'none';
+    }
+  }
+
+  // ── FILTER ───────────────────────────────────────────────────────────────────
+  function setFilter(filter, btn) {
+    _currentFilter = filter;
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderList();
+  }
+
+  // ── RENDER LIST ──────────────────────────────────────────────────────────────
+  function renderList() {
+    const q = (document.getElementById('searchInput').value || '').toLowerCase().trim();
+
+    let list = _submissions.filter(s => {
+      if (_currentFilter === 'unreviewed') return !s.reviewed;
+      if (_currentFilter === 'reviewed')   return s.reviewed;
+      return true;
+    });
+
+    if (q) {
+      list = list.filter(s => {
+        const name = ((s.first_name || '') + ' ' + (s.last_name || '')).toLowerCase();
+        return name.includes(q);
+      });
+    }
+
+    const el = document.getElementById('listContent');
+    if (list.length === 0) {
+      el.innerHTML = '<div class="empty-state"><p>Nenhuma ficha encontrada.</p></div>';
+      return;
+    }
+
+    el.innerHTML = list.map(s => {
+      const name = [s.first_name, s.last_name].filter(Boolean).join(' ');
+      const date = s.submitted_at ? new Date(s.submitted_at).toLocaleDateString('pt-PT') : '—';
+      const heel = s.heel_pain_level != null ? 'Dor ' + s.heel_pain_level + '/10' : '';
+      const badge = s.reviewed
+        ? '<span class="badge badge-done">✓ Revisto</span>'
+        : '<span class="badge badge-new">Por rever</span>';
+      return `
+        <div class="ficha-card" onclick="openDetail('${s.id}')">
+          <div>
+            <div class="ficha-name">${esc(name)}</div>
+            <div class="ficha-meta">
+              ${s.preferred_position ? '<span>' + esc(s.preferred_position) + '</span>' : ''}
+              ${heel ? '<span>' + heel + '</span>' : ''}
+              <span>${date}</span>
+            </div>
+          </div>
+          ${badge}
+        </div>`;
+    }).join('');
+  }
+
+  // ── OPEN DETAIL ──────────────────────────────────────────────────────────────
+  async function openDetail(id) {
+    showScreen('screenDetail', 'Ficha');
+
+    const { data, error } = await sb
+      .from('athlete_intake_submissions')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error || !data) {
+      document.getElementById('detailContent').innerHTML =
+        '<div class="empty-state"><p>Erro ao carregar ficha.</p></div>';
+      return;
+    }
+
+    _currentDetail = data;
+    renderDetail(data);
+  }
+
+  function renderDetail(d) {
+    const name = [d.first_name, d.last_name].filter(Boolean).join(' ');
+    document.getElementById('detailName').textContent = name;
+
+    // toggle button
+    const btn = document.getElementById('btnToggleReviewed');
+    btn.textContent = d.reviewed ? '✓ Revisto' : 'Marcar como revisto';
+    btn.className = 'btn-toggle' + (d.reviewed ? ' reviewed' : '');
+
+    // notes
+    document.getElementById('notesTextarea').value = d.notes_coach || '';
+
+    // content
+    function field(label, value) {
+      if (value == null || value === '' || (Array.isArray(value) && !value.length)) return '';
+      const v = Array.isArray(value) ? value.join(', ') : String(value);
+      return `<div class="dfield"><div class="dfield-label">${label}</div><div class="dfield-value">${esc(v)}</div></div>`;
+    }
+
+    function section(title, html) {
+      return `<div class="detail-section"><div class="dsect-title">${title}</div>${html}</div>`;
+    }
+
+    const selfAttrs = [
+      { label: 'Controlo', key: 'self_ball_control' },
+      { label: 'Velocidade', key: 'self_speed' },
+      { label: 'Drible', key: 'self_dribbling' },
+      { label: 'Finalização', key: 'self_finishing' },
+      { label: 'Aeróbica', key: 'self_aerobic' },
+      { label: 'Leitura', key: 'self_game_reading' },
+    ];
+    const starsHtml = '<div class="stars-row">' + selfAttrs.map(a =>
+      d[a.key] != null
+        ? `<div class="star-item"><div class="star-label">${a.label}</div><div class="star-val">${d[a.key]}/5</div></div>`
+        : ''
+    ).join('') + '</div>';
+
+    document.getElementById('detailContent').innerHTML = [
+      section('Perfil', [
+        field('Nome', name),
+        field('Nascimento', d.dob),
+        field('Responsável', d.parent_name),
+        field('Altura', d.height_cm ? d.height_cm + ' cm' : null),
+        field('Peso', d.weight_kg ? d.weight_kg + ' kg' : null),
+        field('Pé dominante', d.dominant_foot),
+        field('Posição', d.preferred_position),
+      ].join('')),
+
+      section('Historial', [
+        field('Clubes anteriores', d.previous_clubs),
+        field('Anos federado', d.years_federated),
+        field('Sem clube', d.time_without_club),
+        field('Treino individual', d.individual_training),
+        field('Detalhe', d.individual_detail),
+      ].join('')),
+
+      section('Saúde', [
+        field('Dor calcanhar', d.heel_pain_level != null ? d.heel_pain_level + '/10' : null),
+        field('Quando dói', d.heel_when),
+        field('Lesões actuais', d.current_injuries),
+        field('Lesões passadas', d.past_injuries),
+        field('Fisioterapia', d.physiotherapy_status),
+      ].join('')),
+
+      section('Auto-avaliação (1–5)', starsHtml + [
+        field('Ponto forte', d.strongest_point),
+        field('Área a melhorar', d.improvement_area),
+      ].join('')),
+
+      section('Objectivos', [
+        field('Objectivo 1 ano', d.main_objective),
+        field('Clubes alvo', d.target_clubs),
+        field('Ídolo', d.idol_player ? d.idol_player + (d.idol_reason ? ' — ' + d.idol_reason : '') : null),
+        field('Motivação', d.motivation_text),
+        field('Nível motivação', d.motivation_level != null ? d.motivation_level + '/10' : null),
+      ].join('')),
+
+      section('Logística', [
+        field('Dias disponíveis', d.available_days),
+        field('Horário preferido', d.preferred_time),
+        field('Sessões/semana', d.sessions_per_week),
+        field('Localização', d.training_location),
+        field('Responsável presente', d.parent_present),
+        field('Notas adicionais', d.additional_notes),
+        field('Enviado em', d.submitted_at ? new Date(d.submitted_at).toLocaleString('pt-PT') : null),
+      ].join('')),
+    ].join('');
+  }
+
+  // ── TOGGLE REVIEWED ──────────────────────────────────────────────────────────
+  async function toggleReviewed() {
+    if (!_currentDetail) return;
+    const newVal = !_currentDetail.reviewed;
+    await sb.from('athlete_intake_submissions').update({
+      reviewed: newVal,
+      reviewed_at: newVal ? new Date().toISOString() : null,
+    }).eq('id', _currentDetail.id);
+    _currentDetail.reviewed = newVal;
+
+    // update local list
+    const idx = _submissions.findIndex(s => s.id === _currentDetail.id);
+    if (idx >= 0) _submissions[idx].reviewed = newVal;
+
+    const btn = document.getElementById('btnToggleReviewed');
+    btn.textContent = newVal ? '✓ Revisto' : 'Marcar como revisto';
+    btn.className   = 'btn-toggle' + (newVal ? ' reviewed' : '');
+    updateUnreviewedBadge();
+  }
+
+  // ── SAVE NOTES ───────────────────────────────────────────────────────────────
+  async function saveNotes() {
+    if (!_currentDetail) return;
+    const text = document.getElementById('notesTextarea').value;
+    const btn  = document.getElementById('btnSaveNotes');
+    const msg  = document.getElementById('notesSaved');
+    btn.disabled = true;
+    await sb.from('athlete_intake_submissions')
+      .update({ notes_coach: text || null })
+      .eq('id', _currentDetail.id);
+    _currentDetail.notes_coach = text || null;
+    btn.disabled = false;
+    msg.classList.add('show');
+    setTimeout(() => msg.classList.remove('show'), 2500);
+  }
+
+  // ── SHOW LIST ────────────────────────────────────────────────────────────────
+  function showList() {
+    _currentDetail = null;
+    renderList();
+    showScreen('screenList', 'Fichas de Atletas');
+  }
+
+  // ── PDF ──────────────────────────────────────────────────────────────────────
+  function _buildPDF(data) {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+    const W = 210, ml = 18, mr = 192, lh = 7;
+    let y = 18;
+
+    doc.setFillColor(26, 26, 46);
+    doc.rect(0, 0, W, 28, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(18); doc.setTextColor(255, 255, 255);
+    doc.text('COACH', ml, 17);
+    doc.setTextColor(34, 197, 94);
+    doc.text('11', ml + doc.getTextWidth('COACH') + 1, 17);
+    doc.setFontSize(10); doc.setFont('helvetica', 'normal'); doc.setTextColor(148, 163, 184);
+    doc.text('Ficha de Atleta', mr, 17, { align: 'right' });
+    y = 38;
+
+    doc.setTextColor(17, 24, 39);
+
+    function section(title) {
+      if (y > 265) { doc.addPage(); y = 18; }
+      doc.setFillColor(240, 253, 244);
+      doc.rect(ml, y - 5, mr - ml, 8, 'F');
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(9);
+      doc.setTextColor(22, 101, 52);
+      doc.text(title.toUpperCase(), ml + 2, y);
+      doc.setTextColor(17, 24, 39);
+      y += lh + 2;
+    }
+
+    function row(label, value) {
+      if (!value && value !== 0) return;
+      const v = Array.isArray(value) ? value.join(', ') : String(value);
+      if (y > 275) { doc.addPage(); y = 18; }
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5);
+      doc.text(label + ':', ml, y);
+      doc.setFont('helvetica', 'normal');
+      const lines = doc.splitTextToSize(v, mr - ml - 42);
+      doc.text(lines, ml + 42, y);
+      y += lh * Math.max(1, lines.length);
+    }
+
+    section('1. Identificação');
+    row('Nome',               [data.first_name, data.last_name].filter(Boolean).join(' '));
+    row('Nascimento',         data.dob);
+    row('Responsável',        data.parent_name);
+    row('Altura / Peso',      (data.height_cm ? data.height_cm + ' cm' : '') + (data.weight_kg ? ' · ' + data.weight_kg + ' kg' : ''));
+    row('Pé dominante',       data.dominant_foot);
+    row('Posição',            data.preferred_position);
+
+    section('2. Historial');
+    row('Clubes anteriores',  data.previous_clubs);
+    row('Anos federado',      data.years_federated);
+    row('Sem clube',          data.time_without_club);
+    row('Treino individual',  data.individual_training);
+    row('Detalhe treino',     data.individual_detail);
+
+    section('3. Saúde');
+    row('Dor calcanhar',      data.heel_pain_level != null ? data.heel_pain_level + '/10' : null);
+    row('Quando dói',         data.heel_when);
+    row('Lesões actuais',     data.current_injuries);
+    row('Lesões passadas',    data.past_injuries);
+    row('Fisioterapia',       data.physiotherapy_status);
+
+    section('4. Auto-avaliação (1-5)');
+    row('Controlo de bola',   data.self_ball_control);
+    row('Velocidade',         data.self_speed);
+    row('Drible',             data.self_dribbling);
+    row('Finalização',        data.self_finishing);
+    row('Aeróbica',           data.self_aerobic);
+    row('Leitura de jogo',    data.self_game_reading);
+    row('Ponto forte',        data.strongest_point);
+    row('Área a melhorar',    data.improvement_area);
+
+    section('5. Objectivos');
+    row('Objectivo 1 ano',    data.main_objective);
+    row('Clubes alvo',        data.target_clubs);
+    row('Ídolo',              data.idol_player ? data.idol_player + (data.idol_reason ? ' — ' + data.idol_reason : '') : null);
+    row('Motivação',          data.motivation_text);
+    row('Nível motivação',    data.motivation_level != null ? data.motivation_level + '/10' : null);
+
+    section('6. Logística');
+    row('Dias disponíveis',   data.available_days);
+    row('Horário',            data.preferred_time);
+    row('Sessões/semana',     data.sessions_per_week);
+    row('Localização',        data.training_location);
+    row('Responsável treino', data.parent_present);
+    row('Notas adicionais',   data.additional_notes);
+
+    if (data.notes_coach) {
+      section('Notas do Treinador');
+      row('Notas', data.notes_coach);
+    }
+
+    const pages = doc.internal.getNumberOfPages();
+    for (let p = 1; p <= pages; p++) {
+      doc.setPage(p);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(156, 163, 175);
+      doc.text('COACH11 · Ficha de Atleta · ' + new Date().toLocaleDateString('pt-PT'), W / 2, 292, { align: 'center' });
+    }
+
+    return doc;
+  }
+
+  function exportDetailPDF() {
+    if (!_currentDetail) return;
+    const doc = _buildPDF(_currentDetail);
+    const name = [_currentDetail.first_name, _currentDetail.last_name].filter(Boolean).join('_') || 'atleta';
+    doc.save('ficha_' + name + '.pdf');
+  }
+
+  // ── Escape HTML ──────────────────────────────────────────────────────────────
+  function esc(str) {
+    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  // ── Boot ─────────────────────────────────────────────────────────────────────
+  init();
+</script>
+</body>
+</html>
