@@ -6,6 +6,116 @@ import { deleteAgeGroupCascade } from "@/lib/team/delete-age-group";
 
 export const runtime = "nodejs";
 
+const CLUB_EDITABLE_FIELDS = [
+  "name",
+  "morada",
+  "telefone",
+  "email_contacto",
+  "website",
+  "cor_primaria",
+  "cor_secundaria",
+  "distrito",
+  "associacao",
+] as const;
+
+async function resolveClubAccess(userId: string) {
+  const admin = createAdminClient();
+  const [profileRes, membershipRes] = await Promise.all([
+    admin.from("profiles").select("is_super_coordinator").eq("id", userId).maybeSingle(),
+    admin
+      .from("club_memberships")
+      .select("club_id")
+      .eq("profile_id", userId)
+      .limit(1)
+      .maybeSingle(),
+  ]);
+  return {
+    admin,
+    isSuperCoord: profileRes.data?.is_super_coordinator === true,
+    clubId: membershipRes.data?.club_id ?? null,
+  };
+}
+
+export async function GET() {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+    }
+
+    const { admin, isSuperCoord, clubId } = await resolveClubAccess(user.id);
+
+    if (!clubId && !isSuperCoord) {
+      return NextResponse.json({ error: "Sem acesso ao clube." }, { status: 403 });
+    }
+    if (!clubId) {
+      return NextResponse.json({ club: null });
+    }
+
+    const { data: club, error } = await admin
+      .from("clubs")
+      .select(
+        "id, name, logo_url, slug, morada, telefone, email_contacto, website, cor_primaria, cor_secundaria, distrito, associacao",
+      )
+      .eq("id", clubId)
+      .maybeSingle();
+
+    if (error) return respondInternalError("api.club.get", error);
+
+    return NextResponse.json({ club: club ?? null });
+  } catch (error) {
+    return respondInternalError("api.club.get", error);
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+    }
+
+    const { admin, isSuperCoord, clubId } = await resolveClubAccess(user.id);
+
+    if (!clubId && !isSuperCoord) {
+      return NextResponse.json({ error: "Sem permissões." }, { status: 403 });
+    }
+    if (!clubId) {
+      return NextResponse.json({ error: "Clube não encontrado." }, { status: 404 });
+    }
+
+    const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+    if (!body || typeof body !== "object") {
+      return NextResponse.json({ error: "Dados inválidos." }, { status: 400 });
+    }
+
+    const updates: Record<string, string | null> = {};
+    for (const key of CLUB_EDITABLE_FIELDS) {
+      if (key in body) {
+        const val = body[key];
+        updates[key] = typeof val === "string" ? val.trim() || null : null;
+      }
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return NextResponse.json({ error: "Nenhum campo para actualizar." }, { status: 400 });
+    }
+
+    const { error } = await admin.from("clubs").update(updates).eq("id", clubId);
+    if (error) return respondInternalError("api.club.patch", error);
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    return respondInternalError("api.club.patch", error);
+  }
+}
+
 type DeleteClubPayload = {
   confirmation?: string;
 };
