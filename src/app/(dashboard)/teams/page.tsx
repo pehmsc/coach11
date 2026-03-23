@@ -91,9 +91,15 @@ export default function TeamsPage() {
   const [creating, setCreating] = useState(false);
   const [newClubName, setNewClubName] = useState("");
   const [newClubShortName, setNewClubShortName] = useState("");
-  const [newAgeGroupName, setNewAgeGroupName] = useState("");
+  const [newAgeGroupCustomName, setNewAgeGroupCustomName] = useState("");
+  const [newAgeLevel, setNewAgeLevel] = useState("");
   const [newFootballFormat, setNewFootballFormat] = useState("11");
   const [newSeason, setNewSeason] = useState("2025/2026");
+  // Existing club context (resolved on load; hides club fields for normal users)
+  const [existingClubId, setExistingClubId] = useState<string | null>(null);
+  const [existingClubName, setExistingClubName] = useState("");
+  const [existingClubShortName, setExistingClubShortName] = useState("");
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
   const today = new Date().toISOString().split("T")[0];
 
@@ -119,8 +125,10 @@ export default function TeamsPage() {
       .eq("id", user.id)
       .maybeSingle();
 
-    const isCoord = profile?.role === "coordinator" || profile?.is_super_coordinator;
+    const isSuperCoord = !!profile?.is_super_coordinator;
+    const isCoord = profile?.role === "coordinator" || isSuperCoord;
     setCanCreate(!!isCoord);
+    setIsSuperAdmin(isSuperCoord);
 
     if (isCoord) {
       setCoordinatorId(user.id);
@@ -129,9 +137,38 @@ export default function TeamsPage() {
     // Fetch age_groups coordinated by user
     const { data: coordAgeGroups } = await supabase
       .from("age_groups")
-      .select("id, name, age_level, club_name, club_short_name, football_format, season")
+      .select("id, name, age_level, club_name, club_short_name, club_id, football_format, season")
       .eq("coordinator_id", user.id)
       .order("created_at", { ascending: true });
+
+    // Resolve existing club for the create form (hidden for normal users)
+    if (!isSuperCoord && isCoord) {
+      type AgeGroupWithClub = { club_id?: string | null; club_name: string; club_short_name?: string | null };
+      const firstGroup = (coordAgeGroups ?? [])[0] as AgeGroupWithClub | undefined;
+      if (firstGroup?.club_id) {
+        setExistingClubId(firstGroup.club_id);
+        setExistingClubName(firstGroup.club_name);
+        setExistingClubShortName(firstGroup.club_short_name ?? "");
+      } else {
+        // No existing age_group — try club_memberships (club_coordinator with no age_groups yet)
+        const { data: membership } = await supabase
+          .from("club_memberships")
+          .select("club_id")
+          .eq("profile_id", user.id)
+          .limit(1)
+          .maybeSingle();
+        if (membership?.club_id) {
+          const { data: clubRow } = await supabase
+            .from("clubs")
+            .select("name")
+            .eq("id", membership.club_id)
+            .maybeSingle();
+          setExistingClubId(membership.club_id);
+          setExistingClubName((clubRow as { name?: string } | null)?.name ?? "");
+          setExistingClubShortName("");
+        }
+      }
+    }
 
     // Fetch age_groups where user is staff
     const { data: staffLinks } = await supabase
@@ -145,14 +182,14 @@ export default function TeamsPage() {
     if (staffAgeGroupIds.length > 0) {
       const { data } = await supabase
         .from("age_groups")
-        .select("id, name, age_level, club_name, club_short_name, football_format, season")
+        .select("id, name, age_level, club_name, club_short_name, club_id, football_format, season")
         .in("id", staffAgeGroupIds);
       staffAgeGroups = data ?? [];
     }
 
     // Merge, dedup
     const seen = new Set<string>();
-    const allAgeGroups = [...(coordAgeGroups ?? []), ...staffAgeGroups].filter((ag) => {
+    const allAgeGroups = [...(coordAgeGroups ?? [] as typeof staffAgeGroups), ...staffAgeGroups].filter((ag) => {
       if (seen.has(ag.id)) return false;
       seen.add(ag.id);
       return true;
@@ -242,23 +279,46 @@ export default function TeamsPage() {
   async function handleCreateTeam(e: { preventDefault(): void }) {
     e.preventDefault();
     if (!coordinatorId) return;
-    if (!isValidManualShortName(newClubShortName, 2, 5) && newClubShortName.trim() !== "") {
-      toast.error("A sigla deve ter entre 2 e 5 caracteres.");
+
+    const useExistingClub = !!existingClubId && !isSuperAdmin;
+    const clubName = useExistingClub ? existingClubName : newClubName.trim();
+    const clubShortNameRaw = useExistingClub ? existingClubShortName : newClubShortName.trim();
+    const clubId = useExistingClub ? existingClubId : null;
+
+    if (!useExistingClub) {
+      if (!clubName) {
+        toast.error("Introduz o nome do clube.");
+        return;
+      }
+      if (clubShortNameRaw && !isValidManualShortName(clubShortNameRaw, 2, 5)) {
+        toast.error("A sigla deve ter entre 2 e 5 caracteres.");
+        return;
+      }
+    }
+    if (!newAgeLevel) {
+      toast.error("Seleciona o escalão.");
       return;
     }
+    if (!newAgeGroupCustomName.trim()) {
+      toast.error("Introduz o nome do escalão.");
+      return;
+    }
+
     setCreating(true);
 
-    const normalizedShort = newClubShortName.trim()
-      ? normalizeManualShortName(newClubShortName, 5)
+    const normalizedShort = clubShortNameRaw
+      ? normalizeManualShortName(clubShortNameRaw, 5)
       : null;
 
     const { data: ag, error: agError } = await supabase
       .from("age_groups")
       .insert({
         coordinator_id: coordinatorId,
-        club_name: newClubName.trim(),
+        club_id: clubId,
+        club_name: clubName,
         club_short_name: normalizedShort,
-        name: newAgeGroupName,
+        name: newAgeGroupCustomName.trim(),
+        age_level: newAgeLevel,
         football_format: newFootballFormat,
         season: newSeason,
       })
@@ -273,7 +333,7 @@ export default function TeamsPage() {
 
     await supabase.from("teams").insert({
       age_group_id: ag.id,
-      name: `${newClubName.trim()} ${newAgeGroupName}`,
+      name: `${clubName} ${newAgeGroupCustomName.trim()}`,
       is_competitive: true,
     });
 
@@ -281,7 +341,8 @@ export default function TeamsPage() {
     setShowAddForm(false);
     setNewClubName("");
     setNewClubShortName("");
-    setNewAgeGroupName("");
+    setNewAgeGroupCustomName("");
+    setNewAgeLevel("");
     setNewFootballFormat("11");
     setNewSeason("2025/2026");
     setCreating(false);
@@ -318,30 +379,47 @@ export default function TeamsPage() {
           <CardContent className="pt-5">
             <h2 className="font-semibold text-slate-800 mb-4">Nova equipa</h2>
             <form onSubmit={handleCreateTeam} className="space-y-4">
+              {/* Club section — hidden for normal users who already have a club */}
+              {isSuperAdmin || !existingClubId ? (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5 col-span-2">
+                    <Label>Nome do Clube *</Label>
+                    <Input
+                      value={newClubName}
+                      onChange={(e) => setNewClubName(e.target.value)}
+                      placeholder="ex: Sporting CP"
+                    />
+                  </div>
+                  <div className="space-y-1.5 col-span-2">
+                    <Label>Sigla</Label>
+                    <Input
+                      value={newClubShortName}
+                      onChange={(e) =>
+                        setNewClubShortName(normalizeManualShortName(e.target.value, 5) || "")
+                      }
+                      placeholder="ex: SCP"
+                      maxLength={5}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500">
+                  Clube: <span className="font-semibold text-slate-700">{existingClubName}</span>
+                </p>
+              )}
+              {/* Nome do Escalão — first field visible to normal users */}
+              <div className="space-y-1.5">
+                <Label>Nome do Escalão *</Label>
+                <Input
+                  value={newAgeGroupCustomName}
+                  onChange={(e) => setNewAgeGroupCustomName(e.target.value)}
+                  placeholder="Ex: Iniciados B, Sub-12 Azul..."
+                />
+              </div>
               <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5 col-span-2">
-                  <Label>Nome do Clube *</Label>
-                  <Input
-                    value={newClubName}
-                    onChange={(e) => setNewClubName(e.target.value)}
-                    placeholder="ex: Sporting CP"
-                    required
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Sigla</Label>
-                  <Input
-                    value={newClubShortName}
-                    onChange={(e) =>
-                      setNewClubShortName(normalizeManualShortName(e.target.value, 5) || "")
-                    }
-                    placeholder="ex: SCP"
-                    maxLength={5}
-                  />
-                </div>
                 <div className="space-y-1.5">
                   <Label>Escalão *</Label>
-                  <Select value={newAgeGroupName} onValueChange={setNewAgeGroupName} required>
+                  <Select value={newAgeLevel} onValueChange={setNewAgeLevel}>
                     <SelectTrigger>
                       <SelectValue placeholder="Selecciona" />
                     </SelectTrigger>
@@ -355,7 +433,7 @@ export default function TeamsPage() {
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Modalidade *</Label>
+                  <Label>Formato *</Label>
                   <Select value={newFootballFormat} onValueChange={setNewFootballFormat}>
                     <SelectTrigger>
                       <SelectValue />
@@ -369,7 +447,7 @@ export default function TeamsPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-1.5">
+                <div className="space-y-1.5 col-span-2">
                   <Label>Época</Label>
                   <Input
                     value={newSeason}
@@ -381,7 +459,7 @@ export default function TeamsPage() {
               <Button
                 type="submit"
                 className="w-full bg-emerald-600 hover:bg-emerald-700"
-                disabled={creating || !newAgeGroupName}
+                disabled={creating || !newAgeLevel || !newAgeGroupCustomName.trim()}
               >
                 {creating ? <Loader2 size={16} className="animate-spin" /> : "Criar equipa"}
               </Button>

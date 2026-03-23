@@ -442,6 +442,15 @@ export default function OnboardingPage() {
               </div>
               <form onSubmit={handleStep2} className="space-y-4">
                 <div className="space-y-1.5">
+                  <Label>Nome do escalão *</Label>
+                  <Input
+                    value={ageGroupName}
+                    onChange={(e) => setAgeGroupName(e.target.value)}
+                    placeholder="Ex: Iniciados B, Sub-13 Azul..."
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
                   <Label>Escalão *</Label>
                   <Select value={ageLevel} onValueChange={setAgeLevel}>
                     <SelectTrigger>
@@ -453,15 +462,6 @@ export default function OnboardingPage() {
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Nome do escalão *</Label>
-                  <Input
-                    value={ageGroupName}
-                    onChange={(e) => setAgeGroupName(e.target.value)}
-                    placeholder="Ex: Iniciados B, Sub-13 Azul..."
-                    required
-                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label>Formato de jogo *</Label>
