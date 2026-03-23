@@ -115,9 +115,12 @@ export async function POST(request: Request) {
       .limit(1)
       .maybeSingle();
 
-    const rpcName = inviteRow?.role === "club_coordinator"
-      ? "rpc_redeem_club_coordinator_invite"
-      : "rpc_redeem_staff_invite_auth";
+    const rpcName =
+      inviteRow?.role === "club_coordinator"
+        ? "rpc_redeem_club_coordinator_invite"
+        : inviteRow?.role === "age_group_coordinator"
+          ? "rpc_redeem_age_coordinator_invite"
+          : "rpc_redeem_staff_invite_auth";
     const rpcResult = await supabase.rpc(rpcName, {
       p_invite_code: code,
       p_user_email: user.email ?? null,

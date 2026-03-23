@@ -41,6 +41,7 @@ const StaffInviteSchema = z.object({
   phone: z.string().max(20).nullable().optional(),
   role: z.enum([
     "club_coordinator",
+    "age_group_coordinator",
     "head_coach",
     "assistant_coach",
     "intern_coach",
@@ -56,6 +57,7 @@ const StaffInviteSchema = z.object({
 
 const roleLabel: Record<string, string> = {
   club_coordinator: "Coordenador de Clube",
+  age_group_coordinator: "Coordenador de Escalão",
   head_coach: "Treinador Principal",
   assistant_coach: "Treinador Adjunto",
   intern_coach: "Treinador Estagiário",
@@ -85,14 +87,14 @@ export async function POST(request: Request) {
     }
     userId = user.id;
 
-    // 🚦 Rate limiting: máx 5 convites por utilizador em 15 minutos
-    const rateLimitExceeded = await checkInviteSendLimit(supabase, user.id);
-    if (rateLimitExceeded) {
-      return NextResponse.json(
-        { error: "Demasiados pedidos. Tenta mais tarde." },
-        { status: 429 },
-      );
-    }
+    // TODO: re-enable rate limiting when beta phase ends (BUG-4 removed for beta)
+    // const rateLimitExceeded = await checkInviteSendLimit(supabase, user.id);
+    // if (rateLimitExceeded) {
+    //   return NextResponse.json(
+    //     { error: "Demasiados pedidos. Tenta mais tarde." },
+    //     { status: 429 },
+    //   );
+    // }
 
     const context = await resolveUserTeamContext(admin, user.id);
     if ((context.source !== "coordinator" && context.source !== "club_coordinator") || !context.ageGroup?.id) {
@@ -160,6 +162,14 @@ export async function POST(request: Request) {
           { status: 403 },
         );
       }
+    } else if (role === "age_group_coordinator") {
+      // club_coordinator e age_group coordinator podem delegar coordenação de escalão
+      if (context.source !== "club_coordinator" && context.source !== "coordinator") {
+        return NextResponse.json(
+          { error: "Apenas um coordenador pode convidar coordenadores de escalão." },
+          { status: 403 },
+        );
+      }
     } else if (!STAFF_ROLES.includes(role)) {
       return NextResponse.json(
         { error: "Cargo inválido para convite." },
@@ -203,6 +213,7 @@ export async function POST(request: Request) {
       .insert({
         club_id: ageGroup.club_id,
         // club_coordinator não precisa de age_group — âmbito é o clube inteiro
+        // age_group_coordinator e staff técnico têm âmbito de escalão
         age_group_id: role === "club_coordinator" ? null : ageGroup.id,
         invited_by: user.id,
         first_name: firstName,
@@ -233,10 +244,12 @@ export async function POST(request: Request) {
     }
 
     try {
+      const profileRole: "coordinator" | "coach" =
+        role === "club_coordinator" || role === "age_group_coordinator" ? "coordinator" : "coach";
       await ensureInviteAuthUser(admin, {
         email: normalizedEmail,
         fullName: `${firstName} ${lastName}`.trim(),
-        role: "coach",
+        role: profileRole,
       });
     } catch (error) {
       await admin.from("staff_invites").delete().eq("id", createdInvite?.id ?? "");
