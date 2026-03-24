@@ -129,6 +129,31 @@ function RegisterForm() {
       .json()
       .catch(() => null) as { redirectTo?: string } | null;
 
+    // Tentar ligar o convite de staff por email, tal como o OAuth callback faz.
+    // Se ligado com sucesso, o age_group_staff já existe antes de o RSC do
+    // dashboard correr — evita o redirect para /onboarding.
+    const inviteSyncRes = await fetch("/api/invite/sync", {
+      method: "POST",
+    }).catch(() => null);
+    const inviteSyncPayload = inviteSyncRes?.ok
+      ? await inviteSyncRes.json().catch(() => null) as { linked?: boolean } | null
+      : null;
+    const inviteLinked = inviteSyncPayload?.linked === true;
+
+    if (inviteLinked) {
+      // Limpar código do localStorage — redeem já foi feito via sync
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("inviteCode");
+        localStorage.removeItem("inviteEmail");
+        sessionStorage.removeItem("pending_invite_code");
+        sessionStorage.removeItem("pending_invite_email");
+      }
+      markIOSInstallPromptAfterLogin();
+      router.push("/dashboard");
+      router.refresh();
+      return;
+    }
+
     markIOSInstallPromptAfterLogin();
     const dest = resolvePostAuthDestination(ensureProfilePayload);
     router.push(dest);
