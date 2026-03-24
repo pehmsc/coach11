@@ -140,6 +140,10 @@ export default function StaffPage() {
   const [editForm, setEditForm] = useState(EMPTY_EDIT_FORM);
   const [savingEdit, setSavingEdit] = useState(false);
 
+  // Multi-escalão: lista de escalões do clube para o seletor no form de convite
+  const [clubAgeGroups, setClubAgeGroups] = useState<{ id: string; name: string }[]>([]);
+  const [selectedAgeGroupIds, setSelectedAgeGroupIds] = useState<Set<string>>(new Set());
+
   // Permissions modal state
   const [managingPermissionsFor, setManagingPermissionsFor] = useState<StaffMember | null>(null);
   const [loadingPermissions, setLoadingPermissions] = useState(false);
@@ -217,6 +221,17 @@ export default function StaffPage() {
     setLoading(false);
   }
 
+  async function openInviteForm() {
+    setShowForm(true);
+    if (isClubCoordinator && clubAgeGroups.length === 0) {
+      const res = await fetch("/api/club/age-groups");
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && Array.isArray(data.ageGroups)) {
+        setClubAgeGroups(data.ageGroups as { id: string; name: string }[]);
+      }
+    }
+  }
+
   async function handleSendInvite(e: { preventDefault(): void }) {
     e.preventDefault();
     if (!canManageStaff) {
@@ -231,6 +246,11 @@ export default function StaffPage() {
       ...invitePermissions[area],
     }));
 
+    const ageGroupIds =
+      isClubCoordinator && form.role !== "club_coordinator" && selectedAgeGroupIds.size > 0
+        ? Array.from(selectedAgeGroupIds)
+        : undefined;
+
     const res = await fetch("/api/invite/staff", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -241,6 +261,7 @@ export default function StaffPage() {
         phone: form.phone,
         role: form.role,
         permissions: permissionsArray,
+        ...(ageGroupIds ? { ageGroupIds } : {}),
       }),
     });
     const data = await res.json().catch(() => ({}));
@@ -248,6 +269,7 @@ export default function StaffPage() {
     if (data.success) {
       setInviteResult({ code: data.inviteCode, emailSent: data.emailSent, name: form.firstName });
       setForm(EMPTY_FORM);
+      setSelectedAgeGroupIds(new Set());
       setInvitePermissions(templateToPermissions(ROLE_TO_TEMPLATE["assistant_coach"]));
       setShowForm(false);
       setInvitesExpanded(true);
@@ -479,7 +501,7 @@ export default function StaffPage() {
         <h1 className="text-2xl font-bold text-slate-900">Equipa Técnica</h1>
         {canManageStaff && (
           <Button
-            onClick={() => { setShowForm(true); setInviteResult(null); }}
+            onClick={() => { void openInviteForm(); setInviteResult(null); }}
             className="bg-emerald-600 hover:bg-emerald-700"
             size="sm"
           >
@@ -803,6 +825,34 @@ export default function StaffPage() {
                     </SelectContent>
                   </Select>
                 </div>
+                {isClubCoordinator && form.role !== "club_coordinator" && clubAgeGroups.length > 0 && (
+                  <div className="space-y-1.5">
+                    <Label>Escalões *</Label>
+                    <div className="rounded-lg border border-slate-200 p-3 space-y-2 max-h-40 overflow-y-auto">
+                      {clubAgeGroups.map((ag) => (
+                        <label key={ag.id} className="flex items-center gap-2 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={selectedAgeGroupIds.has(ag.id)}
+                            onChange={(e) => {
+                              setSelectedAgeGroupIds((prev) => {
+                                const next = new Set(prev);
+                                if (e.target.checked) next.add(ag.id);
+                                else next.delete(ag.id);
+                                return next;
+                              });
+                            }}
+                            className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                          />
+                          <span className="text-sm text-slate-700">{ag.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                    {selectedAgeGroupIds.size === 0 && (
+                      <p className="text-xs text-amber-600">Seleciona pelo menos um escalão.</p>
+                    )}
+                  </div>
+                )}
                 <div className="space-y-1.5">
                   <Label>Permissões</Label>
                   <div className="rounded-lg border border-slate-100 p-3">
@@ -815,7 +865,11 @@ export default function StaffPage() {
                 </div>
               </div>
               <div className="flex gap-2 p-5 pt-3 border-t bg-white shrink-0 pb-[max(1rem,env(safe-area-inset-bottom))]">
-                <Button type="submit" className="flex-1 bg-emerald-600 hover:bg-emerald-700" disabled={sending}>
+                <Button
+                  type="submit"
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                  disabled={sending || (isClubCoordinator && form.role !== "club_coordinator" && clubAgeGroups.length > 0 && selectedAgeGroupIds.size === 0)}
+                >
                   {sending ? <Loader2 size={16} className="animate-spin" /> : "Enviar convite"}
                 </Button>
                 <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>

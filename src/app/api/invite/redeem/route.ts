@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
 import { checkRedeemLimit } from "@/lib/rate-limit";
 import { TECHNICAL_STAFF_LIMIT_ERROR_MESSAGE } from "@/lib/team/technical-staff-limit";
@@ -110,7 +111,7 @@ export async function POST(request: Request) {
     // Verificar o role do convite para usar o RPC correcto
     const { data: inviteRow } = await supabase
       .from("staff_invites")
-      .select("role")
+      .select("role, age_group_ids")
       .eq("invite_code", code)
       .limit(1)
       .maybeSingle();
@@ -158,6 +159,27 @@ export async function POST(request: Request) {
         ageGroup,
         role,
       });
+    }
+
+    // Criar entradas adicionais em age_group_staff para multi-escalão
+    // O RPC já criou a entrada para age_group_ids[0]; criar as restantes.
+    const extraAgeGroupIds = Array.isArray(inviteRow?.age_group_ids)
+      ? (inviteRow.age_group_ids as string[]).slice(1)
+      : [];
+
+    if (extraAgeGroupIds.length > 0 && result.role && result.role !== "club_coordinator") {
+      try {
+        const admin = createAdminClient();
+        const inserts = extraAgeGroupIds.map((ageGroupId) => ({
+          age_group_id: ageGroupId,
+          profile_id: user.id,
+          role: result.role as string,
+        }));
+        await admin.from("age_group_staff").insert(inserts);
+      } catch {
+        // Falha silenciosa — a entrada primária já foi criada pelo RPC
+        console.warn("Falha ao criar entradas age_group_staff adicionais para multi-escalão.");
+      }
     }
 
     return NextResponse.json({
