@@ -34,6 +34,15 @@ import { toast } from "sonner";
 import { PublicSharePanel } from "@/components/team/PublicSharePanel";
 import type { AgeGroup, Player, FootballFormat } from "@/types/database";
 import { AGE_GROUP_STAFF_ROLE_LABELS, getStaffRoleLabel } from "@/lib/team/staff-role";
+import { PermissionsGrid, type PermissionsMap, templateToPermissions } from "@/components/staff/PermissionsGrid";
+
+const ROLE_TO_TEMPLATE: Record<string, "principal" | "adjunto" | "estagiario"> = {
+  head_coach: "principal",
+  assistant_coach: "adjunto",
+  intern_coach: "estagiario",
+  goalkeeper_coach: "adjunto",
+  fitness_coach: "adjunto",
+};
 
 // ─── Constantes ──────────────────────────────────────────────────────────────
 
@@ -231,6 +240,9 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
   // Staff invite modal
   const [showStaffInvite, setShowStaffInvite] = useState(false);
   const [staffInviteForm, setStaffInviteForm] = useState({ firstName: "", lastName: "", email: "", role: "assistant_coach" });
+  const [invitePermissions, setInvitePermissions] = useState<PermissionsMap>(() =>
+    templateToPermissions(ROLE_TO_TEMPLATE["assistant_coach"]),
+  );
   const [sendingStaffInvite, setSendingStaffInvite] = useState(false);
   const [players, setPlayers] = useState<Player[]>([]);
   const [staff, setStaff] = useState<StaffMember[]>([]);
@@ -506,6 +518,10 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
         lastName: staffInviteForm.lastName,
         email: staffInviteForm.email,
         role: staffInviteForm.role,
+        permissions: Object.entries(invitePermissions).map(([area, perms]) => ({
+          area,
+          ...perms,
+        })),
         // Para club_coordinator, pré-seleccionar este escalão
         ...(isClubCoordinator ? { ageGroupIds: [ageGroupId] } : {}),
       }),
@@ -514,6 +530,7 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
     if (data.success) {
       setShowStaffInvite(false);
       setStaffInviteForm({ firstName: "", lastName: "", email: "", role: "assistant_coach" });
+      setInvitePermissions(templateToPermissions(ROLE_TO_TEMPLATE["assistant_coach"]));
       if (data.emailSent) {
         toast.success("Convite enviado.");
       } else {
@@ -1465,7 +1482,11 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
                 <Label>Função *</Label>
                 <Select
                   value={staffInviteForm.role}
-                  onValueChange={(v) => setStaffInviteForm((f) => ({ ...f, role: v }))}
+                  onValueChange={(v) => {
+                    setStaffInviteForm((f) => ({ ...f, role: v }));
+                    const tpl = ROLE_TO_TEMPLATE[v];
+                    if (tpl) setInvitePermissions(templateToPermissions(tpl));
+                  }}
                 >
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -1474,6 +1495,16 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Permissões</Label>
+                <div className="rounded-lg border border-slate-100 p-3">
+                  <PermissionsGrid
+                    permissions={invitePermissions}
+                    onChange={setInvitePermissions}
+                    showTemplateSelector
+                  />
+                </div>
               </div>
               <div className="flex gap-2 pt-1">
                 <Button
