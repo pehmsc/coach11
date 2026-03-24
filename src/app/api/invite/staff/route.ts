@@ -3,7 +3,6 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { Resend } from "resend";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { checkInviteSendLimit } from "@/lib/rate-limit";
 import { normalizeEmail } from "@/lib/auth/beta-access";
 import { ensureInviteAuthUser } from "@/lib/auth/invite-auth-user";
 import { getCanonicalAppUrl } from "@/lib/config/canonical-app-url";
@@ -11,7 +10,6 @@ import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { captureServerProductEvent } from "@/lib/observability/posthog-server";
 import { resolveUserTeamContext } from "@/lib/auth/team-context";
 import {
-  getAgeGroupTechnicalStaffUsage,
   isTechnicalStaffLimitError,
   TECHNICAL_STAFF_LIMIT_ERROR_MESSAGE,
 } from "@/lib/team/technical-staff-limit";
@@ -148,24 +146,6 @@ export async function POST(request: Request) {
     }
     ageGroupId = ageGroup.id;
 
-    try {
-      const usage = await getAgeGroupTechnicalStaffUsage(admin, ageGroup.id);
-
-      if (usage.limitEnforced && (usage.remainingSlots ?? 0) <= 0) {
-        return NextResponse.json(
-          {
-            error: `${TECHNICAL_STAFF_LIMIT_ERROR_MESSAGE} Remove o membro atual ou um convite pendente antes de enviar outro.`,
-          },
-          { status: 409 },
-        );
-      }
-    } catch {
-      return NextResponse.json(
-        { error: "Não foi possível validar o limite de convites." },
-        { status: 500 },
-      );
-    }
-
     // 📩 Validar dados do convite
     const parsed = StaffInviteSchema.safeParse(body);
     if (!parsed.success) {
@@ -278,11 +258,6 @@ export async function POST(request: Request) {
         { status: 500 },
       );
     }
-
-    // club_coordinator → profiles.role = "coordinator" (umbrella correcto)
-    // staff técnico → profiles.role = "coach"
-    const profileRole: "coordinator" | "coach" =
-      role === "club_coordinator" ? "coordinator" : "coach";
 
     try {
       const profileRole: "coordinator" | "coach" =

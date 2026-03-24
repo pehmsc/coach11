@@ -252,6 +252,20 @@ export default function ClubPage() {
             return (a.full_name || "").localeCompare(b.full_name || "", "pt");
           }),
         );
+
+        // Convites pendentes para club_coordinator (não presentes em staffInvites de me/context)
+        const rawPendingInvites = (mp?.pendingInvites as Array<Record<string, unknown>>) || [];
+        setStaffInvites(
+          rawPendingInvites.map((inv) => ({
+            id: String(inv.id ?? ""),
+            first_name: String(inv.first_name ?? ""),
+            last_name: String(inv.last_name ?? ""),
+            email: String(inv.email ?? ""),
+            role: String(inv.role ?? ""),
+            invite_code: String(inv.invite_code ?? ""),
+            invite_sent_at: String(inv.created_at ?? ""),
+          })),
+        );
       }
 
       if (clubInfoRes?.ok) {
