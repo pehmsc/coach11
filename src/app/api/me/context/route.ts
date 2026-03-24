@@ -176,21 +176,31 @@ export async function GET() {
       }
     }
 
-    const staffMembers = staffContext.members.map((member) => ({
-      id: member.staffLinkId || `coordinator-${member.profileId}`,
-      profile_id: member.profileId,
-      role: member.role,
-      is_coordinator: member.isCoordinator,
-      is_club_coordinator: clubCoordinatorProfileIds.has(member.profileId),
-      full_name: member.fullName,
-      email: member.email,
-      phone: member.phone,
-      avatar_url:
-        member.avatarUrl ||
-        (member.profileId === user.id
-          ? metadataAvatarUrl
-          : authAvatarUrlByProfileId.get(member.profileId) || null),
-    }));
+    const staffMembers = staffContext.members
+      .filter((member) => {
+        // club_coordinators que aparecem apenas como coordinator_id do escalão
+        // (sem registo explícito em age_group_staff) não devem constar na lista
+        // de staff — só aparecem se tiverem sido explicitamente adicionados.
+        if (clubCoordinatorProfileIds.has(member.profileId) && member.staffLinkId === null) {
+          return false;
+        }
+        return true;
+      })
+      .map((member) => ({
+        id: member.staffLinkId || `coordinator-${member.profileId}`,
+        profile_id: member.profileId,
+        role: member.role,
+        is_coordinator: member.isCoordinator,
+        is_club_coordinator: clubCoordinatorProfileIds.has(member.profileId),
+        full_name: member.fullName,
+        email: member.email,
+        phone: member.phone,
+        avatar_url:
+          member.avatarUrl ||
+          (member.profileId === user.id
+            ? metadataAvatarUrl
+            : authAvatarUrlByProfileId.get(member.profileId) || null),
+      }));
     const staffProfileIds = staffContext.members.map((member) => member.profileId);
 
     return NextResponse.json(

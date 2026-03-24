@@ -1,6 +1,6 @@
 export const queryKeys = {
   meContext: () => ["me-context"] as const,
-  players: () => ["players"] as const,
+  players: (ageGroupId?: string | null) => ["players", ageGroupId ?? ""] as const,
   attendance: {
     root: () => ["attendance"] as const,
     today: (date: string) => ["attendance", "today", date] as const,
