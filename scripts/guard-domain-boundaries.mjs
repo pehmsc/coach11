@@ -55,10 +55,13 @@ const SRC_ALLOWED_EXCEPTIONS = new Map([
   ["src/app/api/club/route.ts", new Set(["src-admin-client", "src-club-id-filter"])],
   // CLUB_MEMBERS/LOGO/AGE-GROUPS: endpoints clube-first sem age_group_id
   ["src/app/api/club/members/route.ts", new Set(["src-admin-client", "src-club-id-filter"])],
+  ["src/app/api/club/members/[profileId]/route.ts", new Set(["src-admin-client", "src-club-id-filter"])],
   ["src/app/api/club/logo/route.ts", new Set(["src-admin-client", "src-club-id-filter"])],
   ["src/app/api/club/age-groups/route.ts", new Set(["src-admin-client", "src-club-id-filter"])],
   // BUG-1: redeem cria entradas adicionais age_group_staff para multi-escalão
   ["src/app/api/invite/redeem/route.ts", new Set(["src-admin-client"])],
+  // CANCEL_INVITE: club_coordinator cancela convites pendentes — verifica club_id para auth
+  ["src/app/api/invite/staff/[id]/route.ts", new Set(["src-admin-client", "src-club-id-filter"])],
   // INVITE_SYNC_FALLBACK: dashboard RSC resgata convite pendente por email antes de redirect para onboarding
   ["src/app/(dashboard)/dashboard/page.tsx", new Set(["src-admin-client"])],
 ]);

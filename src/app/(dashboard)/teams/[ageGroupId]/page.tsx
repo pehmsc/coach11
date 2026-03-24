@@ -36,6 +36,13 @@ import type { AgeGroup, Player, FootballFormat } from "@/types/database";
 import { AGE_GROUP_STAFF_ROLE_LABELS, getStaffRoleLabel } from "@/lib/team/staff-role";
 import { PermissionsGrid, type PermissionsMap, templateToPermissions } from "@/components/staff/PermissionsGrid";
 
+// Lista completa para o modal de convite de staff no escalão.
+// Inclui age_group_coordinator (não está em AGE_GROUP_STAFF_ROLE_LABELS).
+const INVITE_ROLE_OPTIONS = [
+  { value: "age_group_coordinator", label: "Coordenador de Escalão" },
+  ...Object.entries(AGE_GROUP_STAFF_ROLE_LABELS).map(([value, label]) => ({ value, label })),
+];
+
 const ROLE_TO_TEMPLATE: Record<string, "principal" | "adjunto" | "estagiario"> = {
   head_coach: "principal",
   assistant_coach: "adjunto",
@@ -1490,7 +1497,7 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
                 >
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {Object.entries(AGE_GROUP_STAFF_ROLE_LABELS).map(([value, label]) => (
+                    {INVITE_ROLE_OPTIONS.map(({ value, label }) => (
                       <SelectItem key={value} value={value}>{label}</SelectItem>
                     ))}
                   </SelectContent>
