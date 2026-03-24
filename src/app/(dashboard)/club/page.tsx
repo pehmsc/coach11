@@ -267,6 +267,7 @@ export default function ClubPage() {
         );
 
         // Convites pendentes — apenas visíveis para club_coordinator
+        // Convites pendentes para club_coordinator (não presentes em staffInvites de me/context)
         const rawPendingInvites = (mp?.pendingInvites as Array<Record<string, unknown>>) || [];
         setStaffInvites(
           rawPendingInvites.map((inv) => ({

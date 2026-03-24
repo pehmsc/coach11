@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -108,16 +109,37 @@ export default async function DashboardPage({
       if (hasPendingInviteCode) {
         // Deixar a página renderizar com o RedeemInviteGate
       } else {
-        // Sem clube, sem escalão, sem staff → onboarding
-        console.error("[dashboard] guard: redirect to onboarding", {
-          userId: user.id,
-          email: user.email,
-          profileRole: profile?.role,
-          managedAgeGroupsCount: managedAgeGroups?.length ?? 0,
-          clubMembership,
-          staffLink,
-        });
-        redirect("/onboarding");
+        // Fallback server-side: tentar resgatar convite pendente por email
+        // (cobre o caso em que o user se registou mas o redeem nunca correu)
+        let serverLinked = false;
+        if (user.email) {
+          const adminForSync = createAdminClient();
+          const { data: pendingInvite } = await adminForSync
+            .from("staff_invites")
+            .select("id, invite_code")
+            .ilike("email", user.email)
+            .is("accepted_at", null)
+            .not("role", "in", "(\"club_coordinator\",\"age_group_coordinator\")")
+            .limit(1)
+            .maybeSingle();
+
+          if (pendingInvite?.invite_code) {
+            const { data: rpcData } = await adminForSync.rpc("rpc_redeem_staff_invite", {
+              p_invite_code: pendingInvite.invite_code,
+              p_user_id: user.id,
+              p_user_email: user.email,
+            });
+            const result = rpcData as { ok?: boolean; already_linked?: boolean } | null;
+            serverLinked = result?.ok === true || result?.already_linked === true;
+          }
+        }
+
+        if (!serverLinked) {
+          // Sem clube, sem escalão, sem staff, sem convite → onboarding
+          redirect("/onboarding");
+        }
+        // se serverLinked = true, a página continua a renderizar normalmente;
+        // as queries seguintes de age_group_staff encontrarão o novo registo
       }
     }
 
