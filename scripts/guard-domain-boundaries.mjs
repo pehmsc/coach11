@@ -53,9 +53,12 @@ const SRC_ALLOWED_EXCEPTIONS = new Map([
   // BUG-2: club_coordinator delete age_group + DELETE club data
   ["src/app/api/me/age-group/route.ts", new Set(["src-admin-client", "src-club-id-filter"])],
   ["src/app/api/club/route.ts", new Set(["src-admin-client", "src-club-id-filter"])],
-  // CLUB_MEMBERS/LOGO: endpoints clube-first sem age_group_id
+  // CLUB_MEMBERS/LOGO/AGE-GROUPS: endpoints clube-first sem age_group_id
   ["src/app/api/club/members/route.ts", new Set(["src-admin-client", "src-club-id-filter"])],
   ["src/app/api/club/logo/route.ts", new Set(["src-admin-client", "src-club-id-filter"])],
+  ["src/app/api/club/age-groups/route.ts", new Set(["src-admin-client", "src-club-id-filter"])],
+  // BUG-1: redeem cria entradas adicionais age_group_staff para multi-escalão
+  ["src/app/api/invite/redeem/route.ts", new Set(["src-admin-client"])],
 ]);
 
 const MIGRATION_ALLOWED_EXCEPTIONS = new Map([

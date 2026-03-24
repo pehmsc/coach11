@@ -53,6 +53,7 @@ const StaffInviteSchema = z.object({
     "team_manager",
   ]),
   permissions: z.array(AreaPermissionsSchema).max(20).optional(),
+  ageGroupIds: z.array(z.string().uuid()).min(1).max(20).optional(),
 });
 
 const roleLabel: Record<string, string> = {
@@ -161,7 +162,7 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
-    const { firstName, lastName, email, phone, role, permissions } = parsed.data;
+    const { firstName, lastName, email, phone, role, permissions, ageGroupIds } = parsed.data;
 
     // Validação server-side de quem pode convidar quem
     const STAFF_ROLES = [
@@ -222,13 +223,22 @@ export async function POST(request: Request) {
         }))
       : null;
 
+    // Quando club_coordinator passa ageGroupIds, usar o primeiro como age_group_id primário
+    const primaryAgeGroupId = role === "club_coordinator"
+      ? null
+      : (ageGroupIds && ageGroupIds.length > 0 ? ageGroupIds[0] : ageGroup.id);
+    const allAgeGroupIds = role === "club_coordinator"
+      ? []
+      : (ageGroupIds && ageGroupIds.length > 0 ? ageGroupIds : [ageGroup.id]);
+
     const { data: createdInvite, error: dbError } = await admin
       .from("staff_invites")
       .insert({
         club_id: ageGroup.club_id,
         // club_coordinator não precisa de age_group — âmbito é o clube inteiro
         // age_group_coordinator e staff técnico têm âmbito de escalão
-        age_group_id: role === "club_coordinator" ? null : ageGroup.id,
+        age_group_id: primaryAgeGroupId,
+        age_group_ids: allAgeGroupIds,
         invited_by: user.id,
         first_name: firstName,
         last_name: lastName,
