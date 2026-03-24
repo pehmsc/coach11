@@ -42,6 +42,7 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [contextSource, setContextSource] = useState<string | null>(null);
+  const [contextTeamRole, setContextTeamRole] = useState<string | null>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [authEmail, setAuthEmail] = useState("");
   const [nextEmail, setNextEmail] = useState("");
@@ -125,6 +126,9 @@ export default function SettingsPage() {
 
         if (typeof contextPayload?.source === "string") {
           setContextSource(contextPayload.source);
+        }
+        if (typeof contextPayload?.teamRole === "string") {
+          setContextTeamRole(contextPayload.teamRole);
         }
       }
 
@@ -378,7 +382,7 @@ export default function SettingsPage() {
                     <div>
                       <p className="font-semibold text-slate-900">{profile?.full_name || "—"}</p>
                       <p className="text-sm text-slate-500">
-                        {getContextRoleLabel(profile?.role, contextSource, profile?.is_super_coordinator)}
+                        {getContextRoleLabel(profile?.role, contextSource, profile?.is_super_coordinator, contextTeamRole)}
                       </p>
                     </div>
                   </div>
@@ -407,7 +411,7 @@ export default function SettingsPage() {
                     <div className="space-y-1.5">
                       <Label>Função</Label>
                       <Input
-                        value={getContextRoleLabel(profile?.role, contextSource, profile?.is_super_coordinator)}
+                        value={getContextRoleLabel(profile?.role, contextSource, profile?.is_super_coordinator, contextTeamRole)}
                         disabled
                         className="bg-slate-50 text-slate-500"
                       />

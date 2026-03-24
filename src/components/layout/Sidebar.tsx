@@ -19,9 +19,10 @@ interface SidebarProps {
   profile: Profile | null;
   avatarUrl?: string | null;
   source?: string | null;
+  teamRole?: string | null;
 }
 
-export function Sidebar({ profile, avatarUrl, source }: SidebarProps) {
+export function Sidebar({ profile, avatarUrl, source, teamRole }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -59,7 +60,7 @@ export function Sidebar({ profile, avatarUrl, source }: SidebarProps) {
             <div className="min-w-0">
               <p className="text-slate-300 text-sm truncate">{profile.full_name}</p>
               <p className="text-slate-500 text-xs truncate">
-                {getContextRoleLabel(profile.role, source, profile.is_super_coordinator)}
+                {getContextRoleLabel(profile.role, source, profile.is_super_coordinator, teamRole)}
               </p>
             </div>
           </div>

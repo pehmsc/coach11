@@ -1,4 +1,5 @@
 import type { LucideIcon } from "lucide-react";
+import { getStaffRoleLabel } from "@/lib/team/staff-role";
 import {
   BarChart2,
   Bell,
@@ -232,10 +233,11 @@ export function getContextRoleLabel(
   role?: string | null,
   source?: string | null,
   isSuperCoordinator?: boolean | null,
+  teamRole?: string | null,
 ): string {
   if (isSuperCoordinator) return "Super Admin";
   if (source === "club_coordinator") return "Coordenador do Clube";
   if (source === "coordinator") return "Coordenador de Escalão";
-  if (source === "staff") return ROLE_LABELS["coach"] ?? "Staff Técnico";
+  if (source === "staff") return getStaffRoleLabel(teamRole) || ROLE_LABELS["coach"] || "Staff Técnico";
   return getRoleLabel(role);
 }

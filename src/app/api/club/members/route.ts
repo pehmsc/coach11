@@ -60,8 +60,8 @@ export async function GET() {
 
     const profileIds = memberships.map((m) => m.profile_id);
 
-    // Buscar perfis, escalões e ligações de staff em paralelo
-    const [profilesRes, ageGroupsRes, ageGroupStaffRes] = await Promise.all([
+    // Buscar perfis, escalões, ligações de staff e convites pendentes em paralelo
+    const [profilesRes, ageGroupsRes, ageGroupStaffRes, pendingInvitesRes] = await Promise.all([
       admin
         .from("profiles")
         .select("id, full_name, email, phone, avatar_url")
@@ -75,6 +75,12 @@ export async function GET() {
         .select("profile_id, age_group_id")
         .in("profile_id", profileIds)
         .eq("club_id", clubId),
+      admin
+        .from("staff_invites")
+        .select("id, first_name, last_name, email, role, invite_code, created_at, age_group_id")
+        .eq("club_id", clubId)
+        .is("accepted_at", null)
+        .order("created_at", { ascending: false }),
     ]);
 
     const profileMap = new Map((profilesRes.data ?? []).map((p) => [p.id, p]));
@@ -119,7 +125,18 @@ export async function GET() {
       };
     });
 
-    return NextResponse.json({ members });
+    const pendingInvites = (pendingInvitesRes.data ?? []).map((inv) => ({
+      id: inv.id,
+      first_name: inv.first_name,
+      last_name: inv.last_name,
+      email: inv.email,
+      role: inv.role,
+      invite_code: inv.invite_code,
+      created_at: inv.created_at,
+      age_group_name: inv.age_group_id ? (ageGroupIdToName.get(inv.age_group_id) ?? null) : null,
+    }));
+
+    return NextResponse.json({ members, pendingInvites });
   } catch (error) {
     return respondInternalError("api.club.members.get", error);
   }

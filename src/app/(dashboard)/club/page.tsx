@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, ImageIcon, ChevronDown, ChevronUp, Plus, Copy, Check, X, Mail, Trash2 } from "lucide-react";
+import { Loader2, ImageIcon, ChevronDown, ChevronUp, Plus, Copy, Check, X, Mail, Trash2, Pencil } from "lucide-react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { toast } from "sonner";
 import {
@@ -120,6 +120,7 @@ type StaffInvite = {
   invite_code: string;
   accepted_at?: string;
   invite_sent_at: string;
+  age_group_name?: string | null;
 };
 
 type ClubTab = "info" | "members" | "settings";
@@ -175,6 +176,18 @@ export default function ClubPage() {
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [confirmRemoveMemberId, setConfirmRemoveMemberId] = useState<string | null>(null);
   const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
+  const [cancelingInviteId, setCancelingInviteId] = useState<string | null>(null);
+
+  // Edit member dialog
+  const [editingMember, setEditingMember] = useState<StaffMember | null>(null);
+  const [editForm, setEditForm] = useState({ fullName: "", phone: "", role: "assistant_coach" });
+  const [editPermissions, setEditPermissions] = useState<PermissionsMap>(() =>
+    templateToPermissions(ROLE_TO_TEMPLATE["assistant_coach"]),
+  );
+  const [editAgeGroupIds, setEditAgeGroupIds] = useState<Set<string>>(new Set());
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [loadingEdit, setLoadingEdit] = useState(false);
+  const [confirmRemoveInEdit, setConfirmRemoveInEdit] = useState(false);
 
   // Settings tab — Danger zone
   const [deleteConfirmName, setDeleteConfirmName] = useState("");
@@ -251,6 +264,21 @@ export default function ClubPage() {
             if (ap !== bp) return ap - bp;
             return (a.full_name || "").localeCompare(b.full_name || "", "pt");
           }),
+        );
+
+        // Convites pendentes — apenas visíveis para club_coordinator
+        const rawPendingInvites = (mp?.pendingInvites as Array<Record<string, unknown>>) || [];
+        setStaffInvites(
+          rawPendingInvites.map((inv) => ({
+            id: String(inv.id ?? ""),
+            first_name: String(inv.first_name ?? ""),
+            last_name: String(inv.last_name ?? ""),
+            email: String(inv.email ?? ""),
+            role: String(inv.role ?? ""),
+            invite_code: String(inv.invite_code ?? ""),
+            invite_sent_at: String(inv.created_at ?? ""),
+            age_group_name: typeof inv.age_group_name === "string" ? inv.age_group_name : null,
+          })),
         );
       }
 
@@ -570,18 +598,101 @@ export default function ClubPage() {
     setSendingInvite(false);
   }
 
-  async function handleRemoveMember(staffId: string) {
-    setRemovingMemberId(staffId);
+  async function handleRemoveMember(memberId: string, profileId: string, onSuccess?: () => void) {
+    setRemovingMemberId(memberId);
     setConfirmRemoveMemberId(null);
-    const res = await fetch(`/api/staff/${staffId}`, { method: "DELETE" });
+    const res = await fetch(`/api/club/members/${profileId}`, { method: "DELETE" });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       toast.error(data?.error || "Erro ao remover membro.");
     } else {
-      setStaffMembers((prev) => prev.filter((m) => m.id !== staffId));
+      setStaffMembers((prev) => prev.filter((m) => m.id !== memberId));
       toast.success("Membro removido.");
+      onSuccess?.();
     }
     setRemovingMemberId(null);
+  }
+
+  async function handleCancelInvite(inviteId: string) {
+    setCancelingInviteId(inviteId);
+    const res = await fetch(`/api/invite/staff/${inviteId}`, { method: "DELETE" });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      toast.error(data?.error || "Erro ao cancelar convite.");
+    } else {
+      setStaffInvites((prev) => prev.filter((inv) => inv.id !== inviteId));
+      toast.success("Convite cancelado.");
+    }
+    setCancelingInviteId(null);
+  }
+
+  async function handleOpenEdit(member: StaffMember) {
+    setEditingMember(member);
+    setConfirmRemoveInEdit(false);
+    setLoadingEdit(true);
+    if (isClubCoordinator && clubAgeGroupsForInvite.length === 0) {
+      const agRes = await fetch("/api/club/age-groups");
+      const agData = await agRes.json().catch(() => ({}));
+      if (agRes.ok && Array.isArray(agData.ageGroups)) {
+        setClubAgeGroupsForInvite(agData.ageGroups as { id: string; name: string }[]);
+      }
+    }
+    const res = await fetch(`/api/club/members/${member.profile_id}`);
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) {
+      setEditForm({
+        fullName: data.full_name || "",
+        phone: data.phone || "",
+        role: data.role || member.role || "assistant_coach",
+      });
+      setEditAgeGroupIds(new Set<string>(Array.isArray(data.ageGroupIds) ? (data.ageGroupIds as string[]) : []));
+      const permsArray = Array.isArray(data.permissions) ? (data.permissions as Array<{ area: string; can_read: boolean; can_write: boolean; can_edit: boolean; can_delete: boolean }>) : [];
+      const permsMap = {} as PermissionsMap;
+      for (const area of ALL_PERMISSION_AREAS) {
+        const p = permsArray.find((x) => x.area === area);
+        permsMap[area] = {
+          can_read: p?.can_read ?? true,
+          can_write: p?.can_write ?? false,
+          can_edit: p?.can_edit ?? false,
+          can_delete: p?.can_delete ?? false,
+        };
+      }
+      setEditPermissions(permsMap);
+    } else {
+      toast.error(data?.error || "Erro ao carregar dados do membro.");
+      setEditingMember(null);
+    }
+    setLoadingEdit(false);
+  }
+
+  async function handleSaveEdit(e: { preventDefault(): void }) {
+    e.preventDefault();
+    if (!editingMember) return;
+    setSavingEdit(true);
+    const permissionsArray = ALL_PERMISSION_AREAS.map((area) => ({
+      area,
+      ...editPermissions[area],
+    }));
+    const res = await fetch(`/api/club/members/${editingMember.profile_id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        fullName: editForm.fullName || undefined,
+        phone: editForm.phone || null,
+        role: editForm.role,
+        ageGroupIds: editAgeGroupIds.size > 0 ? Array.from(editAgeGroupIds) : undefined,
+        permissions: permissionsArray,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) {
+      toast.success("Membro actualizado.");
+      setEditingMember(null);
+      void loadData();
+    } else {
+      toast.error(data?.error || "Erro ao actualizar membro.");
+    }
+    setSavingEdit(false);
   }
 
   function copyCode(code: string) {
@@ -1081,11 +1192,20 @@ export default function ClubPage() {
                         <p className="text-xs text-slate-400 truncate">{member.email}</p>
                       )}
                     </div>
+                    {isClubCoordinator && !member.is_club_coordinator && !confirmRemoveMemberId && (
+                      <button
+                        onClick={() => void handleOpenEdit(member)}
+                        className="p-1.5 hover:bg-slate-100 rounded-lg group shrink-0"
+                        title="Editar membro"
+                      >
+                        <Pencil size={14} className="text-slate-300 group-hover:text-slate-500 transition-colors" />
+                      </button>
+                    )}
                     {canManage && !member.is_coordinator && (
                       confirmRemoveMemberId === member.id ? (
                         <div className="flex items-center gap-1 shrink-0">
                           <button
-                            onClick={() => void handleRemoveMember(member.id)}
+                            onClick={() => void handleRemoveMember(member.id, member.profile_id)}
                             disabled={removingMemberId === member.id}
                             className="text-xs font-semibold text-white bg-red-500 hover:bg-red-600 px-2 py-1 rounded-lg"
                           >
@@ -1131,24 +1251,47 @@ export default function ClubPage() {
                 {staffInvites.map((invite) => (
                   <div key={invite.id} className="flex items-center gap-3 p-3 bg-amber-50 border border-amber-100 rounded-xl">
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-slate-800">
-                        {invite.first_name} {invite.last_name}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-semibold text-slate-800">
+                          {invite.first_name} {invite.last_name}
+                        </p>
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-full shrink-0">
+                          Pendente
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        {getStaffRoleLabel(invite.role)}
+                        {invite.age_group_name ? ` · ${invite.age_group_name}` : ""}
                       </p>
-                      <p className="text-xs text-slate-500">
-                        {invite.email} · {getStaffRoleLabel(invite.role)}
-                      </p>
+                      <p className="text-xs text-slate-400 truncate">{invite.email}</p>
                     </div>
-                    <button
-                      onClick={() => copyCode(invite.invite_code)}
-                      className="p-1.5 hover:bg-amber-100 rounded-lg text-amber-600 shrink-0"
-                      title="Copiar código"
-                    >
-                      {copiedCode === invite.invite_code ? (
-                        <Check size={14} className="text-emerald-600" />
-                      ) : (
-                        <Copy size={14} />
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        onClick={() => copyCode(invite.invite_code)}
+                        className="p-1.5 hover:bg-amber-100 rounded-lg text-amber-600"
+                        title="Copiar código"
+                      >
+                        {copiedCode === invite.invite_code ? (
+                          <Check size={14} className="text-emerald-600" />
+                        ) : (
+                          <Copy size={14} />
+                        )}
+                      </button>
+                      {canManage && (
+                        <button
+                          onClick={() => void handleCancelInvite(invite.id)}
+                          disabled={cancelingInviteId === invite.id}
+                          className="p-1.5 hover:bg-red-50 rounded-lg text-slate-300 hover:text-red-500 transition-colors"
+                          title="Cancelar convite"
+                        >
+                          {cancelingInviteId === invite.id ? (
+                            <Loader2 size={14} className="animate-spin" />
+                          ) : (
+                            <X size={14} />
+                          )}
+                        </button>
                       )}
-                    </button>
+                    </div>
                   </div>
                 ))}
               </CardContent>
@@ -1319,6 +1462,151 @@ export default function ClubPage() {
                 </Button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Modal: Editar membro ─── */}
+      {editingMember && (
+        <div
+          className="fixed inset-0 bg-black/50 z-50 flex items-end md:items-center justify-center p-4"
+          onClick={() => { if (!savingEdit) setEditingMember(null); }}
+        >
+          <div
+            className="bg-white rounded-2xl w-full max-w-md shadow-xl max-h-[calc(100dvh-1rem)] md:max-h-[90vh] overflow-hidden flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center p-5 border-b shrink-0">
+              <h3 className="font-bold text-slate-900">Editar Membro</h3>
+              <button onClick={() => setEditingMember(null)} disabled={savingEdit}>
+                <X size={20} className="text-slate-400" />
+              </button>
+            </div>
+            {loadingEdit ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 size={24} className="animate-spin text-slate-400" />
+              </div>
+            ) : (
+              <form onSubmit={handleSaveEdit} className="flex flex-col min-h-0">
+                <div className="p-5 space-y-4 overflow-y-auto flex-1 pb-[max(1.25rem,env(safe-area-inset-bottom))]" style={{ WebkitOverflowScrolling: "touch" }}>
+                  <div className="space-y-1.5">
+                    <Label>Nome completo</Label>
+                    <Input
+                      value={editForm.fullName}
+                      onChange={(e) => setEditForm((f) => ({ ...f, fullName: e.target.value }))}
+                      placeholder="Nome completo"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Telefone</Label>
+                    <Input
+                      value={editForm.phone}
+                      onChange={(e) => setEditForm((f) => ({ ...f, phone: e.target.value }))}
+                      placeholder="+351 912 345 678"
+                      maxLength={30}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Função</Label>
+                    <Select
+                      value={editForm.role}
+                      onValueChange={(v) => {
+                        setEditForm((f) => ({ ...f, role: v }));
+                        const tpl = ROLE_TO_TEMPLATE[v];
+                        if (tpl) setEditPermissions(templateToPermissions(tpl));
+                      }}
+                    >
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={AGE_GROUP_COORDINATOR_OPTION.value}>
+                          {AGE_GROUP_COORDINATOR_OPTION.label}
+                        </SelectItem>
+                        {INVITE_ROLE_OPTIONS.map((opt) => (
+                          <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {clubAgeGroupsForInvite.length > 0 && (
+                    <div className="space-y-1.5">
+                      <Label>Escalões</Label>
+                      <div className="rounded-lg border border-slate-200 p-3 space-y-2 max-h-36 overflow-y-auto">
+                        {clubAgeGroupsForInvite.map((ag) => (
+                          <label key={ag.id} className="flex items-center gap-2 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={editAgeGroupIds.has(ag.id)}
+                              onChange={(e) => {
+                                setEditAgeGroupIds((prev) => {
+                                  const next = new Set(prev);
+                                  if (e.target.checked) next.add(ag.id);
+                                  else next.delete(ag.id);
+                                  return next;
+                                });
+                              }}
+                              className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                            />
+                            <span className="text-sm text-slate-700">{ag.name}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div className="space-y-1.5">
+                    <Label>Permissões</Label>
+                    <div className="rounded-lg border border-slate-100 p-3">
+                      <PermissionsGrid
+                        permissions={editPermissions}
+                        onChange={setEditPermissions}
+                        showTemplateSelector
+                      />
+                    </div>
+                  </div>
+                  <div className="pt-2 border-t border-slate-100">
+                    {confirmRemoveInEdit ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-slate-600 flex-1">Confirmar remoção?</span>
+                        <button
+                          type="button"
+                          onClick={() => void handleRemoveMember(editingMember.id, editingMember.profile_id, () => setEditingMember(null))}
+                          disabled={removingMemberId === editingMember.id}
+                          className="text-xs font-semibold text-white bg-red-500 hover:bg-red-600 px-3 py-1.5 rounded-lg"
+                        >
+                          {removingMemberId === editingMember.id ? <Loader2 size={12} className="animate-spin" /> : "Remover"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmRemoveInEdit(false)}
+                          className="text-xs text-slate-400 px-2 py-1.5"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmRemoveInEdit(true)}
+                        className="text-sm text-red-500 hover:text-red-600"
+                      >
+                        Remover do clube
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className="flex gap-2 p-5 pt-3 border-t bg-white shrink-0 pb-[max(1rem,env(safe-area-inset-bottom))]">
+                  <Button
+                    type="submit"
+                    className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                    disabled={savingEdit}
+                  >
+                    {savingEdit ? <Loader2 size={16} className="animate-spin" /> : "Guardar"}
+                  </Button>
+                  <Button type="button" variant="outline" onClick={() => setEditingMember(null)} disabled={savingEdit}>
+                    Cancelar
+                  </Button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}
