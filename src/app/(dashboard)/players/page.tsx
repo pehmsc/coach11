@@ -36,7 +36,7 @@ import { ApiFetchError, apiFetch } from "@/lib/http/apiFetch";
 import { queryKeys } from "@/lib/query/keys";
 import type { Player, AgeGroup, PlayerStatus } from "@/types/database";
 
-const POSITIONS = ["GR", "DD", "DC", "DE", "MD", "MC", "ME", "AV", "EE", "ED"];
+const POSITIONS = ["GR", "DD", "DC", "DE", "MD", "MC", "MO", "ME", "AV", "EE", "ED", "SA"];
 
 const POSITION_ORDER: Record<string, number> = {
   GR: 1,
@@ -45,10 +45,12 @@ const POSITION_ORDER: Record<string, number> = {
   DE: 4,
   MD: 5,
   MC: 6,
-  ME: 7,
-  AV: 8,
-  EE: 9,
-  ED: 10,
+  MO: 7,
+  ME: 8,
+  AV: 9,
+  EE: 10,
+  ED: 11,
+  SA: 12,
 };
 
 const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
