@@ -5,6 +5,10 @@ import { respondInternalError } from "@/lib/http/respond-internal-error";
 
 export const runtime = "nodejs";
 
+// Roles in club_memberships that represent a club-level coordinator
+// (mirrors resolveUserTeamContext logic)
+const CLUB_COORDINATOR_ROLES = new Set(["coordinator", "club_coordinator", "owner", "admin"]);
+
 export async function GET() {
   try {
     const supabase = await createClient();
@@ -56,8 +60,8 @@ export async function GET() {
 
     const profileIds = memberships.map((m) => m.profile_id);
 
-    // Buscar perfis + escalões deste clube em paralelo
-    const [profilesRes, ageGroupsRes] = await Promise.all([
+    // Buscar perfis, escalões e ligações de staff em paralelo
+    const [profilesRes, ageGroupsRes, ageGroupStaffRes] = await Promise.all([
       admin
         .from("profiles")
         .select("id, full_name, email, phone, avatar_url")
@@ -66,20 +70,41 @@ export async function GET() {
         .from("age_groups")
         .select("id, name, coordinator_id")
         .eq("club_id", clubId),
+      admin
+        .from("age_group_staff")
+        .select("profile_id, age_group_id")
+        .in("profile_id", profileIds)
+        .eq("club_id", clubId),
     ]);
 
     const profileMap = new Map((profilesRes.data ?? []).map((p) => [p.id, p]));
 
-    // Mapear escalão por coordinator_id (um coordinator pode ter um escalão)
+    // age_group_id → name lookup
+    const ageGroupIdToName = new Map(
+      (ageGroupsRes.data ?? []).map((ag) => [ag.id, ag.name]),
+    );
+
+    // coordinator_id → age_group_name (for age_group coordinators)
     const ageGroupByCoord = new Map(
       (ageGroupsRes.data ?? [])
         .filter((ag) => ag.coordinator_id != null)
-        .map((ag) => [ag.coordinator_id as string, ag]),
+        .map((ag) => [ag.coordinator_id as string, ag.name]),
+    );
+
+    // profile_id → age_group_name (via age_group_staff)
+    const ageGroupByStaff = new Map(
+      (ageGroupStaffRes.data ?? [])
+        .filter((s) => s.age_group_id != null)
+        .map((s) => [s.profile_id, ageGroupIdToName.get(s.age_group_id!) ?? null]),
     );
 
     const members = memberships.map((m) => {
       const p = profileMap.get(m.profile_id);
-      const ag = ageGroupByCoord.get(m.profile_id);
+      const isClubCoord = CLUB_COORDINATOR_ROLES.has(m.role);
+      const ageGroupName = isClubCoord
+        ? null
+        : (ageGroupByCoord.get(m.profile_id) ?? ageGroupByStaff.get(m.profile_id) ?? null);
+
       return {
         id: `club-member-${m.profile_id}`,
         profile_id: m.profile_id,
@@ -88,9 +113,9 @@ export async function GET() {
         email: p?.email ?? null,
         phone: p?.phone ?? null,
         avatar_url: p?.avatar_url ?? null,
-        is_coordinator: m.role === "club_coordinator",
-        is_club_coordinator: m.role === "club_coordinator",
-        age_group_name: ag?.name ?? null,
+        is_coordinator: isClubCoord,
+        is_club_coordinator: isClubCoord,
+        age_group_name: ageGroupName,
       };
     });
 
