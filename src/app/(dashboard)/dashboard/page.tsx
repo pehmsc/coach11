@@ -54,7 +54,11 @@ function toTimestampFromDateTime(dateTimeValue: string | null | undefined) {
   return Number.isNaN(parsed) ? Number.MAX_SAFE_INTEGER : parsed;
 }
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const supabase = await createClient();
   const db = supabase;
 
@@ -62,6 +66,12 @@ export default async function DashboardPage() {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
+
+  // Se há um código de convite no URL, o RedeemInviteGate (client) vai
+  // tratar o redeem — não redirecionar para onboarding antes disso.
+  const resolvedSearchParams = await searchParams;
+  const hasPendingInviteCode =
+    typeof resolvedSearchParams.code === "string" && resolvedSearchParams.code.length > 0;
 
   // Fetch profile + age groups in parallel (both only depend on user.id)
   const [{ data: profile }, { data: managedAgeGroups }] = await Promise.all([
@@ -92,16 +102,23 @@ export default async function DashboardPage() {
     ]);
 
     if (!clubMembership && !staffLink) {
-      // Sem clube, sem escalão, sem staff → onboarding
-      console.error("[dashboard] guard: redirect to onboarding", {
-        userId: user.id,
-        email: user.email,
-        profileRole: profile?.role,
-        managedAgeGroupsCount: managedAgeGroups?.length ?? 0,
-        clubMembership,
-        staffLink,
-      });
-      redirect("/onboarding");
+      // Se há um código de convite no URL, deixar o RedeemInviteGate processar
+      // o redeem no cliente antes de decidir — evita onboarding prematuro para
+      // staff convidado que ainda não fez redeem (race condition no registo).
+      if (hasPendingInviteCode) {
+        // Deixar a página renderizar com o RedeemInviteGate
+      } else {
+        // Sem clube, sem escalão, sem staff → onboarding
+        console.error("[dashboard] guard: redirect to onboarding", {
+          userId: user.id,
+          email: user.email,
+          profileRole: profile?.role,
+          managedAgeGroupsCount: managedAgeGroups?.length ?? 0,
+          clubMembership,
+          staffLink,
+        });
+        redirect("/onboarding");
+      }
     }
 
     if (clubMembership && !staffLink) {
