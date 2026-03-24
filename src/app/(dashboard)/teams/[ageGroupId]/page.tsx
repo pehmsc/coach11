@@ -995,7 +995,7 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
               <p className="text-sm text-slate-500">
                 {activePlayers} activos · {players.filter((p) => (p.status as string) === "archived").length} arquivados
               </p>
-              <Link href="/players">
+              <Link href={`/players?ageGroupId=${ageGroupId}`}>
                 <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700">
                   Adicionar atleta
                 </Button>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   keepPreviousData,
   useMutation,
@@ -107,6 +108,9 @@ function generateInviteCode(): string {
 
 export default function PlayersPage() {
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
+  const ageGroupIdFromUrl = searchParams.get("ageGroupId");
+
   const [showForm, setShowForm] = useState(false);
   const [editingPlayer, setEditingPlayer] = useState<Player | null>(null);
   const [deletingPlayerId, setDeletingPlayerId] = useState<string | null>(null);
@@ -116,8 +120,10 @@ export default function PlayersPage() {
   const [form, setForm] = useState(EMPTY_FORM);
 
   const playersQuery = useQuery({
-    queryKey: queryKeys.players(),
-    queryFn: () => apiFetch<PlayersApiPayload>("/api/players"),
+    queryKey: queryKeys.players(ageGroupIdFromUrl),
+    queryFn: () => apiFetch<PlayersApiPayload>(
+      ageGroupIdFromUrl ? `/api/players?ageGroupId=${ageGroupIdFromUrl}` : "/api/players"
+    ),
     placeholderData: keepPreviousData,
   });
 
@@ -129,7 +135,7 @@ export default function PlayersPage() {
       : null;
 
   function updatePlayersCache(updater: (current: Player[]) => Player[]) {
-    queryClient.setQueryData<PlayersApiPayload>(queryKeys.players(), (previous) => {
+    queryClient.setQueryData<PlayersApiPayload>(queryKeys.players(ageGroupIdFromUrl), (previous) => {
       if (!previous) return previous;
       const currentPlayers = Array.isArray(previous.players) ? previous.players : [];
       return {
