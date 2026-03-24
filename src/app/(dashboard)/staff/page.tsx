@@ -519,12 +519,11 @@ export default function StaffPage() {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-slate-800 truncate">{member.full_name}</p>
                   <p className="text-xs text-slate-500">
-                    {getStaffRoleLabel(member.role)}
                     {member.is_club_coordinator
-                      ? " · Coordenador do Clube"
+                      ? "Coordenador do Clube"
                       : member.is_coordinator
-                        ? " · Coordenador do escalão"
-                        : ""}
+                        ? "Coordenador do Escalão"
+                        : getStaffRoleLabel(member.role)}
                   </p>
                   {(member.email || member.phone) && (
                     <div className="mt-1 flex flex-wrap gap-2 text-xs">
