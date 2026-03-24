@@ -27,10 +27,13 @@ import {
   Settings,
   ClipboardList,
   LayoutGrid,
+  Plus,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { PublicSharePanel } from "@/components/team/PublicSharePanel";
 import type { AgeGroup, Player, FootballFormat } from "@/types/database";
+import { AGE_GROUP_STAFF_ROLE_LABELS, getStaffRoleLabel } from "@/lib/team/staff-role";
 
 // ─── Constantes ──────────────────────────────────────────────────────────────
 
@@ -223,6 +226,12 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
   // Data
   const [ageGroup, setAgeGroup] = useState<AgeGroup | null>(null);
   const [canManage, setCanManage] = useState(false);
+  const [isClubCoordinator, setIsClubCoordinator] = useState(false);
+
+  // Staff invite modal
+  const [showStaffInvite, setShowStaffInvite] = useState(false);
+  const [staffInviteForm, setStaffInviteForm] = useState({ firstName: "", lastName: "", email: "", role: "assistant_coach" });
+  const [sendingStaffInvite, setSendingStaffInvite] = useState(false);
   const [players, setPlayers] = useState<Player[]>([]);
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [weekTrainings, setWeekTrainings] = useState<TrainingRow[]>([]);
@@ -314,6 +323,13 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
       .maybeSingle();
     const isPrincipal = staffLink?.role === "coach";
     setCanManage(isCoord || isOwnAg || isPrincipal || !!profile?.is_super_coordinator);
+
+    // Detectar club_coordinator via context (fetch rápido ao me/context)
+    const ctxRes = await fetch("/api/me/context").catch(() => null);
+    if (ctxRes?.ok) {
+      const ctx = await ctxRes.json().catch(() => ({}));
+      setIsClubCoordinator(ctx?.source === "club_coordinator");
+    }
 
     // Players
     const { data: playersData } = await supabase
@@ -477,6 +493,37 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
       toast.success("Sistema táctico guardado");
     }
     setSavingTactical(false);
+  }
+
+  async function handleStaffInvite(e: { preventDefault(): void }) {
+    e.preventDefault();
+    setSendingStaffInvite(true);
+    const res = await fetch("/api/invite/staff", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        firstName: staffInviteForm.firstName,
+        lastName: staffInviteForm.lastName,
+        email: staffInviteForm.email,
+        role: staffInviteForm.role,
+        // Para club_coordinator, pré-seleccionar este escalão
+        ...(isClubCoordinator ? { ageGroupIds: [ageGroupId] } : {}),
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (data.success) {
+      setShowStaffInvite(false);
+      setStaffInviteForm({ firstName: "", lastName: "", email: "", role: "assistant_coach" });
+      if (data.emailSent) {
+        toast.success("Convite enviado.");
+      } else {
+        toast.warning(data.warning || "Convite criado, mas email não enviado.");
+      }
+      void loadAll();
+    } else {
+      toast.error(data.error || "Erro ao enviar convite.");
+    }
+    setSendingStaffInvite(false);
   }
 
   // Bug 1 — Guardar informações da equipa
@@ -1054,11 +1101,15 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <p className="text-sm text-slate-500">{staffCount} membros</p>
-              <Link href="/staff">
-                <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700">
-                  Gerir staff
+              {canManage && (
+                <Button
+                  size="sm"
+                  className="bg-emerald-600 hover:bg-emerald-700"
+                  onClick={() => setShowStaffInvite(true)}
+                >
+                  <Plus size={14} className="mr-1" /> Convidar
                 </Button>
-              </Link>
+              )}
             </div>
             {staff.length === 0 ? (
               <Card>
@@ -1096,9 +1147,7 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
                       </div>
                       <div className="flex items-center gap-2 flex-wrap justify-end">
                         <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-medium">
-                          {s.role === "coach" ? "Treinador Principal"
-                            : s.role === "assistant_coach" ? "Adjunto"
-                            : s.role}
+                          {getStaffRoleLabel(s.role)}
                         </span>
                         {s.role === "coach" && (
                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">
@@ -1361,6 +1410,84 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
                 </Button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Modal: Convidar staff ─────────────────────────────────────── */}
+      {showStaffInvite && (
+        <div
+          className="fixed inset-0 bg-black/50 z-50 flex items-end md:items-center justify-center p-4"
+          onClick={() => setShowStaffInvite(false)}
+        >
+          <div
+            className="bg-white rounded-2xl w-full max-w-md shadow-xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center p-5 border-b">
+              <h3 className="font-bold text-slate-900">Convidar Staff</h3>
+              <button onClick={() => setShowStaffInvite(false)}>
+                <X size={20} className="text-slate-400" />
+              </button>
+            </div>
+            <form onSubmit={handleStaffInvite} className="p-5 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Nome *</Label>
+                  <Input
+                    value={staffInviteForm.firstName}
+                    onChange={(e) => setStaffInviteForm((f) => ({ ...f, firstName: e.target.value }))}
+                    placeholder="Nome"
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Apelido *</Label>
+                  <Input
+                    value={staffInviteForm.lastName}
+                    onChange={(e) => setStaffInviteForm((f) => ({ ...f, lastName: e.target.value }))}
+                    placeholder="Apelido"
+                    required
+                  />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Email *</Label>
+                <Input
+                  type="email"
+                  value={staffInviteForm.email}
+                  onChange={(e) => setStaffInviteForm((f) => ({ ...f, email: e.target.value }))}
+                  placeholder="email@exemplo.com"
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Função *</Label>
+                <Select
+                  value={staffInviteForm.role}
+                  onValueChange={(v) => setStaffInviteForm((f) => ({ ...f, role: v }))}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(AGE_GROUP_STAFF_ROLE_LABELS).map(([value, label]) => (
+                      <SelectItem key={value} value={value}>{label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex gap-2 pt-1">
+                <Button
+                  type="submit"
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                  disabled={sendingStaffInvite}
+                >
+                  {sendingStaffInvite ? <Loader2 size={16} className="animate-spin" /> : "Enviar convite"}
+                </Button>
+                <Button type="button" variant="outline" onClick={() => setShowStaffInvite(false)}>
+                  Cancelar
+                </Button>
+              </div>
+            </form>
           </div>
         </div>
       )}

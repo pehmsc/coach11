@@ -105,13 +105,26 @@ export async function POST(request: Request) {
       );
     }
 
+    // 📩 Ler body cedo para extrair ageGroupIds antes do lookup ao escalão
+    const body = await request.json().catch(() => null);
+
     // 🏟 Buscar escalão ativo do coordenador
     // club_coordinator: pode convidar para qualquer escalão do seu clube
     // coordinator (age_group): só pode convidar para o seu próprio escalão
+    // Quando ageGroupIds é fornecido pelo club_coordinator, usa o primeiro
+    // como escalão de referência (nome no email + age_group_id no convite).
+    const earlyAgeGroupIds = Array.isArray(body?.ageGroupIds)
+      ? (body.ageGroupIds as unknown[]).filter((v): v is string => typeof v === "string")
+      : null;
+    const targetAgeGroupId =
+      context.source === "club_coordinator" && earlyAgeGroupIds && earlyAgeGroupIds.length > 0
+        ? earlyAgeGroupIds[0]
+        : context.ageGroup.id;
+
     let ageGroupBaseQuery = admin
       .from("age_groups")
       .select("id, name, club_name, club_id")
-      .eq("id", context.ageGroup.id);
+      .eq("id", targetAgeGroupId);
 
     if (context.source === "club_coordinator") {
       if (!context.club?.id) {
@@ -154,7 +167,6 @@ export async function POST(request: Request) {
     }
 
     // 📩 Validar dados do convite
-    const body = await request.json().catch(() => null);
     const parsed = StaffInviteSchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json(

@@ -17,12 +17,11 @@ export async function GET() {
 
     const admin = createAdminClient();
 
-    // Verificar que o utilizador é club_coordinator
+    // Qualquer membro do clube pode listar os escalões
     const { data: membership } = await admin
       .from("club_memberships")
-      .select("club_id, role")
+      .select("club_id")
       .eq("profile_id", user.id)
-      .in("role", ["club_coordinator"])
       .limit(1)
       .maybeSingle();
 
