@@ -105,7 +105,7 @@ const NAV_ITEMS = {
   },
   staff: {
     id: "staff",
-    href: "/staff",
+    href: "/club?tab=members",
     label: "Equipa técnica",
     icon: Briefcase,
   },

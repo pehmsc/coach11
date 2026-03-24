@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useState, useEffect, useMemo, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,6 +30,8 @@ import type {
   PieceType,
 } from "@/types/database";
 import { AGE_GROUP_STAFF_ROLE_LABELS, getStaffRoleLabel } from "@/lib/team/staff-role";
+import { ALL_PERMISSION_AREAS } from "@/lib/auth/permissions-shared";
+import { PermissionsGrid, type PermissionsMap, templateToPermissions } from "@/components/staff/PermissionsGrid";
 
 const KIT_NUMBERS: KitNumber[] = [1, 2];
 const KIT_LABELS: Record<KitNumber, string> = {
@@ -53,6 +56,18 @@ const AGE_GROUP_COORDINATOR_OPTION = { value: "age_group_coordinator", label: "C
 const INVITE_ROLE_OPTIONS = Object.entries(AGE_GROUP_STAFF_ROLE_LABELS).map(
   ([value, label]) => ({ value, label }),
 );
+
+const ROLE_TO_TEMPLATE: Record<string, "principal" | "adjunto" | "estagiario"> = {
+  head_coach: "principal",
+  assistant_coach: "adjunto",
+  intern_coach: "estagiario",
+  goalkeeper_coach: "adjunto",
+  fitness_coach: "adjunto",
+  physiotherapist: "estagiario",
+  doctor: "estagiario",
+  analyst: "estagiario",
+  team_manager: "estagiario",
+};
 
 const EMPTY_INVITE_FORM = {
   firstName: "",
@@ -93,6 +108,7 @@ type StaffMember = {
   email?: string | null;
   phone?: string | null;
   avatar_url?: string | null;
+  age_group_name?: string | null;
 };
 
 type StaffInvite = {
@@ -112,6 +128,7 @@ export default function ClubPage() {
   const supabase = useMemo(() => createClient(), []);
   const logoRef = useRef<HTMLInputElement>(null);
   const kitSaveTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const searchParams = useSearchParams();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -120,7 +137,14 @@ export default function ClubPage() {
   const [canManage, setCanManage] = useState(false);
   const [isClubCoordinator, setIsClubCoordinator] = useState(false);
   const [isSuperCoordinator, setIsSuperCoordinator] = useState(false);
-  const [activeTab, setActiveTab] = useState<ClubTab>("info");
+
+  // Tab — inicializar a partir de ?tab= na URL (ex: /club?tab=members)
+  const [activeTab, setActiveTab] = useState<ClubTab>(() => {
+    const t = searchParams.get("tab");
+    if (t === "members" || t === "membros") return "members";
+    if (t === "settings") return "settings";
+    return "info";
+  });
 
   // Form fields
   const [clubName, setClubName] = useState("");
@@ -142,6 +166,11 @@ export default function ClubPage() {
   const [staffInvites, setStaffInvites] = useState<StaffInvite[]>([]);
   const [showInviteForm, setShowInviteForm] = useState(false);
   const [inviteForm, setInviteForm] = useState(EMPTY_INVITE_FORM);
+  const [invitePermissions, setInvitePermissions] = useState<PermissionsMap>(() =>
+    templateToPermissions(ROLE_TO_TEMPLATE["assistant_coach"]),
+  );
+  const [clubAgeGroupsForInvite, setClubAgeGroupsForInvite] = useState<{ id: string; name: string }[]>([]);
+  const [inviteSelectedAgeGroupIds, setInviteSelectedAgeGroupIds] = useState<Set<string>>(new Set());
   const [sendingInvite, setSendingInvite] = useState(false);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [confirmRemoveMemberId, setConfirmRemoveMemberId] = useState<string | null>(null);
@@ -484,9 +513,33 @@ export default function ClubPage() {
     setSavingKit(null);
   }
 
+  async function openInviteForm() {
+    setShowInviteForm(true);
+    if (isClubCoordinator && clubAgeGroupsForInvite.length === 0) {
+      const res = await fetch("/api/club/age-groups");
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && Array.isArray(data.ageGroups)) {
+        setClubAgeGroupsForInvite(data.ageGroups as { id: string; name: string }[]);
+      }
+    }
+  }
+
   async function handleSendInvite(e: { preventDefault(): void }) {
     e.preventDefault();
     setSendingInvite(true);
+
+    const permissionsArray = ALL_PERMISSION_AREAS.map((area) => ({
+      area,
+      ...invitePermissions[area],
+    }));
+
+    const ageGroupIds =
+      isClubCoordinator &&
+      inviteForm.role !== "club_coordinator" &&
+      inviteSelectedAgeGroupIds.size > 0
+        ? Array.from(inviteSelectedAgeGroupIds)
+        : undefined;
+
     const res = await fetch("/api/invite/staff", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -495,12 +548,16 @@ export default function ClubPage() {
         lastName: inviteForm.lastName,
         email: inviteForm.email,
         role: inviteForm.role,
+        permissions: permissionsArray,
+        ...(ageGroupIds ? { ageGroupIds } : {}),
       }),
     });
     const data = await res.json().catch(() => ({}));
     if (data.success) {
       setShowInviteForm(false);
       setInviteForm(EMPTY_INVITE_FORM);
+      setInviteSelectedAgeGroupIds(new Set());
+      setInvitePermissions(templateToPermissions(ROLE_TO_TEMPLATE["assistant_coach"]));
       if (data.emailSent) {
         toast.success("Convite enviado.");
       } else {
@@ -976,13 +1033,13 @@ export default function ClubPage() {
         <>
           <div className="flex items-center justify-between">
             <p className="text-sm text-slate-500">
-              Membros da equipa técnica deste escalão.
+              Membros da equipa técnica do clube.
             </p>
             {canManage && (
               <Button
                 size="sm"
                 className="bg-emerald-600 hover:bg-emerald-700"
-                onClick={() => setShowInviteForm(true)}
+                onClick={() => void openInviteForm()}
               >
                 <Plus size={15} className="mr-1" /> Convidar
               </Button>
@@ -1011,12 +1068,14 @@ export default function ClubPage() {
                         {member.full_name || "Sem nome"}
                       </p>
                       <p className="text-xs text-slate-500">
-                        {getStaffRoleLabel(member.role)}
                         {member.is_club_coordinator
-                          ? " · Coordenador do Clube"
+                          ? "Coordenador do Clube"
                           : member.is_coordinator
-                            ? " · Coordenador do escalão"
-                            : ""}
+                            ? "Coordenador do Escalão"
+                            : getStaffRoleLabel(member.role)}
+                        {member.age_group_name && !member.is_club_coordinator
+                          ? ` · ${member.age_group_name}`
+                          : ""}
                       </p>
                       {member.email && (
                         <p className="text-xs text-slate-400 truncate">{member.email}</p>
@@ -1141,73 +1200,117 @@ export default function ClubPage() {
           onClick={() => setShowInviteForm(false)}
         >
           <div
-            className="bg-white rounded-2xl w-full max-w-md shadow-xl overflow-hidden flex flex-col"
+            className="bg-white rounded-2xl w-full max-w-md shadow-xl max-h-[calc(100dvh-1rem)] md:max-h-[90vh] overflow-hidden flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex justify-between items-center p-5 border-b">
+            <div className="flex justify-between items-center p-5 border-b shrink-0">
               <h3 className="font-bold text-slate-900">Convidar Membro</h3>
               <button onClick={() => setShowInviteForm(false)}>
                 <X size={20} className="text-slate-400" />
               </button>
             </div>
-            <form onSubmit={handleSendInvite} className="p-5 space-y-4">
-              <div className="grid grid-cols-2 gap-3">
+            <form onSubmit={handleSendInvite} className="flex flex-col min-h-0">
+              <div className="p-5 space-y-4 overflow-y-auto flex-1 pb-[max(1.25rem,env(safe-area-inset-bottom))]" style={{ WebkitOverflowScrolling: "touch" }}>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label>Nome *</Label>
+                    <Input
+                      value={inviteForm.firstName}
+                      onChange={(e) => setInviteForm((f) => ({ ...f, firstName: e.target.value }))}
+                      placeholder="Nome"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Apelido *</Label>
+                    <Input
+                      value={inviteForm.lastName}
+                      onChange={(e) => setInviteForm((f) => ({ ...f, lastName: e.target.value }))}
+                      placeholder="Apelido"
+                      required
+                    />
+                  </div>
+                </div>
                 <div className="space-y-1.5">
-                  <Label>Nome *</Label>
+                  <Label>Email *</Label>
                   <Input
-                    value={inviteForm.firstName}
-                    onChange={(e) => setInviteForm((f) => ({ ...f, firstName: e.target.value }))}
-                    placeholder="Nome"
+                    type="email"
+                    value={inviteForm.email}
+                    onChange={(e) => setInviteForm((f) => ({ ...f, email: e.target.value }))}
+                    placeholder="email@exemplo.com"
                     required
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Apelido *</Label>
-                  <Input
-                    value={inviteForm.lastName}
-                    onChange={(e) => setInviteForm((f) => ({ ...f, lastName: e.target.value }))}
-                    placeholder="Apelido"
-                    required
-                  />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Email *</Label>
-                <Input
-                  type="email"
-                  value={inviteForm.email}
-                  onChange={(e) => setInviteForm((f) => ({ ...f, email: e.target.value }))}
-                  placeholder="email@exemplo.com"
-                  required
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Função *</Label>
-                <Select
-                  value={inviteForm.role}
-                  onValueChange={(v) => setInviteForm((f) => ({ ...f, role: v }))}
-                >
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {isClubCoordinator && (
-                      <SelectItem value={CLUB_COORDINATOR_OPTION.value}>
-                        {CLUB_COORDINATOR_OPTION.label}
+                  <Label>Função *</Label>
+                  <Select
+                    value={inviteForm.role}
+                    onValueChange={(v) => {
+                      setInviteForm((f) => ({ ...f, role: v }));
+                      const tpl = ROLE_TO_TEMPLATE[v];
+                      if (tpl) setInvitePermissions(templateToPermissions(tpl));
+                    }}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {isClubCoordinator && (
+                        <SelectItem value={CLUB_COORDINATOR_OPTION.value}>
+                          {CLUB_COORDINATOR_OPTION.label}
+                        </SelectItem>
+                      )}
+                      <SelectItem value={AGE_GROUP_COORDINATOR_OPTION.value}>
+                        {AGE_GROUP_COORDINATOR_OPTION.label}
                       </SelectItem>
+                      {INVITE_ROLE_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {isClubCoordinator && inviteForm.role !== "club_coordinator" && clubAgeGroupsForInvite.length > 0 && (
+                  <div className="space-y-1.5">
+                    <Label>Escalões *</Label>
+                    <div className="rounded-lg border border-slate-200 p-3 space-y-2 max-h-36 overflow-y-auto">
+                      {clubAgeGroupsForInvite.map((ag) => (
+                        <label key={ag.id} className="flex items-center gap-2 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={inviteSelectedAgeGroupIds.has(ag.id)}
+                            onChange={(e) => {
+                              setInviteSelectedAgeGroupIds((prev) => {
+                                const next = new Set(prev);
+                                if (e.target.checked) next.add(ag.id);
+                                else next.delete(ag.id);
+                                return next;
+                              });
+                            }}
+                            className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                          />
+                          <span className="text-sm text-slate-700">{ag.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                    {inviteSelectedAgeGroupIds.size === 0 && (
+                      <p className="text-xs text-amber-600">Seleciona pelo menos um escalão.</p>
                     )}
-                    <SelectItem value={AGE_GROUP_COORDINATOR_OPTION.value}>
-                      {AGE_GROUP_COORDINATOR_OPTION.label}
-                    </SelectItem>
-                    {INVITE_ROLE_OPTIONS.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  </div>
+                )}
+                <div className="space-y-1.5">
+                  <Label>Permissões</Label>
+                  <div className="rounded-lg border border-slate-100 p-3">
+                    <PermissionsGrid
+                      permissions={invitePermissions}
+                      onChange={setInvitePermissions}
+                      showTemplateSelector
+                    />
+                  </div>
+                </div>
               </div>
-              <div className="flex gap-2 pt-1">
+              <div className="flex gap-2 p-5 pt-3 border-t bg-white shrink-0 pb-[max(1rem,env(safe-area-inset-bottom))]">
                 <Button
                   type="submit"
                   className="flex-1 bg-emerald-600 hover:bg-emerald-700"
-                  disabled={sendingInvite}
+                  disabled={sendingInvite || (isClubCoordinator && inviteForm.role !== "club_coordinator" && clubAgeGroupsForInvite.length > 0 && inviteSelectedAgeGroupIds.size === 0)}
                 >
                   {sendingInvite ? <Loader2 size={16} className="animate-spin" /> : "Enviar convite"}
                 </Button>
