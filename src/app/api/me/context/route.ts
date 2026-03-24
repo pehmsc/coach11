@@ -131,6 +131,11 @@ export async function GET() {
 
     // Detectar quais membros são club_coordinators (para label correcto na UI)
     const clubCoordinatorProfileIds = new Set<string>();
+    // O utilizador actual é definitivamente club_coordinator — garantir que
+    // o set reflecte isso sem depender de RLS sobre club_memberships.
+    if (context.source === "club_coordinator") {
+      clubCoordinatorProfileIds.add(user.id);
+    }
     if (staffContext.members.length > 0) {
       const memberProfileIds = staffContext.members.map((m) => m.profileId);
       const { data: clubCoordRows } = await db
@@ -181,7 +186,13 @@ export async function GET() {
         // club_coordinators que aparecem apenas como coordinator_id do escalão
         // (sem registo explícito em age_group_staff) não devem constar na lista
         // de staff — só aparecem se tiverem sido explicitamente adicionados.
-        if (clubCoordinatorProfileIds.has(member.profileId) && member.staffLinkId === null) {
+        // Excepção: o próprio coordenador do escalão (isCoordinator=true) deve
+        // sempre aparecer, mesmo que seja também club_coordinator.
+        if (
+          clubCoordinatorProfileIds.has(member.profileId) &&
+          member.staffLinkId === null &&
+          !member.isCoordinator
+        ) {
           return false;
         }
         return true;
