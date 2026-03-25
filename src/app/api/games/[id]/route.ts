@@ -3,9 +3,11 @@ import {
   normalizeManualShortName,
 } from "@/lib/football/short-name";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { fetchGameAccessContext } from "@/lib/games/access";
 import { normalizeLocationSource, normalizeNullableNumber } from "@/lib/location";
+import { deleteGameCascade } from "@/lib/events/delete-cascade";
 import { NextResponse } from "next/server";
 
 type RouteContext = {
@@ -125,5 +127,47 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     return NextResponse.json({ success: true, game: updated });
   } catch (error) {
     return respondInternalError("api.games.id.patch", error);
+  }
+}
+
+export async function DELETE(_request: Request, { params }: RouteContext) {
+  try {
+    const { id: gameId } = await params;
+
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+    }
+
+    let access = null;
+    try {
+      access = await fetchGameAccessContext(supabase, gameId);
+    } catch {
+      return NextResponse.json({ error: "Erro ao validar jogo." }, { status: 500 });
+    }
+
+    if (!access?.exists) {
+      return NextResponse.json({ error: "Jogo não encontrado." }, { status: 404 });
+    }
+    if (!access.canAccess) {
+      return NextResponse.json({ error: "Sem permissões." }, { status: 403 });
+    }
+    if (!access.isCoordinator) {
+      return NextResponse.json(
+        { error: "Só o coordenador pode apagar jogos." },
+        { status: 403 },
+      );
+    }
+
+    const admin = createAdminClient();
+    await deleteGameCascade(admin, gameId);
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    return respondInternalError("api.games.id.delete", error);
   }
 }

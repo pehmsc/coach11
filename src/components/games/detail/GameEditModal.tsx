@@ -117,6 +117,26 @@ export function GameEditModal({ game, error, editor }: GameEditModalProps) {
                 className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-slate-700">
+                Competição
+              </label>
+              <select
+                value={editor.editCompetitionId}
+                onChange={(e) => editor.setEditCompetitionId(e.target.value)}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              >
+                <option value="">Nenhuma (amigável)</option>
+                {editor.competitionOptions.map((opt) => (
+                  <option key={opt.id} value={opt.id}>
+                    {opt.name}
+                    {opt.season ? ` · ${opt.season}` : ""}
+                    {opt.team_label ? ` · Equipa ${opt.team_label}` : ""}
+                    {opt.inactive ? " · Fechada" : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
             <LocationFields
               value={{
                 ...EMPTY_LOCATION_FIELDS,
