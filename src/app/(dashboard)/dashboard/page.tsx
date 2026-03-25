@@ -116,21 +116,32 @@ export default async function DashboardPage({
           const adminForSync = createAdminClient();
           const { data: pendingInvite } = await adminForSync
             .from("staff_invites")
-            .select("id, invite_code")
+            .select("id, invite_code, role")
             .ilike("email", user.email)
             .is("accepted_at", null)
-            .not("role", "in", "(\"club_coordinator\",\"age_group_coordinator\")")
+            .neq("role", "club_coordinator")
             .limit(1)
             .maybeSingle();
 
           if (pendingInvite?.invite_code) {
-            const { data: rpcData } = await adminForSync.rpc("rpc_redeem_staff_invite", {
-              p_invite_code: pendingInvite.invite_code,
-              p_user_id: user.id,
-              p_user_email: user.email,
-            });
-            const result = rpcData as { ok?: boolean; already_linked?: boolean } | null;
-            serverLinked = result?.ok === true || result?.already_linked === true;
+            type RpcResult = { ok?: boolean; already_linked?: boolean } | null;
+            let rpcData: RpcResult = null;
+            if (pendingInvite.role === "age_group_coordinator") {
+              // age_group_coordinator: usar RPC dedicado (não altera coordinator_id)
+              const { data } = await adminForSync.rpc("rpc_redeem_age_coordinator_invite", {
+                p_invite_code: pendingInvite.invite_code,
+                p_user_email: user.email,
+              });
+              rpcData = data as RpcResult;
+            } else {
+              const { data } = await adminForSync.rpc("rpc_redeem_staff_invite", {
+                p_invite_code: pendingInvite.invite_code,
+                p_user_id: user.id,
+                p_user_email: user.email,
+              });
+              rpcData = data as RpcResult;
+            }
+            serverLinked = rpcData?.ok === true || rpcData?.already_linked === true;
           }
         }
 
