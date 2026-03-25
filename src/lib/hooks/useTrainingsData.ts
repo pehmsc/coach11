@@ -35,14 +35,19 @@ export function useTrainingsData() {
     const res = await fetch("/api/me/context");
     const ctx = await res.json().catch(() => ({}));
     setCanDeleteTrainings(ctx?.canManageStaff === true);
-    if (!res.ok || (!ctx?.ageGroup?.id && !contextAgeGroupId)) {
+    const hasAnyAccess =
+      ctx?.ageGroup?.id ||
+      (Array.isArray(ctx?.accessibleAgeGroupIds) && ctx.accessibleAgeGroupIds.length > 0);
+    if (!res.ok || !hasAnyAccess) {
       setLoading(false);
       return;
     }
 
-    const agId: string = contextAgeGroupId ?? (ctx.ageGroup as { id: string }).id;
+    // ageGroupId para operações de criação: escalão seleccionado ou default do servidor
+    const agId: string | null = contextAgeGroupId ?? (ctx.ageGroup as { id: string } | null)?.id ?? null;
     setAgeGroupId(agId);
 
+    // Só passa ?ageGroupId quando o utilizador escolheu um escalão específico
     const trainingsUrl = contextAgeGroupId
       ? `/api/trainings?ageGroupId=${contextAgeGroupId}`
       : "/api/trainings";
@@ -290,6 +295,9 @@ export function useTrainingsData() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           type: "training",
+          // Passa o escalão efectivo para o servidor poder criar no escalão correcto.
+          // Essencial quando o club_coordinator tem um escalão seleccionado.
+          ...(ageGroupId ? { ageGroupId } : {}),
           payload: {
             title: fields.title.trim() || "Treino",
             ut_number: parseUtNumberInput(fields.utNumber),
