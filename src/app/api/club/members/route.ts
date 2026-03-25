@@ -72,7 +72,7 @@ export async function GET() {
         .eq("club_id", clubId),
       admin
         .from("age_group_staff")
-        .select("profile_id, age_group_id")
+        .select("profile_id, age_group_id, role")
         .in("profile_id", profileIds)
         .eq("club_id", clubId),
       admin
@@ -104,17 +104,29 @@ export async function GET() {
         .map((s) => [s.profile_id, ageGroupIdToName.get(s.age_group_id!) ?? null]),
     );
 
+    // profile_id → age_group_staff.role (prefere age_group_coordinator sobre outros)
+    const staffRoleByProfile = new Map<string, string>();
+    for (const s of ageGroupStaffRes.data ?? []) {
+      if (!s.role) continue;
+      const existing = staffRoleByProfile.get(s.profile_id);
+      if (!existing || s.role === "age_group_coordinator") {
+        staffRoleByProfile.set(s.profile_id, s.role);
+      }
+    }
+
     const members = memberships.map((m) => {
       const p = profileMap.get(m.profile_id);
       const isClubCoord = CLUB_COORDINATOR_ROLES.has(m.role);
       const ageGroupName = isClubCoord
         ? null
         : (ageGroupByCoord.get(m.profile_id) ?? ageGroupByStaff.get(m.profile_id) ?? null);
+      // Para membros não-coordenadores de clube, usar o role de age_group_staff (mais específico)
+      const displayRole = isClubCoord ? m.role : (staffRoleByProfile.get(m.profile_id) ?? m.role);
 
       return {
         id: `club-member-${m.profile_id}`,
         profile_id: m.profile_id,
-        role: m.role,
+        role: displayRole,
         full_name: p?.full_name ?? null,
         email: p?.email ?? null,
         phone: p?.phone ?? null,

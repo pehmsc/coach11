@@ -112,7 +112,32 @@ export async function resolveUserTeamContext(
     throw new Error(`Erro ao carregar equipas técnicas: ${staffLinksRes.error.message}`);
   }
 
-  const managedAgeGroups = (managedAgeGroupsRes.data || []) as TeamContextAgeGroup[];
+  let managedAgeGroups = (managedAgeGroupsRes.data || []) as TeamContextAgeGroup[];
+
+  // Para club_coordinator: garantir visibilidade de TODOS os escalões do clube,
+  // independentemente de coordinator_id (evita perda de acesso por hijack de coordinator_id).
+  const clubMembershipEarly = clubMembershipRes.data;
+  const isClubCoordinatorEarly = clubMembershipEarly != null &&
+    ["coordinator", "club_coordinator", "owner", "admin"].includes(clubMembershipEarly.role);
+
+  if (isClubCoordinatorEarly && clubMembershipEarly?.club_id) {
+    const { data: allClubAgeGroups } = await admin
+      .from("age_groups")
+      .select("id, club_name, club_short_name, club_logo_url, name, football_format, tactical_system, season, club_id")
+      .eq("club_id", clubMembershipEarly.club_id)
+      .order("created_at", { ascending: true })
+      .limit(20);
+
+    if (allClubAgeGroups) {
+      const existingIds = new Set(managedAgeGroups.map((ag) => ag.id));
+      for (const ag of allClubAgeGroups) {
+        if (!existingIds.has(ag.id)) {
+          managedAgeGroups = [...managedAgeGroups, ag as TeamContextAgeGroup];
+        }
+      }
+    }
+  }
+
   const managedAgeGroupMap = new Map(managedAgeGroups.map((row) => [row.id, row]));
   const managedAgeGroupIds = managedAgeGroups.map((row) => row.id);
 
@@ -201,7 +226,7 @@ export async function resolveUserTeamContext(
   let clubRole: UserTeamContext["clubRole"] = null;
 
   const clubMembership = clubMembershipRes.data;
-  const managedClubId: string | null = (managedAgeGroupsRes.data?.[0] as Record<string, unknown>)?.club_id as string ?? null;
+  const managedClubId: string | null = (managedAgeGroups[0] as (TeamContextAgeGroup & { club_id?: string }) | undefined)?.club_id ?? null;
   const staffClubId: string | null = (staffLinksRes.data?.[0] as Record<string, unknown>)?.club_id as string ?? null;
 
   const targetClubId = clubMembership?.club_id ?? managedClubId ?? staffClubId ?? null;

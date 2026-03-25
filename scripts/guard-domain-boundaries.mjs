@@ -64,6 +64,8 @@ const SRC_ALLOWED_EXCEPTIONS = new Map([
   ["src/app/api/invite/staff/[id]/route.ts", new Set(["src-admin-client", "src-club-id-filter"])],
   // INVITE_SYNC_FALLBACK: dashboard RSC resgata convite pendente por email antes de redirect para onboarding
   ["src/app/(dashboard)/dashboard/page.tsx", new Set(["src-admin-client"])],
+  // CLUB_COORD_ALL_AGE_GROUPS: club_coordinator vê todos os escalões do clube — boundary legítima
+  ["src/lib/auth/team-context.ts", new Set(["src-club-id-filter"])],
 ]);
 
 const MIGRATION_ALLOWED_EXCEPTIONS = new Map([

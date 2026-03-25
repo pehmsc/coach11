@@ -34,6 +34,7 @@ export const AGE_COORDINATOR_INVITABLE_ROLES = AGE_GROUP_STAFF_ROLES;
 export const ALL_STAFF_ROLE_LABELS: Record<string, string> = {
   club_coordinator: "Coordenador de Clube",
   age_coordinator: "Coordenador de Escalão",
+  age_group_coordinator: "Coordenador de Escalão",
   ...AGE_GROUP_STAFF_ROLE_LABELS,
 };
 
@@ -56,7 +57,7 @@ export function normalizeAgeGroupStaffRole(
 export function getStaffRoleLabel(value: string | null | undefined) {
   if (value === "coordinator") return "Coordenador";
   if (value === "club_coordinator") return "Coordenador de Clube";
-  if (value === "age_coordinator") return "Coordenador de Escalão";
+  if (value === "age_coordinator" || value === "age_group_coordinator") return "Coordenador de Escalão";
   if (value === "staff") return "Equipa técnica";
 
   const normalized = normalizeAgeGroupStaffRole(value);
