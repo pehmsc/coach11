@@ -76,9 +76,13 @@ export function Sidebar({ profile, avatarUrl, source, teamRole }: SidebarProps) 
           <div className="relative">
             <select
               value={selectedAgeGroupId ?? ""}
-              onChange={(e) => setSelectedAgeGroupId(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value;
+                setSelectedAgeGroupId(val === "" ? null : val);
+              }}
               className="w-full appearance-none bg-slate-800 text-slate-200 text-sm rounded-lg px-3 py-2 pr-8 border border-slate-700 focus:outline-none focus:border-emerald-500 cursor-pointer"
             >
+              <option value="">Todos os escalões</option>
               {ageGroups.map((ag) => (
                 <option key={ag.id} value={ag.id}>
                   {ag.name}

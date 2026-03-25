@@ -94,31 +94,22 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const sessionId = searchParams.get("sessionId");
 
-    // ?ageGroupId permite ao club_coordinator filtrar por escalão específico.
-    // Verificar que o utilizador tem acesso ao escalão pedido.
-    const requestedAgeGroupId = searchParams.get("ageGroupId");
-    const effectiveAgeGroupId: string | null = (() => {
-      if (requestedAgeGroupId && context.accessibleAgeGroupIds.includes(requestedAgeGroupId)) {
-        return requestedAgeGroupId;
-      }
-      return context.ageGroup?.id ?? null;
-    })();
-
-    if (!effectiveAgeGroupId) {
+    // Sem escalões acessíveis → sem dados
+    if (context.accessibleAgeGroupIds.length === 0) {
       return NextResponse.json(
-        {
-          success: true,
-          linked: false,
-          sessions: [],
-          summaries: [],
-        },
-        {
-          headers: {
-            "Cache-Control": SHORT_PRIVATE_CACHE_CONTROL,
-          },
-        },
+        { success: true, linked: false, sessions: [], summaries: [] },
+        { headers: { "Cache-Control": SHORT_PRIVATE_CACHE_CONTROL } },
       );
     }
+
+    // ?ageGroupId permite ao club_coordinator filtrar por escalão específico.
+    // Verificar que o utilizador tem acesso ao escalão pedido.
+    // Sem ?ageGroupId (ou valor inválido) → todos os escalões acessíveis.
+    const requestedAgeGroupId = searchParams.get("ageGroupId");
+    const effectiveAgeGroupId: string | null =
+      requestedAgeGroupId && context.accessibleAgeGroupIds.includes(requestedAgeGroupId)
+        ? requestedAgeGroupId
+        : null; // null = "todos os escalões acessíveis"
 
     if (sessionId) {
       const { data: session, error: sessionError } = await db
@@ -127,7 +118,7 @@ export async function GET(request: Request) {
           "id, session_date, start_time, end_time, title, ut_number, week_start_date, microcycle_number, mesocycle_number, period_type, initial_instruction, objective, complementary_objectives, focus, intensity, material, field_area, location, location_address, formatted_address, latitude, longitude, osm_place_id, location_source, notes, image_url, status, age_group_id, team_id",
         )
         .eq("id", sessionId)
-        .eq("age_group_id", effectiveAgeGroupId)
+        .in("age_group_id", effectiveAgeGroupId ? [effectiveAgeGroupId] : context.accessibleAgeGroupIds)
         .maybeSingle();
 
       if (sessionError) {
@@ -187,7 +178,7 @@ export async function GET(request: Request) {
           .from("players")
           // Perf: campos específicos — mesmo conjunto que o branch acima.
           .select(PLAYER_ATTENDANCE_FIELDS)
-          .eq("age_group_id", effectiveAgeGroupId)
+          .in("age_group_id", effectiveAgeGroupId ? [effectiveAgeGroupId] : context.accessibleAgeGroupIds)
           .eq("status", "active")
           .order("first_name")
           .order("last_name");
@@ -251,7 +242,7 @@ export async function GET(request: Request) {
       .select(
         "id, session_date, start_time, end_time, title, ut_number, week_start_date, microcycle_number, mesocycle_number, period_type, initial_instruction, objective, complementary_objectives, focus, intensity, material, field_area, location, location_address, formatted_address, latitude, longitude, osm_place_id, location_source, notes, image_url, status, age_group_id, team_id",
       )
-      .eq("age_group_id", effectiveAgeGroupId)
+      .in("age_group_id", effectiveAgeGroupId ? [effectiveAgeGroupId] : context.accessibleAgeGroupIds)
       .order("session_date", { ascending: true })
       .order("start_time", { ascending: true, nullsFirst: false });
 
