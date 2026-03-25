@@ -73,6 +73,7 @@ export async function GET() {
           canManageStaff: false,
           ageGroup: null,
           accessibleTeamIds: context.accessibleTeamIds,
+          allAgeGroups: context.allAgeGroups,
           kits: [],
           staffMembers: [],
           activeStaffProfileIds: [],
@@ -96,7 +97,8 @@ export async function GET() {
     const canManageStaff =
       ageGroupMeta?.coordinator_id === user.id ||
       resolvedProfile?.is_super_coordinator === true ||
-      context.source === "club_coordinator";
+      context.source === "club_coordinator" ||
+      context.source === "coordinator";
 
     const staffContext = context.teamId
       ? await getTeamMembersDetailed(db, {
@@ -224,6 +226,7 @@ export async function GET() {
         canManageStaff,
         ageGroup: context.ageGroup,
         accessibleTeamIds: context.accessibleTeamIds,
+        allAgeGroups: context.allAgeGroups,
         kits: ((kitsRes.data || []) as Record<string, unknown>[]).map((row) =>
           normalizeKitRowForUi(row),
         ),

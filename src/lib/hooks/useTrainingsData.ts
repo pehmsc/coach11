@@ -10,10 +10,12 @@ import type {
 } from "@/components/trainings/types";
 import { parseUtNumberInput } from "@/lib/trainings/ut-numbering";
 import type { Player } from "@/types/database";
+import { useAgeGroup } from "@/contexts/AgeGroupContext";
 
 export function useTrainingsData() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { selectedAgeGroupId: contextAgeGroupId } = useAgeGroup();
   const [loading, setLoading] = useState(true);
   const [sessions, setSessions] = useState<TrainingRow[]>([]);
   const [attendance, setAttendance] = useState<AttendanceSummary[]>([]);
@@ -33,15 +35,18 @@ export function useTrainingsData() {
     const res = await fetch("/api/me/context");
     const ctx = await res.json().catch(() => ({}));
     setCanDeleteTrainings(ctx?.canManageStaff === true);
-    if (!res.ok || !ctx?.ageGroup?.id) {
+    if (!res.ok || (!ctx?.ageGroup?.id && !contextAgeGroupId)) {
       setLoading(false);
       return;
     }
 
-    const agId: string = (ctx.ageGroup as { id: string }).id;
+    const agId: string = contextAgeGroupId ?? (ctx.ageGroup as { id: string }).id;
     setAgeGroupId(agId);
 
-    const trainingsRes = await fetch("/api/trainings", { cache: "no-store" });
+    const trainingsUrl = contextAgeGroupId
+      ? `/api/trainings?ageGroupId=${contextAgeGroupId}`
+      : "/api/trainings";
+    const trainingsRes = await fetch(trainingsUrl, { cache: "no-store" });
     const trainingsPayload = (await trainingsRes.json().catch(() => null)) as
       | {
           success?: boolean;
@@ -63,7 +68,7 @@ export function useTrainingsData() {
     setAttendance(trainingsPayload.summaries || []);
 
     setLoading(false);
-  }, []);
+  }, [contextAgeGroupId]);
 
   useEffect(() => {
     void loadData();
