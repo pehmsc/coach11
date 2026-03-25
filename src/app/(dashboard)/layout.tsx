@@ -8,6 +8,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { UnreadNotificationsProvider } from "@/contexts/UnreadNotificationsContext";
 import { AuthenticatedAnalyticsProvider } from "@/components/observability/AuthenticatedAnalyticsProvider";
 import { getCachedUserTeamContext, type UserTeamContext } from "@/lib/auth/team-context";
+import { AgeGroupProvider } from "@/contexts/AgeGroupContext";
 
 export default async function DashboardLayout({
   children,
@@ -79,24 +80,30 @@ export default async function DashboardLayout({
       }}
     >
       <UnreadNotificationsProvider profileId={profile?.id ?? null}>
-        <div
-          className="min-h-screen bg-slate-50"
-          style={{ ["--coach11-top-inset" as string]: topInset }}
+        <AgeGroupProvider
+          ageGroups={analyticsContext?.allAgeGroups ?? []}
+          source={analyticsContext?.source ?? null}
+          defaultAgeGroupId={analyticsContext?.ageGroup?.id ?? null}
         >
-          {/* Sidebar — visível apenas em desktop */}
-          <Sidebar profile={profile} avatarUrl={avatarUrl} source={analyticsContext?.source ?? null} teamRole={analyticsContext?.teamRole ?? null} />
-
-          {/* Conteúdo principal */}
-          <main
-            className="min-w-0 pb-[calc(var(--mobile-footer-height)+env(safe-area-inset-bottom)+1rem)] md:ml-64 md:pb-0"
-            style={{ paddingTop: "var(--coach11-top-inset, 0px)" }}
+          <div
+            className="min-h-screen bg-slate-50"
+            style={{ ["--coach11-top-inset" as string]: topInset }}
           >
-            {children}
-          </main>
+            {/* Sidebar — visível apenas em desktop */}
+            <Sidebar profile={profile} avatarUrl={avatarUrl} source={analyticsContext?.source ?? null} teamRole={analyticsContext?.teamRole ?? null} />
 
-          {/* Navegação inferior — visível apenas em mobile */}
-          <BottomNav profile={profile} avatarUrl={avatarUrl} />
-        </div>
+            {/* Conteúdo principal */}
+            <main
+              className="min-w-0 pb-[calc(var(--mobile-footer-height)+env(safe-area-inset-bottom)+1rem)] md:ml-64 md:pb-0"
+              style={{ paddingTop: "var(--coach11-top-inset, 0px)" }}
+            >
+              {children}
+            </main>
+
+            {/* Navegação inferior — visível apenas em mobile */}
+            <BottomNav profile={profile} avatarUrl={avatarUrl} />
+          </div>
+        </AgeGroupProvider>
       </UnreadNotificationsProvider>
     </AuthenticatedAnalyticsProvider>
   );

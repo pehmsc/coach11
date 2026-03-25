@@ -73,6 +73,7 @@ export async function GET() {
           canManageStaff: false,
           ageGroup: null,
           accessibleTeamIds: context.accessibleTeamIds,
+          allAgeGroups: context.allAgeGroups,
           kits: [],
           staffMembers: [],
           activeStaffProfileIds: [],
@@ -225,6 +226,7 @@ export async function GET() {
         canManageStaff,
         ageGroup: context.ageGroup,
         accessibleTeamIds: context.accessibleTeamIds,
+        allAgeGroups: context.allAgeGroups,
         kits: ((kitsRes.data || []) as Record<string, unknown>[]).map((row) =>
           normalizeKitRowForUi(row),
         ),

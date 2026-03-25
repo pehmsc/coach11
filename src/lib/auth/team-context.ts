@@ -44,6 +44,8 @@ export type UserTeamContext = {
   club: TeamContextClub | null;
   /** Role do utilizador no contexto de clube. */
   clubRole: "club_coordinator" | "age_coordinator" | "staff" | null;
+  /** Lista de todos os escalões acessíveis — usado no selector de escalão do sidenav. */
+  allAgeGroups: Array<{ id: string; name: string }>;
 };
 
 async function pickPreferredTeamId(
@@ -186,7 +188,7 @@ export async function resolveUserTeamContext(
   const managedTeamIds = managedTeams
     .map((row) => row.id)
     .filter((value): value is string => typeof value === "string");
-  const staffTeamIds = orderedStaffTeamIds;
+  let staffTeamIds = [...orderedStaffTeamIds];
 
   const teamMap = new Map<string, TeamContextTeam>();
   [...managedTeams, ...staffTeams].forEach((row) => {
@@ -207,6 +209,25 @@ export async function resolveUserTeamContext(
     ((missingAgeGroupsRes.data || []) as TeamContextAgeGroup[]).forEach((row) => {
       managedAgeGroupMap.set(row.id, row);
     });
+  }
+
+  // Fix: staff com age_group_id mas sem linked_team_id — buscar teams do escalão
+  // para garantir que ageGroup é resolvido correctamente (evita fallback para "none").
+  if (staffTeamIds.length === 0 && orderedStaffAgeGroupIds.length > 0) {
+    const fallbackTeamsRes = await admin
+      .from("teams")
+      .select("id, age_group_id")
+      .in("age_group_id", orderedStaffAgeGroupIds)
+      .order("created_at", { ascending: true })
+      .limit(20);
+    if (!fallbackTeamsRes.error && fallbackTeamsRes.data) {
+      for (const team of fallbackTeamsRes.data as TeamContextTeam[]) {
+        if (typeof team.id === "string" && !teamMap.has(team.id)) {
+          teamMap.set(team.id, team);
+          staffTeamIds = [...staffTeamIds, team.id];
+        }
+      }
+    }
   }
 
   const accessibleTeamIds = Array.from(
@@ -253,6 +274,11 @@ export async function resolveUserTeamContext(
     clubRole = "staff";
   }
 
+  const allAgeGroups = Array.from(managedAgeGroupMap.values()).map((ag) => ({
+    id: ag.id,
+    name: ag.name,
+  }));
+
   if (managedAgeGroups.length > 0) {
     const preferredManagedTeamId = await pickPreferredTeamId(admin, managedTeamIds);
     const resolvedTeam =
@@ -278,14 +304,15 @@ export async function resolveUserTeamContext(
       accessibleTeams,
       club,
       clubRole,
+      allAgeGroups,
     };
   }
 
-  if (orderedStaffTeamIds.length > 0) {
-    const preferredStaffTeamId = await pickPreferredTeamId(admin, orderedStaffTeamIds);
+  if (staffTeamIds.length > 0) {
+    const preferredStaffTeamId = await pickPreferredTeamId(admin, staffTeamIds);
     const candidateTeamIds = [
       ...(preferredStaffTeamId ? [preferredStaffTeamId] : []),
-      ...orderedStaffTeamIds.filter((id) => id !== preferredStaffTeamId),
+      ...staffTeamIds.filter((id) => id !== preferredStaffTeamId),
     ];
 
     let resolvedTeam: TeamContextTeam | null = null;
@@ -337,6 +364,7 @@ export async function resolveUserTeamContext(
       accessibleTeams,
       club,
       clubRole,
+      allAgeGroups,
     };
   }
 
@@ -352,6 +380,7 @@ export async function resolveUserTeamContext(
     accessibleTeams: [],
     club,
     clubRole,
+    allAgeGroups,
   };
 }
 
