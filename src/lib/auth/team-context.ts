@@ -339,6 +339,9 @@ export async function resolveUserTeamContext(
       staffLinks.find((row) => row.age_group_id === resolvedAgeGroup?.id)?.role ??
       null;
 
+    // age_group_coordinator tem permissões equivalentes a coordenador funcional
+    // no seu escalão — expõe como "coordinator" para que todas as verificações
+    // de isCoordinator passem no contexto do seu escalão.
     const isAgeGroupCoord = staffLinks.some((row) => row.role === "age_group_coordinator");
     const effectiveSource = clubRole === "club_coordinator"
       ? "club_coordinator"
