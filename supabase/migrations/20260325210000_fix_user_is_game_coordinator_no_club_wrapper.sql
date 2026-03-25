@@ -1,5 +1,7 @@
--- Fix: user_is_game_coordinator não reconhecia age_group_coordinator nem club_coordinator.
--- Alinha com user_can_manage_age_group_v2: qualquer coordenador funcional pode apagar jogos.
+-- Fix: remover user_can_access_club da função user_is_game_coordinator.
+-- A função anterior usava user_can_access_club como boundary funcional,
+-- o que viola as regras de arquitectura (club-first via club_memberships/age_groups).
+-- As condições OR já garantem o scope correcto sem wrapper de clube.
 
 CREATE OR REPLACE FUNCTION public.user_is_game_coordinator(p_game_id uuid)
 RETURNS boolean

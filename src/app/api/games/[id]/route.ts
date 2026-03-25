@@ -3,7 +3,6 @@ import {
   normalizeManualShortName,
 } from "@/lib/football/short-name";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { fetchGameAccessContext } from "@/lib/games/access";
 import { normalizeLocationSource, normalizeNullableNumber } from "@/lib/location";
@@ -163,8 +162,7 @@ export async function DELETE(_request: Request, { params }: RouteContext) {
       );
     }
 
-    const admin = createAdminClient();
-    await deleteGameCascade(admin, gameId);
+    await deleteGameCascade(supabase, gameId);
 
     return NextResponse.json({ success: true });
   } catch (error) {
