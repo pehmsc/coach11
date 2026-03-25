@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import { toast } from "sonner";
 import type { Game } from "@/types/database";
+import type { GameCompetitionOption } from "@/components/games/game-form-fields";
 import {
   isValidManualShortName,
   normalizeManualShortName,
@@ -41,7 +42,32 @@ export function useGameEditor(deps: UseGameEditorDeps) {
   >(null);
   const [editNotes, setEditNotes] = useState("");
   const [editImageUrl, setEditImageUrl] = useState("");
+  const [editCompetitionId, setEditCompetitionId] = useState("");
+  const [competitionOptions, setCompetitionOptions] = useState<GameCompetitionOption[]>([]);
   const [savingGameEdit, setSavingGameEdit] = useState(false);
+
+  useEffect(() => {
+    void (async () => {
+      const res = await fetch("/api/competitions").catch(() => null);
+      if (!res?.ok) return;
+      const payload = await res.json().catch(() => null) as {
+        success?: boolean;
+        competitions?: Array<{ id?: string; name?: string; season?: string | null; team_label?: string | null; is_active?: boolean }>;
+      } | null;
+      if (!payload?.success) return;
+      setCompetitionOptions(
+        (payload.competitions || [])
+          .filter((c) => !!c.id)
+          .map((c) => ({
+            id: c.id as string,
+            name: c.name || "Competição",
+            season: c.season || null,
+            team_label: c.team_label || null,
+            inactive: c.is_active === false,
+          })),
+      );
+    })();
+  }, []);
 
   // Delete state
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -74,6 +100,7 @@ export function useGameEditor(deps: UseGameEditorDeps) {
     setEditLocationSource(game.location_source ?? null);
     setEditNotes(game.notes ?? "");
     setEditImageUrl(game.image_url ?? "");
+    setEditCompetitionId(game.competition_id ?? "");
     setEditingGame(true);
   }
 
@@ -120,6 +147,7 @@ export function useGameEditor(deps: UseGameEditorDeps) {
           location_source: editLocationSource,
           notes: editNotes.trim() || null,
           image_url: editImageUrl.trim() || null,
+          competition_id: editCompetitionId || null,
           is_home: game?.is_home ?? true,
         },
       }),
@@ -143,14 +171,8 @@ export function useGameEditor(deps: UseGameEditorDeps) {
     setError(null);
 
     try {
-      const res = await fetch("/api/calendar/events", {
+      const res = await fetch(`/api/games/${game.id}`, {
         method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: game.id,
-          type: "game",
-          ageGroupId: game.age_group_id ?? null,
-        }),
       });
       const payload = await res.json().catch(() => ({}));
 
@@ -216,6 +238,9 @@ export function useGameEditor(deps: UseGameEditorDeps) {
     setEditNotes,
     editImageUrl,
     setEditImageUrl,
+    editCompetitionId,
+    setEditCompetitionId,
+    competitionOptions,
     savingGameEdit,
     openEditGame,
     handleSaveGameEdit,
