@@ -8,6 +8,7 @@ import {
   deleteUserAvatarStorage,
   listManagedAgeGroups,
   optionalDeleteByEq,
+  optionalDeleteByIn,
   optionalUpdateByEq,
 } from "@/lib/team/delete-age-group";
 
@@ -43,7 +44,17 @@ export async function DELETE(request: Request) {
       );
     }
 
+    // Limpar staff_permissions antes de apagar age_group_staff (FK: staff_permissions.staff_id → age_group_staff.id)
+    const { data: staffEntries } = await admin
+      .from("age_group_staff")
+      .select("id")
+      .eq("profile_id", user.id);
+    const staffIds = (staffEntries ?? []).map((s) => s.id);
+    if (staffIds.length > 0) {
+      await optionalDeleteByIn(admin, "staff_permissions", "staff_id", staffIds);
+    }
     await optionalDeleteByEq(admin, "age_group_staff", "profile_id", user.id);
+    await optionalDeleteByEq(admin, "club_memberships", "profile_id", user.id);
     await optionalDeleteByEq(admin, "staff_invites", "profile_id", user.id);
     await optionalDeleteByEq(admin, "staff_invites", "invited_by", user.id);
     await optionalDeleteByEq(admin, "staff_invites", "accepted_by", user.id);

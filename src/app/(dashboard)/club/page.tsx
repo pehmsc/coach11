@@ -243,31 +243,32 @@ export default function ClubPage() {
     setIsClubCoordinator(isClubCoord);
     setIsSuperCoordinator(isSuper);
 
-    // BUG-1: para club_coordinator, buscar membros directamente de club_memberships
+    // Buscar membros e info do clube em paralelo.
+    // Todos os membros do clube (qualquer role) podem ver a lista via /api/club/members.
+    // Info do clube (/api/club) e convites pendentes apenas para coordenadores.
     let resolvedLogoFromClub = "";
-    if (isClubCoord || isSuper) {
-      const [membersRes, clubInfoRes] = await Promise.all([
-        fetch("/api/club/members", { signal }).catch(() => null),
-        fetch("/api/club", { signal }).catch(() => null),
-      ]);
+    const [membersRes, clubInfoRes] = await Promise.all([
+      fetch("/api/club/members", { signal }).catch(() => null),
+      (isClubCoord || isSuper) ? fetch("/api/club", { signal }).catch(() => null) : Promise.resolve(null),
+    ]);
 
-      if (membersRes?.ok) {
-        const mp = await membersRes.json().catch(() => ({}));
-        const clubMembers = ((mp?.members as StaffMember[]) || []).map((m) => ({
-          ...m,
-          full_name: m.full_name || "Sem nome",
-        }));
-        setStaffMembers(
-          clubMembers.sort((a, b) => {
-            const ap = a.is_coordinator ? 0 : 1;
-            const bp = b.is_coordinator ? 0 : 1;
-            if (ap !== bp) return ap - bp;
-            return (a.full_name || "").localeCompare(b.full_name || "", "pt");
-          }),
-        );
+    if (membersRes?.ok) {
+      const mp = await membersRes.json().catch(() => ({}));
+      const clubMembers = ((mp?.members as StaffMember[]) || []).map((m) => ({
+        ...m,
+        full_name: m.full_name || "Sem nome",
+      }));
+      setStaffMembers(
+        clubMembers.sort((a, b) => {
+          const ap = a.is_coordinator ? 0 : 1;
+          const bp = b.is_coordinator ? 0 : 1;
+          if (ap !== bp) return ap - bp;
+          return (a.full_name || "").localeCompare(b.full_name || "", "pt");
+        }),
+      );
 
-        // Convites pendentes — apenas visíveis para club_coordinator
-        // Convites pendentes para club_coordinator (não presentes em staffInvites de me/context)
+      // Convites pendentes — apenas visíveis para club_coordinator
+      if (isClubCoord || isSuper) {
         const rawPendingInvites = (mp?.pendingInvites as Array<Record<string, unknown>>) || [];
         setStaffInvites(
           rawPendingInvites.map((inv) => ({
@@ -282,26 +283,8 @@ export default function ClubPage() {
           })),
         );
       }
-
-      if (clubInfoRes?.ok) {
-        const cp = await clubInfoRes.json().catch(() => ({}));
-        const c = cp?.club;
-        if (c) {
-          resolvedLogoFromClub = c.logo_url || "";
-          if (c.name && !ag) setClubName(c.name);
-          // BUG-2: pre-popular sigla a partir de clubs.slug
-          if (!ag && c.slug) setClubShortName(c.slug);
-          setClubMorada(c.morada || "");
-          setClubTelefone(c.telefone || "");
-          setClubEmailContacto(c.email_contacto || "");
-          setClubWebsite(c.website || "");
-          setClubCorPrimaria(c.cor_primaria || "#000000");
-          setClubCorSecundaria(c.cor_secundaria || "#FFFFFF");
-          setClubDistrito(c.distrito || "");
-          setClubAssociacao(c.associacao || "");
-        }
-      }
     } else {
+      // Fallback: usar staffMembers do contexto se /api/club/members falhar
       const rawMembers = (payload?.staffMembers as StaffMember[]) || [];
       setStaffMembers(
         rawMembers
@@ -315,21 +298,23 @@ export default function ClubPage() {
       );
     }
 
-    const rawInvites = (payload?.staffInvites as Array<Record<string, unknown>>) || [];
-    setStaffInvites(
-      rawInvites
-        .filter((inv) => !inv.accepted_at)
-        .map((inv) => ({
-          id: String(inv.id ?? ""),
-          first_name: String(inv.first_name ?? ""),
-          last_name: String(inv.last_name ?? ""),
-          email: String(inv.email ?? ""),
-          role: String(inv.role ?? ""),
-          invite_code: String(inv.invite_code ?? ""),
-          accepted_at: inv.accepted_at ? String(inv.accepted_at) : undefined,
-          invite_sent_at: String(inv.created_at ?? ""),
-        })),
-    );
+    if (clubInfoRes?.ok) {
+      const cp = await clubInfoRes.json().catch(() => ({}));
+      const c = cp?.club;
+      if (c) {
+        resolvedLogoFromClub = c.logo_url || "";
+        if (c.name && !ag) setClubName(c.name);
+        if (!ag && c.slug) setClubShortName(c.slug);
+        setClubMorada(c.morada || "");
+        setClubTelefone(c.telefone || "");
+        setClubEmailContacto(c.email_contacto || "");
+        setClubWebsite(c.website || "");
+        setClubCorPrimaria(c.cor_primaria || "#000000");
+        setClubCorSecundaria(c.cor_secundaria || "#FFFFFF");
+        setClubDistrito(c.distrito || "");
+        setClubAssociacao(c.associacao || "");
+      }
+    }
 
     if (!ag) {
       if (resolvedLogoFromClub) setLogoUrl(resolvedLogoFromClub);
