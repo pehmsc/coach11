@@ -340,7 +340,7 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
       .eq("age_group_id", ageGroupId)
       .eq("profile_id", user.id)
       .maybeSingle();
-    const isPrincipal = staffLink?.role === "coach";
+    const isPrincipal = staffLink?.role === "coach" || staffLink?.role === "age_group_coordinator";
     setCanManage(isCoord || isOwnAg || isPrincipal || !!profile?.is_super_coordinator);
 
     // Detectar club_coordinator via context (fetch rápido ao me/context)
