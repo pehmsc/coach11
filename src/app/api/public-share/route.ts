@@ -39,21 +39,38 @@ const PatchSchema = AgeGroupSchema.extend({
   publicAccessEnabled: z.boolean(),
 });
 
+const CLUB_COORDINATOR_ROLES = new Set(["coordinator", "club_coordinator", "owner", "admin"]);
+
 async function assertCanManagePublicShare(userId: string, ageGroupId: string) {
   const admin = createAdminClient();
-  const [{ data: ageGroup, error: ageGroupError }, { data: profile, error: profileError }] =
-    await Promise.all([
-      admin
-        .from("age_groups")
-        .select("id, coordinator_id, club_name, name, public_slug, public_access_enabled")
-        .eq("id", ageGroupId)
-        .maybeSingle(),
-      admin
-        .from("profiles")
-        .select("id, is_super_coordinator")
-        .eq("id", userId)
-        .maybeSingle(),
-    ]);
+  const [
+    { data: ageGroup, error: ageGroupError },
+    { data: profile, error: profileError },
+    { data: clubMembership },
+    { data: staffEntry },
+  ] = await Promise.all([
+    admin
+      .from("age_groups")
+      .select("id, coordinator_id, club_id, club_name, name, public_slug, public_access_enabled")
+      .eq("id", ageGroupId)
+      .maybeSingle(),
+    admin
+      .from("profiles")
+      .select("id, is_super_coordinator")
+      .eq("id", userId)
+      .maybeSingle(),
+    admin
+      .from("club_memberships")
+      .select("role, club_id")
+      .eq("profile_id", userId)
+      .maybeSingle(),
+    admin
+      .from("age_group_staff")
+      .select("role")
+      .eq("profile_id", userId)
+      .eq("age_group_id", ageGroupId)
+      .maybeSingle(),
+  ]);
 
   if (ageGroupError || profileError) {
     return {
@@ -73,9 +90,18 @@ async function assertCanManagePublicShare(userId: string, ageGroupId: string) {
   }
 
   const isSuperCoordinator = profile?.is_super_coordinator === true;
+  // coordinator_id directo no escalão
   const isAgeGroupCoordinator = ageGroup.coordinator_id === userId;
+  // age_group_coordinator via age_group_staff
+  const isAgeGroupCoordRole = staffEntry?.role === "age_group_coordinator";
+  // club_coordinator via club_memberships (mesmo clube do escalão)
+  const ageGroupClubId = (ageGroup as Record<string, unknown>).club_id as string | null;
+  const isClubCoordinator =
+    clubMembership != null &&
+    CLUB_COORDINATOR_ROLES.has(clubMembership.role) &&
+    clubMembership.club_id === ageGroupClubId;
 
-  if (!isSuperCoordinator && !isAgeGroupCoordinator) {
+  if (!isSuperCoordinator && !isAgeGroupCoordinator && !isAgeGroupCoordRole && !isClubCoordinator) {
     return {
       ok: false as const,
       response: NextResponse.json(
@@ -88,7 +114,7 @@ async function assertCanManagePublicShare(userId: string, ageGroupId: string) {
   return {
     ok: true as const,
     admin,
-    ageGroup: ageGroup as AgeGroupAccessRecord,
+    ageGroup: ageGroup as unknown as AgeGroupAccessRecord,
   };
 }
 

@@ -367,21 +367,108 @@ export default function GamesPage() {
 
   if (games.length === 0) {
     return (
-      <div className="p-4 md:p-8 max-w-2xl mx-auto text-center py-16">
-        <Sword size={40} className="text-slate-200 mx-auto mb-3" />
-        <p className="text-slate-500 text-sm">Nenhum jogo registado.</p>
-        <p className="text-slate-400 text-xs mt-1">Cria o primeiro jogo aqui.</p>
-        <Button
-          className="mt-4 bg-indigo-600 hover:bg-indigo-700"
-          onClick={() => {
-            resetCreateForm();
-            setCreateModalOpen(true);
-          }}
-        >
-          <Plus size={16} className="mr-2" />
-          Adicionar jogo
-        </Button>
-      </div>
+      <>
+        <div className="p-4 md:p-8 max-w-2xl mx-auto text-center py-16">
+          <Sword size={40} className="text-slate-200 mx-auto mb-3" />
+          <p className="text-slate-500 text-sm">Nenhum jogo registado.</p>
+          <p className="text-slate-400 text-xs mt-1">Cria o primeiro jogo aqui.</p>
+          <Button
+            className="mt-4 bg-indigo-600 hover:bg-indigo-700"
+            onClick={() => {
+              resetCreateForm();
+              setCreateModalOpen(true);
+            }}
+          >
+            <Plus size={16} className="mr-2" />
+            Adicionar jogo
+          </Button>
+        </div>
+        {createModalOpen && (
+          <div
+            className="fixed inset-0 bg-black/50 z-[90] flex items-end justify-center px-4 pt-4 pb-[calc(var(--mobile-footer-height)+env(safe-area-inset-bottom)+0.75rem)] md:items-center md:p-4"
+            onClick={() => setCreateModalOpen(false)}
+          >
+            <div
+              className="min-w-0 overflow-x-hidden bg-white rounded-2xl w-full max-w-md shadow-xl h-[calc(100dvh-var(--mobile-footer-height)-env(safe-area-inset-bottom)-1rem)] md:h-auto md:max-h-[90vh] overflow-hidden flex flex-col"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-center justify-between p-5 border-b">
+                <h3 className="font-bold text-slate-900">
+                  {createMode === "duplicate" ? "Duplicar jogo" : "Adicionar jogo"}
+                </h3>
+                <button onClick={() => setCreateModalOpen(false)}>
+                  <X size={20} className="text-slate-400" />
+                </button>
+              </div>
+              <form onSubmit={handleCreateGame} className="flex min-h-0 min-w-0 flex-1 flex-col">
+                <div
+                  className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-5 space-y-3 [overflow-wrap:anywhere]"
+                  style={{ WebkitOverflowScrolling: "touch" }}
+                >
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium text-slate-700">
+                      Título
+                    </label>
+                    <input
+                      type="text"
+                      value={gameForm.title}
+                      onChange={(event) =>
+                        setGameForm((prev) => ({ ...prev, title: event.target.value }))
+                      }
+                      placeholder="ex: Jornada 5, Cópia Jogo, Torneio"
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <GameFormFields
+                    values={gameForm}
+                    onFieldChange={handleGameFormFieldChange}
+                    competitionOptions={competitionOptions}
+                    showCompetitionSelect
+                  />
+                  <EventImagePicker
+                    ageGroupId={ageGroupId}
+                    value={gameForm.image_url}
+                    onChange={(value) =>
+                      setGameForm((prev) => ({ ...prev, image_url: value }))
+                    }
+                    accent="blue"
+                  />
+                  <NotesEditor
+                    value={gameForm.notes}
+                    onChange={(value) =>
+                      setGameForm((prev) => ({ ...prev, notes: value }))
+                    }
+                    accent="blue"
+                    rows={6}
+                  />
+                  {createError && <p className="text-sm text-red-600">{createError}</p>}
+                </div>
+                <div className="flex gap-2 border-t bg-white p-5 pt-3 shrink-0 pb-[max(1rem,env(safe-area-inset-bottom))]">
+                  <Button
+                    type="submit"
+                    disabled={creatingGame}
+                    className="flex-1 bg-indigo-600 hover:bg-indigo-700"
+                  >
+                    {creatingGame ? (
+                      <Loader2 size={16} className="animate-spin" />
+                    ) : (
+                      createMode === "duplicate" ? "Criar cópia" : "Criar jogo"
+                    )}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setCreateModalOpen(false)}
+                    disabled={creatingGame}
+                  >
+                    Cancelar
+                  </Button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+      </>
     );
   }
 
