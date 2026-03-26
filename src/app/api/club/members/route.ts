@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 
 // Roles in club_memberships that represent a club-level coordinator
 // (mirrors resolveUserTeamContext logic)
-const CLUB_COORDINATOR_ROLES = new Set(["coordinator", "club_coordinator", "owner", "admin"]);
+const CLUB_COORDINATOR_ROLES = new Set(["club_coordinator", "owner", "admin"]);
 
 export async function GET() {
   try {

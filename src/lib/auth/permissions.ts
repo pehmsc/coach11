@@ -174,7 +174,7 @@ export async function hasPermission(
     .from("club_memberships")
     .select("club_id")
     .eq("profile_id", userId)
-    .in("role", ["club_coordinator", "coordinator", "owner", "admin"])
+    .in("role", ["club_coordinator", "owner", "admin"])
     .limit(1)
     .maybeSingle();
   if (clubCoord) return true;

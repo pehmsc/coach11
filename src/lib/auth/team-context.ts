@@ -120,7 +120,7 @@ export async function resolveUserTeamContext(
   // independentemente de coordinator_id (evita perda de acesso por hijack de coordinator_id).
   const clubMembershipEarly = clubMembershipRes.data;
   const isClubCoordinatorEarly = clubMembershipEarly != null &&
-    ["coordinator", "club_coordinator", "owner", "admin"].includes(clubMembershipEarly.role);
+    ["club_coordinator", "owner", "admin"].includes(clubMembershipEarly.role);
 
   if (isClubCoordinatorEarly && clubMembershipEarly?.club_id) {
     const { data: allClubAgeGroups } = await admin
@@ -265,7 +265,7 @@ export async function resolveUserTeamContext(
 
   if (clubMembership) {
     const memberRole = clubMembership.role;
-    clubRole = memberRole === "coordinator" || memberRole === "club_coordinator" || memberRole === "owner" || memberRole === "admin"
+    clubRole = memberRole === "club_coordinator" || memberRole === "owner" || memberRole === "admin"
       ? "club_coordinator"
       : "staff";
   } else if (managedAgeGroups.length > 0) {

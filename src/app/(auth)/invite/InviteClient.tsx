@@ -24,7 +24,8 @@ const ROLE_LABELS: Record<string, string> = {
   doctor: "Médico",
   analyst: "Analista / Observador",
   team_manager: "Team Manager",
-  coach: "Treinador Principal",
+  age_group_coordinator: "Coordenador de Escalão",
+  club_coordinator: "Coordenador de Clube",
 };
 
 export default function InviteClient() {

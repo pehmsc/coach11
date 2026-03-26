@@ -75,6 +75,13 @@ const MIGRATION_ALLOWED_EXCEPTIONS = new Map([
     "supabase/migrations/20260323100000_fix_rpc_staff_invite_role_mapping.sql",
     new Set(["sql-team-staff-write", "sql-team-staff-source"]),
   ],
+  [
+    // ROLE-NORMALIZE: normalização única de dados — 'coordinator'→'club_coordinator' em club_memberships,
+    // 'coordinator'→'age_group_coordinator' em age_group_staff e team_staff, 'coach'→'head_coach' em team_staff.
+    // team_staff mantém-se como projecção; este UPDATE é migração de dados históricos, não escrita funcional.
+    "supabase/migrations/20260326010000_normalize_coordinator_roles.sql",
+    new Set(["sql-team-staff-write"]),
+  ],
 ]);
 
 const SRC_RULES = [
