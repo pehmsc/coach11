@@ -101,7 +101,7 @@ export default async function DashboardLayout({
             </main>
 
             {/* Navegação inferior — visível apenas em mobile */}
-            <BottomNav profile={profile} avatarUrl={avatarUrl} />
+            <BottomNav profile={profile} avatarUrl={avatarUrl} source={analyticsContext?.source ?? null} teamRole={analyticsContext?.teamRole ?? null} />
           </div>
         </AgeGroupProvider>
       </UnreadNotificationsProvider>
