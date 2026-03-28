@@ -219,15 +219,12 @@ export function getProfileInitials(fullName?: string | null) {
   return `${tokens[0][0] || ""}${tokens[tokens.length - 1][0] || ""}`.toUpperCase();
 }
 
-export function getRoleLabel(role?: string | null) {
-  if (!role) return "Utilizador";
-  return ROLE_LABELS[role] || role;
-}
-
 /**
  * Retorna o label de role tendo em conta o source do contexto.
  * O `source` vem de resolveUserTeamContext() e distingue
  * club_coordinator de age_group_coordinator, ambos com profiles.role = "coordinator".
+ *
+ * Fallback: mapeia profiles.role via ROLE_LABELS (cenários sem contexto de equipa).
  */
 export function getContextRoleLabel(
   role?: string | null,
@@ -239,5 +236,6 @@ export function getContextRoleLabel(
   if (source === "club_coordinator") return "Coordenador do Clube";
   if (source === "coordinator") return "Coordenador de Escalão";
   if (source === "staff") return getStaffRoleLabel(teamRole) || "Staff Técnico";
-  return getRoleLabel(role);
+  if (!role) return "Utilizador";
+  return ROLE_LABELS[role] || role;
 }
