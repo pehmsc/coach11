@@ -16,9 +16,13 @@ import { cn } from "@/lib/utils";
 export function MobileFooterNav({
   profile,
   avatarUrl,
+  source,
+  teamRole,
 }: {
   profile: NavProfile;
   avatarUrl?: string | null;
+  source?: string | null;
+  teamRole?: string | null;
 }) {
   const pathname = usePathname();
   const { unreadMessages: unreadMessagesCount, unreadNotifications: unreadNotificationsCount } = useUnreadCounts();
@@ -31,6 +35,8 @@ export function MobileFooterNav({
         onClose={() => setIsDrawerOpen(false)}
         profile={profile}
         avatarUrl={avatarUrl}
+        source={source}
+        teamRole={teamRole}
         unreadMessagesCount={unreadMessagesCount}
         unreadNotificationsCount={unreadNotificationsCount}
       />

@@ -238,6 +238,6 @@ export function getContextRoleLabel(
   if (isSuperCoordinator) return "Super Admin";
   if (source === "club_coordinator") return "Coordenador do Clube";
   if (source === "coordinator") return "Coordenador de Escalão";
-  if (source === "staff") return getStaffRoleLabel(teamRole) || ROLE_LABELS["coach"] || "Staff Técnico";
+  if (source === "staff") return getStaffRoleLabel(teamRole) || "Staff Técnico";
   return getRoleLabel(role);
 }

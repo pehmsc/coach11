@@ -10,7 +10,7 @@ import { clearClientCaches } from "@/lib/query/cache-clear";
 import { InstallPWAButton } from "@/components/pwa/InstallPWAButton";
 import {
   getMobileAppNavSections,
-  getRoleLabel,
+  getContextRoleLabel,
   isNavItemActive,
   type NavProfile,
 } from "@/components/layout/nav-config";
@@ -32,6 +32,8 @@ export function MobileSideNavDrawer({
   onClose,
   profile,
   avatarUrl,
+  source,
+  teamRole,
   unreadMessagesCount,
   unreadNotificationsCount,
 }: {
@@ -39,6 +41,8 @@ export function MobileSideNavDrawer({
   onClose: () => void;
   profile: NavProfile;
   avatarUrl?: string | null;
+  source?: string | null;
+  teamRole?: string | null;
   unreadMessagesCount: number;
   unreadNotificationsCount: number;
 }) {
@@ -185,7 +189,7 @@ export function MobileSideNavDrawer({
                   {profile?.full_name || "Utilizador"}
                 </p>
                 <p className="truncate text-xs text-slate-400">
-                  {getRoleLabel(profile?.role)}
+                  {getContextRoleLabel(profile?.role, source, profile?.is_super_coordinator, teamRole)}
                 </p>
                 <Link
                   href="/settings"
