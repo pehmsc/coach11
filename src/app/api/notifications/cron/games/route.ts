@@ -7,7 +7,7 @@ export const maxDuration = 30;
 
 /**
  * Cron: notificações proactivas de jogos.
- * Corre de 5 em 5 minutos via Vercel Cron.
+ * Corre de 15 em 15 minutos via Vercel Cron.
  *
  * J1: convocation_reminder — 48h antes do jogo (se convocatória não criada)
  * J2: game_concentration — na hora de concentração
@@ -21,7 +21,8 @@ export async function GET(request: NextRequest) {
 
   const admin = createAdminClient();
   const now = new Date();
-  const fiveMinAgo = new Date(now.getTime() - 5 * 60 * 1000);
+  const cronWindowMs = 15 * 60 * 1000;
+  const windowStart = new Date(now.getTime() - cronWindowMs);
   let j1Count = 0;
   let j2Count = 0;
   let j3Count = 0;
@@ -32,7 +33,7 @@ export async function GET(request: NextRequest) {
     .from("games")
     .select("id, team_id, age_group_id, game_datetime, concentration_time, title, opponent_name, location, status")
     .in("status", ["scheduled", "live"])
-    .gte("game_datetime", fiveMinAgo.toISOString())
+    .gte("game_datetime", windowStart.toISOString())
     .lte("game_datetime", twoDaysFromNow.toISOString());
 
   if (!upcomingGames) {
@@ -54,7 +55,7 @@ export async function GET(request: NextRequest) {
 
     // J1: 48h antes — convocatória não criada
     const fortyEightHoursBefore = new Date(gameDateTime.getTime() - 48 * 60 * 60 * 1000);
-    if (fortyEightHoursBefore >= fiveMinAgo && fortyEightHoursBefore <= now) {
+    if (fortyEightHoursBefore >= windowStart && fortyEightHoursBefore <= now) {
       // Verificar se convocatória já existe
       const { count: convCount } = await admin
         .from("convocations")
@@ -90,7 +91,7 @@ export async function GET(request: NextRequest) {
       ? new Date(game.concentration_time)
       : new Date(gameDateTime.getTime() - 30 * 60 * 1000);
 
-    if (concentrationTime >= fiveMinAgo && concentrationTime <= now) {
+    if (concentrationTime >= windowStart && concentrationTime <= now) {
       await createNotificationForTeamOnce(admin, {
         teamId: game.team_id,
         actorId,
@@ -107,7 +108,7 @@ export async function GET(request: NextRequest) {
     // J3: 10 min antes do início real (game_datetime + 50min)
     // Início real = game_datetime + 1h → alerta = game_datetime + 50min
     const alertTime = new Date(gameDateTime.getTime() + 50 * 60 * 1000);
-    if (alertTime >= fiveMinAgo && alertTime <= now && game.status === "scheduled") {
+    if (alertTime >= windowStart && alertTime <= now && game.status === "scheduled") {
       await createNotificationForTeamOnce(admin, {
         teamId: game.team_id,
         actorId,
