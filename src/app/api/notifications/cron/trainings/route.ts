@@ -7,7 +7,7 @@ export const maxDuration = 30;
 
 /**
  * Cron: notificações proactivas de treinos.
- * Corre de 5 em 5 minutos via Vercel Cron.
+ * Corre de 15 em 15 minutos via Vercel Cron.
  *
  * T1: attendance_pending — na hora de início do treino
  * T2: attendance_reminder — 10 min após o fim (se presenças não marcadas)
@@ -20,25 +20,26 @@ export async function GET(request: NextRequest) {
 
   const admin = createAdminClient();
   const now = new Date();
-  const fiveMinAgo = new Date(now.getTime() - 5 * 60 * 1000);
+  const cronWindowMs = 15 * 60 * 1000;
+  const windowStart = new Date(now.getTime() - cronWindowMs);
   let t1Count = 0;
   let t2Count = 0;
 
-  // T1: Treinos que começaram nos últimos 5 minutos
+  // T1: Treinos que começaram nos últimos 15 minutos
   const { data: startingSessions } = await admin
     .from("training_sessions")
     .select("id, team_id, age_group_id, session_date, start_time, title")
     .eq("status", "scheduled")
-    .gte("session_date", fiveMinAgo.toISOString().split("T")[0])
+    .gte("session_date", windowStart.toISOString().split("T")[0])
     .lte("session_date", now.toISOString().split("T")[0]);
 
   if (startingSessions) {
     for (const session of startingSessions) {
       if (!session.team_id || !session.start_time) continue;
 
-      // Verificar se a hora de início está na janela [now-5min, now]
+      // Verificar se a hora de início está na janela [now-15min, now]
       const startDateTime = new Date(`${session.session_date}T${session.start_time}`);
-      if (startDateTime < fiveMinAgo || startDateTime > now) continue;
+      if (startDateTime < windowStart || startDateTime > now) continue;
 
       const { data: coordinator } = await admin
         .from("age_groups")
@@ -66,7 +67,7 @@ export async function GET(request: NextRequest) {
 
   // T2: Treinos que terminaram há ~10 minutos sem presenças marcadas
   const tenMinAgo = new Date(now.getTime() - 10 * 60 * 1000);
-  const fifteenMinAgo = new Date(now.getTime() - 15 * 60 * 1000);
+  const t2WindowEnd = new Date(now.getTime() - (10 + 15) * 60 * 1000);
 
   const { data: endedSessions } = await admin
     .from("training_sessions")
@@ -82,8 +83,8 @@ export async function GET(request: NextRequest) {
         new Date(`${session.session_date}T${session.start_time}`).getTime() + duration * 60 * 1000,
       );
 
-      // Janela: terminou entre 10-15 min atrás
-      if (endDateTime < fifteenMinAgo || endDateTime > tenMinAgo) continue;
+      // Janela: terminou entre 10-25 min atrás (alargada para cron de 15 min)
+      if (endDateTime < t2WindowEnd || endDateTime > tenMinAgo) continue;
 
       // Verificar se presenças já foram marcadas
       const { count } = await admin

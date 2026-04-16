@@ -10,11 +10,11 @@
     },
     {
       "path": "/api/notifications/cron/trainings",
-      "schedule": "*/5 * * * *"
+      "schedule": "*/15 * * * *"
     },
     {
       "path": "/api/notifications/cron/games",
-      "schedule": "*/5 * * * *"
+      "schedule": "*/15 * * * *"
     }
   ],
   "headers": [
