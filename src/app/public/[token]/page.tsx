@@ -21,7 +21,6 @@ import {
   resolvePublicAccessGate,
 } from "@/lib/public-share";
 
-export const dynamic = "force-dynamic";
 export const revalidate = 30;
 
 type PublicPageParams = {
