@@ -137,6 +137,35 @@ export function GameEditModal({ game, error, editor }: GameEditModalProps) {
                 ))}
               </select>
             </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-slate-700">
+                Casa ou Fora?
+              </label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => editor.setEditIsHome(true)}
+                  className={`flex-1 rounded-xl py-2.5 text-sm font-medium border-2 transition-colors ${
+                    editor.editIsHome
+                      ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                      : "border-slate-200 text-slate-500"
+                  }`}
+                >
+                  Casa
+                </button>
+                <button
+                  type="button"
+                  onClick={() => editor.setEditIsHome(false)}
+                  className={`flex-1 rounded-xl py-2.5 text-sm font-medium border-2 transition-colors ${
+                    !editor.editIsHome
+                      ? "border-blue-500 bg-blue-50 text-blue-700"
+                      : "border-slate-200 text-slate-500"
+                  }`}
+                >
+                  Fora
+                </button>
+              </div>
+            </div>
             <LocationFields
               value={{
                 ...EMPTY_LOCATION_FIELDS,

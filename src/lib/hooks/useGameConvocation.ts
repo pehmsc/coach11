@@ -1,6 +1,6 @@
 "use client";
 
-import type { MutableRefObject } from "react";
+import { type MutableRefObject, useRef } from "react";
 import { toast } from "sonner";
 import type { Game } from "@/types/database";
 import type { PlayerWithStatus } from "@/components/games/detail/types";
@@ -61,6 +61,13 @@ export function useGameConvocation(deps: UseGameConvocationDeps) {
     markConvocationDirty,
   } = deps;
 
+  // Ref mirrors lineupStatuses but updates synchronously within the same
+  // event-loop tick. This prevents the stale-closure guard bug where two
+  // rapid toggles (demote A + promote B) both read the pre-render snapshot
+  // and the second toggle is wrongly blocked by the starters-limit guard.
+  const lineupRef = useRef(lineupStatuses);
+  lineupRef.current = lineupStatuses;
+
   async function handleTacticalChange(formation: string) {
     const previousFormation = tacticalSystem;
     const payload = buildConvocationPayload({ tacticalSystem: formation });
@@ -99,14 +106,17 @@ export function useGameConvocation(deps: UseGameConvocationDeps) {
     const targetPlayer = players.find((player) => player.id === playerId) ?? null;
     const isExternalPlayer = targetPlayer?.isExternal === true;
     const externalConvocationId = targetPlayer?.externalConvocationId ?? null;
-    const current = lineupStatuses[playerId];
+    const current = lineupRef.current[playerId];
     const newStatus: "on_field" | "substitute" =
       current === "on_field" ? "substitute" : "on_field";
 
-    // Guard: don't exceed the format's starter count
+    // Guard: don't exceed the format's starter count.
+    // Uses lineupRef (synchronously up-to-date) instead of lineupStatuses
+    // (stale until next React render) to avoid blocking a valid swap when
+    // the user demotes A then immediately promotes B.
     if (newStatus === "on_field" && footballFormat) {
       const format = parseInt(footballFormat);
-      const currentStarters = Object.values(lineupStatuses).filter(
+      const currentStarters = Object.values(lineupRef.current).filter(
         (s) => s === "on_field",
       ).length;
       if (currentStarters >= format) {
@@ -115,28 +125,32 @@ export function useGameConvocation(deps: UseGameConvocationDeps) {
       }
     }
 
+    // Update ref synchronously so the next toggle (if clicked before React
+    // re-renders) sees the correct count.
+    lineupRef.current = { ...lineupRef.current, [playerId]: newStatus };
+
     setSavingLineupPlayer(playerId);
     setError(null);
     setLineupStatuses((prev) => ({ ...prev, [playerId]: newStatus }));
+
+    function rollback() {
+      const restored = current ?? "substitute";
+      lineupRef.current = { ...lineupRef.current, [playerId]: restored };
+      setLineupStatuses((prev) => ({ ...prev, [playerId]: restored }));
+    }
 
     const payload = buildConvocationPayload({
       playerId,
       lineupStatus: newStatus,
     });
     if (!payload) {
-      setLineupStatuses((prev) => ({
-        ...prev,
-        [playerId]: current ?? "substitute",
-      }));
+      rollback();
       setSavingLineupPlayer(null);
       return;
     }
 
     if (isExternalPlayer && !externalConvocationId) {
-      setLineupStatuses((prev) => ({
-        ...prev,
-        [playerId]: current ?? "substitute",
-      }));
+      rollback();
       setSavingLineupPlayer(null);
       setError("Jogador externo inválido para atualizar lineup.");
       return;
@@ -160,22 +174,16 @@ export function useGameConvocation(deps: UseGameConvocationDeps) {
         body: JSON.stringify(requestBody),
       });
       if (!res.ok) {
-        const payload = await res.json().catch(() => ({}));
-        setLineupStatuses((prev) => ({
-          ...prev,
-          [playerId]: current ?? "substitute",
-        }));
+        const errPayload = await res.json().catch(() => ({}));
+        rollback();
         setError(
-          (payload as { error?: string })?.error || "Erro ao guardar lineup.",
+          (errPayload as { error?: string })?.error || "Erro ao guardar lineup.",
         );
       } else {
         markConvocationDirty();
       }
     } catch {
-      setLineupStatuses((prev) => ({
-        ...prev,
-        [playerId]: current ?? "substitute",
-      }));
+      rollback();
       setError("Erro de ligação ao guardar lineup.");
     } finally {
       setSavingLineupPlayer(null);
@@ -308,7 +316,10 @@ export function useGameConvocation(deps: UseGameConvocationDeps) {
   // Auto-assign lineup when player is convocated: fills starters up to format number
   async function autoAssignLineup(playerId: string, isConvocated: boolean) {
     if (!isConvocated) {
-      // Remove from lineup
+      // Remove from lineup — sync ref first
+      const refCopy = { ...lineupRef.current };
+      delete refCopy[playerId];
+      lineupRef.current = refCopy;
       setLineupStatuses((prev) => {
         const next = { ...prev };
         delete next[playerId];
@@ -329,12 +340,13 @@ export function useGameConvocation(deps: UseGameConvocationDeps) {
     }
 
     const format = footballFormat ? parseInt(footballFormat) : 0;
-    const currentStarters = Object.values(lineupStatuses).filter(
+    const currentStarters = Object.values(lineupRef.current).filter(
       (s) => s === "on_field",
     ).length;
     const newStatus: "on_field" | "substitute" =
       currentStarters < format ? "on_field" : "substitute";
 
+    lineupRef.current = { ...lineupRef.current, [playerId]: newStatus };
     setLineupStatuses((prev) => ({ ...prev, [playerId]: newStatus }));
     const nextPayload = buildConvocationPayload({ playerId, lineupStatus: newStatus });
     if (nextPayload) {

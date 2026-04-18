@@ -43,6 +43,7 @@ export function useGameEditor(deps: UseGameEditorDeps) {
   const [editNotes, setEditNotes] = useState("");
   const [editImageUrl, setEditImageUrl] = useState("");
   const [editCompetitionId, setEditCompetitionId] = useState("");
+  const [editIsHome, setEditIsHome] = useState(true);
   const [competitionOptions, setCompetitionOptions] = useState<GameCompetitionOption[]>([]);
   const [savingGameEdit, setSavingGameEdit] = useState(false);
 
@@ -101,6 +102,7 @@ export function useGameEditor(deps: UseGameEditorDeps) {
     setEditNotes(game.notes ?? "");
     setEditImageUrl(game.image_url ?? "");
     setEditCompetitionId(game.competition_id ?? "");
+    setEditIsHome(game.is_home ?? true);
     setEditingGame(true);
   }
 
@@ -148,7 +150,7 @@ export function useGameEditor(deps: UseGameEditorDeps) {
           notes: editNotes.trim() || null,
           image_url: editImageUrl.trim() || null,
           competition_id: editCompetitionId || null,
-          is_home: game?.is_home ?? true,
+          is_home: editIsHome,
         },
       }),
     });
@@ -161,6 +163,7 @@ export function useGameEditor(deps: UseGameEditorDeps) {
     } else {
       setGame((prev) => (prev ? { ...prev, ...payload.event } : prev));
       setEditingGame(false);
+      router.refresh();
     }
     setSavingGameEdit(false);
   }
@@ -240,6 +243,8 @@ export function useGameEditor(deps: UseGameEditorDeps) {
     setEditImageUrl,
     editCompetitionId,
     setEditCompetitionId,
+    editIsHome,
+    setEditIsHome,
     competitionOptions,
     savingGameEdit,
     openEditGame,

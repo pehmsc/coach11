@@ -36,7 +36,7 @@ type TrainingWritePayload = {
 type GameWritePayload = {
   age_group_id: string;
   team_id: string;
-  title: string;
+  title: string | null;
   game_datetime: string;
   end_time: string | null | undefined;
   competition_id: string | null;

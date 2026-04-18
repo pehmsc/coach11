@@ -782,7 +782,7 @@ export async function handleCalendarEventsPatch(request: Request) {
     const { data, error } = await updateGame(db, id, {
       age_group_id: targetAgeGroupId,
       team_id: targetTeamId,
-      title: resolveGameTitle(payload),
+      title: payload.title ?? null,
       game_datetime: gameDatetime,
       end_time: payload.end_time,
       competition_id: competitionResult.id,
