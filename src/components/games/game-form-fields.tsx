@@ -169,7 +169,6 @@ export function GameFormFields({
         locationPlaceholder="Estádio / Campo"
         accent="blue"
         compact={compact}
-        showPreview={!compact}
       />
 
       <div className="space-y-1">

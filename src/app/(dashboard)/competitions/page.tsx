@@ -20,11 +20,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  GameFormFields,
-  type SharedGameFormValues,
-} from "@/components/games/game-form-fields";
-import { EMPTY_LOCATION_FIELDS, resolveLocationLabel } from "@/lib/location";
+import { GameFormModal } from "@/components/games/GameFormModal";
+import { resolveLocationLabel } from "@/lib/location";
 import {
   Card,
   CardContent,
@@ -32,10 +29,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  isValidManualShortName,
-  normalizeManualShortName,
-} from "@/lib/football/short-name";
 import {
   formatFixtureOpponentLabel,
   isClosedGameStatus,
@@ -56,10 +49,6 @@ interface CompetitionForm {
   has_two_legs: boolean;
 }
 
-interface GameForm extends SharedGameFormValues {
-  round_number: string;
-}
-
 type CompetitionsPayload = {
   success: boolean;
   teamId: string | null;
@@ -78,18 +67,6 @@ const EMPTY_COMP_FORM: CompetitionForm = {
   team_label: "A",
   total_rounds: "",
   has_two_legs: false,
-};
-
-const EMPTY_GAME_FORM: GameForm = {
-  opponent_name: "",
-  opponent_short_name: "",
-  date: "",
-  start_time: "15:00",
-  end_time: "",
-  is_home: true,
-  ...EMPTY_LOCATION_FIELDS,
-  competition_id: "",
-  round_number: "",
 };
 
 const COMPETITION_GAMES_WINDOW_SIZE = 5;
@@ -152,10 +129,8 @@ export default function CompetitionsPage() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  // Jogo form
+  // Jogo modal
   const [addingGameToCompId, setAddingGameToCompId] = useState<string | null>(null);
-  const [gameForm, setGameForm] = useState(EMPTY_GAME_FORM);
-  const [savingGame, setSavingGame] = useState(false);
   const [competitionWindowStarts, setCompetitionWindowStarts] = useState<Record<string, number>>(
     {},
   );
@@ -303,89 +278,16 @@ export default function CompetitionsPage() {
   }
 
   function openAddGame(compId: string) {
-    const now = new Date();
     setAddingGameToCompId(compId);
-    setGameForm({
-      ...EMPTY_GAME_FORM,
-      competition_id: compId,
-      date: format(now, "yyyy-MM-dd"),
-    });
     setError(null);
   }
 
   function closeGameForm() {
     setAddingGameToCompId(null);
-    setGameForm(EMPTY_GAME_FORM);
     setError(null);
   }
 
-  function handleGameFieldChange(
-    field: keyof SharedGameFormValues,
-    value: SharedGameFormValues[keyof SharedGameFormValues],
-  ) {
-    setGameForm((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
-  }
-
-  async function handleSaveGame(e: { preventDefault(): void }) {
-    e.preventDefault();
-    if (!teamId || !ageGroupId) return;
-    if (!gameForm.opponent_name.trim() || !gameForm.date || !gameForm.start_time) {
-      setError("Preenche adversário, data e hora.");
-      return;
-    }
-    if (!isValidManualShortName(gameForm.opponent_short_name, 2, 5)) {
-      setError("A sigla do adversário deve ter entre 2 e 5 caracteres.");
-      return;
-    }
-
-    const normalizedOpponentShortName = normalizeManualShortName(
-      gameForm.opponent_short_name,
-      5,
-    );
-
-    setSavingGame(true);
-    setError(null);
-
-    const res = await fetch("/api/calendar/events", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        type: "game",
-        ageGroupId,
-        teamId,
-        payload: {
-          title: gameForm.round_number ? `Jornada ${gameForm.round_number}` : null,
-          competition_id: gameForm.competition_id || null,
-          opponent_name: gameForm.opponent_name.trim(),
-          opponent_short_name: normalizedOpponentShortName || null,
-          date: gameForm.date,
-          start_time: gameForm.start_time,
-          end_time: gameForm.end_time || null,
-          is_home: gameForm.is_home,
-          location: gameForm.location || null,
-          location_address: gameForm.location_address || null,
-          formatted_address: gameForm.formatted_address || null,
-          latitude: gameForm.latitude,
-          longitude: gameForm.longitude,
-          osm_place_id: gameForm.osm_place_id || null,
-          location_source: gameForm.location_source,
-        },
-      }),
-    });
-    const payload = await res.json().catch(() => null);
-
-    if (!res.ok || !payload?.success) {
-      const message =
-        (payload as { error?: string } | null)?.error || "Erro ao criar jogo.";
-      setError(message);
-      setSavingGame(false);
-      return;
-    }
-
-    setSavingGame(false);
+  function handleGameSaved() {
     closeGameForm();
     loadData();
   }
@@ -695,84 +597,30 @@ export default function CompetitionsPage() {
                   )}
 
                   {/* Adicionar jogo */}
-                  {addingGameToCompId === comp.id ? (
-                    <div className="border border-emerald-200 bg-emerald-50 rounded-xl p-3 mt-2">
-                      <div className="flex items-center justify-between mb-3">
-                        <p className="text-xs font-semibold text-emerald-800">
-                          Novo jogo — {comp.name}
-                        </p>
-                        <button onClick={closeGameForm}>
-                          <X size={14} className="text-slate-400" />
-                        </button>
-                      </div>
-                      <form onSubmit={handleSaveGame} className="space-y-2">
-                        <p className="text-[11px] text-emerald-700">
-                          O jogo será criado diretamente na competição <strong>{comp.name}</strong>.
-                        </p>
-                        <GameFormFields
-                          values={gameForm}
-                          onFieldChange={handleGameFieldChange}
-                          showCompetitionSelect={false}
-                          compact
-                        />
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <Label className="text-xs">Jornada</Label>
-                            <Input
-                              type="number"
-                              min="1"
-                              value={gameForm.round_number}
-                              onChange={(e) =>
-                                setGameForm((f) => ({
-                                  ...f,
-                                  round_number: e.target.value,
-                                }))
-                              }
-                              placeholder="ex: 3"
-                              className="text-sm h-8"
-                            />
-                          </div>
-                        </div>
-                        <div className="flex gap-2 pt-1">
-                          <Button
-                            type="submit"
-                            size="sm"
-                            className="flex-1 bg-emerald-600 hover:bg-emerald-700 h-8 text-xs"
-                            disabled={savingGame}
-                          >
-                            {savingGame ? (
-                              <Loader2 size={12} className="animate-spin" />
-                            ) : (
-                              "Adicionar jogo"
-                            )}
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className="h-8 text-xs"
-                            onClick={closeGameForm}
-                          >
-                            Cancelar
-                          </Button>
-                        </div>
-                      </form>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => openAddGame(comp.id)}
-                      className="w-full flex items-center justify-center gap-2 p-2.5 rounded-xl border-2 border-dashed border-slate-200 hover:border-emerald-300 hover:bg-emerald-50 transition-colors text-slate-400 hover:text-emerald-600 mt-1"
-                    >
-                      <PlusCircle size={14} />
-                      <span className="text-xs font-medium">Adicionar jogo</span>
-                    </button>
-                  )}
+                  <button
+                    onClick={() => openAddGame(comp.id)}
+                    className="w-full flex items-center justify-center gap-2 p-2.5 rounded-xl border-2 border-dashed border-slate-200 hover:border-emerald-300 hover:bg-emerald-50 transition-colors text-slate-400 hover:text-emerald-600 mt-1"
+                  >
+                    <PlusCircle size={14} />
+                    <span className="text-xs font-medium">Adicionar jogo</span>
+                  </button>
                 </CardContent>
               </Card>
             );
           })}
         </div>
       )}
+
+      <GameFormModal
+        open={addingGameToCompId !== null}
+        onOpenChange={(open) => {
+          if (!open) closeGameForm();
+        }}
+        ageGroupId={ageGroupId}
+        teamId={teamId}
+        initialCompetitionId={addingGameToCompId}
+        onSaved={handleGameSaved}
+      />
 
       {/* ── MODAL: COMPETIÇÃO FORM ── */}
       {showCompForm && (
