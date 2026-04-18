@@ -125,43 +125,42 @@ export function useGameEditor(deps: UseGameEditorDeps) {
       5,
     );
 
-    const res = await fetch("/api/calendar/events", {
+    // Build ISO datetime string from date + time inputs.
+    // new Date("YYYY-MM-DDTHH:mm") parses as local time, then
+    // .toISOString() produces UTC with Z suffix — exactly what
+    // the DB column (timestamp with time zone) expects.
+    const gameDatetime = new Date(`${editDate}T${editStartTime}`).toISOString();
+
+    const res = await fetch(`/api/games/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        id,
-        type: "game",
-        ageGroupId: game?.age_group_id ?? null,
-        teamId: game?.team_id ?? null,
-        payload: {
-          title: editTitle.trim() || null,
-          date: editDate,
-          start_time: editStartTime,
-          end_time: editEndTime || null,
-          opponent_name: editOpponent.trim(),
-          opponent_short_name: normalizedOpponentShortName || null,
-          location: editLocation.trim() || null,
-          location_address: editLocationAddress.trim() || null,
-          formatted_address: editFormattedAddress.trim() || null,
-          latitude: editLatitude,
-          longitude: editLongitude,
-          osm_place_id: editOsmPlaceId.trim() || null,
-          location_source: editLocationSource,
-          notes: editNotes.trim() || null,
-          image_url: editImageUrl.trim() || null,
-          competition_id: editCompetitionId || null,
-          is_home: editIsHome,
-        },
+        title: editTitle.trim() || null,
+        game_datetime: gameDatetime,
+        end_time: editEndTime || null,
+        opponent_name: editOpponent.trim(),
+        opponent_short_name: normalizedOpponentShortName || null,
+        location: editLocation.trim() || null,
+        location_address: editLocationAddress.trim() || null,
+        formatted_address: editFormattedAddress.trim() || null,
+        latitude: editLatitude,
+        longitude: editLongitude,
+        osm_place_id: editOsmPlaceId.trim() || null,
+        location_source: editLocationSource,
+        notes: editNotes.trim() || null,
+        image_url: editImageUrl.trim() || null,
+        competition_id: editCompetitionId || null,
+        is_home: editIsHome,
       }),
     });
     const payload = (await res.json().catch(() => ({}))) as
-      | { event?: Game; error?: string }
+      | { game?: Game; error?: string; details?: unknown }
       | Record<string, never>;
 
-    if (!res.ok || !payload?.event) {
+    if (!res.ok || !payload?.game) {
       setError(payload?.error || "Erro ao guardar jogo.");
     } else {
-      setGame((prev) => (prev ? { ...prev, ...payload.event } : prev));
+      setGame((prev) => (prev ? { ...prev, ...payload.game } : prev));
       setEditingGame(false);
       router.refresh();
     }
