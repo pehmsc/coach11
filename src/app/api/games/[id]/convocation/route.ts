@@ -1,7 +1,15 @@
 import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
-import { portugalDateTimeToUtc } from "@/lib/events/presence-window";
+import {
+  formatPortugalTime,
+  getPortugalDateKey,
+  portugalDateTimeToUtc,
+} from "@/lib/events/presence-window";
 import { fetchGameAccessContext } from "@/lib/games/access";
+import {
+  gameInterval,
+  intervalsOverlap,
+} from "@/lib/games/convocation-overlap";
 import { getFixtureConnector } from "@/lib/games/display";
 import {
   getStarterPlayerIdsFromLiveStats,
@@ -15,7 +23,6 @@ type RouteContext = {
 
 type ConvocationStatus = "draft" | "confirmed" | "closed";
 type MatchPhase = "pre_match" | "first_half" | "halftime" | "second_half" | "review" | "completed";
-const PORTUGAL_TIMEZONE = "Europe/Lisbon";
 
 function toConvocationStatus(value: string | null | undefined): ConvocationStatus {
   if (value === "confirmed" || value === "closed") return value;
@@ -39,43 +46,6 @@ function isMissingRelationError(
     message.includes(relationName) &&
     (message.includes("does not exist") || message.includes("relation"))
   );
-}
-
-function getPortugalDateKey(value: string | null | undefined) {
-  if (!value) return null;
-
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return null;
-
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: PORTUGAL_TIMEZONE,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(parsed);
-
-  const lookup = Object.fromEntries(
-    parts
-      .filter((part) => part.type !== "literal")
-      .map((part) => [part.type, part.value]),
-  );
-
-  if (!lookup.year || !lookup.month || !lookup.day) return null;
-  return `${lookup.year}-${lookup.month}-${lookup.day}`;
-}
-
-function formatPortugalTime(value: string | null | undefined) {
-  if (!value) return null;
-
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return null;
-
-  return new Intl.DateTimeFormat("pt-PT", {
-    timeZone: PORTUGAL_TIMEZONE,
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(parsed);
 }
 
 function normalizeKitRowForUi(row: Record<string, unknown>) {
@@ -294,9 +264,13 @@ export async function GET(_request: Request, { params }: RouteContext) {
     const dayEndUtc = portugalDateTimeToUtc(gameDateKey, "23:59:59");
 
     if (gameDateKey && dayStartUtc && dayEndUtc) {
+      // Filtramos pela data calendário (Portugal) para limitar a query.
+      // O overlap real é aplicado em memória depois.
       const sameDayGamesQuery = supabase
         .from("games")
-        .select("id, game_datetime, opponent_name, is_home, competition_id")
+        .select(
+          "id, game_datetime, end_time, concentration_time, opponent_name, is_home, competition_id",
+        )
         .neq("id", gameId)
         .gte("game_datetime", dayStartUtc.toISOString())
         .lte("game_datetime", dayEndUtc.toISOString())
@@ -354,6 +328,20 @@ export async function GET(_request: Request, { params }: RouteContext) {
             );
           }
 
+          // Intervalo do jogo alvo (kickoff atual). Usamos `end_time` e
+          // `concentration_time` reais; se não existirem, aplicamos o fallback
+          // de 2h30 dentro de gameInterval().
+          const targetInterval = gameInterval({
+            game_datetime:
+              typeof game.game_datetime === "string" ? game.game_datetime : "",
+            concentration_time:
+              typeof game.concentration_time === "string"
+                ? game.concentration_time
+                : null,
+            end_time:
+              typeof game.end_time === "string" ? game.end_time : null,
+          });
+
           (sameDayConvocationPlayers || []).forEach((row) => {
             const otherGameId = convocationGameById.get(row.convocation_id);
             if (!otherGameId) return;
@@ -361,23 +349,51 @@ export async function GET(_request: Request, { params }: RouteContext) {
             const otherGame = sameDayGamesById.get(otherGameId);
             if (!otherGame) return;
 
-            if (game.competition_id && otherGame.competition_id) {
-              blockedIds.add(row.player_id);
-            }
+            const otherInterval = gameInterval({
+              game_datetime:
+                typeof otherGame.game_datetime === "string"
+                  ? otherGame.game_datetime
+                  : "",
+              concentration_time:
+                typeof (otherGame as { concentration_time?: unknown })
+                  .concentration_time === "string"
+                  ? (otherGame as { concentration_time: string })
+                      .concentration_time
+                  : null,
+              end_time:
+                typeof (otherGame as { end_time?: unknown }).end_time ===
+                "string"
+                  ? (otherGame as { end_time: string }).end_time
+                  : null,
+            });
+
+            // Sem sobreposição → jogador continua disponível para este jogo.
+            if (!intervalsOverlap(targetInterval, otherInterval)) return;
+
+            // Conflito real: bloquear sempre (independentemente de competição
+            // vs amigável — breaking change intencional vs comportamento
+            // anterior, que só bloqueava competition vs competition).
+            blockedIds.add(row.player_id);
 
             if (!sameDayConflictLabelByPlayerId.has(row.player_id)) {
               const opponentName =
                 (typeof otherGame.opponent_name === "string" && otherGame.opponent_name.trim()) ||
                 "Adversário";
               const connector = getFixtureConnector(Boolean(otherGame.is_home));
-              const timeLabel = formatPortugalTime(
-                typeof otherGame.game_datetime === "string"
-                  ? otherGame.game_datetime
-                  : null,
+              const startLabel = formatPortugalTime(
+                otherInterval.start.toISOString(),
               );
-              const text = timeLabel
-                ? `Já convocado hoje: ${connector} ${opponentName} às ${timeLabel}`
-                : `Já convocado hoje: ${connector} ${opponentName}`;
+              const endLabelRaw = formatPortugalTime(
+                otherInterval.end.toISOString(),
+              );
+              const endLabel =
+                otherInterval.endIsEstimated && endLabelRaw
+                  ? `~${endLabelRaw}`
+                  : endLabelRaw;
+              const text =
+                startLabel && endLabel
+                  ? `Sobreposição: ${connector} ${opponentName} (${startLabel}–${endLabel})`
+                  : `Sobreposição: ${connector} ${opponentName}`;
               sameDayConflictLabelByPlayerId.set(row.player_id, text);
             }
           });
