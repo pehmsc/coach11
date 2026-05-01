@@ -108,7 +108,7 @@ export default function PlayerDetailPage() {
             onSaved={(updated) => setPlayer(updated)}
           />
           <PlayerStatsGroup stats={stats} status={player.status} />
-          <PlayerHistoryShortcuts />
+          <PlayerHistoryShortcuts playerId={id} />
         </div>
       ) : null}
     </div>
