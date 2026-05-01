@@ -38,7 +38,13 @@ function fmtRating(n: number | null | undefined): string {
   return n.toFixed(1);
 }
 
-function fmtRate(n: number | null | undefined): string {
+function fmtRate(
+  n: number | null | undefined,
+  total: number | null | undefined,
+): string {
+  // Se não houve treinos completos no período, "—" é mais honesto que "0%"
+  // (a percentagem só faz sentido com denominador > 0).
+  if (!total || total <= 0) return "—";
   if (n === null || n === undefined) return "—";
   // attendance_rate da RPC vem em percentagem (0..100, numeric(5,2)).
   return `${Math.round(n)}%`;
@@ -109,7 +115,7 @@ export function PlayerStatsGroup({ stats, status }: PlayerStatsGroupProps) {
         <Tile label="Avaliação média" value={fmtRating(stats.avg_rating)} />
         <Tile
           label="Presença em treinos"
-          value={fmtRate(stats.attendance_rate)}
+          value={fmtRate(stats.attendance_rate, stats.attendance_total)}
           hint={
             stats.attendance_total
               ? `${stats.attendance_present ?? 0} / ${stats.attendance_total}`

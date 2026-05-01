@@ -102,7 +102,11 @@ export default function PlayerDetailPage() {
         </div>
       ) : player ? (
         <div className="space-y-5">
-          <PlayerProfileHeader player={player} canEdit={canEdit} />
+          <PlayerProfileHeader
+            player={player}
+            canEdit={canEdit}
+            onSaved={(updated) => setPlayer(updated)}
+          />
           <PlayerStatsGroup stats={stats} status={player.status} />
           <PlayerHistoryShortcuts />
         </div>
