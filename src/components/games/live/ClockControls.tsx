@@ -1,7 +1,14 @@
 "use client";
 
+import { useState } from "react";
 import { Loader2, Plus, Minus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import {
+  applyTransition,
+  transitionContent,
+  type PendingTransition,
+} from "./clock-controls.utils";
 import type { MatchPhase, ClockState } from "./types";
 
 interface ClockControlsProps {
@@ -35,6 +42,13 @@ export function ClockControls({
   startClock,
   setPhase,
 }: ClockControlsProps) {
+  const [pendingTransition, setPendingTransition] =
+    useState<PendingTransition | null>(null);
+
+  const dialogContent = pendingTransition
+    ? transitionContent(pendingTransition, currentMinute)
+    : null;
+
   return (
     <div className="mb-5 p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
       <div className="flex items-center gap-3">
@@ -58,6 +72,10 @@ export function ClockControls({
 
       <div className="grid grid-cols-1 gap-2">
         {phase === "pre_match" && (
+          // Nota: a transição pre_match → first_half NÃO passa pelo
+          // ConfirmDialog porque já tem guard via kickoffState.canStart
+          // (validação de titulares e dados do jogo). Adicionar dialog
+          // aqui seria fricção sem ganho de segurança.
           <div className="space-y-2">
             <Button
               onClick={() => {
@@ -92,10 +110,7 @@ export function ClockControls({
         )}
         {phase === "first_half" && (
           <Button
-            onClick={() => {
-              pauseClock();
-              setPhase("halftime");
-            }}
+            onClick={() => setPendingTransition("end_first_half")}
             className="w-full bg-amber-600 hover:bg-amber-700"
           >
             Terminar 1ª parte
@@ -103,10 +118,7 @@ export function ClockControls({
         )}
         {phase === "halftime" && (
           <Button
-            onClick={() => {
-              setPhase("second_half");
-              startClock();
-            }}
+            onClick={() => setPendingTransition("start_second_half")}
             className="w-full bg-blue-600 hover:bg-blue-700"
           >
             Iniciar 2ª parte
@@ -114,15 +126,15 @@ export function ClockControls({
         )}
         {phase === "second_half" && (
           <Button
-            onClick={() => {
-              pauseClock();
-              setPhase("review");
-            }}
+            onClick={() => setPendingTransition("end_second_half")}
             className="w-full bg-slate-800 hover:bg-slate-700"
           >
             Terminar 2ª parte
           </Button>
         )}
+        {/* Nota: review → completed (em FinalizeSection) NÃO passa pelo
+            ConfirmDialog porque já tem gate via allRatingsFilled e não
+            é uma transição de parte. */}
       </div>
 
       {isLivePhase && (
@@ -150,6 +162,28 @@ export function ClockControls({
         <p className="text-xs text-center text-slate-600">
           Revê os dados, preenche notas e MVP, depois finaliza.
         </p>
+      )}
+
+      {pendingTransition && dialogContent && (
+        <ConfirmDialog
+          open={pendingTransition !== null}
+          onOpenChange={(v) => {
+            if (!v) setPendingTransition(null);
+          }}
+          title={dialogContent.title}
+          description={dialogContent.description}
+          confirmLabel={dialogContent.confirmLabel}
+          cancelLabel="Cancelar"
+          destructive={dialogContent.destructive}
+          onConfirm={() => {
+            applyTransition(pendingTransition, {
+              pauseClock,
+              startClock,
+              setPhase,
+            });
+            setPendingTransition(null);
+          }}
+        />
       )}
     </div>
   );
