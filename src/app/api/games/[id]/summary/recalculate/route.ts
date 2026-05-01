@@ -4,18 +4,15 @@ import {
   GAME_EVENT_SELECT_COLUMNS,
   normalizeStoredGameEventRowsForClient,
 } from "@/lib/games/live-event-participants";
+import {
+  isManualOverride,
+  recalculateRequestSchema,
+  type PlayerOverride,
+} from "@/lib/schemas/game-recalculate";
 import { NextResponse } from "next/server";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
-};
-
-type RecalculatePayload = {
-  finalMinute?: number;
-  ratings?: Record<string, number | null>;
-  notes?: Record<string, string | null>;
-  mvpPlayerId?: string | null;
-  starterIds?: string[];
 };
 
 type GameEventRow = {
@@ -188,7 +185,7 @@ function parseGameAccessContext(value: unknown): GameAccessContext | null {
   };
 }
 
-async function assertCoordinatorAccess(
+async function assertWriteAccess(
   supabase: Awaited<ReturnType<typeof createClient>>,
   gameId: string,
 ) {
@@ -221,11 +218,11 @@ async function assertCoordinatorAccess(
     };
   }
 
-  if (!access.canWrite || !access.isCoordinator) {
+  if (!access.canWrite) {
     return {
       ok: false as const,
       response: NextResponse.json(
-        { error: "Só o coordenador pode refazer estatísticas em jogos terminados." },
+        { error: "Sem permissões para editar estatísticas deste jogo." },
         { status: 403 },
       ),
     };
@@ -254,14 +251,52 @@ export async function POST(request: Request, { params }: RouteContext) {
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
 
-    const body = (await request.json().catch(() => null)) as RecalculatePayload | null;
-    const access = await assertCoordinatorAccess(supabase, gameId);
+    let rawBody: unknown;
+    try {
+      rawBody = await request.json();
+    } catch {
+      return NextResponse.json(
+        { error: "Corpo do pedido inválido (JSON esperado)." },
+        { status: 400 },
+      );
+    }
+
+    const parsed = recalculateRequestSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      return NextResponse.json(
+        {
+          error: "Payload inválido.",
+          fieldErrors: parsed.error.issues.map((issue) => ({
+            path: issue.path.join("."),
+            message: issue.message,
+          })),
+        },
+        { status: 400 },
+      );
+    }
+    const body = parsed.data;
+
+    const access = await assertWriteAccess(supabase, gameId);
     if (!access.ok) return access.response;
 
-    if (access.game.status !== "completed") {
+    // Bloqueio explícito de status não-editáveis. A RPC re-valida, mas
+    // devolvemos 409 com mensagem específica antes de chamar.
+    if (access.game.status === "live") {
       return NextResponse.json(
-        { error: "Esta ação só está disponível para jogos terminados." },
-        { status: 400 },
+        {
+          error:
+            "Não é possível editar stats de um jogo em curso. Termina o jogo primeiro.",
+        },
+        { status: 409 },
+      );
+    }
+    if (access.game.status === "scheduled") {
+      return NextResponse.json(
+        {
+          error:
+            "O jogo ainda não foi marcado como terminado. Os stats finais só podem ser editados após o jogo terminar.",
+        },
+        { status: 409 },
       );
     }
 
@@ -325,7 +360,7 @@ export async function POST(request: Request, { params }: RouteContext) {
       supabase
         .from("game_final_stats")
         .select(
-          "player_id, lineup_type, coach_rating, is_mvp, minutes_played, goals, own_goals, assists, yellow_cards, red_cards, notes, is_finalized, finalized_at",
+          "player_id, lineup_type, coach_rating, is_mvp, minutes_played, goals, own_goals, assists, yellow_cards, red_cards, notes, is_finalized, finalized_at, edited_manually",
         )
         .eq("game_id", gameId),
       supabase
@@ -360,8 +395,7 @@ export async function POST(request: Request, { params }: RouteContext) {
     const liveRows = liveStatsRes.data || [];
     const currentFinalStats = finalStatsRes.data || [];
 
-    const ratingsOverridesRaw =
-      body && body.ratings && typeof body.ratings === "object" ? body.ratings : {};
+    const ratingsOverridesRaw = body.ratings ?? {};
     const ratingsByPlayer = new Map<string, number | null>();
     currentFinalStats.forEach((row) => {
       ratingsByPlayer.set(
@@ -380,7 +414,7 @@ export async function POST(request: Request, { params }: RouteContext) {
       }
     });
 
-    const notesOverridesRaw = body && body.notes && typeof body.notes === "object" ? body.notes : {};
+    const notesOverridesRaw = body.notes ?? {};
     const notesByPlayer = new Map<string, string | null>();
     currentFinalStats.forEach((row) => {
       notesByPlayer.set(row.player_id, typeof row.notes === "string" ? row.notes : null);
@@ -397,12 +431,10 @@ export async function POST(request: Request, { params }: RouteContext) {
       }
     });
 
-    const payloadStarterIds = Array.isArray(body?.starterIds)
-      ? body?.starterIds.filter((value): value is string => typeof value === "string")
-      : [];
-    const starterIds = new Set<string>(
-      payloadStarterIds.filter((playerId) => playerIds.includes(playerId)),
+    const payloadStarterIds = body.starterIds.filter((playerId) =>
+      playerIds.includes(playerId),
     );
+    const starterIds = new Set<string>(payloadStarterIds);
 
     if (starterIds.size === 0) {
       liveRows.forEach((row) => {
@@ -426,10 +458,7 @@ export async function POST(request: Request, { params }: RouteContext) {
       });
     }
 
-    const payloadFinalMinute =
-      typeof body?.finalMinute === "number" && Number.isFinite(body.finalMinute)
-        ? Math.max(1, Math.floor(body.finalMinute))
-        : null;
+    const payloadFinalMinute = Math.max(1, Math.floor(body.finalMinute));
     const checkpointMinute =
       typeof checkpointRes.data?.base_seconds === "number"
         ? Math.floor(Math.max(0, checkpointRes.data.base_seconds) / 60) + 1
@@ -439,14 +468,22 @@ export async function POST(request: Request, { params }: RouteContext) {
       (max, row) => Math.max(max, row.minutes_played || 0),
       0,
     );
-    const finalMinute = payloadFinalMinute ?? Math.max(1, checkpointMinute, maxEventMinute, maxCurrentMinute);
+    const finalMinute = Math.max(payloadFinalMinute, 1, checkpointMinute, maxEventMinute, maxCurrentMinute);
 
     const mvpPlayerId =
-      typeof body?.mvpPlayerId === "string" && playerIds.includes(body.mvpPlayerId)
+      typeof body.mvpPlayerId === "string" && playerIds.includes(body.mvpPlayerId)
         ? body.mvpPlayerId
         : currentFinalStats.find((row) => row.is_mvp)?.player_id ?? null;
 
     const minutesMap = computeMinutesPlayed(playerIds, events, starterIds, finalMinute);
+
+    const existingEditedManually = new Map<string, boolean>();
+    currentFinalStats.forEach((row) => {
+      existingEditedManually.set(row.player_id, row.edited_manually === true);
+    });
+
+    const overridesByPlayer = body.overrides ?? {};
+    const forceAuto = body.force_auto === true;
 
     const rowsToInsert = playerIds.map((playerId) => {
       const goals = events.filter(
@@ -480,7 +517,7 @@ export async function POST(request: Request, { params }: RouteContext) {
           event.event_type === "red_card",
       ).length;
 
-      return {
+      const baseRow = {
         game_id: gameId,
         player_id: playerId,
         lineup_type: starterIds.has(playerId) ? "starter" : "substitute",
@@ -496,6 +533,37 @@ export async function POST(request: Request, { params }: RouteContext) {
         is_finalized: true,
         finalized_at: new Date().toISOString(),
       };
+
+      // force_auto: ignora overrides, todas as rows passam a edited_manually=false
+      if (forceAuto) {
+        return { ...baseRow, edited_manually: false };
+      }
+
+      const override: PlayerOverride | undefined = overridesByPlayer[playerId];
+      const wasManual = existingEditedManually.get(playerId) ?? false;
+
+      if (!override) {
+        // Sem override neste pedido: preservar manualidade anterior.
+        return { ...baseRow, edited_manually: wasManual };
+      }
+
+      const merged = {
+        ...baseRow,
+        ...(override.lineup_type !== undefined && { lineup_type: override.lineup_type }),
+        ...(override.minutes_played !== undefined && { minutes_played: override.minutes_played }),
+        ...(override.goals !== undefined && { goals: override.goals }),
+        ...(override.own_goals !== undefined && { own_goals: override.own_goals }),
+        ...(override.assists !== undefined && { assists: override.assists }),
+        ...(override.yellow_cards !== undefined && { yellow_cards: override.yellow_cards }),
+        ...(override.red_cards !== undefined && { red_cards: override.red_cards }),
+        ...(override.coach_rating !== undefined && { coach_rating: override.coach_rating }),
+        ...(override.notes !== undefined && { notes: override.notes }),
+        ...(override.is_mvp !== undefined && { is_mvp: override.is_mvp }),
+      };
+
+      // edited_manually é "sticky" (uma vez true, fica true até force_auto).
+      // Apenas overrides em campos NUMÉRICOS contam como manualidade.
+      return { ...merged, edited_manually: wasManual || isManualOverride(override) };
     });
 
     const { data: gameMeta, error: gameMetaError } = await supabase
@@ -519,6 +587,31 @@ export async function POST(request: Request, { params }: RouteContext) {
     });
 
     if (rpcResult.error) {
+      const msg = rpcResult.error.message || "";
+      if (msg.includes("game_in_progress")) {
+        return NextResponse.json(
+          {
+            error:
+              "Não é possível editar stats de um jogo em curso. Termina o jogo primeiro.",
+          },
+          { status: 409 },
+        );
+      }
+      if (msg.includes("game_not_started")) {
+        return NextResponse.json(
+          {
+            error:
+              "O jogo ainda não foi marcado como terminado. Os stats finais só podem ser editados após o jogo terminar.",
+          },
+          { status: 409 },
+        );
+      }
+      if (msg.includes("forbidden")) {
+        return NextResponse.json(
+          { error: "Sem permissões para editar estatísticas deste jogo." },
+          { status: 403 },
+        );
+      }
       return respondInternalError(
         "api.games.id.summary.recalculate.post.rpc-recalculate-auth",
         rpcResult.error,

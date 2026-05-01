@@ -70,7 +70,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
         supabase
           .from("game_final_stats")
           .select(
-            "id, game_id, player_id, lineup_type, minutes_played, goals, own_goals, assists, yellow_cards, red_cards, coach_rating, notes, is_mvp, is_finalized, finalized_at, created_at",
+            "id, game_id, player_id, lineup_type, minutes_played, goals, own_goals, assists, yellow_cards, red_cards, coach_rating, notes, is_mvp, is_finalized, finalized_at, created_at, edited_manually, updated_at",
           )
           .eq("game_id", gameId)
           .order("lineup_type", { ascending: true })
@@ -214,6 +214,8 @@ export async function GET(_request: Request, { params }: RouteContext) {
         success: true,
         game,
         isCoordinator: access.isCoordinator,
+        canEdit: access.canWrite,
+        gameStatus: game.status ?? "scheduled",
         events: normalizedEvents,
         finalStats: finalStats || [],
         playersById,

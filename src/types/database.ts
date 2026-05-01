@@ -326,6 +326,10 @@ export interface GameFinalStats {
   coach_rating?: number;
   notes?: string;
   is_mvp?: boolean;
+  /** TRUE quando ao menos 1 campo numérico foi sobrescrito manualmente. */
+  edited_manually?: boolean;
+  /** Última alteração da row (mantido por trigger set_updated_at). */
+  updated_at?: string;
   is_finalized: boolean;
   finalized_at?: string;
   created_at: string;
