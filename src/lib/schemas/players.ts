@@ -56,7 +56,11 @@ const optionalDate = z
   .union([
     z
       .string()
-      .regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida (formato YYYY-MM-DD)"),
+      .regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida (formato YYYY-MM-DD)")
+      .refine(
+        (value) => new Date(`${value}T00:00:00`) <= new Date(),
+        "Data não pode ser futura",
+      ),
     emptyStringToNull,
     z.null(),
   ])
@@ -102,6 +106,12 @@ export const playerUpdateSchema = z
     parent_phone: optionalPhone,
     status: z.enum(PLAYER_STATUSES).optional(),
     photo_consent_given: z.boolean().optional(),
+    // Path interno no bucket players-photos (formato:
+    // {ageGroupId}/{playerId}.webp). null para remover foto. NÃO é URL —
+    // ver lib/storage/players-photos.ts.
+    avatar_url: z
+      .union([z.string().trim().min(1).max(500), z.null()])
+      .optional(),
     // Mantidos para compat com flow de convite existente:
     invite_code: optionalShortText(40),
     invite_method: optionalShortText(20),
