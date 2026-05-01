@@ -13,6 +13,7 @@ import {
   intervalsOverlap,
 } from "@/lib/games/convocation-overlap";
 import { getFixtureConnector } from "@/lib/games/display";
+import { filterLiveStatsBySelected } from "@/lib/games/lineup-ghost-filter";
 import {
   getStarterPlayerIdsFromLiveStats,
   normalizeLiveStatusForUi,
@@ -494,24 +495,33 @@ export async function GET(_request: Request, { params }: RouteContext) {
         (ag as { tactical_system?: string | null } | null)?.tactical_system ?? null;
     }
 
-    // Lineup statuses from game_stats_live
+    // Lineup statuses from game_stats_live.
+    //
+    // Defesa em profundidade: descartar entradas cujo player_id já não está
+    // em convocation_players (selectedIds). Estas "ghosts" surgem quando um
+    // atleta é removido da convocatória sem o respectivo cleanup em
+    // game_stats_live. Se chegassem ao cliente, o `lineupRef` continha-as
+    // como `on_field` e a guarda `currentStarters >= format` em
+    // handleLineupToggle bloqueava promoções legítimas.
+    // Ver toggle/route.ts (cleanup pré-jogo).
     const { data: liveStats } = await supabase
       .from("game_stats_live")
       .select("player_id, status, start_minute")
       .eq("game_id", gameId);
-    const lineupStatuses: Record<string, string> = {};
-    const starterIdsSet = getStarterPlayerIdsFromLiveStats(
-      ((liveStats || []) as Array<{
+    const filteredLiveStats = filterLiveStatsBySelected(
+      (liveStats || []) as Array<{
         player_id?: string | null;
         status?: string | null;
         start_minute?: number | null;
-      }>),
+      }>,
+      selectedIds,
     );
-    (liveStats || []).forEach((row) => {
-      const r = row as unknown as { player_id?: string; status?: string; start_minute?: number | null };
-      if (!r.player_id) return;
-      const normalized = normalizeLiveStatusForUi(r.status);
-      if (normalized) lineupStatuses[r.player_id] = normalized;
+    const lineupStatuses: Record<string, string> = {};
+    const starterIdsSet = getStarterPlayerIdsFromLiveStats(filteredLiveStats);
+    filteredLiveStats.forEach((row) => {
+      if (!row.player_id) return;
+      const normalized = normalizeLiveStatusForUi(row.status);
+      if (normalized) lineupStatuses[row.player_id] = normalized;
     });
 
     externalRows.forEach((row) => {
