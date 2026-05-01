@@ -56,7 +56,11 @@ const optionalDate = z
   .union([
     z
       .string()
-      .regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida (formato YYYY-MM-DD)"),
+      .regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida (formato YYYY-MM-DD)")
+      .refine(
+        (value) => new Date(`${value}T00:00:00`) <= new Date(),
+        "Data não pode ser futura",
+      ),
     emptyStringToNull,
     z.null(),
   ])

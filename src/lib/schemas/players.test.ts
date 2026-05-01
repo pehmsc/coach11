@@ -50,6 +50,34 @@ describe("playerUpdateSchema", () => {
     expect(result.success).toBe(false);
   });
 
+  it("birth_date futuro produz erro 'Data não pode ser futura'", () => {
+    const result = playerUpdateSchema.safeParse({ birth_date: "2099-01-01" });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const errors = JSON.stringify(result.error.flatten().fieldErrors);
+      expect(errors).toContain("futura");
+    }
+  });
+
+  it("birth_date passado válido aceite", () => {
+    const result = playerUpdateSchema.safeParse({
+      birth_date: "2010-04-15",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("avatar_url com path válido aceite", () => {
+    const result = playerUpdateSchema.safeParse({
+      avatar_url: "ag-uuid/p-uuid.webp",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("avatar_url null (remover foto) aceite", () => {
+    const result = playerUpdateSchema.safeParse({ avatar_url: null });
+    expect(result.success).toBe(true);
+  });
+
   it("[7] preferred_position fora do enum produz erro", () => {
     const result = playerUpdateSchema.safeParse({
       preferred_position: "XX",
@@ -71,7 +99,8 @@ describe("playerUpdateSchema", () => {
 
   it("[10] strict mode rejeita campos desconhecidos", () => {
     const result = playerUpdateSchema.safeParse({
-      avatar_url: "https://example.com/x.jpg",
+      // Campo nunca presente no schema — deve ser rejeitado por .strict()
+      foo_bar_unknown_field: "anything",
     });
     expect(result.success).toBe(false);
   });
