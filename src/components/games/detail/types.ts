@@ -2,10 +2,13 @@ import type { Player } from "@/types/database";
 
 export interface PlayerWithStatus extends Player {
   isConvocated: boolean;
-  isBlocked: boolean; // já convocado noutro jogo de competição no mesmo dia
+  isBlocked: boolean; // já convocado noutro jogo SOBREPOSTO no mesmo dia
   isExternal?: boolean;
   externalConvocationId?: string | null;
+  /** Vermelho/destructive — sobreposição real, jogador bloqueado. */
   sameDayConflictLabel?: string | null;
+  /** Amarelo/warning — convocado noutro(s) jogo(s) sem sobreposição, jogador disponível. */
+  sameDayInfoLabel?: string | null;
 }
 
 export interface KitPieceRow {

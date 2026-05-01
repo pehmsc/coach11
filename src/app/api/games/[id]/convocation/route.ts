@@ -7,6 +7,8 @@ import {
 } from "@/lib/events/presence-window";
 import { fetchGameAccessContext } from "@/lib/games/access";
 import {
+  buildConflictLabel,
+  buildInfoLabel,
   gameInterval,
   intervalsOverlap,
 } from "@/lib/games/convocation-overlap";
@@ -256,6 +258,21 @@ export async function GET(_request: Request, { params }: RouteContext) {
 
     const blockedIds = new Set<string>();
     const sameDayConflictLabelByPlayerId = new Map<string, string>();
+    const sameDayInfoLabelByPlayerId = new Map<string, string>();
+
+    // Por cada jogador, lista todos os jogos do mesmo dia em que está
+    // convocado, com flag de sobreposição. Usado a seguir para construir
+    // a label de conflito (vermelha) OU a label informativa (amarela) —
+    // mutuamente exclusivas.
+    type SameDayEntry = {
+      start: Date;
+      end: Date;
+      endIsEstimated: boolean;
+      connector: string;
+      opponentName: string;
+      isOverlap: boolean;
+    };
+    const sameDayEntriesByPlayerId = new Map<string, SameDayEntry[]>();
 
     const gameDateKey = getPortugalDateKey(
       typeof game.game_datetime === "string" ? game.game_datetime : null,
@@ -342,6 +359,8 @@ export async function GET(_request: Request, { params }: RouteContext) {
               typeof game.end_time === "string" ? game.end_time : null,
           });
 
+          // Primeira passagem: acumular todos os jogos do mesmo dia em
+          // que cada jogador está convocado, com flag isOverlap.
           (sameDayConvocationPlayers || []).forEach((row) => {
             const otherGameId = convocationGameById.get(row.convocation_id);
             if (!otherGameId) return;
@@ -367,36 +386,55 @@ export async function GET(_request: Request, { params }: RouteContext) {
                   : null,
             });
 
-            // Sem sobreposição → jogador continua disponível para este jogo.
-            if (!intervalsOverlap(targetInterval, otherInterval)) return;
+            const isOverlap = intervalsOverlap(targetInterval, otherInterval);
+            const opponentName =
+              (typeof otherGame.opponent_name === "string" &&
+                otherGame.opponent_name.trim()) ||
+              "Adversário";
+            const connector = getFixtureConnector(Boolean(otherGame.is_home));
 
-            // Conflito real: bloquear sempre (independentemente de competição
-            // vs amigável — breaking change intencional vs comportamento
-            // anterior, que só bloqueava competition vs competition).
-            blockedIds.add(row.player_id);
-
-            if (!sameDayConflictLabelByPlayerId.has(row.player_id)) {
-              const opponentName =
-                (typeof otherGame.opponent_name === "string" && otherGame.opponent_name.trim()) ||
-                "Adversário";
-              const connector = getFixtureConnector(Boolean(otherGame.is_home));
-              const startLabel = formatPortugalTime(
-                otherInterval.start.toISOString(),
-              );
-              const endLabelRaw = formatPortugalTime(
-                otherInterval.end.toISOString(),
-              );
-              const endLabel =
-                otherInterval.endIsEstimated && endLabelRaw
-                  ? `~${endLabelRaw}`
-                  : endLabelRaw;
-              const text =
-                startLabel && endLabel
-                  ? `Sobreposição: ${connector} ${opponentName} (${startLabel}–${endLabel})`
-                  : `Sobreposição: ${connector} ${opponentName}`;
-              sameDayConflictLabelByPlayerId.set(row.player_id, text);
-            }
+            const entries =
+              sameDayEntriesByPlayerId.get(row.player_id) ?? [];
+            entries.push({
+              start: otherInterval.start,
+              end: otherInterval.end,
+              endIsEstimated: otherInterval.endIsEstimated,
+              connector,
+              opponentName,
+              isOverlap,
+            });
+            sameDayEntriesByPlayerId.set(row.player_id, entries);
           });
+
+          // Segunda passagem: construir labels finais. Conflito (vermelho)
+          // e info (amarelo) são mutuamente exclusivos — se há
+          // sobreposição, ignora-se a info.
+          for (const [
+            playerId,
+            entries,
+          ] of sameDayEntriesByPlayerId.entries()) {
+            const overlapEntry = entries.find((e) => e.isOverlap);
+
+            if (overlapEntry) {
+              // Bloqueia sempre que houver sobreposição (independentemente
+              // de competição vs amigável — breaking change intencional vs
+              // comportamento anterior, que só bloqueava competition vs
+              // competition).
+              blockedIds.add(playerId);
+              sameDayConflictLabelByPlayerId.set(
+                playerId,
+                buildConflictLabel(overlapEntry, formatPortugalTime),
+              );
+              continue;
+            }
+
+            // Sem sobreposição mas com convocações no mesmo dia → label
+            // informativa (amarela), jogador continua selecionável.
+            const infoLabel = buildInfoLabel(entries, formatPortugalTime);
+            if (infoLabel) {
+              sameDayInfoLabelByPlayerId.set(playerId, infoLabel);
+            }
+          }
         }
       }
     }
@@ -410,6 +448,8 @@ export async function GET(_request: Request, { params }: RouteContext) {
           isBlocked: blockedIds.has(player.id) && !isConvocated,
           sameDayConflictLabel:
             sameDayConflictLabelByPlayerId.get(player.id) ?? null,
+          sameDayInfoLabel:
+            sameDayInfoLabelByPlayerId.get(player.id) ?? null,
           isExternal: false,
           externalConvocationId: null,
         };
@@ -428,6 +468,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
         isConvocated: true,
         isBlocked: false,
         sameDayConflictLabel: null,
+        sameDayInfoLabel: null,
         isExternal: true,
         externalConvocationId: row.id,
       })),

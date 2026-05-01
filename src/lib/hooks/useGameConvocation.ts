@@ -429,6 +429,7 @@ export function useGameConvocation(deps: UseGameConvocationDeps) {
         isExternal: true,
         externalConvocationId: responseBody.player.id,
         sameDayConflictLabel: null,
+        sameDayInfoLabel: null,
       };
 
       setPlayers((prev) => [...prev, insertedPlayer]);
