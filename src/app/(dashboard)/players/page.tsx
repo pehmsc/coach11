@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
@@ -757,8 +758,11 @@ export default function PlayersPage() {
                       </span>
                     </div>
 
-                    {/* Info */}
-                    <div className="flex-1 min-w-0">
+                    {/* Info — tap abre página de detalhe */}
+                    <Link
+                      href={`/players/${player.id}`}
+                      className="flex-1 min-w-0 -my-1 -ml-1 rounded-md py-1 pl-1 hover:bg-slate-50 transition-colors"
+                    >
                       <p className="font-semibold text-slate-900 truncate">
                         {player.first_name} {player.last_name}
                       </p>
@@ -774,7 +778,7 @@ export default function PlayersPage() {
                           </span>
                         )}
                       </div>
-                    </div>
+                    </Link>
 
                     {/* Estado */}
                     <button

@@ -98,6 +98,10 @@ export interface Player {
   jersey_number?: number;
   phone?: string;
   email?: string;
+  parent_email?: string | null;
+  parent_phone?: string | null;
+  notes?: string | null;
+  photo_consent_given?: boolean;
   avatar_url?: string;
   status: PlayerStatus;
   profile_id?: string;
@@ -106,6 +110,7 @@ export interface Player {
   invite_sent_at?: string;
   invite_accepted_at?: string;
   created_at: string;
+  updated_at?: string;
 }
 
 export interface TrainingSession {
