@@ -80,3 +80,61 @@ export function gameInterval(g: GameTimeSource): GameInterval {
 export function intervalsOverlap(a: GameInterval, b: GameInterval): boolean {
   return a.start < b.end && b.start < a.end;
 }
+
+// ─── Construção de labels (puro) ──────────────────────────────────────────
+//
+// Estas funções recebem entradas já calculadas (start/end como Date) e o
+// formatador de tempo Portugal — assim ficam totalmente testáveis sem
+// depender de Supabase ou do route handler.
+
+export interface SameDayEntry {
+  start: Date;
+  end: Date;
+  endIsEstimated: boolean;
+  connector: string;
+  opponentName: string;
+  isOverlap: boolean;
+}
+
+export type TimeFormatter = (isoTimestamp: string) => string | null;
+
+/** Label vermelha de sobreposição. Caller já escolheu a entry com overlap. */
+export function buildConflictLabel(
+  overlapEntry: SameDayEntry,
+  formatTime: TimeFormatter,
+): string {
+  const startLabel = formatTime(overlapEntry.start.toISOString());
+  const endLabelRaw = formatTime(overlapEntry.end.toISOString());
+  const endLabel =
+    overlapEntry.endIsEstimated && endLabelRaw
+      ? `~${endLabelRaw}`
+      : endLabelRaw;
+  if (startLabel && endLabel) {
+    return `Sobreposição: ${overlapEntry.connector} ${overlapEntry.opponentName} (${startLabel}–${endLabel})`;
+  }
+  return `Sobreposição: ${overlapEntry.connector} ${overlapEntry.opponentName}`;
+}
+
+/**
+ * Label amarela informativa: jogador convocado em outro(s) jogo(s) do
+ * mesmo dia SEM sobreposição. Lista todos por ordem de início. Devolve
+ * `null` se não há entries (defensivo).
+ */
+export function buildInfoLabel(
+  entries: SameDayEntry[],
+  formatTime: TimeFormatter,
+): string | null {
+  const sorted = [...entries].sort(
+    (a, b) => a.start.getTime() - b.start.getTime(),
+  );
+  const parts = sorted
+    .map((e) => {
+      const startLabel = formatTime(e.start.toISOString());
+      return startLabel
+        ? `${e.connector} ${e.opponentName} (${startLabel})`
+        : `${e.connector} ${e.opponentName}`;
+    })
+    .filter(Boolean);
+  if (parts.length === 0) return null;
+  return `Convocado: ${parts.join(", ")}`;
+}

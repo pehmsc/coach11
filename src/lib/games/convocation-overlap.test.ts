@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildConflictLabel,
+  buildInfoLabel,
   gameInterval,
   intervalsOverlap,
   type GameTimeSource,
+  type SameDayEntry,
+  type TimeFormatter,
 } from "./convocation-overlap";
 
 /**
@@ -166,5 +170,196 @@ describe("endIsEstimated flag", () => {
       makeGame("2026-04-15T20:00:00.000Z", "08:00:00"),
     );
     expect(interval.endIsEstimated).toBe(true);
+  });
+});
+
+// Formatter determinístico para testes (HH:mm UTC, sem timezone shenanigans).
+const fakeFormatTime: TimeFormatter = (iso) => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const h = String(d.getUTCHours()).padStart(2, "0");
+  const m = String(d.getUTCMinutes()).padStart(2, "0");
+  return `${h}:${m}`;
+};
+
+function makeEntry(
+  startIso: string,
+  endIso: string,
+  opts: {
+    endIsEstimated?: boolean;
+    isOverlap?: boolean;
+    connector?: string;
+    opponentName?: string;
+  } = {},
+): SameDayEntry {
+  return {
+    start: new Date(startIso),
+    end: new Date(endIso),
+    endIsEstimated: opts.endIsEstimated ?? false,
+    connector: opts.connector ?? "vs",
+    opponentName: opts.opponentName ?? "Adversário",
+    isOverlap: opts.isOverlap ?? false,
+  };
+}
+
+describe("buildConflictLabel", () => {
+  it("formata 'Sobreposição: vs Torre (09:00–11:00)' quando end NÃO é estimado", () => {
+    const entry = makeEntry(
+      "2026-04-15T09:00:00.000Z",
+      "2026-04-15T11:00:00.000Z",
+      { isOverlap: true, opponentName: "Torre" },
+    );
+    expect(buildConflictLabel(entry, fakeFormatTime)).toBe(
+      "Sobreposição: vs Torre (09:00–11:00)",
+    );
+  });
+
+  it("[L6] prefixa end com '~' quando endIsEstimated", () => {
+    const entry = makeEntry(
+      "2026-04-15T09:00:00.000Z",
+      "2026-04-15T11:30:00.000Z",
+      { isOverlap: true, opponentName: "Torre", endIsEstimated: true },
+    );
+    expect(buildConflictLabel(entry, fakeFormatTime)).toBe(
+      "Sobreposição: vs Torre (09:00–~11:30)",
+    );
+  });
+
+  it("fallback para nome sem horas quando formatTime devolve null", () => {
+    const entry = makeEntry(
+      "2026-04-15T09:00:00.000Z",
+      "2026-04-15T11:00:00.000Z",
+      { isOverlap: true, opponentName: "Torre" },
+    );
+    const nullFormatter: TimeFormatter = () => null;
+    expect(buildConflictLabel(entry, nullFormatter)).toBe(
+      "Sobreposição: vs Torre",
+    );
+  });
+});
+
+describe("buildInfoLabel", () => {
+  it("[L1] devolve null para lista vazia", () => {
+    expect(buildInfoLabel([], fakeFormatTime)).toBeNull();
+  });
+
+  it("[L2] 1 jogo sem sobreposição: 'Convocado: vs Carcavelos (08:00)'", () => {
+    const entries = [
+      makeEntry(
+        "2026-04-15T08:00:00.000Z",
+        "2026-04-15T10:30:00.000Z",
+        { opponentName: "Carcavelos" },
+      ),
+    ];
+    expect(buildInfoLabel(entries, fakeFormatTime)).toBe(
+      "Convocado: vs Carcavelos (08:00)",
+    );
+  });
+
+  it("[L3] 2 jogos ordenados por hora", () => {
+    const entries = [
+      makeEntry(
+        "2026-04-15T15:00:00.000Z",
+        "2026-04-15T17:30:00.000Z",
+        { opponentName: "Restelo" },
+      ),
+      makeEntry(
+        "2026-04-15T08:00:00.000Z",
+        "2026-04-15T10:30:00.000Z",
+        { opponentName: "Carcavelos" },
+      ),
+    ];
+    expect(buildInfoLabel(entries, fakeFormatTime)).toBe(
+      "Convocado: vs Carcavelos (08:00), vs Restelo (15:00)",
+    );
+  });
+
+  it("3 jogos ordenados por hora", () => {
+    const entries = [
+      makeEntry(
+        "2026-04-15T20:00:00.000Z",
+        "2026-04-15T22:30:00.000Z",
+        { opponentName: "Belém" },
+      ),
+      makeEntry(
+        "2026-04-15T08:00:00.000Z",
+        "2026-04-15T10:30:00.000Z",
+        { opponentName: "Carcavelos" },
+      ),
+      makeEntry(
+        "2026-04-15T15:00:00.000Z",
+        "2026-04-15T17:30:00.000Z",
+        { opponentName: "Restelo" },
+      ),
+    ];
+    expect(buildInfoLabel(entries, fakeFormatTime)).toBe(
+      "Convocado: vs Carcavelos (08:00), vs Restelo (15:00), vs Belém (20:00)",
+    );
+  });
+
+  it("conector personalizado é preservado", () => {
+    const entries = [
+      makeEntry(
+        "2026-04-15T08:00:00.000Z",
+        "2026-04-15T10:30:00.000Z",
+        { opponentName: "Sport", connector: "@" },
+      ),
+    ];
+    expect(buildInfoLabel(entries, fakeFormatTime)).toBe(
+      "Convocado: @ Sport (08:00)",
+    );
+  });
+});
+
+describe("integração label-building (route.ts behavior)", () => {
+  // Simula o algoritmo do route.ts contra um set de entries pre-calculadas
+  // sem mockar Supabase. Verifica a regra de exclusão mútua.
+  function pickLabels(entries: SameDayEntry[]) {
+    const overlap = entries.find((e) => e.isOverlap);
+    if (overlap) {
+      return {
+        conflict: buildConflictLabel(overlap, fakeFormatTime),
+        info: null as string | null,
+        blocked: true,
+      };
+    }
+    const info = buildInfoLabel(entries, fakeFormatTime);
+    return { conflict: null as string | null, info, blocked: false };
+  }
+
+  it("[L1] sem entries → ambas labels null, não bloqueado", () => {
+    const r = pickLabels([]);
+    expect(r).toEqual({ conflict: null, info: null, blocked: false });
+  });
+
+  it("[L4] 1 jogo com sobreposição → label conflict, sem info, bloqueado", () => {
+    const r = pickLabels([
+      makeEntry(
+        "2026-04-15T09:00:00.000Z",
+        "2026-04-15T11:00:00.000Z",
+        { isOverlap: true, opponentName: "Torre" },
+      ),
+    ]);
+    expect(r.blocked).toBe(true);
+    expect(r.conflict).toBe("Sobreposição: vs Torre (09:00–11:00)");
+    expect(r.info).toBeNull();
+  });
+
+  it("[L5] 1 com sobreposição + 1 sem → conflict prevalece, info=null", () => {
+    const r = pickLabels([
+      makeEntry(
+        "2026-04-15T08:00:00.000Z",
+        "2026-04-15T10:30:00.000Z",
+        { opponentName: "Carcavelos" },
+      ),
+      makeEntry(
+        "2026-04-15T09:00:00.000Z",
+        "2026-04-15T11:00:00.000Z",
+        { isOverlap: true, opponentName: "Torre" },
+      ),
+    ]);
+    expect(r.blocked).toBe(true);
+    expect(r.conflict).toContain("Torre");
+    expect(r.info).toBeNull();
   });
 });

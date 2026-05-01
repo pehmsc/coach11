@@ -56,9 +56,11 @@ export function ConvocatedRow({
           )}
         </p>
         {playerMeta && <p className="text-xs text-slate-400">{playerMeta}</p>}
-        {player.sameDayConflictLabel && (
-          <p className="text-xs text-orange-500">{player.sameDayConflictLabel}</p>
-        )}
+        {player.sameDayConflictLabel ? (
+          <p className="text-xs text-red-600">{player.sameDayConflictLabel}</p>
+        ) : player.sameDayInfoLabel ? (
+          <p className="text-xs text-amber-600">{player.sameDayInfoLabel}</p>
+        ) : null}
       </div>
       {/* Toggle lineup badge */}
       <button

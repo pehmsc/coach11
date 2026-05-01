@@ -292,11 +292,15 @@ export function ConvocationSection({
                         {getPlayerCardMeta(player)}
                       </p>
                     )}
-                    {player.sameDayConflictLabel && (
-                      <p className="text-xs text-orange-500">
+                    {player.sameDayConflictLabel ? (
+                      <p className="text-xs text-red-600">
                         {player.sameDayConflictLabel}
                       </p>
-                    )}
+                    ) : player.sameDayInfoLabel ? (
+                      <p className="text-xs text-amber-600">
+                        {player.sameDayInfoLabel}
+                      </p>
+                    ) : null}
                   </div>
                   {saving === player.id ? (
                     <Loader2
