@@ -102,7 +102,18 @@ export interface Player {
   parent_phone?: string | null;
   notes?: string | null;
   photo_consent_given?: boolean;
-  avatar_url?: string;
+  /**
+   * Path interno no bucket privado players-photos
+   * (`{ageGroupId}/{playerId}.webp`). NÃO é URL pública. Para
+   * apresentação, usar `avatar_signed_url` (gerada server-side).
+   */
+  avatar_url?: string | null;
+  /**
+   * Signed URL temporária (TTL ~1h) gerada server-side em
+   * `GET /api/players/[id]` e `PATCH /api/players/[id]`. Não persistida
+   * no DB.
+   */
+  avatar_signed_url?: string | null;
   status: PlayerStatus;
   profile_id?: string;
   invite_code?: string;

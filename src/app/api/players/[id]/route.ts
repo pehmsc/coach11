@@ -4,6 +4,7 @@ import { resolveUserTeamContext } from "@/lib/auth/team-context";
 import { deletePlayerCascade } from "@/lib/events/delete-cascade";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { playerUpdateSchema } from "@/lib/schemas/players";
+import { getPlayerPhotoSignedUrl } from "@/lib/storage/players-photos";
 import { NextResponse } from "next/server";
 
 type RouteContext = {
@@ -74,7 +75,25 @@ export async function GET(_request: Request, { params }: RouteContext) {
       );
     }
 
-    return NextResponse.json({ success: true, player });
+    // avatar_url armazena o path interno do bucket privado players-photos.
+    // Geramos signed URL temporária (TTL 1h) e devolvemos como campo
+    // adicional `avatar_signed_url` para o cliente usar em <img src>. O
+    // path original é mantido em avatar_url para edição/PATCH posteriores.
+    const playerWithRow = player as typeof player & {
+      avatar_url?: string | null;
+    };
+    const avatarSignedUrl = await getPlayerPhotoSignedUrl(
+      supabase,
+      playerWithRow.avatar_url,
+    );
+
+    return NextResponse.json({
+      success: true,
+      player: {
+        ...playerWithRow,
+        avatar_signed_url: avatarSignedUrl,
+      },
+    });
   } catch (error) {
     return respondInternalError("api.players.id.get", error);
   }
@@ -149,7 +168,18 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       );
     }
 
-    return NextResponse.json({ success: true, player: data });
+    // Devolver signed URL alinhada com o GET — evita o cliente ter de
+    // refetch só para mostrar a foto recém-actualizada.
+    const dataRow = data as typeof data & { avatar_url?: string | null };
+    const avatarSignedUrl = await getPlayerPhotoSignedUrl(
+      supabase,
+      dataRow.avatar_url,
+    );
+
+    return NextResponse.json({
+      success: true,
+      player: { ...dataRow, avatar_signed_url: avatarSignedUrl },
+    });
   } catch (error) {
     return respondInternalError("api.players.id.patch", error);
   }

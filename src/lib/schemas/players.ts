@@ -102,6 +102,12 @@ export const playerUpdateSchema = z
     parent_phone: optionalPhone,
     status: z.enum(PLAYER_STATUSES).optional(),
     photo_consent_given: z.boolean().optional(),
+    // Path interno no bucket players-photos (formato:
+    // {ageGroupId}/{playerId}.webp). null para remover foto. NÃO é URL —
+    // ver lib/storage/players-photos.ts.
+    avatar_url: z
+      .union([z.string().trim().min(1).max(500), z.null()])
+      .optional(),
     // Mantidos para compat com flow de convite existente:
     invite_code: optionalShortText(40),
     invite_method: optionalShortText(20),

@@ -27,12 +27,20 @@ export function PlayerProfileHeader({
     <>
       <div className="rounded-2xl border border-slate-100 bg-white p-4 md:p-5">
         <div className="flex items-start gap-4">
-          {/* Placeholder visual no lugar da foto (PR 3 substitui). */}
           <div
-            className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-400 md:h-20 md:w-20"
-            aria-hidden="true"
+            className="flex h-16 w-16 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-100 text-slate-400 md:h-20 md:w-20"
+            aria-hidden={!player.avatar_signed_url}
           >
-            <User size={32} />
+            {player.avatar_signed_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={player.avatar_signed_url}
+                alt={`Foto de ${fullName}`}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <User size={32} />
+            )}
           </div>
 
           <div className="min-w-0 flex-1">

@@ -19,6 +19,7 @@ import { PlayerContactFields } from "./edit-fields/PlayerContactFields";
 import { ParentContactFields } from "./edit-fields/ParentContactFields";
 import { NotesField } from "./edit-fields/NotesField";
 import { RGPDField } from "./edit-fields/RGPDField";
+import { PlayerPhotoPicker } from "./PlayerPhotoPicker";
 
 type Mode = "readonly" | "edit";
 
@@ -206,11 +207,23 @@ export function PlayerEditModal({
   const [topError, setTopError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors | undefined>();
   const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false);
+  // Avatar state: o upload acontece imediatamente (independente do submit),
+  // pelo que mantemos `avatarPath` separado do `formState` (que é o diff
+  // baseline para campos textuais). signed URL local actualiza o preview
+  // sem precisar de refetch.
+  const [avatarPath, setAvatarPath] = useState<string | null>(
+    player.avatar_url ?? null,
+  );
+  const [avatarSignedUrl, setAvatarSignedUrl] = useState<string | null>(
+    player.avatar_signed_url ?? null,
+  );
 
   // Re-inicializa o form sempre que abre com o player original.
   useEffect(() => {
     if (open) {
       setFormState(playerToFormState(player));
+      setAvatarPath(player.avatar_url ?? null);
+      setAvatarSignedUrl(player.avatar_signed_url ?? null);
       setTopError(null);
       setFieldErrors(undefined);
     }
@@ -218,6 +231,50 @@ export function PlayerEditModal({
 
   function handleFieldChange(patch: Partial<PlayerFormState>) {
     setFormState((prev) => ({ ...prev, ...patch }));
+  }
+
+  // Upload da foto: completa-se imediatamente. Faz PATCH com avatar_url
+  // novo e refresca o preview com a signed URL devolvida pelo servidor.
+  async function handlePhotoUploaded(newPath: string) {
+    setAvatarPath(newPath);
+    try {
+      const res = await fetch(`/api/players/${player.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ avatar_url: newPath }),
+      });
+      const payload = (await res.json().catch(() => null)) as
+        | { player?: Player }
+        | null;
+      if (res.ok && payload?.player) {
+        setAvatarSignedUrl(payload.player.avatar_signed_url ?? null);
+        onSaved?.(payload.player);
+      }
+    } catch {
+      // Falha do PATCH: a foto foi para o Storage mas avatar_url não foi
+      // actualizada na DB. O cliente ficou com path local. Próximo refetch
+      // (ou GET) regula o estado.
+    }
+  }
+
+  async function handlePhotoRemoved() {
+    setAvatarPath(null);
+    setAvatarSignedUrl(null);
+    try {
+      const res = await fetch(`/api/players/${player.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ avatar_url: null }),
+      });
+      const payload = (await res.json().catch(() => null)) as
+        | { player?: Player }
+        | null;
+      if (res.ok && payload?.player) {
+        onSaved?.(payload.player);
+      }
+    } catch {
+      // ver nota em handlePhotoUploaded
+    }
   }
 
   const dirtyDiff = isReadonly ? {} : diffPayload(player, formState);
@@ -306,6 +363,34 @@ export function PlayerEditModal({
               <p>{topError}</p>
             </div>
           )}
+
+          <div>
+            <h3 className="mb-2 text-sm font-bold text-slate-900">Foto</h3>
+            {isReadonly ? (
+              <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-slate-100 text-slate-400">
+                {avatarSignedUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={avatarSignedUrl}
+                    alt="Foto do atleta"
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <span className="text-xs">—</span>
+                )}
+              </div>
+            ) : (
+              <PlayerPhotoPicker
+                playerId={player.id}
+                ageGroupId={player.age_group_id}
+                currentSignedUrl={avatarSignedUrl}
+                currentPath={avatarPath}
+                onUploaded={handlePhotoUploaded}
+                onRemoved={handlePhotoRemoved}
+                disabled={saving}
+              />
+            )}
+          </div>
 
           {isReadonly ? (
             <ReadonlyContent player={player} />
