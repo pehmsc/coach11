@@ -3,6 +3,7 @@ import {
   assertConvocationWriteAllowed,
   insertConvocationAuditLog,
 } from "@/lib/games/convocation-guard";
+import { shouldCleanupGameStatsLive } from "@/lib/games/lineup-ghost-filter";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { NextResponse } from "next/server";
 
@@ -123,6 +124,27 @@ export async function POST(request: Request, { params }: RouteContext) {
           { error: "Erro ao remover jogador da convocatória." },
           { status: 500 },
         );
+      }
+
+      // Higiene: remover a row de game_stats_live só em jogos pré-jogo.
+      // Em "completed" (correcção via correctionReason) preservamos a row
+      // para manter o audit trail de quem participou. "live" nunca chega
+      // aqui — assertConvocationWriteAllowed devolve 423 antes.
+      // Falha aqui não falha a operação principal — o GET filtra ghosts
+      // como defesa em profundidade.
+      if (shouldCleanupGameStatsLive(writeGuard.access.status)) {
+        const { error: liveDeleteError } = await supabase
+          .from("game_stats_live")
+          .delete()
+          .eq("game_id", gameId)
+          .eq("player_id", playerId);
+
+        if (liveDeleteError) {
+          console.error(
+            "[convocation/toggle] cleanup de game_stats_live falhou",
+            { gameId, playerId, error: liveDeleteError.message },
+          );
+        }
       }
 
       await supabase

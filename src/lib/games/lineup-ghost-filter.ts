@@ -25,3 +25,15 @@ export function filterLiveStatsBySelected<T extends LiveStatsLikeRow>(
       typeof row.player_id === "string" && selectedIds.has(row.player_id),
   );
 }
+
+/**
+ * Devolve `true` se é seguro apagar a row de game_stats_live ao remover o
+ * atleta da convocatória. Apenas em jogos "scheduled" — preserva audit
+ * trail em "completed". "live" não atinge este código (bloqueado em
+ * assertConvocationWriteAllowed).
+ */
+export function shouldCleanupGameStatsLive(
+  gameStatus: string | null | undefined,
+): boolean {
+  return gameStatus === "scheduled";
+}

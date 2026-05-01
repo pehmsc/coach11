@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { filterLiveStatsBySelected } from "./lineup-ghost-filter";
+import {
+  filterLiveStatsBySelected,
+  shouldCleanupGameStatsLive,
+} from "./lineup-ghost-filter";
 
 describe("filterLiveStatsBySelected", () => {
   it("[Teste 1a] mantém apenas rows cujo player_id está em selectedIds; descarta ghosts", () => {
@@ -47,6 +50,35 @@ describe("filterLiveStatsBySelected", () => {
     expect(result).toEqual([
       { player_id: "a", status: "starter", start_minute: 0 },
     ]);
+  });
+});
+
+describe("shouldCleanupGameStatsLive", () => {
+  it('[Teste 2a] devolve true para "scheduled"', () => {
+    expect(shouldCleanupGameStatsLive("scheduled")).toBe(true);
+  });
+
+  it('[Teste 2b] devolve false para "live"', () => {
+    expect(shouldCleanupGameStatsLive("live")).toBe(false);
+  });
+
+  it('[Teste 2c] devolve false para "completed"', () => {
+    expect(shouldCleanupGameStatsLive("completed")).toBe(false);
+  });
+
+  it('devolve false para "cancelled"', () => {
+    expect(shouldCleanupGameStatsLive("cancelled")).toBe(false);
+  });
+
+  it("devolve false para null/undefined/string vazia", () => {
+    expect(shouldCleanupGameStatsLive(null)).toBe(false);
+    expect(shouldCleanupGameStatsLive(undefined)).toBe(false);
+    expect(shouldCleanupGameStatsLive("")).toBe(false);
+  });
+
+  it("devolve false para qualquer string inesperada (defensivo)", () => {
+    expect(shouldCleanupGameStatsLive("draft")).toBe(false);
+    expect(shouldCleanupGameStatsLive("postponed")).toBe(false);
   });
 });
 
