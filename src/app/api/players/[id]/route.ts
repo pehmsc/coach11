@@ -57,6 +57,48 @@ async function getRouteContext() {
   return { supabase: db, context };
 }
 
+const PLAYER_DETAIL_FIELDS =
+  "id, age_group_id, first_name, last_name, preferred_position, secondary_position, birth_date, phone, email, parent_email, parent_phone, notes, jersey_number, status, avatar_url, photo_consent_given, invite_code, invite_method, invite_sent_at, invite_accepted_at, profile_id, created_at, updated_at";
+
+export async function GET(_request: Request, { params }: RouteContext) {
+  try {
+    const { id } = await params;
+    if (!id) {
+      return NextResponse.json({ error: "ID inválido." }, { status: 400 });
+    }
+
+    const routeContext = await getRouteContext();
+    if ("error" in routeContext) return routeContext.error;
+    const { supabase, context } = routeContext;
+
+    const { data: player, error } = await supabase
+      .from("players")
+      .select(PLAYER_DETAIL_FIELDS)
+      .eq("id", id)
+      .maybeSingle();
+
+    if (error) {
+      return respondInternalError("api.players.id.get", error);
+    }
+    if (!player) {
+      return NextResponse.json(
+        { error: "Atleta não encontrado." },
+        { status: 404 },
+      );
+    }
+    if (!context.accessibleAgeGroupIds.includes(player.age_group_id)) {
+      return NextResponse.json(
+        { error: "Sem permissões para ver este atleta." },
+        { status: 403 },
+      );
+    }
+
+    return NextResponse.json({ success: true, player });
+  } catch (error) {
+    return respondInternalError("api.players.id.get", error);
+  }
+}
+
 export async function PATCH(request: Request, { params }: RouteContext) {
   try {
     const { id } = await params;
