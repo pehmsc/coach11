@@ -10,14 +10,18 @@ import {
   Download,
   FileText,
   Loader2,
+  Pencil,
   RotateCcw,
   Star,
+  Undo2,
   Users,
 } from "lucide-react";
 import { StickyBackLink } from "@/components/navigation/StickyBackLink";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { resolveFixtureScoreboardShortNames } from "@/lib/games/display";
+import type { PlayerOverride } from "@/lib/schemas/game-recalculate";
 import { toast } from "sonner";
 import { captureClientProductEvent } from "@/lib/observability/posthog-client";
 import {
@@ -35,15 +39,28 @@ type SummaryPlayer = {
   preferred_position: string | null;
 };
 
+type GameStatus = "scheduled" | "live" | "completed" | "cancelled";
+
 type SummaryPayload = {
   game: Game;
   isCoordinator: boolean;
+  canEdit: boolean;
+  gameStatus: GameStatus;
   events: GameEvent[];
   finalStats: GameFinalStats[];
   playersById: Record<string, SummaryPlayer>;
   totalMinutes: number;
   homeClubName: string | null;
   homeClubShortName: string | null;
+};
+
+type NumericDraft = {
+  minutes_played?: number;
+  goals?: number;
+  own_goals?: number;
+  assists?: number;
+  yellow_cards?: number;
+  red_cards?: number;
 };
 
 type ConvocationExportPlayer = {
@@ -143,6 +160,8 @@ export default function GameSummaryPage() {
   const [mvpDraft, setMvpDraft] = useState<string | null>(null);
   const [starterDraft, setStarterDraft] = useState<Set<string>>(new Set());
   const [finalMinuteDraft, setFinalMinuteDraft] = useState<string>("90");
+  const [numericDrafts, setNumericDrafts] = useState<Record<string, NumericDraft>>({});
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
   const [exportingPdf, setExportingPdf] = useState<ExportKind | null>(null);
   const [convocationExport, setConvocationExport] =
     useState<ConvocationExportPayload | null>(null);
@@ -171,7 +190,34 @@ export default function GameSummaryPage() {
       ),
     );
     setFinalMinuteDraft(String(payload.totalMinutes));
+    setNumericDrafts({});
   }, []);
+
+  const updateNumericDraft = useCallback(
+    (playerId: string, field: keyof NumericDraft, raw: string) => {
+      setNumericDrafts((prev) => {
+        const trimmed = raw.trim();
+        if (trimmed === "") {
+          // Limpar o draft volta ao valor original do servidor (sem override).
+          const current = { ...(prev[playerId] ?? {}) };
+          delete current[field];
+          if (Object.keys(current).length === 0) {
+            const next = { ...prev };
+            delete next[playerId];
+            return next;
+          }
+          return { ...prev, [playerId]: current };
+        }
+        const value = Number(trimmed);
+        if (!Number.isFinite(value) || value < 0) return prev;
+        return {
+          ...prev,
+          [playerId]: { ...(prev[playerId] ?? {}), [field]: Math.floor(value) },
+        };
+      });
+    },
+    [],
+  );
 
   const loadSummary = useCallback(async (options?: {
     keepLoading?: boolean;
@@ -227,6 +273,11 @@ export default function GameSummaryPage() {
       router.replace(`/games/${id}`);
     }
   }, [summary?.game?.status, id, router]);
+
+  const hasAnyManualRow = useMemo(
+    () => summary?.finalStats?.some((row) => row.edited_manually === true) ?? false,
+    [summary?.finalStats],
+  );
 
   const timeline = useMemo(() => {
     if (!summary) return [];
@@ -477,8 +528,8 @@ export default function GameSummaryPage() {
     }
   }
 
-  async function handleRecalculateStats() {
-    if (!summary?.isCoordinator) return;
+  async function submitRecalculate(opts: { forceAuto?: boolean } = {}) {
+    if (!summary?.canEdit) return;
 
     const finalMinute = parseInt(finalMinuteDraft, 10);
     if (!Number.isFinite(finalMinute) || finalMinute < 1) {
@@ -504,32 +555,87 @@ export default function GameSummaryPage() {
       notesPayload[playerId] = normalized.length > 0 ? normalized : null;
     });
 
+    // Construir overrides em modo normal apenas. Em force_auto, ignoramos
+    // tudo o que o user tenha em drafts numéricos — voltamos a auto-cálculo.
+    const overrides: Record<string, PlayerOverride> = {};
+    if (!opts.forceAuto) {
+      summary.finalStats.forEach((row) => {
+        const playerId = row.player_id;
+        const draft = numericDrafts[playerId];
+        const override: PlayerOverride = {};
+
+        if (draft) {
+          if (
+            draft.minutes_played !== undefined &&
+            draft.minutes_played !== row.minutes_played
+          ) {
+            override.minutes_played = draft.minutes_played;
+          }
+          if (draft.goals !== undefined && draft.goals !== row.goals) {
+            override.goals = draft.goals;
+          }
+          if (draft.own_goals !== undefined && draft.own_goals !== row.own_goals) {
+            override.own_goals = draft.own_goals;
+          }
+          if (draft.assists !== undefined && draft.assists !== row.assists) {
+            override.assists = draft.assists;
+          }
+          if (
+            draft.yellow_cards !== undefined &&
+            draft.yellow_cards !== row.yellow_cards
+          ) {
+            override.yellow_cards = draft.yellow_cards;
+          }
+          if (draft.red_cards !== undefined && draft.red_cards !== row.red_cards) {
+            override.red_cards = draft.red_cards;
+          }
+        }
+
+        if (Object.keys(override).length > 0) {
+          overrides[playerId] = override;
+        }
+      });
+    }
+
     setSavingRecalc(true);
     setActionError(null);
     try {
+      const body: Record<string, unknown> = {
+        finalMinute,
+        ratings: ratingsPayload,
+        notes: notesPayload,
+        mvpPlayerId: mvpDraft,
+        starterIds: Array.from(starterDraft),
+      };
+      if (Object.keys(overrides).length > 0) {
+        body.overrides = overrides;
+      }
+      if (opts.forceAuto) {
+        body.force_auto = true;
+      }
+
       const res = await fetch(`/api/games/${id}/summary/recalculate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          finalMinute,
-          ratings: ratingsPayload,
-          notes: notesPayload,
-          mvpPlayerId: mvpDraft,
-          starterIds: Array.from(starterDraft),
-        }),
+        body: JSON.stringify(body),
       });
       const payload = await res.json().catch(() => null);
       if (!res.ok) {
         throw new Error(
           (payload as { error?: string } | null)?.error ||
-            "Erro ao recalcular estatísticas.",
+            "Erro ao guardar estatísticas.",
         );
       }
       await loadSummary({ keepLoading: false, throwOnError: true });
       setEditing(false);
+      if (opts.forceAuto) {
+        toast.success("Stats recalculadas a partir dos eventos do jogo.");
+      } else {
+        toast.success("Estatísticas atualizadas.");
+      }
     } catch (err) {
       const message =
-        err instanceof Error ? err.message : "Erro ao recalcular estatísticas.";
+        err instanceof Error ? err.message : "Erro ao guardar estatísticas.";
       setActionError(message);
     } finally {
       setSavingRecalc(false);
@@ -594,21 +700,47 @@ export default function GameSummaryPage() {
         </div>
       )}
 
-      {summary.isCoordinator && (
+      {summary.gameStatus === "live" && (
+        <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          <AlertCircle size={16} className="mt-0.5 flex-shrink-0" aria-hidden="true" />
+          <div>
+            <p className="font-semibold">Jogo em curso</p>
+            <p className="mt-0.5 text-amber-800">
+              A edição de stats finais está bloqueada enquanto o jogo está em curso. Termina o jogo primeiro.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {summary.gameStatus === "scheduled" && (
+        <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          <AlertCircle size={16} className="mt-0.5 flex-shrink-0" aria-hidden="true" />
+          <div>
+            <p className="font-semibold">Jogo ainda não terminado</p>
+            <p className="mt-0.5 text-amber-800">
+              Os stats finais só podem ser editados após o jogo ser marcado como terminado.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {summary.canEdit && (
         <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3">
           <p className="text-xs font-semibold text-amber-800 uppercase mb-2">
-            Modo Coordenador
+            Modo Edição
           </p>
           {!editing ? (
             <div className="flex flex-wrap gap-2">
-              <Button
-                onClick={() => router.push(`/games/${id}?correction=1`)}
-                variant="outline"
-                className="border-amber-300 text-amber-900"
-              >
-                <RotateCcw size={14} className="mr-2" />
-                Corrigir convocatória
-              </Button>
+              {summary.isCoordinator && (
+                <Button
+                  onClick={() => router.push(`/games/${id}?correction=1`)}
+                  variant="outline"
+                  className="border-amber-300 text-amber-900"
+                >
+                  <RotateCcw size={14} className="mr-2" />
+                  Corrigir convocatória
+                </Button>
+              )}
               <Button
                 onClick={() => {
                   setActionError(null);
@@ -616,9 +748,31 @@ export default function GameSummaryPage() {
                 }}
                 variant="outline"
                 className="border-amber-300 text-amber-900"
+                disabled={
+                  summary.gameStatus === "live" ||
+                  summary.gameStatus === "scheduled"
+                }
               >
-                <RotateCcw size={14} className="mr-2" />
-                Refazer Final Stats
+                <Pencil size={14} className="mr-2" />
+                Editar Final Stats
+              </Button>
+              <Button
+                onClick={() => setResetConfirmOpen(true)}
+                variant="outline"
+                className="border-amber-300 text-amber-900"
+                disabled={
+                  !hasAnyManualRow ||
+                  summary.gameStatus === "live" ||
+                  summary.gameStatus === "scheduled"
+                }
+                title={
+                  !hasAnyManualRow
+                    ? "Os stats já estão em modo automático."
+                    : undefined
+                }
+              >
+                <Undo2 size={14} className="mr-2" />
+                Repor auto-cálculo
               </Button>
             </div>
           ) : (
@@ -630,6 +784,7 @@ export default function GameSummaryPage() {
                 <input
                   type="number"
                   min={1}
+                  max={200}
                   value={finalMinuteDraft}
                   onChange={(event) => setFinalMinuteDraft(event.target.value)}
                   className="w-24 rounded-md border border-amber-300 bg-white px-2 py-1 text-sm"
@@ -637,16 +792,16 @@ export default function GameSummaryPage() {
               </div>
               <div className="flex gap-2">
                 <Button
-                  onClick={() => void handleRecalculateStats()}
+                  onClick={() => void submitRecalculate()}
                   disabled={savingRecalc}
                   className="bg-amber-600 hover:bg-amber-700"
                 >
                   {savingRecalc ? (
                     <Loader2 size={14} className="mr-2 animate-spin" />
                   ) : (
-                    <RotateCcw size={14} className="mr-2" />
+                    <Pencil size={14} className="mr-2" />
                   )}
-                  Recalcular e Guardar
+                  Guardar
                 </Button>
                 <Button
                   variant="outline"
@@ -843,8 +998,16 @@ export default function GameSummaryPage() {
               return (
                 <div key={row.id} className="px-4 py-3 text-sm">
                   <div className="flex items-center justify-between gap-3">
-                    <p className="font-semibold text-slate-800">
+                    <p className="font-semibold text-slate-800 inline-flex items-center gap-1.5">
                       {playerDisplayName(player)}
+                      {row.edited_manually && (
+                        <span
+                          className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-700"
+                          title="Stats deste jogador foram editadas manualmente"
+                        >
+                          Manual
+                        </span>
+                      )}
                     </p>
                     <div className="flex items-center gap-2">
                       <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
@@ -858,12 +1021,139 @@ export default function GameSummaryPage() {
                     </div>
                   </div>
                   <div className="mt-1 text-xs text-slate-600 flex flex-wrap gap-x-3 gap-y-1">
-                    <span>{row.minutes_played ?? 0}&apos;</span>
-                    <span>G: {row.goals ?? 0}</span>
-                    <span>AG: {row.own_goals ?? 0}</span>
-                    <span>A: {row.assists ?? 0}</span>
-                    <span>CA: {row.yellow_cards ?? 0}</span>
-                    <span>CV: {row.red_cards ?? 0}</span>
+                    {!editing ? (
+                      <>
+                        <span>{row.minutes_played ?? 0}&apos;</span>
+                        <span>G: {row.goals ?? 0}</span>
+                        <span>AG: {row.own_goals ?? 0}</span>
+                        <span>A: {row.assists ?? 0}</span>
+                        <span>CA: {row.yellow_cards ?? 0}</span>
+                        <span>CV: {row.red_cards ?? 0}</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="inline-flex items-center gap-1">
+                          Min:
+                          <input
+                            type="number"
+                            min={0}
+                            max={200}
+                            value={
+                              numericDrafts[row.player_id]?.minutes_played ??
+                              row.minutes_played ?? 0
+                            }
+                            onChange={(event) =>
+                              updateNumericDraft(
+                                row.player_id,
+                                "minutes_played",
+                                event.target.value,
+                              )
+                            }
+                            className="w-14 rounded border border-slate-300 px-1.5 py-0.5 text-xs"
+                          />
+                        </span>
+                        <span className="inline-flex items-center gap-1">
+                          G:
+                          <input
+                            type="number"
+                            min={0}
+                            max={20}
+                            value={
+                              numericDrafts[row.player_id]?.goals ??
+                              row.goals ?? 0
+                            }
+                            onChange={(event) =>
+                              updateNumericDraft(
+                                row.player_id,
+                                "goals",
+                                event.target.value,
+                              )
+                            }
+                            className="w-12 rounded border border-slate-300 px-1.5 py-0.5 text-xs"
+                          />
+                        </span>
+                        <span className="inline-flex items-center gap-1">
+                          AG:
+                          <input
+                            type="number"
+                            min={0}
+                            max={5}
+                            value={
+                              numericDrafts[row.player_id]?.own_goals ??
+                              row.own_goals ?? 0
+                            }
+                            onChange={(event) =>
+                              updateNumericDraft(
+                                row.player_id,
+                                "own_goals",
+                                event.target.value,
+                              )
+                            }
+                            className="w-12 rounded border border-slate-300 px-1.5 py-0.5 text-xs"
+                          />
+                        </span>
+                        <span className="inline-flex items-center gap-1">
+                          A:
+                          <input
+                            type="number"
+                            min={0}
+                            max={20}
+                            value={
+                              numericDrafts[row.player_id]?.assists ??
+                              row.assists ?? 0
+                            }
+                            onChange={(event) =>
+                              updateNumericDraft(
+                                row.player_id,
+                                "assists",
+                                event.target.value,
+                              )
+                            }
+                            className="w-12 rounded border border-slate-300 px-1.5 py-0.5 text-xs"
+                          />
+                        </span>
+                        <span className="inline-flex items-center gap-1">
+                          CA:
+                          <input
+                            type="number"
+                            min={0}
+                            max={2}
+                            value={
+                              numericDrafts[row.player_id]?.yellow_cards ??
+                              row.yellow_cards ?? 0
+                            }
+                            onChange={(event) =>
+                              updateNumericDraft(
+                                row.player_id,
+                                "yellow_cards",
+                                event.target.value,
+                              )
+                            }
+                            className="w-12 rounded border border-slate-300 px-1.5 py-0.5 text-xs"
+                          />
+                        </span>
+                        <span className="inline-flex items-center gap-1">
+                          CV:
+                          <input
+                            type="number"
+                            min={0}
+                            max={2}
+                            value={
+                              numericDrafts[row.player_id]?.red_cards ??
+                              row.red_cards ?? 0
+                            }
+                            onChange={(event) =>
+                              updateNumericDraft(
+                                row.player_id,
+                                "red_cards",
+                                event.target.value,
+                              )
+                            }
+                            className="w-12 rounded border border-slate-300 px-1.5 py-0.5 text-xs"
+                          />
+                        </span>
+                      </>
+                    )}
                     {!editing ? (
                       <span>Nota: {row.coach_rating ?? "—"}</span>
                     ) : (
@@ -941,6 +1231,20 @@ export default function GameSummaryPage() {
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={resetConfirmOpen}
+        onOpenChange={setResetConfirmOpen}
+        title="Repor stats automáticas?"
+        description="Vais perder todos os ajustes manuais nesta partida. Os stats serão recalculados a partir dos eventos do jogo."
+        confirmLabel="Sim, repor"
+        cancelLabel="Cancelar"
+        destructive
+        onConfirm={() => {
+          setResetConfirmOpen(false);
+          void submitRecalculate({ forceAuto: true });
+        }}
+      />
     </div>
   );
 }
