@@ -47,4 +47,21 @@ describe("PlayerStatsGroup", () => {
     // Status badge ainda aparece
     expect(screen.getByText("Activo")).toBeInTheDocument();
   });
+
+  it("[#3] attendance_total = 0 → tile mostra '—' em vez de 0%", () => {
+    render(
+      <PlayerStatsGroup
+        stats={makeStats({
+          attendance_total: 0,
+          attendance_present: 0,
+          attendance_rate: 0,
+        })}
+        status="active"
+      />,
+    );
+    expect(screen.queryByText("0%")).not.toBeInTheDocument();
+    // O tile "Presença em treinos" deve mostrar "—"
+    const dashes = screen.getAllByText("—");
+    expect(dashes.length).toBeGreaterThan(0);
+  });
 });

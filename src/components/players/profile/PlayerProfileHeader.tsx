@@ -10,11 +10,13 @@ import { PlayerEditModal } from "./PlayerEditModal";
 interface PlayerProfileHeaderProps {
   player: Player;
   canEdit: boolean;
+  onSaved?: (updated: Player) => void;
 }
 
 export function PlayerProfileHeader({
   player,
   canEdit,
+  onSaved,
 }: PlayerProfileHeaderProps) {
   const [editOpen, setEditOpen] = useState(false);
   const statusConfig =
@@ -74,9 +76,10 @@ export function PlayerProfileHeader({
 
       <PlayerEditModal
         player={player}
-        mode="readonly"
+        mode={canEdit ? "edit" : "readonly"}
         open={editOpen}
         onOpenChange={setEditOpen}
+        onSaved={onSaved}
       />
     </>
   );
