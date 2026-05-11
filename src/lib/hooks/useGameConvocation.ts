@@ -157,18 +157,18 @@ export function useGameConvocation(deps: UseGameConvocationDeps) {
     }
 
     try {
-      const endpoint = isExternalPlayer
-        ? `/api/games/${id}/convocation/external/lineup`
-        : `/api/games/${id}/convocation/lineup`;
+      // Modelo unificado: usar sempre /convocation/lineup com squadId (externos)
+      // ou playerId (internos, compat). O endpoint /convocation/external/lineup
+      // foi deprecado (HTTP 410) no PR #134.
       const requestBody = isExternalPlayer
         ? {
-            ...payload,
-            externalConvocationId,
-            playerId: undefined,
+            squadId: externalConvocationId,
+            lineupStatus: payload.lineupStatus,
+            correctionReason: payload.correctionReason,
           }
         : payload;
 
-      const res = await fetch(endpoint, {
+      const res = await fetch(`/api/games/${id}/convocation/lineup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(requestBody),

@@ -14,12 +14,8 @@ import {
   computeIsOnFieldAfterAllEvents,
   playerKeyFromEvent,
 } from "@/lib/games/compute-on-field-at-event";
-import { syncExternalPlayerLiveStatus } from "@/lib/games/live-external-player-sync";
 import { filterPersistentLiveStatsPlayers } from "@/lib/games/live-persistence";
-import {
-  getExternalConvocationIdFromLivePlayerId,
-  toExternalLivePlayerId,
-} from "@/lib/games/live-player-ids";
+import { toExternalLivePlayerId } from "@/lib/games/live-player-ids";
 import { captureClientProductEvent } from "@/lib/observability/posthog-client";
 import { exportMatchReportPDF } from "@/lib/pdf/matchReport";
 import type { Game, Player, GameEvent, GameEventType } from "@/types/database";
@@ -702,19 +698,18 @@ export function useLiveGameState(id: string) {
     ) => {
       const player = convocatedPlayers.find((entry) => entry.id === playerId);
       if (player?.isExternal) {
-        const externalConvocationId =
-          player.externalConvocationId ??
-          getExternalConvocationIdFromLivePlayerId(playerId);
-        if (!externalConvocationId) {
-          throw new Error("Jogador externo inválido para atualizar live.");
-        }
-
-        // Usa endpoint /live/external-players (apenas gate canWrite). O
-        // endpoint /convocation/external/lineup é bloqueado por
-        // convocation-guard quando o jogo está em `status='live'` — partia
-        // substituições live envolvendo externos (bug 2026-05-09).
-        const lineupStatus = status === "on_field" ? "on_field" : "substitute";
-        await syncExternalPlayerLiveStatus(id, externalConvocationId, lineupStatus);
+        // Modelo unificado (PR #134): externos não têm coluna
+        // `lineup_status` persistida durante o live. Os events
+        // (substitution_in/out) em game_events são fonte de verdade.
+        // Hidratação após refresh deriva o "em campo agora" dos events.
+        //
+        // Logo este branch é NO-OP durante live. O estado em RAM
+        // (convocatedPlayers[i].isOnField) continua a actualizar via o
+        // caller (handleSubstitution / applySendOff), e os events já
+        // são gravados via /live/events.
+        //
+        // Pré-jogo o lineup é actualizado via /convocation/lineup
+        // (chamado em outros pontos do hook, não aqui).
         return;
       }
 

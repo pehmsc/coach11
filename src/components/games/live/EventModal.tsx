@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import type { LivePlayer, ModalType, PlayerAvailability } from "./types";
 import { EVENT_LABELS } from "./types";
 import { sortPlayersByName, getAvailabilityBadgeClasses } from "./utils";
+import { sortPlayersByFieldStatus } from "@/lib/games/sort-players-by-field-status";
 
 interface EventModalProps {
   modalType: ModalType | null;
@@ -67,6 +68,10 @@ export function EventModal({
   confirmSubstitution,
 }: EventModalProps) {
   if (!modalType) return null;
+
+  // Set de IDs de jogadores expulsos (derivado de suspendedBenchPlayers).
+  // Usado por sortPlayersByFieldStatus para empurrar expulsos para o final.
+  const sentOffPlayerIds = new Set(suspendedBenchPlayers.map((p) => p.id));
 
   return (
     <AppModal
@@ -287,7 +292,7 @@ export function EventModal({
                   <p className="text-xs font-semibold text-slate-500 uppercase mb-2">
                     Marcador
                   </p>
-                  {sortPlayersByName(convocatedPlayers).map((player) => {
+                  {sortPlayersByFieldStatus(convocatedPlayers, sentOffPlayerIds).map((player) => {
                     const availability = getPlayerAvailability(player.id);
                     const isDisabled = !availability.selectable;
                     const isSelected = selectedScorerID === player.id;
@@ -347,8 +352,9 @@ export function EventModal({
                   <p className="text-xs font-semibold text-slate-500 uppercase mb-2">
                     Assistência (opcional)
                   </p>
-                  {sortPlayersByName(
+                  {sortPlayersByFieldStatus(
                     convocatedPlayers.filter((player) => player.id !== selectedScorerID),
+                    sentOffPlayerIds,
                   ).map((player) => {
                     const availability = getPlayerAvailability(player.id);
                     const isDisabled = !availability.selectable;
@@ -514,7 +520,7 @@ export function EventModal({
               <p className="text-xs font-semibold text-slate-500 uppercase mb-2">
                 Jogador que marcou autogolo
               </p>
-              {sortPlayersByName(convocatedPlayers).map((player) => {
+              {sortPlayersByFieldStatus(convocatedPlayers, sentOffPlayerIds).map((player) => {
                 const availability = getPlayerAvailability(player.id);
                 const isDisabled = !availability.selectable;
                 const isSelected = selectedScorerID === player.id;
@@ -580,7 +586,7 @@ export function EventModal({
           <p className="text-xs font-semibold text-slate-500 uppercase mb-2">
             Jogador
           </p>
-          {sortPlayersByName(convocatedPlayers).map((p) => {
+          {sortPlayersByFieldStatus(convocatedPlayers, sentOffPlayerIds).map((p) => {
             const availability = getPlayerAvailability(p.id);
             const isDisabled = !availability.selectable;
             const isSelected = selectedScorerID === p.id;
