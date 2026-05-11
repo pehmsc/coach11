@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { resolveFixtureScoreboardShortNames } from "@/lib/games/display";
+import { formatCardEventLabel } from "@/lib/games/format-card-event-label";
 import type { PlayerOverride } from "@/lib/schemas/game-recalculate";
 import { toast } from "sonner";
 import { captureClientProductEvent } from "@/lib/observability/posthog-client";
@@ -917,7 +918,10 @@ export default function GameSummaryPage() {
               const related = event.related_player_id
                 ? summary.playersById[event.related_player_id]
                 : null;
-              const baseLabel = EVENT_LABELS[event.event_type] || event.event_type;
+              const baseLabel =
+                event.event_type === "yellow_card" || event.event_type === "red_card"
+                  ? formatCardEventLabel(event, summary.events)
+                  : EVENT_LABELS[event.event_type] || event.event_type;
               const actorLabel = event.is_opponent_event
                 ? player
                   ? `Adversário (associado: ${playerDisplayName(player)})`
