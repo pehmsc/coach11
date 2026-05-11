@@ -13,12 +13,14 @@ import {
   Pencil,
   RotateCcw,
   Star,
+  Trash2,
   Undo2,
   Users,
 } from "lucide-react";
 import { StickyBackLink } from "@/components/navigation/StickyBackLink";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { DeleteGameModal } from "@/components/games/detail/DeleteGameModal";
 import { Skeleton } from "@/components/ui/skeleton";
 import { resolveFixtureScoreboardShortNames } from "@/lib/games/display";
 import { formatCardEventLabel } from "@/lib/games/format-card-event-label";
@@ -166,6 +168,8 @@ export default function GameSummaryPage() {
   const [exportingPdf, setExportingPdf] = useState<ExportKind | null>(null);
   const [convocationExport, setConvocationExport] =
     useState<ConvocationExportPayload | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deletingGame, setDeletingGame] = useState(false);
 
   const syncDraftsFromSummary = useCallback((payload: SummaryPayload) => {
     setRatingDraft(() => {
@@ -643,6 +647,30 @@ export default function GameSummaryPage() {
     }
   }
 
+  async function handleDeleteGame() {
+    if (!summary?.isCoordinator) return;
+    setDeletingGame(true);
+    setActionError(null);
+    try {
+      const res = await fetch(`/api/games/${id}`, { method: "DELETE" });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok || !(payload as { success?: boolean })?.success) {
+        setActionError(
+          (payload as { error?: string })?.error || "Erro ao apagar jogo.",
+        );
+        return;
+      }
+      toast.success("Jogo apagado com sucesso.");
+      router.replace("/games");
+      router.refresh();
+    } catch {
+      setActionError("Erro de ligação ao apagar jogo.");
+    } finally {
+      setDeletingGame(false);
+      setShowDeleteConfirm(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="p-4 md:p-8 max-w-3xl mx-auto space-y-4">
@@ -775,6 +803,20 @@ export default function GameSummaryPage() {
                 <Undo2 size={14} className="mr-2" />
                 Repor auto-cálculo
               </Button>
+              {summary.isCoordinator && (
+                <Button
+                  onClick={() => {
+                    setActionError(null);
+                    setShowDeleteConfirm(true);
+                  }}
+                  variant="outline"
+                  className="border-red-300 text-red-700 hover:bg-red-50 hover:text-red-800"
+                  title="Apagar jogo e todos os dados associados"
+                >
+                  <Trash2 size={14} className="mr-2" />
+                  Apagar jogo
+                </Button>
+              )}
             </div>
           ) : (
             <div className="space-y-3">
@@ -1249,6 +1291,19 @@ export default function GameSummaryPage() {
           void submitRecalculate({ forceAuto: true });
         }}
       />
+
+      {showDeleteConfirm && (
+        <DeleteGameModal
+          deletingGame={deletingGame}
+          gameStatus={summary.gameStatus}
+          gameTitle={
+            game.title ||
+            (game.opponent_name ? `vs ${game.opponent_name}` : null)
+          }
+          onDelete={() => void handleDeleteGame()}
+          onClose={() => setShowDeleteConfirm(false)}
+        />
+      )}
     </div>
   );
 }

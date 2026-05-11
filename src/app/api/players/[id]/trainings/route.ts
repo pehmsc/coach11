@@ -10,6 +10,9 @@ type RouteContext = {
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
 
+const VALID_STATUSES = new Set(["present", "absent", "injured", "late"]);
+const VALID_SORTS = new Set(["date_desc", "date_asc"]);
+
 function parseLimit(value: string | null): number {
   const n = Number.parseInt(value ?? "", 10);
   if (!Number.isFinite(n) || n <= 0) return DEFAULT_LIMIT;
@@ -22,6 +25,28 @@ function parseOffset(value: string | null): number {
   return n;
 }
 
+function parseStatusFilter(value: string | null): string[] | null {
+  if (!value) return null;
+  const list = value
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter((s) => VALID_STATUSES.has(s));
+  return list.length > 0 ? list : null;
+}
+
+function parseUtFilter(value: string | null): number | null {
+  if (!value) return null;
+  const n = Number.parseInt(value, 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function parseSort(value: string | null): "date_desc" | "date_asc" {
+  if (value && VALID_SORTS.has(value)) {
+    return value as "date_desc" | "date_asc";
+  }
+  return "date_desc";
+}
+
 export async function GET(request: Request, { params }: RouteContext) {
   try {
     const { id: playerId } = await params;
@@ -32,6 +57,9 @@ export async function GET(request: Request, { params }: RouteContext) {
     const url = new URL(request.url);
     const limit = parseLimit(url.searchParams.get("limit"));
     const offset = parseOffset(url.searchParams.get("offset"));
+    const statusFilter = parseStatusFilter(url.searchParams.get("status"));
+    const utFilter = parseUtFilter(url.searchParams.get("ut"));
+    const sort = parseSort(url.searchParams.get("sort"));
 
     const supabase = await createClient();
     const {
@@ -60,19 +88,28 @@ export async function GET(request: Request, { params }: RouteContext) {
       );
     }
 
-    const { data, error } = await supabase
+    let query = supabase
       .from("training_attendance")
       .select(
         `id, training_session_id, status, justification, marked_at,
-         training_sessions:training_sessions(
-           id, session_date, start_time, end_time, title, status, focus
+         training_sessions:training_sessions!inner(
+           id, session_date, start_time, end_time, title, status, focus, ut_number
          )`,
       )
       .eq("player_id", playerId)
-      .eq("training_sessions.status", "completed")
+      .eq("training_sessions.status", "completed");
+
+    if (statusFilter) {
+      query = query.in("status", statusFilter);
+    }
+    if (utFilter !== null) {
+      query = query.eq("training_sessions.ut_number", utFilter);
+    }
+
+    const { data, error } = await query
       .order("session_date", {
         referencedTable: "training_sessions",
-        ascending: false,
+        ascending: sort === "date_asc",
       })
       .range(offset, offset + limit);
 
