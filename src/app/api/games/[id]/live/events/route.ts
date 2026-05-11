@@ -9,6 +9,7 @@ import {
   normalizeStoredGameEventRowsForClient,
 } from "@/lib/games/live-event-participants";
 import { toExternalLivePlayerId } from "@/lib/games/live-player-ids";
+import { planAutoRedCardsForSecondYellow } from "@/lib/games/auto-red-from-second-yellow";
 import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -280,27 +281,38 @@ export async function POST(request: Request, { params }: RouteContext) {
       }>,
     );
 
-    const { sentOff: sentOffPlayerIds, yellowByPlayer } = computeSentOffPlayers(
+    const { sentOff: priorSentOffPlayerIds, yellowByPlayer } = computeSentOffPlayers(
       normalizedExistingEvents as Array<{
         event_type?: string | null;
         player_id?: string | null;
         is_opponent_event?: boolean | null;
       }>,
     );
-    sentOffPlayerIds.forEach((playerId) => onFieldPlayerIds.delete(playerId));
+    // O guard "jogador expulso" usa priorSentOffPlayerIds (snapshot do estado
+    // antes do batch). Não pode usar uma versão mutada durante o loop,
+    // senão o red_card auto-gerado pelo próprio yellow_card no mesmo batch
+    // seria falsamente rejeitado — esse era o bug reportado.
+    priorSentOffPlayerIds.forEach((playerId) => onFieldPlayerIds.delete(playerId));
+
+    // Defesa em profundidade: helper puro decide se há red_cards a injectar
+    // por acumulação de amarelos (cliente dessincronizado).
+    const { autoRedRows, expelledByThisBatch } = planAutoRedCardsForSecondYellow(
+      rows,
+      yellowByPlayer,
+    );
 
     for (const row of rows) {
       const playerId = typeof row.player_id === "string" ? row.player_id : null;
       const relatedPlayerId =
         typeof row.related_player_id === "string" ? row.related_player_id : null;
 
-      if (playerId && sentOffPlayerIds.has(playerId)) {
+      if (playerId && priorSentOffPlayerIds.has(playerId)) {
         return NextResponse.json(
           { error: "Jogador expulso não pode ser selecionado para eventos." },
           { status: 400 },
         );
       }
-      if (relatedPlayerId && sentOffPlayerIds.has(relatedPlayerId)) {
+      if (relatedPlayerId && priorSentOffPlayerIds.has(relatedPlayerId)) {
         return NextResponse.json(
           { error: "Jogador expulso não pode ser selecionado para eventos." },
           { status: 400 },
@@ -353,25 +365,18 @@ export async function POST(request: Request, { params }: RouteContext) {
         continue;
       }
 
-      if (!row.is_opponent_event && playerId) {
-        if (row.event_type === "red_card") {
-          sentOffPlayerIds.add(playerId);
-          onFieldPlayerIds.delete(playerId);
-          continue;
-        }
-
-        if (row.event_type === "yellow_card") {
-          const next = (yellowByPlayer.get(playerId) ?? 0) + 1;
-          yellowByPlayer.set(playerId, next);
-          if (next >= 2) {
-            sentOffPlayerIds.add(playerId);
-            onFieldPlayerIds.delete(playerId);
-          }
-        }
+      // Mantém onFieldPlayerIds em sintonia com expulsões (yellow×2 ou red
+      // explícito) para que substituições posteriores no mesmo batch
+      // (caso existam) sejam validadas correctamente.
+      if (!row.is_opponent_event && playerId && row.event_type === "red_card") {
+        onFieldPlayerIds.delete(playerId);
       }
     }
 
-    const payload = rows.map((row) => ({
+    expelledByThisBatch.forEach((pid) => onFieldPlayerIds.delete(pid));
+
+    const allRows = autoRedRows.length > 0 ? [...rows, ...autoRedRows] : rows;
+    const payload = allRows.map((row) => ({
       game_id: gameId,
       event_type: row.event_type,
       ...buildStoredGameEventParticipantFields({
@@ -408,7 +413,8 @@ export async function POST(request: Request, { params }: RouteContext) {
         game_id: gameId,
         age_group_id: gameMeta?.age_group_id ?? null,
         team_id: gameMeta?.team_id ?? null,
-        events_count: rows.length,
+        events_count: allRows.length,
+        auto_red_cards: autoRedRows.length,
         has_opponent_events: rows.some((row) => row.is_opponent_event),
       },
     });
