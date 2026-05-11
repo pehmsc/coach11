@@ -66,18 +66,6 @@ function gameStatusBadgeClassName(status: string | null | undefined) {
   return "bg-white/10 text-white";
 }
 
-function isMissingRelationError(
-  message: string | null | undefined,
-  relationName: string,
-) {
-  if (!message) return false;
-
-  return (
-    message.includes(relationName) &&
-    (message.includes("does not exist") || message.includes("relation"))
-  );
-}
-
 const getPublicGameDetailPayload = unstable_cache(
   async (ageGroupId: string, accessIdentifier: string, publicGameRef: string) => {
     const admin = createAdminClient();
@@ -183,29 +171,46 @@ export default async function PublicGameDetailPage({
   });
 
   if (convocation?.id) {
+    // Modelo unificado: ler internos e externos a partir de game_squads.
+    // PUBLIC_SQUAD_COLUMNS exclui `initial_lineup_status` para defesa em
+    // profundidade — mas precisamos do `initial_lineup_status` para deduzir
+    // `starterIds` dos externos (visível no público). Para internos usamos
+    // `game_stats_live` (legacy mas a fonte real é o coach decidir public).
     const [
-      { data: selectedRows },
+      internalSquadsRes,
       { data: liveRows },
-      externalPlayersRes,
+      externalSquadsRes,
     ] = await Promise.all([
       admin
-        .from("convocation_players")
-        .select("player_id")
-        .eq("convocation_id", convocation.id),
+        .from("game_squads")
+        .select("player_id, initial_lineup_status")
+        .eq("game_id", game.id)
+        .not("player_id", "is", null),
       admin
         .from("game_stats_live")
         .select("player_id, status, start_minute")
         .eq("game_id", game.id),
       admin
-        .from("external_player_convocations")
-        .select("id, name, lineup_status")
+        .from("game_squads")
+        .select("id, external_name, initial_lineup_status, created_at")
         .eq("game_id", game.id)
+        .is("player_id", null)
         .order("created_at", { ascending: true }),
     ]);
 
+    const internalSquadsRaw =
+      internalSquadsRes.error
+        ? []
+        : (
+            (internalSquadsRes.data || []) as Array<{
+              player_id: string | null;
+              initial_lineup_status: string | null;
+            }>
+          );
+
     const playerIds = Array.from(
       new Set(
-        (selectedRows || [])
+        internalSquadsRaw
           .map((row) => row.player_id)
           .filter((value): value is string => typeof value === "string"),
       ),
@@ -219,20 +224,20 @@ export default async function PublicGameDetailPage({
       }>),
     );
 
-    const externalPlayers =
-      externalPlayersRes.error &&
-      !isMissingRelationError(
-        externalPlayersRes.error.message,
-        "external_player_convocations",
-      )
-        ? []
-        : (
-            (externalPlayersRes.data || []) as Array<{
-              id: string;
-              name: string | null;
-              lineup_status: string | null;
-            }>
-          );
+    const externalPlayers = externalSquadsRes.error
+      ? []
+      : (
+          (externalSquadsRes.data || []) as Array<{
+            id: string;
+            external_name: string | null;
+            initial_lineup_status: string | null;
+          }>
+        ).map((row) => ({
+          id: row.id,
+          name: row.external_name,
+          lineup_status:
+            row.initial_lineup_status === "starter" ? "on_field" : "substitute",
+        }));
 
     let squadPlayers: Array<{
       id: string;

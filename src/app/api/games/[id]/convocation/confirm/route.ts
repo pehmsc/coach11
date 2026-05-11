@@ -12,6 +12,10 @@ type RouteContext = {
   params: Promise<{ id: string }>;
 };
 
+// Confirma convocatória: passa `games.convocation_status` de 'draft' a
+// 'published'. Antes do refactor usava convocations.status='confirmed'.
+// Modelo unificado: game_squads é fonte de verdade da lista; games.convocation_status
+// é apenas a flag de publicação.
 export async function POST(_request: Request, { params }: RouteContext) {
   let userId: string | null = null;
   let gameIdForError: string | null = null;
@@ -45,134 +49,91 @@ export async function POST(_request: Request, { params }: RouteContext) {
       return writeGuard.response;
     }
 
-    const { data: convocationRows, error: convocationRowsError } = await supabase
-      .from("convocations")
-      .select("id, status, created_at")
-      .eq("game_id", gameId)
-      .order("created_at", { ascending: false })
-      .order("id", { ascending: false });
-
-    if (convocationRowsError) {
-      return NextResponse.json(
-        { error: "Erro ao carregar a convocatória." },
-        { status: 500 },
-      );
-    }
-
-    let convocation = convocationRows?.[0] ?? null;
-
-    if (!convocation) {
-      const { data: createdConvocation, error: createError } = await supabase
-        .from("convocations")
-        .insert({ game_id: gameId, status: "draft" })
-        .select("id, status, created_at")
-        .single();
-
-      if (createError || !createdConvocation) {
-        return NextResponse.json(
-          { error: "Não foi possível criar a convocatória." },
-          { status: 500 },
-        );
-      }
-
-      convocation = createdConvocation;
-    }
-
-    if (convocation.status === "closed") {
-      return NextResponse.json(
-        { error: "A convocatória está fechada e não pode ser alterada." },
-        { status: 400 },
-      );
-    }
-
-    const allConvocationIds = convocationRows?.length
-      ? convocationRows.map((row) => row.id)
-      : [convocation.id];
-
-    const { data: selectedRows, error: selectedError } = await supabase
-      .from("convocation_players")
-      .select("player_id")
-      .in("convocation_id", allConvocationIds);
-
-    if (selectedError) {
-      return NextResponse.json(
-        { error: "Erro ao validar os jogadores convocados." },
-        { status: 500 },
-      );
-    }
-
-    const uniquePlayers = new Set((selectedRows || []).map((row) => row.player_id));
-
-    const { count: externalPlayersCount, error: externalPlayersCountError } = await supabase
-      .from("external_player_convocations")
+    // Contar squads no jogo (internos + externos via game_squads)
+    const { count: squadCount, error: squadCountError } = await supabase
+      .from("game_squads")
       .select("id", { head: true, count: "exact" })
       .eq("game_id", gameId);
 
-    if (
-      externalPlayersCountError &&
-      !(
-        externalPlayersCountError.message?.includes("external_player_convocations") &&
-        (externalPlayersCountError.message.includes("does not exist") ||
-          externalPlayersCountError.message.includes("relation"))
-      )
-    ) {
+    if (squadCountError) {
       return NextResponse.json(
-        { error: "Erro ao validar jogadores externos convocados." },
+        { error: "Erro ao validar jogadores convocados." },
         { status: 500 },
       );
     }
 
-    const playersCount = uniquePlayers.size + (externalPlayersCount ?? 0);
+    const playersCount = squadCount ?? 0;
 
-    if (!playersCount || playersCount <= 0) {
+    if (playersCount <= 0) {
       return NextResponse.json(
         { error: "Seleciona pelo menos 1 jogador antes de guardar." },
         { status: 400 },
       );
     }
 
-    // Guarantee game_stats_live has a row for each convocated player.
-    // Missing rows are initialized as bench so live page always has full state.
-    const { data: existingLiveRows, error: existingLiveRowsError } = await supabase
-      .from("game_stats_live")
+    // Garantir game_stats_live tem row para cada jogador interno convocado.
+    // TODO: remove after game_stats_live.status drop.
+    const { data: internalSquads, error: internalSquadsError } = await supabase
+      .from("game_squads")
       .select("player_id")
-      .eq("game_id", gameId);
+      .eq("game_id", gameId)
+      .not("player_id", "is", null);
 
-    if (existingLiveRowsError) {
+    if (internalSquadsError) {
       return NextResponse.json(
-        { error: "Erro ao preparar estados live dos convocados." },
+        { error: "Erro ao validar squads internos." },
         { status: 500 },
       );
     }
 
-    const existingLiveIds = new Set((existingLiveRows || []).map((row) => row.player_id));
-    const missingLiveRows = Array.from(uniquePlayers)
-      .filter((playerId) => !existingLiveIds.has(playerId))
-      .map((playerId) => ({
-        game_id: gameId,
-        player_id: playerId,
-        status: "on_bench",
-        start_minute: null,
-        end_minute: null,
-      }));
+    const internalPlayerIds = (internalSquads || [])
+      .map((row) => row.player_id)
+      .filter((id): id is string => typeof id === "string");
 
-    if (missingLiveRows.length > 0) {
-      const { error: insertLiveRowsError } = await supabase
+    if (internalPlayerIds.length > 0) {
+      const { data: existingLiveRows, error: existingLiveRowsError } = await supabase
         .from("game_stats_live")
-        .insert(missingLiveRows);
+        .select("player_id")
+        .eq("game_id", gameId);
 
-      if (insertLiveRowsError) {
+      if (existingLiveRowsError) {
         return NextResponse.json(
-          { error: "Erro ao guardar suplentes/titulares no live." },
+          { error: "Erro ao preparar estados live dos convocados." },
           { status: 500 },
         );
+      }
+
+      const existingLiveIds = new Set(
+        (existingLiveRows || []).map((row) => row.player_id),
+      );
+      const missingLiveRows = internalPlayerIds
+        .filter((playerId) => !existingLiveIds.has(playerId))
+        .map((playerId) => ({
+          game_id: gameId,
+          player_id: playerId,
+          status: "on_bench",
+          start_minute: null,
+          end_minute: null,
+        }));
+
+      if (missingLiveRows.length > 0) {
+        const { error: insertLiveRowsError } = await supabase
+          .from("game_stats_live")
+          .insert(missingLiveRows);
+
+        if (insertLiveRowsError) {
+          console.error(
+            "[convocation/confirm] game_stats_live insert falhou (não-bloqueante):",
+            insertLiveRowsError.message,
+          );
+        }
       }
     }
 
     const { error: updateError } = await supabase
-      .from("convocations")
-      .update({ status: "confirmed" })
-      .in("id", allConvocationIds);
+      .from("games")
+      .update({ convocation_status: "published" })
+      .eq("id", gameId);
 
     if (updateError) {
       return NextResponse.json(
@@ -207,7 +168,6 @@ export async function POST(_request: Request, { params }: RouteContext) {
           age_group_id: gameRow.age_group_id,
           team_id: gameRow.team_id,
           players_count: playersCount,
-          created_now: convocationRows?.length ? false : true,
         },
       });
 
@@ -233,7 +193,7 @@ export async function POST(_request: Request, { params }: RouteContext) {
 
     return NextResponse.json({
       success: true,
-      status: "confirmed",
+      status: "published",
       players: playersCount,
     });
   } catch (error) {

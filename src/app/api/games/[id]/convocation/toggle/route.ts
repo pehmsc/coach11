@@ -11,6 +11,10 @@ type RouteContext = {
   params: Promise<{ id: string }>;
 };
 
+// Toggle de jogador interno na convocatória.
+// Modelo unificado: game_squads é fonte de verdade. INSERT default
+// initial_lineup_status='substitute'; UPDATE de lineup acontece via
+// endpoint /convocation/lineup. Idempotência via UNIQUE (game_id, player_id).
 export async function POST(request: Request, { params }: RouteContext) {
   try {
     const { id: gameId } = await params;
@@ -61,63 +65,27 @@ export async function POST(request: Request, { params }: RouteContext) {
       }
     }
 
-    const { data: convocationRows, error: convocationRowsError } = await supabase
-      .from("convocations")
-      .select("id, status, created_at")
+    // Verificar se já existe linha em game_squads para este (game_id, player_id)
+    const { data: existing, error: existingError } = await supabase
+      .from("game_squads")
+      .select("id")
       .eq("game_id", gameId)
-      .order("created_at", { ascending: false })
-      .order("id", { ascending: false });
+      .eq("player_id", playerId)
+      .maybeSingle();
 
-    if (convocationRowsError) {
+    if (existingError) {
       return NextResponse.json(
-        { error: "Erro ao carregar a convocatória." },
+        { error: "Erro ao verificar convocatória." },
         { status: 500 },
       );
     }
 
-    let convocation = convocationRows?.[0] ?? null;
-
-    if (!convocation) {
-      const { data: newConvocation, error: createConvError } = await supabase
-        .from("convocations")
-        .insert({ game_id: gameId, status: "draft" })
-        .select("id, status, created_at")
-        .single();
-
-      if (createConvError || !newConvocation) {
-        return NextResponse.json(
-          { error: "Não foi possível criar a convocatória." },
-          { status: 500 },
-        );
-      }
-
-      convocation = newConvocation;
-    }
-
-    if (convocation.status === "closed") {
-      return NextResponse.json(
-        { error: "A convocatória está fechada e não pode ser editada." },
-        { status: 400 },
-      );
-    }
-
-    const allConvocationIds = convocationRows?.length
-      ? convocationRows.map((row) => row.id)
-      : [convocation.id];
-
-    const { data: existing } = await supabase
-      .from("convocation_players")
-      .select("id")
-      .in("convocation_id", allConvocationIds)
-      .eq("player_id", playerId)
-      .limit(1);
-
-    if ((existing?.length ?? 0) > 0) {
+    if (existing?.id) {
+      // Remover do squad
       const { error: deleteError } = await supabase
-        .from("convocation_players")
+        .from("game_squads")
         .delete()
-        .in("convocation_id", allConvocationIds)
-        .eq("player_id", playerId);
+        .eq("id", existing.id);
 
       if (deleteError) {
         return NextResponse.json(
@@ -126,12 +94,8 @@ export async function POST(request: Request, { params }: RouteContext) {
         );
       }
 
-      // Higiene: remover a row de game_stats_live só em jogos pré-jogo.
-      // Em "completed" (correcção via correctionReason) preservamos a row
-      // para manter o audit trail de quem participou. "live" nunca chega
-      // aqui — assertConvocationWriteAllowed devolve 423 antes.
-      // Falha aqui não falha a operação principal — o GET filtra ghosts
-      // como defesa em profundidade.
+      // Higiene: remover row de game_stats_live só pré-jogo.
+      // TODO: remove after game_stats_live.status drop
       if (shouldCleanupGameStatsLive(writeGuard.access.status)) {
         const { error: liveDeleteError } = await supabase
           .from("game_stats_live")
@@ -147,11 +111,11 @@ export async function POST(request: Request, { params }: RouteContext) {
         }
       }
 
+      // Convocatória volta a 'draft' (re-publicar precisa de nova confirmação)
       await supabase
-        .from("convocations")
-        .update({ status: "draft" })
-        .eq("id", convocation.id)
-        .neq("status", "closed");
+        .from("games")
+        .update({ convocation_status: "draft" })
+        .eq("id", gameId);
 
       if (writeGuard.requiresAudit && writeGuard.correctionReason) {
         await insertConvocationAuditLog({
@@ -166,13 +130,18 @@ export async function POST(request: Request, { params }: RouteContext) {
       return NextResponse.json({ success: true, isConvocated: false });
     }
 
-    const { error: insertError } = await supabase.from("convocation_players").insert({
-      convocation_id: convocation.id,
-      player_id: playerId,
-    });
+    // Adicionar ao squad como suplente por default
+    const { error: insertError } = await supabase
+      .from("game_squads")
+      .insert({
+        game_id: gameId,
+        player_id: playerId,
+        initial_lineup_status: "substitute",
+        data_quality: "authoritative",
+      });
 
     if (insertError) {
-      // Corrida entre requests: se já foi inserido por outro request, considerar sucesso.
+      // Race condition: outro request já inseriu — devolver sucesso.
       if (insertError.code === "23505") {
         return NextResponse.json({ success: true, isConvocated: true });
       }
@@ -184,10 +153,9 @@ export async function POST(request: Request, { params }: RouteContext) {
     }
 
     await supabase
-      .from("convocations")
-      .update({ status: "draft" })
-      .eq("id", convocation.id)
-      .neq("status", "closed");
+      .from("games")
+      .update({ convocation_status: "draft" })
+      .eq("id", gameId);
 
     if (writeGuard.requiresAudit && writeGuard.correctionReason) {
       await insertConvocationAuditLog({
