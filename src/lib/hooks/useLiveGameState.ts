@@ -14,6 +14,7 @@ import {
   computeIsOnFieldAfterAllEvents,
   playerKeyFromEvent,
 } from "@/lib/games/compute-on-field-at-event";
+import { hydrateIsOnFieldFromEvents } from "@/lib/games/hydrate-is-on-field";
 import { filterPersistentLiveStatsPlayers } from "@/lib/games/live-persistence";
 import { toExternalLivePlayerId } from "@/lib/games/live-player-ids";
 import { captureClientProductEvent } from "@/lib/observability/posthog-client";
@@ -584,6 +585,17 @@ export function useLiveGameState(id: string) {
   useEffect(() => {
     if (id) void loadData();
   }, [id, loadData]);
+
+  // Reconciliacao: deriva isOnField de events + initialStarterIds sempre que
+  // events ou initialStarterIds mudam. Fecha o gap documentado no PR #135
+  // (refresh durante jogo live mostrava externo no estado pre-jogo) e funciona
+  // como defesa contra divergencia entre mutacoes locais e events.
+  useEffect(() => {
+    if (initialStarterIds.length === 0) return;
+    setConvocatedPlayers((prev) =>
+      hydrateIsOnFieldFromEvents(prev, events, initialStarterIds),
+    );
+  }, [events, initialStarterIds]);
 
   useEffect(() => {
     if (game?.status === "completed") {
