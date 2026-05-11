@@ -26,11 +26,15 @@ export function GameHeader({
   return (
     <div className="rounded-2xl bg-blue-600 text-white p-5 mb-5 relative">
       <div className="absolute top-3 right-3 flex items-center gap-1.5">
-        {game.status !== "completed" && (
+        {(game.status !== "completed" || canEditCompleted) && (
           <button
             onClick={onEdit}
             className="p-1.5 rounded-full bg-white/20 hover:bg-white/30 transition-colors"
-            title="Editar jogo"
+            title={
+              game.status === "completed"
+                ? "Editar (jogo concluído)"
+                : "Editar jogo"
+            }
           >
             <Pencil size={14} />
           </button>

@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2, X } from "lucide-react";
+import { AlertCircle, Loader2, X } from "lucide-react";
 import { EMPTY_LOCATION_FIELDS } from "@/lib/location";
 import { normalizeManualShortName } from "@/lib/football/short-name";
 import { LocationFields } from "@/components/maps/LocationFields";
@@ -17,6 +17,7 @@ interface GameEditModalProps {
 
 export function GameEditModal({ game, error, editor }: GameEditModalProps) {
   const onClose = () => editor.setEditingGame(false);
+  const isEditingCompletedGame = game.status === "completed";
 
   return (
     <div
@@ -28,7 +29,9 @@ export function GameEditModal({ game, error, editor }: GameEditModalProps) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between p-5 border-b">
-          <h3 className="font-bold text-slate-900">Editar jogo</h3>
+          <h3 className="font-bold text-slate-900">
+            {isEditingCompletedGame ? "Editar jogo (concluído)" : "Editar jogo"}
+          </h3>
           <button onClick={onClose}>
             <X size={20} className="text-slate-400" />
           </button>
@@ -38,6 +41,20 @@ export function GameEditModal({ game, error, editor }: GameEditModalProps) {
             className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-5 space-y-4 [overflow-wrap:anywhere]"
             style={{ WebkitOverflowScrolling: "touch" }}
           >
+            {isEditingCompletedGame && (
+              <div
+                className="flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"
+                role="alert"
+              >
+                <AlertCircle size={16} className="mt-0.5 flex-shrink-0" aria-hidden="true" />
+                <div>
+                  <p className="font-semibold">A editar jogo concluído</p>
+                  <p className="mt-0.5 text-amber-800">
+                    As alterações ficam registadas para auditoria. As estatísticas e o resultado não são afectados por esta edição.
+                  </p>
+                </div>
+              </div>
+            )}
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-700">
                 Jornada / Título

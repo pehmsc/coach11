@@ -183,6 +183,11 @@ export default function GameDetailPage() {
       {editor.showDeleteConfirm && (
         <DeleteGameModal
           deletingGame={editor.deletingGame}
+          gameStatus={game.status ?? "scheduled"}
+          gameTitle={
+            game.title ||
+            (game.opponent_name ? `vs ${game.opponent_name}` : null)
+          }
           onDelete={() => void editor.handleDeleteGame()}
           onClose={() => editor.setShowDeleteConfirm(false)}
         />

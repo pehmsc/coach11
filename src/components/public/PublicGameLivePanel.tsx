@@ -91,9 +91,9 @@ function eventLabel(event: PublicGameLiveEvent) {
     case "own_goal":
       return "Autogolo";
     case "yellow_card":
-      return "Cartão amarelo";
+      return event.cardLabel ?? "Cartão amarelo";
     case "red_card":
-      return "Cartão vermelho";
+      return event.cardLabel ?? "Cartão vermelho";
     default:
       return "Substituição";
   }

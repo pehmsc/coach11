@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { formatCardEventLabel } from "./format-card-event-label";
 import {
   GAME_EVENT_SELECT_COLUMNS,
   normalizeStoredGameEventRowsForClient,
@@ -34,6 +35,12 @@ export type PublicGameLiveEvent = {
   playerLabel: string | null;
   relatedPlayerLabel: string | null;
   createdAt: string | null;
+  /**
+   * Label cosmética para eventos de cartão, computada em runtime a partir do
+   * histórico do jogador (ex.: "2º Cartão Amarelo", "Cartão Vermelho (por
+   * acumulação)"). Apenas para `yellow_card`/`red_card`. Outros eventos = null.
+   */
+  cardLabel: string | null;
 };
 
 export type PublicGameLiveSnapshot = {
@@ -161,6 +168,31 @@ export function filterPublicLiveEvents(rows: GameEventRow[]): PublicGameLiveEven
         return null;
       }
 
+      const isCard =
+        eventType === "yellow_card" || eventType === "red_card";
+      const cardLabel = isCard
+        ? formatCardEventLabel(
+            {
+              id: event.id,
+              event_type: eventType,
+              player_id:
+                typeof event.player_id === "string" ? event.player_id : null,
+              is_opponent_event: event.is_opponent_event === true,
+              created_at: event.created_at ?? null,
+              minute: event.minute ?? null,
+            },
+            eligibleRows.map((row) => ({
+              id: row.id,
+              event_type: row.event_type as string,
+              player_id:
+                typeof row.player_id === "string" ? row.player_id : null,
+              is_opponent_event: row.is_opponent_event === true,
+              created_at: row.created_at ?? null,
+              minute: row.minute ?? null,
+            })),
+          )
+        : null;
+
       return {
         id: event.id,
         minute: Math.max(1, Math.floor(event.minute ?? 1)),
@@ -172,6 +204,7 @@ export function filterPublicLiveEvents(rows: GameEventRow[]): PublicGameLiveEven
             ? event.related_player_id
             : null,
         createdAt: event.created_at ?? null,
+        cardLabel,
       };
     })
     .filter((event): event is PublicGameLiveEvent => event !== null);

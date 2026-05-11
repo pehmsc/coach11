@@ -17,6 +17,7 @@ describe("public-live", () => {
         playerLabel: "#9 Avancado",
         relatedPlayerLabel: null,
         createdAt: "2026-03-06T18:10:00.000Z",
+        cardLabel: null,
       },
       {
         id: "2",
@@ -26,6 +27,7 @@ describe("public-live", () => {
         playerLabel: null,
         relatedPlayerLabel: null,
         createdAt: "2026-03-06T18:30:00.000Z",
+        cardLabel: null,
       },
       {
         id: "3",
@@ -35,6 +37,7 @@ describe("public-live", () => {
         playerLabel: null,
         relatedPlayerLabel: null,
         createdAt: "2026-03-06T19:00:00.000Z",
+        cardLabel: null,
       },
     ];
 
