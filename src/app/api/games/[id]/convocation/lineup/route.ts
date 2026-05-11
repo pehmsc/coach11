@@ -10,6 +10,13 @@ type RouteContext = {
   params: Promise<{ id: string }>;
 };
 
+// Actualiza initial_lineup_status (starter/substitute) de um squad.
+// Modelo unificado: aceita tanto jogadores internos como externos via
+// game_squads.id (`squadId`). Compat retro: `playerId` legacy continua
+// a funcionar (lookup pelo player_id correspondente).
+//
+// Dual-write para game_stats_live.status durante transição
+// (D1: drop adiado). TODO: remove after game_stats_live.status drop.
 export async function POST(request: Request, { params }: RouteContext) {
   try {
     const { id: gameId } = await params;
@@ -24,18 +31,21 @@ export async function POST(request: Request, { params }: RouteContext) {
     }
 
     const body = await request.json().catch(() => null);
-    const playerId =
-      typeof body?.playerId === "string" ? body.playerId : null;
-    const lineupStatus =
+    const squadId = typeof body?.squadId === "string" ? body.squadId : null;
+    const playerId = typeof body?.playerId === "string" ? body.playerId : null;
+    const lineupStatusRaw =
       body?.lineupStatus === "on_field" || body?.lineupStatus === "substitute"
         ? (body.lineupStatus as "on_field" | "substitute")
         : null;
     const correctionReason =
       typeof body?.correctionReason === "string" ? body.correctionReason : null;
 
-    if (!playerId || !lineupStatus) {
+    if ((!squadId && !playerId) || !lineupStatusRaw) {
       return NextResponse.json(
-        { error: "Dados inválidos: playerId e lineupStatus são obrigatórios." },
+        {
+          error:
+            "Dados inválidos: squadId (ou playerId) e lineupStatus são obrigatórios.",
+        },
         { status: 400 },
       );
     }
@@ -49,108 +59,100 @@ export async function POST(request: Request, { params }: RouteContext) {
       return writeGuard.response;
     }
 
-    const { data: convocationRows } = await supabase
-      .from("convocations")
-      .select("id, created_at")
-      .eq("game_id", gameId)
-      .order("created_at", { ascending: false })
-      .order("id", { ascending: false });
+    // Resolver squad row (game_squads.id directo, ou pelo player_id legacy)
+    const squadQuery = supabase
+      .from("game_squads")
+      .select("id, player_id")
+      .eq("game_id", gameId);
+    const { data: squad, error: squadError } = squadId
+      ? await squadQuery.eq("id", squadId).maybeSingle()
+      : await squadQuery.eq("player_id", playerId!).maybeSingle();
 
-    const latestConvocationId = convocationRows?.[0]?.id ?? null;
-    if (!latestConvocationId) {
+    if (squadError) {
       return NextResponse.json(
-        { error: "Convocatória não encontrada para este jogo." },
-        { status: 400 },
+        { error: "Erro ao validar squad." },
+        { status: 500 },
       );
     }
 
-    const { data: playerInConvocation } = await supabase
-      .from("convocation_players")
-      .select("id")
-      .eq("convocation_id", latestConvocationId)
-      .eq("player_id", playerId)
-      .maybeSingle();
-
-    if (!playerInConvocation) {
+    if (!squad) {
       return NextResponse.json(
         { error: "Jogador não está convocado neste jogo." },
         { status: 400 },
       );
     }
 
-    const dbStatus = lineupStatus === "on_field" ? "starter" : "on_bench";
-    const payload = {
-      status: dbStatus,
-      start_minute: lineupStatus === "on_field" ? 0 : null,
-      end_minute: null,
-    };
+    const newLineupStatus =
+      lineupStatusRaw === "on_field" ? "starter" : "substitute";
 
-    const { data: existingRows, error: existingRowsError } = await supabase
-      .from("game_stats_live")
-      .select("id")
-      .eq("game_id", gameId)
-      .eq("player_id", playerId);
+    const { error: updateError } = await supabase
+      .from("game_squads")
+      .update({ initial_lineup_status: newLineupStatus })
+      .eq("id", squad.id);
 
-    if (existingRowsError) {
-      console.error("Erro ao validar lineup:", existingRowsError);
+    if (updateError) {
+      console.error("[convocation/lineup] update game_squads falhou", updateError);
       return NextResponse.json(
         { error: "Erro ao guardar lineup." },
         { status: 500 },
       );
     }
 
-    if ((existingRows || []).length > 0) {
-      const { error: updateError } = await supabase
+    // Dual-write game_stats_live.status para internos (transição).
+    // TODO: remove after game_stats_live.status drop.
+    if (squad.player_id) {
+      const dbStatus =
+        lineupStatusRaw === "on_field" ? "starter" : "on_bench";
+      const livePayload = {
+        game_id: gameId,
+        player_id: squad.player_id,
+        status: dbStatus,
+        start_minute: lineupStatusRaw === "on_field" ? 0 : null,
+        end_minute: null,
+      };
+
+      const { data: existingLive } = await supabase
         .from("game_stats_live")
-        .update(payload)
+        .select("id")
         .eq("game_id", gameId)
-        .eq("player_id", playerId);
+        .eq("player_id", squad.player_id)
+        .limit(1);
 
-      if (!updateError) {
-        if (writeGuard.requiresAudit && writeGuard.correctionReason) {
-          await insertConvocationAuditLog({
-            actorId: user.id,
-            gameId,
-            action: "convocation_lineup_updated_after_completed",
-            correctionReason: writeGuard.correctionReason,
-            payload: { playerId, lineupStatus },
-          });
-        }
-        return NextResponse.json({ success: true, playerId, lineupStatus });
+      if ((existingLive ?? []).length > 0) {
+        await supabase
+          .from("game_stats_live")
+          .update({
+            status: dbStatus,
+            start_minute: lineupStatusRaw === "on_field" ? 0 : null,
+            end_minute: null,
+          })
+          .eq("game_id", gameId)
+          .eq("player_id", squad.player_id);
+      } else {
+        await supabase.from("game_stats_live").insert(livePayload);
       }
-
-      console.error("Erro ao atualizar lineup:", updateError);
-      return NextResponse.json(
-        { error: "Erro ao guardar lineup." },
-        { status: 500 },
-      );
-    }
-
-    const { error: insertError } = await supabase.from("game_stats_live").insert({
-      game_id: gameId,
-      player_id: playerId,
-      ...payload,
-    });
-
-    if (insertError) {
-      console.error("Erro ao inserir lineup:", insertError);
-      return NextResponse.json(
-        { error: "Erro ao guardar lineup." },
-        { status: 500 },
-      );
     }
 
     if (writeGuard.requiresAudit && writeGuard.correctionReason) {
       await insertConvocationAuditLog({
         actorId: user.id,
         gameId,
-        action: "convocation_lineup_created_after_completed",
+        action: "convocation_lineup_updated_after_completed",
         correctionReason: writeGuard.correctionReason,
-        payload: { playerId, lineupStatus },
+        payload: {
+          squadId: squad.id,
+          playerId: squad.player_id,
+          lineupStatus: lineupStatusRaw,
+        },
       });
     }
 
-    return NextResponse.json({ success: true, playerId, lineupStatus });
+    return NextResponse.json({
+      success: true,
+      squadId: squad.id,
+      playerId: squad.player_id,
+      lineupStatus: lineupStatusRaw,
+    });
   } catch (error) {
     console.error("Erro ao guardar lineup:", error);
     return respondInternalError("api.games.id.convocation.lineup.post", error);

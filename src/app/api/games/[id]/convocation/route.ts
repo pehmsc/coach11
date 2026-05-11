@@ -40,17 +40,6 @@ function isMissingCheckpointTableError(message: string | null | undefined) {
   );
 }
 
-function isMissingRelationError(
-  message: string | null | undefined,
-  relationName: string,
-) {
-  if (!message) return false;
-  return (
-    message.includes(relationName) &&
-    (message.includes("does not exist") || message.includes("relation"))
-  );
-}
-
 function normalizeKitRowForUi(row: Record<string, unknown>) {
   return {
     ...row,
@@ -133,48 +122,33 @@ export async function GET(_request: Request, { params }: RouteContext) {
       { responseStatus: string | null; isPresent: boolean | null }
     > = {};
 
+    // Modelo unificado: ler internos e presenças a partir de game_squads.
+    // (convocation_players e convocations ficam só como reads legacy de
+    // back-compat para jogos antigos onde o back-fill já criou as rows.)
     const selectedIds = new Set<string>();
-    if (convocationIds.length > 0) {
-      const { data: selectedRows, error: selectedError } = await supabase
-        .from("convocation_players")
-        .select("player_id")
-        .in("convocation_id", convocationIds);
+    const { data: internalSquadRows, error: internalSquadError } = await supabase
+      .from("game_squads")
+      .select("player_id, response_status, is_present")
+      .eq("game_id", gameId)
+      .not("player_id", "is", null);
 
-      if (selectedError) {
-        return NextResponse.json(
-          { error: "Erro ao carregar jogadores convocados." },
-          { status: 500 },
-        );
-      }
-
-      (selectedRows || []).forEach((row) => {
-        selectedIds.add(row.player_id);
-      });
+    if (internalSquadError) {
+      return NextResponse.json(
+        { error: "Erro ao carregar jogadores convocados." },
+        { status: 500 },
+      );
     }
 
-    if (latestConvocation?.id) {
-      const { data: latestSelectionRows, error: latestSelectionRowsError } = await supabase
-        .from("convocation_players")
-        .select("player_id, response_status, is_present")
-        .eq("convocation_id", latestConvocation.id);
-
-      if (latestSelectionRowsError) {
-        return NextResponse.json(
-          { error: "Erro ao carregar estados de presença da convocatória." },
-          { status: 500 },
-        );
-      }
-
-      (latestSelectionRows || []).forEach((row) => {
-        if (!row.player_id) return;
-        convocationSelections[row.player_id] = {
-          responseStatus:
-            typeof row.response_status === "string" ? row.response_status : null,
-          isPresent:
-            typeof row.is_present === "boolean" ? row.is_present : null,
-        };
-      });
-    }
+    (internalSquadRows || []).forEach((row) => {
+      if (!row.player_id) return;
+      selectedIds.add(row.player_id);
+      convocationSelections[row.player_id] = {
+        responseStatus:
+          typeof row.response_status === "string" ? row.response_status : null,
+        isPresent:
+          typeof row.is_present === "boolean" ? row.is_present : null,
+      };
+    });
 
     // Ensure all convocated players have a game_stats_live row (bench by default).
     // This keeps lineup/states consistent after refresh and across devices.
@@ -232,30 +206,43 @@ export async function GET(_request: Request, { params }: RouteContext) {
       );
     }
 
-    const { data: externalRowsRaw, error: externalRowsError } = await supabase
-      .from("external_player_convocations")
-      .select("id, name, jersey_number, position, lineup_status, created_at")
+    // Modelo unificado: ler externos a partir de game_squads (player_id IS NULL).
+    // Compat: mapear external_name → name, external_jersey_number → jersey_number,
+    // initial_lineup_status (starter/substitute) → lineup_status (on_field/substitute).
+    const { data: externalSquadRows, error: externalRowsError } = await supabase
+      .from("game_squads")
+      .select(
+        "id, external_name, external_jersey_number, external_position, initial_lineup_status, created_at",
+      )
       .eq("game_id", gameId)
+      .is("player_id", null)
       .order("created_at", { ascending: true });
 
-    if (
-      externalRowsError &&
-      !isMissingRelationError(externalRowsError.message, "external_player_convocations")
-    ) {
+    if (externalRowsError) {
       return NextResponse.json(
         { error: "Erro ao carregar jogadores externos da convocatória." },
         { status: 500 },
       );
     }
 
-    const externalRows = ((externalRowsRaw || []) as Array<{
+    const externalRows = ((externalSquadRows || []) as Array<{
       id: string;
-      name: string;
-      jersey_number: number | null;
-      position: string | null;
-      lineup_status: string | null;
+      external_name: string | null;
+      external_jersey_number: number | null;
+      external_position: string | null;
+      initial_lineup_status: string | null;
       created_at: string;
-    }>).filter((row) => row?.id && row?.name);
+    }>)
+      .filter((row) => row?.id && row?.external_name)
+      .map((row) => ({
+        id: row.id,
+        name: row.external_name as string,
+        jersey_number: row.external_jersey_number ?? null,
+        position: row.external_position ?? null,
+        lineup_status:
+          row.initial_lineup_status === "starter" ? "on_field" : "substitute",
+        created_at: row.created_at,
+      }));
 
     const blockedIds = new Set<string>();
     const sameDayConflictLabelByPlayerId = new Map<string, string>();
@@ -315,36 +302,37 @@ export async function GET(_request: Request, { params }: RouteContext) {
       );
 
       if (sameDayGameIds.length > 0) {
-        const { data: otherConvocations, error: otherConvocationsError } = await supabase
-          .from("convocations")
-          .select("id, game_id")
-          .in("game_id", sameDayGameIds);
+        // Modelo unificado: ler directamente de game_squads (sem passar
+        // por convocations + convocation_players). Compat: o shape devolvido
+        // tem que conter `convocation_id` para o map a seguir — usamos
+        // `game_id` como pseudo-convocation_id (1:1 com game no novo modelo).
+        const { data: sameDaySquads, error: sameDaySquadsError } = await supabase
+          .from("game_squads")
+          .select("player_id, game_id")
+          .in("game_id", sameDayGameIds)
+          .not("player_id", "is", null);
 
-        if (otherConvocationsError) {
+        if (sameDaySquadsError) {
           return NextResponse.json(
-            { error: "Erro ao carregar convocatórias no mesmo dia." },
+            { error: "Erro ao validar jogadores convocados no mesmo dia." },
             { status: 500 },
           );
         }
 
-        const otherConvocationIds = (otherConvocations || []).map((entry) => entry.id);
-        const convocationGameById = new Map(
-          (otherConvocations || []).map((entry) => [entry.id, entry.game_id]),
+        const sameDayConvocationPlayers = (sameDaySquads || []).map((row) => ({
+          player_id: row.player_id as string,
+          convocation_id: row.game_id, // proxy: usa game_id como key
+        }));
+        const convocationGameById = new Map<string, string>(
+          (sameDayConvocationPlayers || []).map((row) => [row.convocation_id, row.convocation_id]),
+        );
+
+        // Necessário para o `if (otherConvocationIds.length > 0)` que vinha depois.
+        const otherConvocationIds: string[] = Array.from(
+          new Set(sameDayConvocationPlayers.map((p) => p.convocation_id)),
         );
 
         if (otherConvocationIds.length > 0) {
-          const { data: sameDayConvocationPlayers, error: sameDayConvocationPlayersError } =
-            await supabase
-              .from("convocation_players")
-              .select("player_id, convocation_id")
-              .in("convocation_id", otherConvocationIds);
-
-          if (sameDayConvocationPlayersError) {
-            return NextResponse.json(
-              { error: "Erro ao validar jogadores convocados no mesmo dia." },
-              { status: 500 },
-            );
-          }
 
           // Intervalo do jogo alvo (kickoff atual). Usamos `end_time` e
           // `concentration_time` reais; se não existirem, aplicamos o fallback

@@ -10,6 +10,9 @@ type RouteContext = {
   params: Promise<{ id: string }>;
 };
 
+// Remove jogador "externo" (free-text ou cross-age) da convocatória.
+// Modelo unificado: actua em game_squads. Body aceita
+// `externalConvocationId` (legacy field name, mas é game_squads.id).
 export async function POST(request: Request, { params }: RouteContext) {
   try {
     const { id: gameId } = await params;
@@ -47,7 +50,7 @@ export async function POST(request: Request, { params }: RouteContext) {
     }
 
     const { data: deletedRows, error: deleteError } = await supabase
-      .from("external_player_convocations")
+      .from("game_squads")
       .delete()
       .eq("id", externalConvocationId)
       .eq("game_id", gameId)
@@ -69,10 +72,9 @@ export async function POST(request: Request, { params }: RouteContext) {
     }
 
     await supabase
-      .from("convocations")
-      .update({ status: "draft" })
-      .eq("game_id", gameId)
-      .neq("status", "closed");
+      .from("games")
+      .update({ convocation_status: "draft" })
+      .eq("id", gameId);
 
     if (writeGuard.requiresAudit && writeGuard.correctionReason) {
       await insertConvocationAuditLog({
