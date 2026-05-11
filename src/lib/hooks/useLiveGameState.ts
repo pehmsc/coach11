@@ -9,6 +9,7 @@ import {
   GAME_EVENT_SELECT_COLUMNS,
   normalizeStoredGameEventRowsForClient,
 } from "@/lib/games/live-event-participants";
+import { syncExternalPlayerLiveStatus } from "@/lib/games/live-external-player-sync";
 import { filterPersistentLiveStatsPlayers } from "@/lib/games/live-persistence";
 import {
   getExternalConvocationIdFromLivePlayerId,
@@ -697,22 +698,12 @@ export function useLiveGameState(id: string) {
           throw new Error("Jogador externo inválido para atualizar live.");
         }
 
+        // Usa endpoint /live/external-players (apenas gate canWrite). O
+        // endpoint /convocation/external/lineup é bloqueado por
+        // convocation-guard quando o jogo está em `status='live'` — partia
+        // substituições live envolvendo externos (bug 2026-05-09).
         const lineupStatus = status === "on_field" ? "on_field" : "substitute";
-        const res = await fetch(`/api/games/${id}/convocation/external/lineup`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            externalConvocationId,
-            lineupStatus,
-          }),
-        });
-        if (!res.ok) {
-          const payload = await res.json().catch(() => null);
-          throw new Error(
-            (payload as { error?: string } | null)?.error ||
-              "live_external_player_status_save_failed",
-          );
-        }
+        await syncExternalPlayerLiveStatus(id, externalConvocationId, lineupStatus);
         return;
       }
 
