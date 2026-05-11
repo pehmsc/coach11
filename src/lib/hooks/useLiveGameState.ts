@@ -9,6 +9,11 @@ import {
   GAME_EVENT_SELECT_COLUMNS,
   normalizeStoredGameEventRowsForClient,
 } from "@/lib/games/live-event-participants";
+import {
+  affectedPlayerKeysFromEvent,
+  computeIsOnFieldAfterAllEvents,
+  playerKeyFromEvent,
+} from "@/lib/games/compute-on-field-at-event";
 import { syncExternalPlayerLiveStatus } from "@/lib/games/live-external-player-sync";
 import { filterPersistentLiveStatsPlayers } from "@/lib/games/live-persistence";
 import {
@@ -81,6 +86,12 @@ export function useLiveGameState(id: string) {
   // Substitution
   const [selectedSubOutId, setSelectedSubOutId] = useState<string | null>(null);
   const [selectedSubInId, setSelectedSubInId] = useState<string | null>(null);
+
+  // Confirmação de cascade-delete (apagar 1º amarelo de expulsão por acumulação
+  // apaga também 2º amarelo + red_card auto). UI render no live page.
+  const [cascadeDeleteIds, setCascadeDeleteIds] = useState<string[] | null>(
+    null,
+  );
 
   // Review phase
   const [playerRatings, setPlayerRatings] = useState<Record<string, number>>({});
@@ -1358,38 +1369,184 @@ export function useLiveGameState(id: string) {
     setSavingLineup(null);
   }
 
-  async function deleteEvent(eventId: string) {
-    const eventToDelete = events.find((event) => event.id === eventId);
-    const idsToDelete = new Set<string>([eventId]);
+  async function performDelete(idsToDelete: Set<string>) {
+    try {
+      await deleteEventsFromBackend(Array.from(idsToDelete));
+    } catch {
+      toast.error("Erro ao apagar evento.");
+      return;
+    }
 
-    if (eventToDelete?.event_type === "substitution_out") {
-      const pair = events.find(
+    const remainingEvents = events.filter(
+      (event) => !idsToDelete.has(event.id),
+    );
+    setEvents(remainingEvents);
+
+    // Reconstruir isOnField apenas para jogadores tocados pelos eventos
+    // apagados. sentOffPlayerIds é useMemo derivado de events; auto-actualiza.
+    const deletedEvents = events.filter((event) => idsToDelete.has(event.id));
+    const affectedKeys = new Set<string>();
+    deletedEvents.forEach((event) => {
+      affectedPlayerKeysFromEvent(event).forEach((key) =>
+        affectedKeys.add(key),
+      );
+    });
+
+    if (affectedKeys.size === 0) return;
+
+    const starterKeys = initialStarterIds.length > 0
+      ? initialStarterIds
+      : convocatedPlayers.filter((p) => p.isOnField).map((p) => p.id);
+
+    const newIsOnFieldByPlayer = new Map<string, boolean>();
+    affectedKeys.forEach((key) => {
+      newIsOnFieldByPlayer.set(
+        key,
+        computeIsOnFieldAfterAllEvents(key, remainingEvents, starterKeys),
+      );
+    });
+
+    const playersToSyncToServer: Array<{
+      id: string;
+      newIsOnField: boolean;
+      previousIsOnField: boolean;
+    }> = [];
+
+    setConvocatedPlayers((prev) =>
+      prev.map((player) => {
+        if (!newIsOnFieldByPlayer.has(player.id)) return player;
+        const newIsOnField = newIsOnFieldByPlayer.get(player.id) ?? false;
+        if (player.isOnField === newIsOnField) return player;
+        playersToSyncToServer.push({
+          id: player.id,
+          newIsOnField,
+          previousIsOnField: player.isOnField,
+        });
+        return { ...player, isOnField: newIsOnField };
+      }),
+    );
+
+    // Sincronizar com servidor (game_stats_live ou external_player_convocations)
+    // para que recarregar a página reflicta o estado correcto. Falhas não
+    // bloqueiam — refresh corrige; events já foram apagados.
+    for (const change of playersToSyncToServer) {
+      try {
+        await saveLivePlayerStatus(
+          change.id,
+          change.newIsOnField ? "on_field" : "substitute",
+          {
+            startMinute: change.newIsOnField ? 0 : null,
+            endMinute: change.newIsOnField ? null : currentMinute,
+          },
+        );
+      } catch (error) {
+        console.error(
+          "[deleteEvent] failed to sync player status after undo",
+          { playerId: change.id, error },
+        );
+      }
+    }
+  }
+
+  function collectPairedSubstitutionIds(
+    eventToDelete: GameEvent,
+    allEvents: GameEvent[],
+  ): Set<string> {
+    const ids = new Set<string>([eventToDelete.id]);
+    if (eventToDelete.event_type === "substitution_out") {
+      const pair = allEvents.find(
         (event) =>
           event.event_type === "substitution_in" &&
           event.minute === eventToDelete.minute &&
           event.player_id === eventToDelete.related_player_id &&
           event.related_player_id === eventToDelete.player_id,
       );
-      if (pair?.id) idsToDelete.add(pair.id);
+      if (pair?.id) ids.add(pair.id);
     }
-
-    if (eventToDelete?.event_type === "substitution_in") {
-      const pair = events.find(
+    if (eventToDelete.event_type === "substitution_in") {
+      const pair = allEvents.find(
         (event) =>
           event.event_type === "substitution_out" &&
           event.minute === eventToDelete.minute &&
           event.player_id === eventToDelete.related_player_id &&
           event.related_player_id === eventToDelete.player_id,
       );
-      if (pair?.id) idsToDelete.add(pair.id);
+      if (pair?.id) ids.add(pair.id);
+    }
+    return ids;
+  }
+
+  /**
+   * Detecta se apagar este yellow obrigaria a cascata (apaga também o 2º
+   * yellow + red_card auto subsequente). Retorna IDs em ordem cronológica
+   * inversa (mais recentes primeiro) para apagar em batch.
+   */
+  function collectYellowCascadeIds(
+    eventToDelete: GameEvent,
+    allEvents: GameEvent[],
+  ): string[] | null {
+    if (eventToDelete.event_type !== "yellow_card") return null;
+    if (eventToDelete.is_opponent_event) return null;
+    const playerKey = playerKeyFromEvent(eventToDelete);
+    if (!playerKey) return null;
+
+    const samePlayerYellows = allEvents
+      .filter(
+        (event) =>
+          event.event_type === "yellow_card" &&
+          !event.is_opponent_event &&
+          playerKeyFromEvent(event) === playerKey,
+      )
+      .sort((a, b) => {
+        const minuteCmp = (a.minute ?? 0) - (b.minute ?? 0);
+        if (minuteCmp !== 0) return minuteCmp;
+        return (a.created_at || "").localeCompare(b.created_at || "");
+      });
+
+    // Só dispara cascata quando o yellow a apagar é o 1º cronológico E
+    // existem 2 yellows e um red para o mesmo jogador.
+    if (samePlayerYellows.length < 2) return null;
+    if (samePlayerYellows[0].id !== eventToDelete.id) return null;
+
+    const samePlayerReds = allEvents.filter(
+      (event) =>
+        event.event_type === "red_card" &&
+        !event.is_opponent_event &&
+        playerKeyFromEvent(event) === playerKey,
+    );
+    if (samePlayerReds.length === 0) return null;
+
+    return [
+      ...samePlayerReds.map((event) => event.id),
+      samePlayerYellows[1].id,
+      eventToDelete.id,
+    ];
+  }
+
+  async function deleteEvent(eventId: string) {
+    const eventToDelete = events.find((event) => event.id === eventId);
+    if (!eventToDelete) return;
+
+    const cascadeIds = collectYellowCascadeIds(eventToDelete, events);
+    if (cascadeIds) {
+      // Não apaga já — pede confirmação. UI consome cascadeDeleteIds.
+      setCascadeDeleteIds(cascadeIds);
+      return;
     }
 
-    try {
-      await deleteEventsFromBackend(Array.from(idsToDelete));
-      setEvents((prev) => prev.filter((event) => !idsToDelete.has(event.id)));
-    } catch {
-      toast.error("Erro ao apagar evento.");
-    }
+    const idsToDelete = collectPairedSubstitutionIds(eventToDelete, events);
+    await performDelete(idsToDelete);
+  }
+
+  async function confirmCascadeDelete() {
+    if (!cascadeDeleteIds) return;
+    const ids = new Set(cascadeDeleteIds);
+    setCascadeDeleteIds(null);
+    await performDelete(ids);
+  }
+
+  function cancelCascadeDelete() {
+    setCascadeDeleteIds(null);
   }
 
   function buildFinalStatsPayload(finalMinute: number): FinalStatPayloadRow[] {
@@ -1652,6 +1809,9 @@ export function useLiveGameState(id: string) {
     confirmSubstitution,
     toggleLineup,
     deleteEvent,
+    cascadeDeleteIds,
+    confirmCascadeDelete,
+    cancelCascadeDelete,
     finalizeGame,
     handleExportPDF,
     getPlayerAvailability,

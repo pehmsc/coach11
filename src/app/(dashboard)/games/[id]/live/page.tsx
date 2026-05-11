@@ -14,6 +14,7 @@ import { EventsLog } from "@/components/games/live/EventsLog";
 import { ReviewPanel } from "@/components/games/live/ReviewPanel";
 import { FinalizeSection } from "@/components/games/live/FinalizeSection";
 import { EventModal } from "@/components/games/live/EventModal";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 export default function LiveGamePage() {
   const { id } = useParams<{ id: string }>();
@@ -180,6 +181,21 @@ export default function LiveGamePage() {
         confirmGoal={state.confirmGoal}
         confirmCard={state.confirmCard}
         confirmSubstitution={state.confirmSubstitution}
+      />
+
+      {/* Confirmação ao apagar 1º amarelo que dispararia cascata
+          (2º amarelo + red_card auto). */}
+      <ConfirmDialog
+        open={state.cascadeDeleteIds !== null}
+        onOpenChange={(open) => {
+          if (!open) state.cancelCascadeDelete();
+        }}
+        title="Apagar cartão amarelo?"
+        description="Esta acção também vai apagar o 2.º cartão amarelo e o cartão vermelho automático. O jogador volta a estar disponível. Continuar?"
+        confirmLabel="Apagar tudo"
+        cancelLabel="Cancelar"
+        destructive
+        onConfirm={() => void state.confirmCascadeDelete()}
       />
     </div>
   );
