@@ -10,6 +10,7 @@ import {
   Download,
   FileText,
   Loader2,
+  Lock,
   Pencil,
   RotateCcw,
   Star,
@@ -21,6 +22,7 @@ import { StickyBackLink } from "@/components/navigation/StickyBackLink";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DeleteGameModal } from "@/components/games/detail/DeleteGameModal";
+import { LineupCorrectionModal } from "@/components/games/summary/LineupCorrectionModal";
 import { Skeleton } from "@/components/ui/skeleton";
 import { resolveFixtureScoreboardShortNames } from "@/lib/games/display";
 import { formatCardEventLabel } from "@/lib/games/format-card-event-label";
@@ -170,6 +172,7 @@ export default function GameSummaryPage() {
     useState<ConvocationExportPayload | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletingGame, setDeletingGame] = useState(false);
+  const [showLineupCorrection, setShowLineupCorrection] = useState(false);
 
   const syncDraftsFromSummary = useCallback((payload: SummaryPayload) => {
     setRatingDraft(() => {
@@ -803,6 +806,20 @@ export default function GameSummaryPage() {
                 <Undo2 size={14} className="mr-2" />
                 Repor auto-cálculo
               </Button>
+              {summary.isCoordinator && summary.gameStatus === "completed" && (
+                <Button
+                  onClick={() => {
+                    setActionError(null);
+                    setShowLineupCorrection(true);
+                  }}
+                  variant="outline"
+                  className="border-amber-300 text-amber-900"
+                  title="Corrigir titulares iniciais retroactivamente (audit log)"
+                >
+                  <Lock size={14} className="mr-2" />
+                  Corrigir titulares
+                </Button>
+              )}
               {summary.isCoordinator && (
                 <Button
                   onClick={() => {
@@ -1304,6 +1321,15 @@ export default function GameSummaryPage() {
           onClose={() => setShowDeleteConfirm(false)}
         />
       )}
+
+      <LineupCorrectionModal
+        gameId={id}
+        open={showLineupCorrection}
+        onClose={() => setShowLineupCorrection(false)}
+        onApplied={() => {
+          void loadSummary({ keepLoading: false });
+        }}
+      />
     </div>
   );
 }
