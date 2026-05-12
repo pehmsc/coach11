@@ -62,21 +62,21 @@ export async function GET(request: Request, { params }: RouteContext) {
     }
 
     // Carregamos limit+1 rows para detectar `hasMore` sem count separado.
+    // Top-level ORDER BY embedded column (PostgREST 11+ syntax).
+    // `referencedTable: 'games'` apenas ordena dentro do embed (no-op para
+    // m2o). `'games(game_datetime)'` ordena a query pai pela coluna do embed.
     const { data, error } = await supabase
       .from("game_final_stats")
       .select(
         `id, game_id, lineup_type, minutes_played, goals, assists,
          yellow_cards, red_cards, own_goals, coach_rating, is_mvp,
-         games:games(id, game_datetime, opponent_name, opponent_short_name,
+         games:games!inner(id, game_datetime, opponent_name, opponent_short_name,
                      score_home, score_away, is_home, competition_id, title,
                      competitions:competitions(name))`,
       )
       .eq("player_id", playerId)
       .eq("is_finalized", true)
-      .order("game_datetime", {
-        referencedTable: "games",
-        ascending: false,
-      })
+      .order("games(game_datetime)", { ascending: false })
       .range(offset, offset + limit);
 
     if (error) {

@@ -106,9 +106,12 @@ export async function GET(request: Request, { params }: RouteContext) {
       query = query.eq("training_sessions.ut_number", utFilter);
     }
 
+    // Top-level ORDER BY embedded column (PostgREST 11+ syntax).
+    // `referencedTable: 'training_sessions'` apenas ordena dentro do embed
+    // (no-op para m2o). `'training_sessions(session_date)'` ordena a query
+    // pai pela coluna do embed.
     const { data, error } = await query
-      .order("session_date", {
-        referencedTable: "training_sessions",
+      .order("training_sessions(session_date)", {
         ascending: sort === "date_asc",
       })
       .range(offset, offset + limit);
