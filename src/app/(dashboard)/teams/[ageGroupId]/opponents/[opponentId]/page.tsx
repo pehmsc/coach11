@@ -26,6 +26,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { getFormationsForFormat } from "@/lib/formations";
+import {
+  getGameResult,
+  getOpponentScore,
+  getOurScore,
+} from "@/lib/games/score-helpers";
 import { OpponentLogoUploader } from "@/components/opponents/OpponentLogoUploader";
 import {
   useOpponentAutosave,
@@ -40,8 +45,8 @@ type GameRow = {
   id: string;
   game_datetime: string | null;
   is_home: boolean | null;
-  goals_scored: number | null;
-  goals_conceded: number | null;
+  score_home: number | null;
+  score_away: number | null;
   competition_id: string | null;
   title: string | null;
   status: string | null;
@@ -710,20 +715,18 @@ function HistoricoTab({
         <ul className="space-y-2">
           {games.map((g) => {
             const dt = g.game_datetime ? parseISO(g.game_datetime) : null;
-            const score =
-              g.goals_scored != null && g.goals_conceded != null
-                ? `${g.goals_scored}–${g.goals_conceded}`
-                : "—";
+            const our = getOurScore(g);
+            const opp = getOpponentScore(g);
+            const score = our != null && opp != null ? `${our}–${opp}` : "—";
+            const result = getGameResult(g);
             const resultBadge =
-              g.status === "completed" &&
-              g.goals_scored != null &&
-              g.goals_conceded != null
-                ? g.goals_scored > g.goals_conceded
-                  ? { label: "V", color: "bg-emerald-100 text-emerald-700" }
-                  : g.goals_scored < g.goals_conceded
-                    ? { label: "D", color: "bg-red-100 text-red-700" }
-                    : { label: "E", color: "bg-slate-100 text-slate-600" }
-                : null;
+              result === "W"
+                ? { label: "V", color: "bg-emerald-100 text-emerald-700" }
+                : result === "L"
+                  ? { label: "D", color: "bg-red-100 text-red-700" }
+                  : result === "D"
+                    ? { label: "E", color: "bg-slate-100 text-slate-600" }
+                    : null;
             const competitionName = g.competitions?.name ?? null;
             return (
               <li
