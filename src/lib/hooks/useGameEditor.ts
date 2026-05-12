@@ -10,6 +10,7 @@ import {
   isValidManualShortName,
   normalizeManualShortName,
 } from "@/lib/football/short-name";
+import type { OpponentSelectionValue } from "@/components/opponents/OpponentTypeahead";
 
 interface UseGameEditorDeps {
   id: string;
@@ -28,6 +29,8 @@ export function useGameEditor(deps: UseGameEditorDeps) {
   const [editTitle, setEditTitle] = useState("");
   const [editOpponent, setEditOpponent] = useState("");
   const [editOpponentShortName, setEditOpponentShortName] = useState("");
+  const [editOpponentSelection, setEditOpponentSelection] =
+    useState<OpponentSelectionValue | null>(null);
   const [editDate, setEditDate] = useState("");
   const [editStartTime, setEditStartTime] = useState("00:00");
   const [editEndTime, setEditEndTime] = useState("");
@@ -89,6 +92,17 @@ export function useGameEditor(deps: UseGameEditorDeps) {
     setEditOpponentShortName(
       normalizeManualShortName(game.opponent_short_name, 5) || "",
     );
+    if (game.opponent_id) {
+      setEditOpponentSelection({
+        id: game.opponent_id,
+        name: game.opponent_name ?? "",
+        short_name: game.opponent_short_name ?? null,
+        logo_url: null,
+        tactical_formation: null,
+      });
+    } else {
+      setEditOpponentSelection(null);
+    }
     setEditDate(parsedGameDate ? format(parsedGameDate, "yyyy-MM-dd") : "");
     setEditStartTime(parsedGameDate ? format(parsedGameDate, "HH:mm") : "00:00");
     setEditEndTime(game.end_time?.slice(0, 5) ?? "");
@@ -138,6 +152,7 @@ export function useGameEditor(deps: UseGameEditorDeps) {
         title: editTitle.trim() || null,
         game_datetime: gameDatetime,
         end_time: editEndTime || null,
+        opponent_id: editOpponentSelection?.id ?? null,
         opponent_name: editOpponent.trim(),
         opponent_short_name: normalizedOpponentShortName || null,
         location: editLocation.trim() || null,
@@ -206,6 +221,21 @@ export function useGameEditor(deps: UseGameEditorDeps) {
     resetExternalPlayerForm();
   }
 
+  function setEditOpponentFromTypeahead(
+    opponent: OpponentSelectionValue | null,
+  ) {
+    setEditOpponentSelection(opponent);
+    if (opponent) {
+      setEditOpponent(opponent.name);
+      setEditOpponentShortName(
+        normalizeManualShortName(opponent.short_name ?? null, 5) || "",
+      );
+    } else {
+      setEditOpponent("");
+      setEditOpponentShortName("");
+    }
+  }
+
   return {
     // Game edit
     editingGame,
@@ -216,6 +246,8 @@ export function useGameEditor(deps: UseGameEditorDeps) {
     setEditOpponent,
     editOpponentShortName,
     setEditOpponentShortName,
+    editOpponentSelection,
+    setEditOpponentFromTypeahead,
     editDate,
     setEditDate,
     editStartTime,

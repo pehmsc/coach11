@@ -5,6 +5,7 @@ const TIME_RE = /^\d{2}:\d{2}(:\d{2})?$/;
 export const gameUpdateSchema = z
   .object({
     competition_id: z.string().uuid().nullable().optional(),
+    opponent_id: z.string().uuid().nullable().optional(),
     opponent_name: z.string().trim().max(120).optional(),
     opponent_short_name: z.string().trim().max(40).nullable().optional(),
     opponent_tactical_system: z.string().trim().max(40).nullable().optional(),
