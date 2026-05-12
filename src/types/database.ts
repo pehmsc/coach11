@@ -225,10 +225,26 @@ export interface Matchday {
 export interface Opponent {
   id: string;
   age_group_id: string;
+  club_id: string;
+  competition_id?: string | null;
   name: string;
-  short_name?: string;
-  logo_url?: string;
+  short_name?: string | null;
+  logo_url?: string | null;
+  tactical_formation?: string | null;
+  pontos_fortes?: string | null;
+  pontos_fracos?: string | null;
+  atletas_chave?: string | null;
+  notas_gerais?: string | null;
+  home_ground?: string | null;
+  home_ground_address?: string | null;
+  home_ground_lat?: number | null;
+  home_ground_lng?: number | null;
+  coach_name?: string | null;
+  phone?: string | null;
+  contact_info?: string | null;
+  youth_academy_notes?: string | null;
   created_at: string;
+  updated_at?: string;
 }
 
 export interface Ground {

@@ -28,6 +28,7 @@ import {
   ClipboardList,
   LayoutGrid,
   Plus,
+  Swords,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -35,6 +36,7 @@ import { PublicSharePanel } from "@/components/team/PublicSharePanel";
 import type { AgeGroup, Player, FootballFormat } from "@/types/database";
 import { AGE_GROUP_STAFF_ROLE_LABELS, getStaffRoleLabel } from "@/lib/team/staff-role";
 import { PermissionsGrid, type PermissionsMap, templateToPermissions } from "@/components/staff/PermissionsGrid";
+import { OpponentsTab } from "@/components/opponents/OpponentsTab";
 
 // Lista completa para o modal de convite de staff no escalão.
 // Inclui age_group_coordinator (não está em AGE_GROUP_STAFF_ROLE_LABELS).
@@ -80,7 +82,7 @@ const FORMAT_LABELS: Record<string, string> = {
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
-type Tab = "geral" | "atletas" | "staff" | "planeamento" | "configuracoes";
+type Tab = "geral" | "atletas" | "staff" | "planeamento" | "configuracoes" | "adversarios";
 
 interface StaffMember {
   id: string;
@@ -641,6 +643,7 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
     { id: "staff", label: `Staff (${staffCount})`, icon: Trophy },
     { id: "planeamento", label: "Planeamento", icon: ClipboardList },
     { id: "configuracoes", label: "Configurações", icon: Settings },
+    { id: "adversarios", label: "Adversários", icon: Swords },
   ];
 
   // Performance — presenças (Fix 2: estados e cores correctos)
@@ -1206,6 +1209,11 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
               </Card>
             ))}
           </div>
+        )}
+
+        {/* ─── TAB ADVERSÁRIOS ─────────────────────────────────────────── */}
+        {tab === "adversarios" && (
+          <OpponentsTab ageGroupId={ageGroupId} />
         )}
 
         {/* ─── TAB CONFIGURAÇÕES ───────────────────────────────────────── */}
