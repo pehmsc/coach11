@@ -154,7 +154,6 @@ export function GameFormModal({
           end_time: form.end_time || null,
           is_home: form.is_home,
           location: form.location.trim() || null,
-          location_address: form.location_address.trim() || null,
           formatted_address: form.formatted_address.trim() || null,
           latitude: form.latitude,
           longitude: form.longitude,

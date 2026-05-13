@@ -42,7 +42,6 @@ interface GameRow {
   score_home?: number;
   score_away?: number;
   location?: string;
-  location_address?: string;
   formatted_address?: string;
   latitude?: number | null;
   longitude?: number | null;
@@ -238,7 +237,6 @@ export default function GamesPage() {
         : "15:00",
       end_time: source.end_time?.slice(0, 5) || "",
       location: source.location || "",
-      location_address: source.location_address || "",
       formatted_address: source.formatted_address || "",
       latitude: source.latitude ?? null,
       longitude: source.longitude ?? null,
@@ -494,13 +492,11 @@ function GameCard({
         {resolveLocationLabel(
           game.location,
           game.formatted_address,
-          game.location_address,
         ) && (
           <p className="text-xs text-slate-400 truncate">
             {resolveLocationLabel(
               game.location,
               game.formatted_address,
-              game.location_address,
             )}
           </p>
         )}

@@ -16,7 +16,6 @@ type TrainingRow = {
   ut_number?: number | null;
   week_start_date?: string | null;
   location?: string | null;
-  location_address?: string | null;
   formatted_address?: string | null;
   latitude?: number | null;
   longitude?: number | null;
@@ -115,7 +114,7 @@ export async function GET(request: Request) {
       const { data: session, error: sessionError } = await db
         .from("training_sessions")
         .select(
-          "id, session_date, start_time, end_time, title, ut_number, week_start_date, microcycle_number, mesocycle_number, period_type, initial_instruction, objective, complementary_objectives, focus, intensity, material, field_area, location, location_address, formatted_address, latitude, longitude, osm_place_id, location_source, notes, image_url, status, age_group_id, team_id",
+          "id, session_date, start_time, end_time, title, ut_number, week_start_date, microcycle_number, mesocycle_number, period_type, initial_instruction, objective, complementary_objectives, focus, intensity, material, field_area, location, formatted_address, latitude, longitude, osm_place_id, location_source, notes, image_url, status, age_group_id, team_id",
         )
         .eq("id", sessionId)
         .in("age_group_id", effectiveAgeGroupId ? [effectiveAgeGroupId] : context.accessibleAgeGroupIds)
@@ -240,7 +239,7 @@ export async function GET(request: Request) {
     const { data: sessionsData, error: sessionsError } = await db
       .from("training_sessions")
       .select(
-        "id, session_date, start_time, end_time, title, ut_number, week_start_date, microcycle_number, mesocycle_number, period_type, initial_instruction, objective, complementary_objectives, focus, intensity, material, field_area, location, location_address, formatted_address, latitude, longitude, osm_place_id, location_source, notes, image_url, status, age_group_id, team_id",
+        "id, session_date, start_time, end_time, title, ut_number, week_start_date, microcycle_number, mesocycle_number, period_type, initial_instruction, objective, complementary_objectives, focus, intensity, material, field_area, location, formatted_address, latitude, longitude, osm_place_id, location_source, notes, image_url, status, age_group_id, team_id",
       )
       .in("age_group_id", effectiveAgeGroupId ? [effectiveAgeGroupId] : context.accessibleAgeGroupIds)
       .order("session_date", { ascending: true })

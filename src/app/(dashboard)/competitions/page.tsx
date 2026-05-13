@@ -503,7 +503,6 @@ export default function CompetitionsPage() {
                         const gameLocationLabel = resolveLocationLabel(
                           game.location,
                           game.formatted_address,
-                          game.location_address,
                         );
                         return (
                           <button

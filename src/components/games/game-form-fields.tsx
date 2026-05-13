@@ -21,7 +21,6 @@ export type SharedGameFormValues = {
   start_time: string;
   end_time: string;
   location: string;
-  location_address: string;
   formatted_address: string;
   latitude: number | null;
   longitude: number | null;
@@ -164,7 +163,6 @@ export function GameFormFields({
         value={{
           ...EMPTY_LOCATION_FIELDS,
           location: values.location,
-          location_address: values.location_address,
           formatted_address: values.formatted_address,
           latitude: values.latitude,
           longitude: values.longitude,
@@ -173,7 +171,6 @@ export function GameFormFields({
         }}
         onChange={(nextValue) => {
           onFieldChange("location", nextValue.location);
-          onFieldChange("location_address", nextValue.location_address);
           onFieldChange("formatted_address", nextValue.formatted_address);
           onFieldChange("latitude", nextValue.latitude);
           onFieldChange("longitude", nextValue.longitude);

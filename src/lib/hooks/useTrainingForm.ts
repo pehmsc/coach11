@@ -11,7 +11,6 @@ const DEFAULT_FORM: TrainingFormFields = {
   startTime: "18:30",
   endTime: "20:00",
   location: "",
-  locationAddress: "",
   formattedAddress: "",
   latitude: null,
   longitude: null,
@@ -35,7 +34,6 @@ export function useTrainingForm(initialValues?: Partial<TrainingFormFields>) {
   const [startTime, setStartTime] = useState(initialValues?.startTime ?? DEFAULT_FORM.startTime);
   const [endTime, setEndTime] = useState(initialValues?.endTime ?? DEFAULT_FORM.endTime);
   const [location, setLocation] = useState(initialValues?.location ?? DEFAULT_FORM.location);
-  const [locationAddress, setLocationAddress] = useState(initialValues?.locationAddress ?? DEFAULT_FORM.locationAddress);
   const [formattedAddress, setFormattedAddress] = useState(initialValues?.formattedAddress ?? DEFAULT_FORM.formattedAddress);
   const [latitude, setLatitude] = useState<number | null>(initialValues?.latitude ?? DEFAULT_FORM.latitude);
   const [longitude, setLongitude] = useState<number | null>(initialValues?.longitude ?? DEFAULT_FORM.longitude);
@@ -54,7 +52,7 @@ export function useTrainingForm(initialValues?: Partial<TrainingFormFields>) {
   function getFields(): TrainingFormFields {
     return {
       title, utNumber, date, startTime, endTime,
-      location, locationAddress, formattedAddress,
+      location, formattedAddress,
       latitude, longitude, osmPlaceId, locationSource,
       notes, imageUrl,
       utFocus, utIntensity, utPeriodType, utFieldArea,
@@ -74,7 +72,6 @@ export function useTrainingForm(initialValues?: Partial<TrainingFormFields>) {
     setStartTime(DEFAULT_FORM.startTime);
     setEndTime(DEFAULT_FORM.endTime);
     setLocation(DEFAULT_FORM.location);
-    setLocationAddress(DEFAULT_FORM.locationAddress);
     setFormattedAddress(DEFAULT_FORM.formattedAddress);
     setLatitude(DEFAULT_FORM.latitude);
     setLongitude(DEFAULT_FORM.longitude);
@@ -110,7 +107,6 @@ export function useTrainingForm(initialValues?: Partial<TrainingFormFields>) {
     setStartTime(source.start_time?.slice(0, 5) || "18:30");
     setEndTime(source.end_time?.slice(0, 5) || "20:00");
     setLocation(source.location || "");
-    setLocationAddress(source.location_address || "");
     setFormattedAddress(source.formatted_address || "");
     setLatitude(source.latitude ?? null);
     setLongitude(source.longitude ?? null);
@@ -134,7 +130,6 @@ export function useTrainingForm(initialValues?: Partial<TrainingFormFields>) {
     startTime, setStartTime,
     endTime, setEndTime,
     location, setLocation,
-    locationAddress, setLocationAddress,
     formattedAddress, setFormattedAddress,
     latitude, setLatitude,
     longitude, setLongitude,

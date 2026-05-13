@@ -46,8 +46,7 @@ type Props = {
 
 function hasAnyLocationData(value: LocationFieldsValue) {
   return Boolean(
-    value.location_address.trim() ||
-      value.formatted_address.trim() ||
+    value.formatted_address.trim() ||
       value.latitude != null ||
       value.longitude != null,
   );
@@ -115,7 +114,7 @@ export function LocationFields({
     value.longitude != null ? String(value.longitude) : "",
   );
   const latestRequestIdRef = useRef(0);
-  const deferredAddress = useDeferredValue(value.location_address);
+  const deferredAddress = useDeferredValue(value.formatted_address);
 
   useEffect(() => {
     setLatitudeInput(value.latitude != null ? String(value.latitude) : "");
@@ -136,7 +135,6 @@ export function LocationFields({
     const trimmedAddress = nextAddress.trim();
     onChange({
       ...value,
-      location_address: nextAddress,
       formatted_address: trimmedAddress ? nextAddress : "",
       latitude: null,
       longitude: null,
@@ -170,7 +168,6 @@ export function LocationFields({
     const nextLatitude = field === "latitude" ? parsed : value.latitude;
     const nextLongitude = field === "longitude" ? parsed : value.longitude;
     const hasSignal =
-      value.location_address.trim() ||
       value.formatted_address.trim() ||
       nextLatitude != null ||
       nextLongitude != null;
@@ -194,7 +191,6 @@ export function LocationFields({
     setLongitudeInput("");
     onChange({
       ...value,
-      location_address: "",
       formatted_address: "",
       latitude: null,
       longitude: null,
@@ -252,8 +248,6 @@ export function LocationFields({
 
       onChange({
         ...value,
-        location_address:
-          resolvedLocation.formatted_address || suggestion.formatted_address,
         formatted_address:
           resolvedLocation.formatted_address || suggestion.formatted_address,
         latitude: resolvedLocation.latitude ?? suggestion.latitude ?? null,
@@ -301,7 +295,7 @@ export function LocationFields({
       <div className="relative space-y-1.5">
         <Label className={isCompact}>{addressLabel}</Label>
         <Input
-          value={value.location_address}
+          value={value.formatted_address}
           onFocus={() => {
             if (suggestions.length > 0) setDropdownOpen(true);
           }}
@@ -417,7 +411,6 @@ export function LocationFields({
       {showPreview && (
         <LocationMapPreview
           location={value.location}
-          locationAddress={value.location_address}
           formattedAddress={value.formatted_address}
           latitude={value.latitude}
           longitude={value.longitude}
@@ -430,7 +423,6 @@ export function LocationFields({
             setLookupError(null);
             onChange({
               ...value,
-              location_address: nextValue.locationAddress ?? value.location_address,
               formatted_address:
                 nextValue.formattedAddress ?? value.formatted_address,
               latitude: nextValue.latitude,

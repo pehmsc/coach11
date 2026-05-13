@@ -153,7 +153,7 @@ export async function POST(request: Request) {
     const { data: sourceSessions, error: sourceError } = await supabase
       .from("training_sessions")
       .select(
-        "age_group_id, team_id, session_date, start_time, end_time, location, location_address, formatted_address, latitude, longitude, osm_place_id, location_source, objective, focus, intensity, material, field_area, week_start_date",
+        "age_group_id, team_id, session_date, start_time, end_time, location, formatted_address, latitude, longitude, osm_place_id, location_source, objective, focus, intensity, material, field_area, week_start_date",
       )
       .eq("age_group_id", ageGroupId)
       .eq("week_start_date", parsed.data.sourceWeekStartDate)

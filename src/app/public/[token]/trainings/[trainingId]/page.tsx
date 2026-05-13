@@ -89,7 +89,7 @@ const getPublicTrainingDetailPayload = unstable_cache(
       admin
         .from("training_sessions")
         .select(
-          "id, title, session_date, start_time, end_time, location, location_address, formatted_address, latitude, longitude, osm_place_id, location_source, notes, status, image_url",
+          "id, title, session_date, start_time, end_time, location, formatted_address, latitude, longitude, osm_place_id, location_source, notes, status, image_url",
         )
         .eq("id", resolvedTrainingId)
         .eq("age_group_id", ageGroupId)
@@ -139,11 +139,9 @@ export default async function PublicTrainingDetailPage({
   const trainingLocationLabel = resolveLocationLabel(
     training.location,
     training.formatted_address,
-    training.location_address,
   );
   const trainingAddress = resolveFormattedAddress(
     training.formatted_address,
-    training.location_address,
   );
 
   return (
@@ -239,12 +237,10 @@ export default async function PublicTrainingDetailPage({
         </section>
 
         {(training.location ||
-          training.location_address ||
           training.formatted_address ||
           (training.latitude != null && training.longitude != null)) && (
           <LocationMapPreview
             location={training.location}
-            locationAddress={training.location_address}
             formattedAddress={training.formatted_address}
             latitude={training.latitude}
             longitude={training.longitude}

@@ -4,7 +4,6 @@ export type MapsTarget =
   | string
   | {
       location?: string | null;
-      locationAddress?: string | null;
       formattedAddress?: string | null;
       latitude?: number | null;
       longitude?: number | null;
@@ -23,11 +22,7 @@ function normalizeTarget(target: MapsTarget) {
   }
 
   return {
-    query: resolveMapsQuery(
-      target?.formattedAddress,
-      target?.locationAddress,
-      target?.location,
-    ),
+    query: resolveMapsQuery(target?.formattedAddress, target?.location),
     latitude: target?.latitude ?? null,
     longitude: target?.longitude ?? null,
   };
@@ -39,17 +34,15 @@ function buildCoordinateQuery(latitude: number, longitude: number) {
 
 export function resolveMapsQuery(
   formattedAddress: string | null | undefined,
-  locationAddress: string | null | undefined,
   location: string | null | undefined,
 ) {
-  return resolveLocationLabel(location, formattedAddress, locationAddress);
+  return resolveLocationLabel(location, formattedAddress);
 }
 
 export function resolveMapsAddress(
   formattedAddress: string | null | undefined,
-  locationAddress: string | null | undefined,
 ) {
-  return resolveFormattedAddress(formattedAddress, locationAddress);
+  return resolveFormattedAddress(formattedAddress);
 }
 
 export function buildGoogleMapsUrl(target: MapsTarget) {

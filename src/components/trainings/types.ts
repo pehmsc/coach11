@@ -10,7 +10,6 @@ export interface TrainingRow {
   ut_number?: number | null;
   week_start_date?: string | null;
   location?: string;
-  location_address?: string;
   formatted_address?: string;
   latitude?: number | null;
   longitude?: number | null;
@@ -56,7 +55,6 @@ export interface TrainingFormFields {
   startTime: string;
   endTime: string;
   location: string;
-  locationAddress: string;
   formattedAddress: string;
   latitude: number | null;
   longitude: number | null;

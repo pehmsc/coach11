@@ -72,7 +72,6 @@ export function TrainingDetailModal({
   const selectedSessionLocationLabel = resolveLocationLabel(
     selectedSession.session.location,
     selectedSession.session.formatted_address,
-    selectedSession.session.location_address,
   );
   const canEditSelectedSession = computeCanEdit(selectedSession.session);
   const canCorrectSelectedSessionAttendance =
@@ -127,10 +126,10 @@ export function TrainingDetailModal({
                   {selectedSessionLocationLabel ? ` · ${selectedSessionLocationLabel}` : ""}
                 </p>
               )}
-              {selectedSession.session.location_address &&
-                selectedSession.session.location_address !== selectedSessionLocationLabel && (
+              {selectedSession.session.formatted_address &&
+                selectedSession.session.formatted_address !== selectedSessionLocationLabel && (
                   <p className="mt-1 text-xs text-slate-500">
-                    {selectedSession.session.location_address}
+                    {selectedSession.session.formatted_address}
                   </p>
                 )}
             </div>
@@ -207,7 +206,6 @@ export function TrainingDetailModal({
                   endTime={editForm.endTime}
                   onEndTimeChange={editForm.setEndTime}
                   location={editForm.location}
-                  locationAddress={editForm.locationAddress}
                   formattedAddress={editForm.formattedAddress}
                   latitude={editForm.latitude}
                   longitude={editForm.longitude}
@@ -215,7 +213,6 @@ export function TrainingDetailModal({
                   locationSource={editForm.locationSource}
                   onLocationChange={(nextValue) => {
                     editForm.setLocation(nextValue.location);
-                    editForm.setLocationAddress(nextValue.location_address);
                     editForm.setFormattedAddress(nextValue.formatted_address);
                     editForm.setLatitude(nextValue.latitude);
                     editForm.setLongitude(nextValue.longitude);
@@ -280,12 +277,10 @@ export function TrainingDetailModal({
           ) : (
             <div className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden [overflow-wrap:anywhere]">
               {(selectedSession.session.location ||
-                selectedSession.session.location_address ||
                 selectedSession.session.formatted_address) && (
                 <div className="border-b px-5 py-4">
                   <LocationMapPreview
                     location={selectedSession.session.location}
-                    locationAddress={selectedSession.session.location_address}
                     formattedAddress={selectedSession.session.formatted_address}
                     latitude={selectedSession.session.latitude}
                     longitude={selectedSession.session.longitude}

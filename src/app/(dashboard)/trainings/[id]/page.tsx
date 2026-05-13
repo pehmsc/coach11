@@ -143,7 +143,6 @@ export default function TrainingDetailPage() {
             start_time: fields.startTime,
             end_time: fields.endTime || null,
             location: fields.location.trim() || null,
-            location_address: fields.locationAddress.trim() || null,
             formatted_address: fields.formattedAddress.trim() || null,
             latitude: fields.latitude,
             longitude: fields.longitude,
@@ -217,7 +216,6 @@ export default function TrainingDetailPage() {
             start_time: fields.startTime,
             end_time: fields.endTime || null,
             location: fields.location.trim() || null,
-            location_address: fields.locationAddress.trim() || null,
             formatted_address: fields.formattedAddress.trim() || null,
             latitude: fields.latitude,
             longitude: fields.longitude,
@@ -277,7 +275,7 @@ export default function TrainingDetailPage() {
         sessionDate: session.session_date,
         startTime: session.start_time,
         endTime: session.end_time,
-        location: resolveLocationLabel(session.location, session.formatted_address, session.location_address) ?? undefined,
+        location: resolveLocationLabel(session.location, session.formatted_address) ?? undefined,
         fieldArea: session.field_area,
         mesocycle: session.mesocycle_number,
         microcycle: session.microcycle_number,
@@ -330,13 +328,13 @@ export default function TrainingDetailPage() {
     );
   }
 
-  const locationLabel = resolveLocationLabel(session.location, session.formatted_address, session.location_address);
+  const locationLabel = resolveLocationLabel(session.location, session.formatted_address);
   const canEditSession = computeCanEdit(session);
   const canCorrectAttendance = canDelete && session.status === "completed";
   const isClosed = session.status === "completed";
   const displayTitle = getTrainingDisplayTitle(session);
   const attendanceCount = Object.keys(attendanceMap).length;
-  const hasLocation = !!(session.location || session.location_address || session.formatted_address);
+  const hasLocation = !!(session.location || session.formatted_address);
 
   return (
     <>
@@ -409,7 +407,6 @@ export default function TrainingDetailPage() {
             <div className="mt-3 rounded-xl overflow-hidden bg-white/10">
               <LocationMapPreview
                 location={session.location}
-                locationAddress={session.location_address}
                 formattedAddress={session.formatted_address}
                 latitude={session.latitude}
                 longitude={session.longitude}
@@ -440,13 +437,12 @@ export default function TrainingDetailPage() {
               date={editForm.date} onDateChange={editForm.setDate}
               startTime={editForm.startTime} onStartTimeChange={editForm.setStartTime}
               endTime={editForm.endTime} onEndTimeChange={editForm.setEndTime}
-              location={editForm.location} locationAddress={editForm.locationAddress}
+              location={editForm.location}
               formattedAddress={editForm.formattedAddress} latitude={editForm.latitude}
               longitude={editForm.longitude} osmPlaceId={editForm.osmPlaceId}
               locationSource={editForm.locationSource}
               onLocationChange={(nv) => {
                 editForm.setLocation(nv.location);
-                editForm.setLocationAddress(nv.location_address);
                 editForm.setFormattedAddress(nv.formatted_address);
                 editForm.setLatitude(nv.latitude);
                 editForm.setLongitude(nv.longitude);

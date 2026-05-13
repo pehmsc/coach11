@@ -77,8 +77,6 @@ export function useCalendarData() {
         notes: typeof s.notes === "string" ? s.notes : undefined,
         status: typeof s.status === "string" ? s.status : undefined,
         location: typeof s.location === "string" ? s.location : undefined,
-        location_address:
-          typeof s.location_address === "string" ? s.location_address : undefined,
         formatted_address:
           typeof s.formatted_address === "string" ? s.formatted_address : undefined,
         latitude: typeof s.latitude === "number" ? s.latitude : null,
@@ -131,8 +129,6 @@ export function useCalendarData() {
         competition_id:
           typeof g.competition_id === "string" ? g.competition_id : undefined,
         location: typeof g.location === "string" ? g.location : undefined,
-        location_address:
-          typeof g.location_address === "string" ? g.location_address : undefined,
         formatted_address:
           typeof g.formatted_address === "string" ? g.formatted_address : undefined,
         latitude: typeof g.latitude === "number" ? g.latitude : null,

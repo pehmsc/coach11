@@ -18,7 +18,6 @@ export interface CalEvent {
   opponent_short_name?: string;
   competition_id?: string;
   location?: string;
-  location_address?: string;
   formatted_address?: string;
   latitude?: number | null;
   longitude?: number | null;
@@ -34,7 +33,6 @@ export type ModalScreen = "view" | "edit";
 export type EventForm = SharedGameFormValues & {
   title: string;
   end_time: string;
-  location_address: string;
   notes: string;
   image_url: string;
 };

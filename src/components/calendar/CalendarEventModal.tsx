@@ -158,7 +158,6 @@ export function CalendarEventModal({
                   {resolveLocationLabel(
                     selectedEvent.location,
                     selectedEvent.formatted_address,
-                    selectedEvent.location_address,
                   ) ? (
                     <div className="flex items-start gap-2">
                       <MapPin size={14} className="mt-0.5 text-slate-400" />
@@ -166,7 +165,6 @@ export function CalendarEventModal({
                         {resolveLocationLabel(
                           selectedEvent.location,
                           selectedEvent.formatted_address,
-                          selectedEvent.location_address,
                         )}
                       </span>
                     </div>

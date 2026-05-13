@@ -50,7 +50,6 @@ type CalendarPayload = {
   opponent_short_name?: string | null;
   competition_id?: string | null;
   location?: string | null;
-  location_address?: string | null;
   formatted_address?: string | null;
   latitude?: number | null;
   longitude?: number | null;
@@ -80,7 +79,6 @@ type RouteContextData = {
 
 const CalendarLocationSchema = z.object({
   location: z.string().nullable().optional(),
-  location_address: z.string().nullable().optional(),
   formatted_address: z.string().nullable().optional(),
   latitude: z.number().nullable().optional(),
   longitude: z.number().nullable().optional(),
@@ -210,7 +208,6 @@ function normalizePayload(value: unknown): CalendarPayload {
     opponent_short_name: normalizeManualShortName(opponentShortNameRaw, 5),
     competition_id: normalizeOptionalId(row.competition_id),
     location: normalizeOptionalText(row.location),
-    location_address: normalizeOptionalText(row.location_address),
     formatted_address: normalizeOptionalText(row.formatted_address),
     latitude: normalizeNullableNumber(row.latitude),
     longitude: normalizeNullableNumber(row.longitude),
@@ -228,7 +225,6 @@ function normalizeLocationPayload(payload: CalendarPayload): CalendarPayload {
     typeof payload.longitude === "number" && Number.isFinite(payload.longitude);
   const formattedAddress = resolveFormattedAddress(
     payload.formatted_address,
-    payload.location_address,
   );
 
   return {
@@ -241,7 +237,7 @@ function normalizeLocationPayload(payload: CalendarPayload): CalendarPayload {
       payload.location_source,
       payload.osm_place_id ?? null,
       hasCoordinates,
-      Boolean(payload.location || payload.location_address || formattedAddress),
+      Boolean(payload.location || formattedAddress),
     ),
   };
 }
@@ -542,7 +538,6 @@ export async function handleCalendarEventsPost(request: Request) {
         start_time: payload.start_time || "00:00",
         end_time: payload.end_time,
         location: payload.location,
-        location_address: payload.location_address,
         formatted_address: payload.formatted_address,
         latitude: payload.latitude,
         longitude: payload.longitude,
@@ -602,7 +597,6 @@ export async function handleCalendarEventsPost(request: Request) {
       opponent_name: payload.opponent_name,
       opponent_short_name: payload.opponent_short_name,
       location: payload.location,
-      location_address: payload.location_address,
       formatted_address: payload.formatted_address,
       latitude: payload.latitude,
       longitude: payload.longitude,
@@ -715,7 +709,6 @@ export async function handleCalendarEventsPatch(request: Request) {
         start_time: payload.start_time || "00:00",
         end_time: payload.end_time,
         location: payload.location,
-        location_address: payload.location_address,
         formatted_address: payload.formatted_address,
         latitude: payload.latitude,
         longitude: payload.longitude,
@@ -789,7 +782,6 @@ export async function handleCalendarEventsPatch(request: Request) {
       opponent_name: payload.opponent_name,
       opponent_short_name: payload.opponent_short_name,
       location: payload.location,
-      location_address: payload.location_address,
       formatted_address: payload.formatted_address,
       latitude: payload.latitude,
       longitude: payload.longitude,

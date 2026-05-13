@@ -19,7 +19,6 @@ interface TrainingFormFieldsProps {
   endTime: string;
   onEndTimeChange: (value: string) => void;
   location: string;
-  locationAddress: string;
   formattedAddress: string;
   latitude: number | null;
   longitude: number | null;
@@ -27,7 +26,6 @@ interface TrainingFormFieldsProps {
   locationSource: "google" | "osm" | "manual" | null;
   onLocationChange: (nextValue: {
     location: string;
-    location_address: string;
     formatted_address: string;
     latitude: number | null;
     longitude: number | null;
@@ -68,7 +66,6 @@ export function TrainingFormFieldsComponent({
   endTime,
   onEndTimeChange,
   location,
-  locationAddress,
   formattedAddress,
   latitude,
   longitude,
@@ -162,7 +159,6 @@ export function TrainingFormFieldsComponent({
         value={{
           ...EMPTY_LOCATION_FIELDS,
           location,
-          location_address: locationAddress,
           formatted_address: formattedAddress,
           latitude,
           longitude,

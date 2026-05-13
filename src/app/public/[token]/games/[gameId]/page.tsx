@@ -94,7 +94,7 @@ const getPublicGameDetailPayload = unstable_cache(
       admin
         .from("games")
         .select(
-          "id, game_datetime, end_time, opponent_name, opponent_short_name, location, location_address, formatted_address, latitude, longitude, osm_place_id, location_source, notes, is_home, status, score_home, score_away, image_url, title",
+          "id, game_datetime, end_time, opponent_name, opponent_short_name, location, formatted_address, latitude, longitude, osm_place_id, location_source, notes, is_home, status, score_home, score_away, image_url, title",
         )
         .eq("id", resolvedGameId)
         .eq("age_group_id", ageGroupId)
@@ -144,11 +144,9 @@ export default async function PublicGameDetailPage({
   const gameLocationLabel = resolveLocationLabel(
     game.location,
     game.formatted_address,
-    game.location_address,
   );
   const gameAddress = resolveFormattedAddress(
     game.formatted_address,
-    game.location_address,
   );
   const concentrationTime = extractTimeFromDateTime(game.game_datetime);
   const gameTime = addMinutesToTime(concentrationTime, 60);
@@ -439,12 +437,10 @@ export default async function PublicGameDetailPage({
         </section>
 
         {(game.location ||
-          game.location_address ||
           game.formatted_address ||
           (game.latitude != null && game.longitude != null)) && (
           <LocationMapPreview
             location={game.location}
-            locationAddress={game.location_address}
             formattedAddress={game.formatted_address}
             latitude={game.latitude}
             longitude={game.longitude}
