@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
 import { usePathname, useRouter } from "next/navigation";
-import { LogOut, ChevronDown } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { clearClientCaches } from "@/lib/query/cache-clear";
 import type { Profile } from "@/types/database";
@@ -14,7 +14,7 @@ import {
   isNavItemActive,
 } from "@/components/layout/nav-config";
 import { UserAvatar } from "@/components/layout/UserAvatar";
-import { useAgeGroup } from "@/contexts/AgeGroupContext";
+import { ScopeToggle } from "@/components/navigation/ScopeToggle";
 
 interface SidebarProps {
   profile: Profile | null;
@@ -28,7 +28,6 @@ export function Sidebar({ profile, avatarUrl, source, teamRole }: SidebarProps) 
   const router = useRouter();
   const queryClient = useQueryClient();
   const { unreadMessages: unreadMessagesCount, unreadNotifications: unreadNotificationsCount } = useUnreadCounts();
-  const { ageGroups, selectedAgeGroupId, setSelectedAgeGroupId, showAgeGroupSelector } = useAgeGroup();
   const navSections = getAppNavSections();
   const mainSection = navSections.find((section) => section.id === "main");
   const settingsSection = navSections.find((section) => section.id === "settings");
@@ -70,29 +69,7 @@ export function Sidebar({ profile, avatarUrl, source, teamRole }: SidebarProps) 
       </div>
 
       {/* Selector de escalão — visível apenas para club_coordinator com múltiplos escalões */}
-      {showAgeGroupSelector && (
-        <div className="px-4 py-3 border-b border-slate-800">
-          <p className="text-slate-500 text-[11px] uppercase tracking-wide mb-1.5">Escalão</p>
-          <div className="relative">
-            <select
-              value={selectedAgeGroupId ?? ""}
-              onChange={(e) => {
-                const val = e.target.value;
-                setSelectedAgeGroupId(val === "" ? null : val);
-              }}
-              className="w-full appearance-none bg-slate-800 text-slate-200 text-sm rounded-lg px-3 py-2 pr-8 border border-slate-700 focus:outline-none focus:border-emerald-500 cursor-pointer"
-            >
-              <option value="">Todos os escalões</option>
-              {ageGroups.map((ag) => (
-                <option key={ag.id} value={ag.id}>
-                  {ag.name}
-                </option>
-              ))}
-            </select>
-            <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-          </div>
-        </div>
-      )}
+      <ScopeToggle variant="sidebar" />
 
       {/* Navegação */}
       <nav className="flex-1 overflow-y-auto p-4">
