@@ -4,6 +4,7 @@ import { useParams } from "next/navigation";
 import { LiveErrorState, LiveLoadingState, LiveLockedState } from "@/components/games/live/LiveScreenStates";
 import { LiveScoreboardCard } from "@/components/games/live/LiveScoreboardCard";
 import { StickyBackLink } from "@/components/navigation/StickyBackLink";
+import { Breadcrumb } from "@/components/navigation/Breadcrumb";
 import { useGameLiveController } from "@/lib/hooks/useGameLiveController";
 import { useLiveGameState } from "@/lib/hooks/useLiveGameState";
 import { formatClock } from "@/components/games/live/utils";
@@ -61,9 +62,22 @@ export default function LiveGamePage() {
     <div className="p-4 md:p-8 max-w-2xl mx-auto pb-24">
       <StickyBackLink
         href={`/games/${id}`}
-        label="Voltar"
+        label="Voltar ao jogo"
         wrapperClassName="-mx-4 mb-4 bg-slate-50/95 px-4 py-2 md:-mx-8 md:px-8"
-      />
+      >
+        <Breadcrumb
+          items={[
+            { label: "Jogos", href: "/games" },
+            {
+              label: state.game.opponent_name
+                ? `vs ${state.game.opponent_name}`
+                : "Jogo",
+              href: `/games/${id}`,
+            },
+            { label: "Live" },
+          ]}
+        />
+      </StickyBackLink>
 
       <LiveScoreboardCard
         matchMetaLabel={matchMetaLabel}

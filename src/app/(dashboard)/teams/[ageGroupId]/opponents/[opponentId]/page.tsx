@@ -1,13 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, use } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import { pt } from "date-fns/locale";
 import {
   AlertTriangle,
-  ChevronLeft,
   Loader2,
   Trash2,
   History,
@@ -31,6 +29,8 @@ import {
   getOpponentScore,
   getOurScore,
 } from "@/lib/games/score-helpers";
+import { StickyBackLink } from "@/components/navigation/StickyBackLink";
+import { Breadcrumb } from "@/components/navigation/Breadcrumb";
 import { OpponentLogoUploader } from "@/components/opponents/OpponentLogoUploader";
 import {
   useOpponentAutosave,
@@ -327,41 +327,33 @@ export default function OpponentDetailPage({
 
   return (
     <div className="min-h-screen bg-slate-50">
+      <StickyBackLink
+        href={`/teams/${ageGroupId}?tab=adversarios`}
+        label="Voltar aos adversários"
+        sticky={false}
+        wrapperClassName="bg-slate-50 px-4 py-2 max-w-5xl mx-auto"
+      >
+        <Breadcrumb
+          items={[
+            { label: "Equipas", href: "/teams" },
+            {
+              label: ageGroup?.name ?? "Escalão",
+              href: `/teams/${ageGroupId}`,
+            },
+            {
+              label: "Adversários",
+              href: `/teams/${ageGroupId}?tab=adversarios`,
+              shortLabel: "Adv.",
+            },
+            { label: opponent.name },
+          ]}
+        />
+      </StickyBackLink>
+
       {/* Header */}
       <div className="bg-white border-b border-slate-200 sticky top-0 z-10">
         <div className="max-w-5xl mx-auto px-4 py-3 space-y-2">
-          <div className="flex items-center gap-2 text-xs text-slate-500">
-            <Link href="/teams" className="hover:text-slate-700">
-              Equipas
-            </Link>
-            <span>›</span>
-            <Link
-              href={`/teams/${ageGroupId}`}
-              className="hover:text-slate-700"
-            >
-              {ageGroup?.name ?? "Escalao"}
-            </Link>
-            <span>›</span>
-            <Link
-              href={`/teams/${ageGroupId}?tab=adversarios`}
-              className="hover:text-slate-700"
-            >
-              Adversarios
-            </Link>
-            <span>›</span>
-            <span className="text-slate-700 font-medium truncate">
-              {opponent.name}
-            </span>
-          </div>
-
           <div className="flex items-center gap-3">
-            <Link
-              href={`/teams/${ageGroupId}?tab=adversarios`}
-              className="text-slate-400 hover:text-slate-600 flex-shrink-0"
-            >
-              <ChevronLeft size={20} />
-            </Link>
-
             <OpponentLogoUploader
               ageGroupId={ageGroupId}
               opponentId={opponentId}

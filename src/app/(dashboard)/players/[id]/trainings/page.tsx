@@ -6,6 +6,7 @@ import { format, parseISO } from "date-fns";
 import { pt } from "date-fns/locale";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { StickyBackLink } from "@/components/navigation/StickyBackLink";
+import { Breadcrumb } from "@/components/navigation/Breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -200,7 +201,15 @@ export default function PlayerHistoryTrainingsPage() {
         href={`/players/${id}`}
         label="Voltar ao perfil"
         wrapperClassName="-mx-4 mb-4 bg-slate-50/95 px-4 py-2 md:-mx-8 md:px-8"
-      />
+      >
+        <Breadcrumb
+          items={[
+            { label: "Plantel", href: "/players" },
+            { label: "Atleta", href: `/players/${id}` },
+            { label: "Treinos" },
+          ]}
+        />
+      </StickyBackLink>
 
       <h1 className="mb-4 text-xl font-bold text-slate-900">
         Histórico de treinos
