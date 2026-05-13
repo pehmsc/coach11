@@ -19,6 +19,7 @@ import {
   Users,
 } from "lucide-react";
 import { StickyBackLink } from "@/components/navigation/StickyBackLink";
+import { Breadcrumb } from "@/components/navigation/Breadcrumb";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DeleteGameModal } from "@/components/games/detail/DeleteGameModal";
@@ -721,10 +722,21 @@ export default function GameSummaryPage() {
   return (
     <div className="p-4 md:p-8 max-w-3xl mx-auto pb-16">
       <StickyBackLink
-        href="/games"
-        label="Voltar aos jogos"
+        href={`/games/${id}`}
+        label="Voltar ao jogo"
         wrapperClassName="-mx-4 mb-4 bg-slate-50/95 px-4 py-2 md:-mx-8 md:px-8"
-      />
+      >
+        <Breadcrumb
+          items={[
+            { label: "Jogos", href: "/games" },
+            {
+              label: game.opponent_name ? `vs ${game.opponent_name}` : "Jogo",
+              href: `/games/${id}`,
+            },
+            { label: "Sumário" },
+          ]}
+        />
+      </StickyBackLink>
 
       {actionError && (
         <div className="mb-4 rounded-lg border border-red-200 bg-red-50 text-red-700 text-sm px-3 py-2">

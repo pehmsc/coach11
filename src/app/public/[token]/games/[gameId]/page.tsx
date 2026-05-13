@@ -7,6 +7,7 @@ import { Clock3, FileText, MapPin, ShieldCheck } from "lucide-react";
 import { RichTextContent } from "@/components/content/RichTextContent";
 import { LocationMapPreview } from "@/components/maps/LocationMapPreview";
 import { StickyBackLink } from "@/components/navigation/StickyBackLink";
+import { Breadcrumb } from "@/components/navigation/Breadcrumb";
 import { PublicGameLivePanel } from "@/components/public/PublicGameLivePanel";
 import { PublicRateLimitedState } from "@/components/public/PublicRateLimitedState";
 import {
@@ -288,7 +289,21 @@ export default async function PublicGameDetailPage({
           href={`/public/${access.identifier}`}
           label="Voltar ao calendário"
           wrapperClassName="-mx-4 bg-slate-50/95 px-4 py-2"
-        />
+        >
+          <Breadcrumb
+            items={[
+              {
+                label: "Calendário",
+                href: `/public/${access.identifier}`,
+              },
+              {
+                label: game.opponent_name
+                  ? `${game.is_home ? "vs" : "@"} ${game.opponent_name}`
+                  : "Jogo",
+              },
+            ]}
+          />
+        </StickyBackLink>
 
         <section className="rounded-3xl bg-slate-900 px-6 py-8 text-white">
           <p className="text-sm uppercase tracking-[0.2em] text-emerald-300">

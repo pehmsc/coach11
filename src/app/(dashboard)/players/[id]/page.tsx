@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { AlertCircle } from "lucide-react";
 import { StickyBackLink } from "@/components/navigation/StickyBackLink";
+import { Breadcrumb } from "@/components/navigation/Breadcrumb";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PlayerProfileHeader } from "@/components/players/profile/PlayerProfileHeader";
 import {
@@ -83,7 +84,18 @@ export default function PlayerDetailPage() {
         href="/players"
         label="Voltar ao plantel"
         wrapperClassName="-mx-4 mb-4 bg-slate-50/95 px-4 py-2 md:-mx-8 md:px-8"
-      />
+      >
+        <Breadcrumb
+          items={[
+            { label: "Plantel", href: "/players" },
+            {
+              label: player
+                ? `${player.first_name} ${player.last_name}`.trim() || "Atleta"
+                : "Atleta",
+            },
+          ]}
+        />
+      </StickyBackLink>
 
       {loading ? (
         <div className="space-y-4">

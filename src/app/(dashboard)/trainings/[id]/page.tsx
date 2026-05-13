@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { RichTextContent } from "@/components/content/RichTextContent";
 import { LocationMapPreview } from "@/components/maps/LocationMapPreview";
 import { StickyBackLink } from "@/components/navigation/StickyBackLink";
+import { Breadcrumb } from "@/components/navigation/Breadcrumb";
 import { resolveLocationLabel } from "@/lib/location";
 import { portugalDateTimeToUtc } from "@/lib/events/presence-window";
 import { useTrainingForm } from "@/lib/hooks/useTrainingForm";
@@ -343,7 +344,23 @@ export default function TrainingDetailPage() {
           href="/trainings"
           label="Voltar aos treinos"
           wrapperClassName="-mx-4 mb-4 bg-slate-50/95 px-4 py-2 md:-mx-8 md:px-8"
-        />
+        >
+          <Breadcrumb
+            items={[
+              { label: "Treinos", href: "/trainings" },
+              {
+                label:
+                  session.ut_number != null
+                    ? `UT ${String(session.ut_number).padStart(2, "0")}${
+                        session.session_date
+                          ? ` (${format(parseISO(session.session_date), "d MMM", { locale: pt })})`
+                          : ""
+                      }`
+                    : session.title || "Treino",
+              },
+            ]}
+          />
+        </StickyBackLink>
 
         {/* ── Header (sempre visível acima das tabs) ── */}
         <div className="rounded-2xl bg-emerald-600 text-white p-5 mb-0 relative">

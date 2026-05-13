@@ -5,6 +5,7 @@ import { differenceInMinutes, format, parseISO, subMinutes } from "date-fns";
 import { pt } from "date-fns/locale";
 import { AlertCircle } from "lucide-react";
 import { StickyBackLink } from "@/components/navigation/StickyBackLink";
+import { Breadcrumb } from "@/components/navigation/Breadcrumb";
 import { resolveLocationLabel } from "@/lib/location";
 import { getConvocationEditorState } from "@/lib/games/convocation-editor";
 import { LocationMapPreview } from "@/components/maps/LocationMapPreview";
@@ -130,7 +131,18 @@ export default function GameDetailPage() {
         href="/games"
         label="Voltar aos jogos"
         wrapperClassName="-mx-4 mb-4 bg-slate-50/95 px-4 py-2 md:-mx-8 md:px-8"
-      />
+      >
+        <Breadcrumb
+          items={[
+            { label: "Jogos", href: "/games" },
+            {
+              label: game.opponent_name
+                ? `vs ${game.opponent_name}`
+                : "Jogo",
+            },
+          ]}
+        />
+      </StickyBackLink>
 
       <GameHeader
         game={game}
