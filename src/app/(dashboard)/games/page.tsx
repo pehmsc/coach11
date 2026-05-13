@@ -31,6 +31,7 @@ import {
   formatFixtureOpponentLabel,
   isClosedGameStatus,
 } from "@/lib/games/display";
+import { useListStateSync } from "@/hooks/useListStateSync";
 
 interface GameRow {
   id: string;
@@ -108,7 +109,12 @@ export default function GamesPage() {
   const [createMode, setCreateMode] = useState<"create" | "duplicate">("create");
   const [competitionOptions, setCompetitionOptions] = useState<GameCompetitionOption[]>([]);
   const [ageGroupId, setAgeGroupId] = useState<string | null>(null);
-  const [closedGamesExpanded, setClosedGamesExpanded] = useState(false);
+  const [closedFlag, setClosedFlag] = useListStateSync<"yes" | "no">(
+    "closed",
+    "no",
+  );
+  const closedGamesExpanded = closedFlag === "yes";
+  const setClosedGamesExpanded = (v: boolean) => setClosedFlag(v ? "yes" : "no");
   const [duplicateInitialValues, setDuplicateInitialValues] = useState<
     Partial<SharedGameFormValues & { title: string; notes: string; image_url: string }> | undefined
   >(undefined);
@@ -370,7 +376,7 @@ export default function GamesPage() {
         <section className="rounded-2xl border border-slate-200 bg-white">
           <button
             type="button"
-            onClick={() => setClosedGamesExpanded((current) => !current)}
+            onClick={() => setClosedGamesExpanded(!closedGamesExpanded)}
             className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left"
           >
             <div>

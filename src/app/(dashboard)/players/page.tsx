@@ -36,6 +36,7 @@ import {
 import { ApiFetchError, apiFetch } from "@/lib/http/apiFetch";
 import { queryKeys } from "@/lib/query/keys";
 import type { Player, AgeGroup, PlayerStatus } from "@/types/database";
+import { useListStateSync } from "@/hooks/useListStateSync";
 
 const POSITIONS = ["GR", "DD", "DC", "DE", "MD", "MC", "MO", "ME", "AV", "EE", "ED", "SA"];
 
@@ -118,8 +119,8 @@ export default function PlayersPage() {
   const [editingPlayer, setEditingPlayer] = useState<Player | null>(null);
   const [deletingPlayerId, setDeletingPlayerId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [sortKey, setSortKey] = useState<SortKey>("name");
-  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [sortKey, setSortKey] = useListStateSync<SortKey>("sortBy", "name");
+  const [sortDir, setSortDir] = useListStateSync<SortDir>("sortDir", "asc");
   const [form, setForm] = useState(EMPTY_FORM);
 
   const playersQuery = useQuery({
@@ -277,7 +278,7 @@ export default function PlayersPage() {
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
     } else {
       setSortKey(key);
       setSortDir("asc");

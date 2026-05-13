@@ -11,6 +11,7 @@ import { TrainingCreateModal } from "@/components/trainings/TrainingCreateModal"
 import { DuplicateWeekDialog } from "@/components/trainings/DuplicateWeekDialog";
 import { isTrainingClosed } from "@/components/trainings/utils";
 import type { TrainingRow } from "@/components/trainings/types";
+import { useListStateSync } from "@/hooks/useListStateSync";
 
 type TabKey = "scheduled" | "closed";
 
@@ -19,7 +20,7 @@ export default function TrainingsPage() {
   const data = useTrainingsData();
   const createForm = useTrainingForm();
 
-  const [activeTab, setActiveTab] = useState<TabKey>("scheduled");
+  const [activeTab, setActiveTab] = useListStateSync<TabKey>("tab", "scheduled");
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [createMode, setCreateMode] = useState<"create" | "duplicate">("create");
   const [duplicateWeekOpen, setDuplicateWeekOpen] = useState(false);
