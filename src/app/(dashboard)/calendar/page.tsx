@@ -49,6 +49,8 @@ export default function CalendarPage() {
     saveEvent,
     deleteEvent,
     openAttendanceCorrectionFromCalendar,
+    opponentSelection,
+    handleOpponentSelectionChange,
   } = useCalendarModal({
     ageGroupId,
     teamId,
@@ -139,6 +141,8 @@ export default function CalendarPage() {
           onViewScreen={() => setModalScreen("view")}
           onGameFieldChange={handleGameFieldChange}
           onAttendanceCorrection={openAttendanceCorrectionFromCalendar}
+          opponentSelection={opponentSelection}
+          onOpponentSelectionChange={handleOpponentSelectionChange}
         />
       )}
     </div>

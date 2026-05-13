@@ -39,6 +39,7 @@ type GameWritePayload = {
   game_datetime: string;
   end_time: string | null | undefined;
   competition_id: string | null;
+  opponent_id: string | null | undefined;
   opponent_name: string | null | undefined;
   opponent_short_name: string | null | undefined;
   location: string | null | undefined;
@@ -71,7 +72,7 @@ const TRAINING_SESSION_CALENDAR_FIELDS =
 // Perf: campos específicos — evitar transferir club_id e outros campos
 // internos não usados pela UI do calendário.
 const GAME_CALENDAR_FIELDS =
-  "id, age_group_id, team_id, competition_id, title, game_datetime, end_time, opponent_name, opponent_short_name, location, formatted_address, latitude, longitude, osm_place_id, location_source, is_home, notes, image_url, status, score_home, score_away, created_at";
+  "id, age_group_id, team_id, competition_id, title, game_datetime, end_time, opponent_id, opponent_name, opponent_short_name, location, formatted_address, latitude, longitude, osm_place_id, location_source, is_home, notes, image_url, status, score_home, score_away, created_at";
 
 export async function listTrainingSessionsInRange(
   db: CalendarDbClient,

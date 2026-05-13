@@ -46,6 +46,7 @@ type CalendarPayload = {
   date?: string | null;
   start_time?: string | null;
   end_time?: string | null;
+  opponent_id?: string | null;
   opponent_name?: string | null;
   opponent_short_name?: string | null;
   competition_id?: string | null;
@@ -92,6 +93,7 @@ const CalendarPayloadSchema = CalendarLocationSchema.extend({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida.").nullable().optional(),
   start_time: z.string().nullable().optional(),
   end_time: z.string().nullable().optional(),
+  opponent_id: z.string().uuid().nullable().optional(),
   opponent_name: z.string().nullable().optional(),
   opponent_short_name: z.string().nullable().optional(),
   competition_id: z.string().nullable().optional(),
@@ -204,6 +206,7 @@ function normalizePayload(value: unknown): CalendarPayload {
     date: normalizeDate(row.date),
     start_time: normalizeTime(row.start_time),
     end_time: normalizeTime(row.end_time),
+    opponent_id: normalizeOptionalId(row.opponent_id),
     opponent_name: normalizeOptionalText(row.opponent_name),
     opponent_short_name: normalizeManualShortName(opponentShortNameRaw, 5),
     competition_id: normalizeOptionalId(row.competition_id),
@@ -594,6 +597,7 @@ export async function handleCalendarEventsPost(request: Request) {
       game_datetime: gameDatetime,
       end_time: payload.end_time,
       competition_id: competitionResult.id,
+      opponent_id: payload.opponent_id ?? null,
       opponent_name: payload.opponent_name,
       opponent_short_name: payload.opponent_short_name,
       location: payload.location,
@@ -779,6 +783,7 @@ export async function handleCalendarEventsPatch(request: Request) {
       game_datetime: gameDatetime,
       end_time: payload.end_time,
       competition_id: competitionResult.id,
+      opponent_id: payload.opponent_id ?? null,
       opponent_name: payload.opponent_name,
       opponent_short_name: payload.opponent_short_name,
       location: payload.location,

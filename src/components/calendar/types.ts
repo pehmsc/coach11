@@ -14,6 +14,7 @@ export interface CalEvent {
   end_time?: string;
   notes?: string;
   status?: string;
+  opponent_id?: string;
   opponent_name?: string;
   opponent_short_name?: string;
   competition_id?: string;
