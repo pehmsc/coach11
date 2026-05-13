@@ -18,6 +18,10 @@ import {
   isValidManualShortName,
   normalizeManualShortName,
 } from "@/lib/football/short-name";
+import {
+  OpponentTypeahead,
+  type OpponentSelectionValue,
+} from "@/components/opponents/OpponentTypeahead";
 
 type GameFormExtra = SharedGameFormValues & {
   title: string;
@@ -36,6 +40,7 @@ export type GameFormModalProps = {
   competitionOptions?: GameCompetitionOption[];
   mode?: "create" | "duplicate";
   onSaved?: () => void;
+  footballFormat?: string | null;
 };
 
 const EMPTY_FORM: GameFormExtra = {
@@ -63,9 +68,12 @@ export function GameFormModal({
   competitionOptions = [],
   mode = "create",
   onSaved,
+  footballFormat = null,
 }: GameFormModalProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [opponentSelection, setOpponentSelection] =
+    useState<OpponentSelectionValue | null>(null);
 
   const defaultDate = format(new Date(), "yyyy-MM-dd");
   const [form, setForm] = useState<GameFormExtra>(() => ({
@@ -75,7 +83,6 @@ export function GameFormModal({
     ...initialValues,
   }));
 
-  // Reset form when modal opens with new initial values
   function resetForm() {
     setForm({
       ...EMPTY_FORM,
@@ -83,6 +90,7 @@ export function GameFormModal({
       competition_id: initialCompetitionId || "",
       ...initialValues,
     });
+    setOpponentSelection(null);
     setError(null);
   }
 
@@ -91,6 +99,17 @@ export function GameFormModal({
     value: SharedGameFormValues[keyof SharedGameFormValues],
   ) {
     setForm((prev) => ({ ...prev, [field]: value }));
+  }
+
+  function handleOpponentChange(opponent: OpponentSelectionValue | null) {
+    setOpponentSelection(opponent);
+    setForm((prev) => ({
+      ...prev,
+      opponent_name: opponent?.name ?? "",
+      opponent_short_name: opponent?.short_name
+        ? normalizeManualShortName(opponent.short_name, 5) || ""
+        : "",
+    }));
   }
 
   function handleClose() {
@@ -156,6 +175,16 @@ export function GameFormModal({
       return;
     }
 
+    // Se foi seleccionado um opponent da entidade, escrever opponent_id no jogo
+    if (opponentSelection?.id) {
+      const gameId = payload.event.id as string;
+      await fetch(`/api/games/${gameId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ opponent_id: opponentSelection.id }),
+      }).catch(() => null);
+    }
+
     setSaving(false);
     onOpenChange(false);
     resetForm();
@@ -167,6 +196,7 @@ export function GameFormModal({
   const modalTitle = mode === "duplicate" ? "Duplicar jogo" : "Adicionar jogo";
   const submitLabel = mode === "duplicate" ? "Criar copia" : "Criar jogo";
   const showCompetitionSelect = !initialCompetitionId;
+  const canUseTypeahead = !!ageGroupId;
 
   return (
     <div
@@ -226,6 +256,23 @@ export function GameFormModal({
               onFieldChange={handleFieldChange}
               competitionOptions={competitionOptions}
               showCompetitionSelect={showCompetitionSelect}
+              renderOpponentField={
+                canUseTypeahead
+                  ? () => (
+                      <OpponentTypeahead
+                        ageGroupId={ageGroupId!}
+                        footballFormat={footballFormat ?? null}
+                        value={opponentSelection}
+                        onChange={handleOpponentChange}
+                        initialLegacyName={
+                          !opponentSelection && form.opponent_name
+                            ? form.opponent_name
+                            : null
+                        }
+                      />
+                    )
+                  : undefined
+              }
             />
 
             <EventImagePicker

@@ -6,6 +6,7 @@ import { normalizeManualShortName } from "@/lib/football/short-name";
 import { LocationFields } from "@/components/maps/LocationFields";
 import { NotesEditor } from "@/components/forms/NotesEditor";
 import { EventImagePicker } from "@/components/media/EventImagePicker";
+import { OpponentTypeahead } from "@/components/opponents/OpponentTypeahead";
 import type { Game } from "@/types/database";
 import type { GameEditorState } from "@/lib/hooks/useGameEditor";
 
@@ -71,14 +72,28 @@ export function GameEditModal({ game, error, editor }: GameEditModalProps) {
               <label className="text-sm font-medium text-slate-700">
                 Adversário *
               </label>
-              <input
-                type="text"
-                value={editor.editOpponent}
-                onChange={(e) => editor.setEditOpponent(e.target.value)}
-                placeholder="Nome do adversário"
-                required
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+              {game.age_group_id ? (
+                <OpponentTypeahead
+                  ageGroupId={game.age_group_id}
+                  footballFormat={null}
+                  value={editor.editOpponentSelection}
+                  onChange={editor.setEditOpponentFromTypeahead}
+                  initialLegacyName={
+                    !editor.editOpponentSelection && editor.editOpponent
+                      ? editor.editOpponent
+                      : null
+                  }
+                />
+              ) : (
+                <input
+                  type="text"
+                  value={editor.editOpponent}
+                  onChange={(e) => editor.setEditOpponent(e.target.value)}
+                  placeholder="Nome do adversário"
+                  required
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              )}
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-700">

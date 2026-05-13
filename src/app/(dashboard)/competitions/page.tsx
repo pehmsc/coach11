@@ -619,6 +619,7 @@ export default function CompetitionsPage() {
         ageGroupId={ageGroupId}
         teamId={teamId}
         initialCompetitionId={addingGameToCompId}
+        footballFormat={footballFormat}
         onSaved={handleGameSaved}
       />
 

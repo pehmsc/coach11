@@ -42,6 +42,13 @@ type Props = {
   competitionOptions?: GameCompetitionOption[];
   showCompetitionSelect?: boolean;
   compact?: boolean;
+  /**
+   * Se fornecido, substitui os inputs default de opponent_name + opponent_short_name
+   * por um nó custom (tipicamente o OpponentTypeahead). O caller é responsável
+   * por sincronizar `values.opponent_name` e `values.opponent_short_name` via
+   * `onFieldChange`.
+   */
+  renderOpponentField?: () => React.ReactNode;
 };
 
 function competitionLabel(option: GameCompetitionOption) {
@@ -57,6 +64,7 @@ export function GameFormFields({
   competitionOptions = [],
   showCompetitionSelect = true,
   compact = false,
+  renderOpponentField,
 }: Props) {
   const inputSizeClass = compact ? "text-sm h-8" : "text-sm";
   const gridClass = compact
@@ -84,33 +92,40 @@ export function GameFormFields({
         </div>
       )}
 
-      <div className={gridClass}>
+      {renderOpponentField ? (
         <div className="space-y-1">
           <Label className={compact ? "text-xs" : undefined}>Adversário *</Label>
-          <Input
-            value={values.opponent_name}
-            onChange={(event) => onFieldChange("opponent_name", event.target.value)}
-            placeholder="Nome do adversário"
-            required
-            className={inputSizeClass}
-          />
+          {renderOpponentField()}
         </div>
-        <div className="space-y-1">
-          <Label className={compact ? "text-xs" : undefined}>Sigla do adversário</Label>
-          <Input
-            value={values.opponent_short_name}
-            onChange={(event) =>
-              onFieldChange(
-                "opponent_short_name",
-                normalizeManualShortName(event.target.value, 5) || "",
-              )
-            }
-            placeholder="ex: SCP"
-            maxLength={5}
-            className={`${inputSizeClass} uppercase`}
-          />
+      ) : (
+        <div className={gridClass}>
+          <div className="space-y-1">
+            <Label className={compact ? "text-xs" : undefined}>Adversário *</Label>
+            <Input
+              value={values.opponent_name}
+              onChange={(event) => onFieldChange("opponent_name", event.target.value)}
+              placeholder="Nome do adversário"
+              required
+              className={inputSizeClass}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className={compact ? "text-xs" : undefined}>Sigla do adversário</Label>
+            <Input
+              value={values.opponent_short_name}
+              onChange={(event) =>
+                onFieldChange(
+                  "opponent_short_name",
+                  normalizeManualShortName(event.target.value, 5) || "",
+                )
+              }
+              placeholder="ex: SCP"
+              maxLength={5}
+              className={`${inputSizeClass} uppercase`}
+            />
+          </div>
         </div>
-      </div>
+      )}
 
       <div className={gridClass}>
         <div className="space-y-1">
