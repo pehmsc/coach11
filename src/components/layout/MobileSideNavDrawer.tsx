@@ -15,6 +15,7 @@ import {
   type NavProfile,
 } from "@/components/layout/nav-config";
 import { UserAvatar } from "@/components/layout/UserAvatar";
+import { ScopeToggle } from "@/components/navigation/ScopeToggle";
 import { cn } from "@/lib/utils";
 
 function getFocusableElements(container: HTMLElement | null) {
@@ -211,6 +212,8 @@ export function MobileSideNavDrawer({
             </button>
           </div>
         </div>
+
+        <ScopeToggle variant="sidebar" />
 
         <nav className="flex-1 overflow-y-auto px-3 py-4">
           <div className="space-y-1">
