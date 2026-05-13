@@ -13,12 +13,14 @@ import { isTrainingClosed } from "@/components/trainings/utils";
 import type { TrainingRow } from "@/components/trainings/types";
 import { useListStateSync } from "@/hooks/useListStateSync";
 import { useReturnTo } from "@/hooks/useReturnTo";
+import { useScrollRestoration } from "@/hooks/useScrollRestoration";
 
 type TabKey = "scheduled" | "closed";
 
 export default function TrainingsPage() {
   const router = useRouter();
   const { saveReturnTo } = useReturnTo("trainings");
+  useScrollRestoration("trainings");
   const data = useTrainingsData();
   const createForm = useTrainingForm();
 

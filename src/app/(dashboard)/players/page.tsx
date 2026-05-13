@@ -38,6 +38,7 @@ import { queryKeys } from "@/lib/query/keys";
 import type { Player, AgeGroup, PlayerStatus } from "@/types/database";
 import { useListStateSync } from "@/hooks/useListStateSync";
 import { useReturnTo } from "@/hooks/useReturnTo";
+import { useScrollRestoration } from "@/hooks/useScrollRestoration";
 
 const POSITIONS = ["GR", "DD", "DC", "DE", "MD", "MC", "MO", "ME", "AV", "EE", "ED", "SA"];
 
@@ -116,6 +117,7 @@ export default function PlayersPage() {
   const searchParams = useSearchParams();
   const ageGroupIdFromUrl = searchParams.get("ageGroupId");
   const { saveReturnTo } = useReturnTo("players");
+  useScrollRestoration("players");
 
   const [showForm, setShowForm] = useState(false);
   const [editingPlayer, setEditingPlayer] = useState<Player | null>(null);

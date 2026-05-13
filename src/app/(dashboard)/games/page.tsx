@@ -33,6 +33,7 @@ import {
 } from "@/lib/games/display";
 import { useListStateSync } from "@/hooks/useListStateSync";
 import { useReturnTo } from "@/hooks/useReturnTo";
+import { useScrollRestoration } from "@/hooks/useScrollRestoration";
 
 interface GameRow {
   id: string;
@@ -103,6 +104,7 @@ function groupByMonth(games: GameRow[]): { label: string; games: GameRow[] }[] {
 export default function GamesPage() {
   const router = useRouter();
   const { saveReturnTo } = useReturnTo("games");
+  useScrollRestoration("games");
   const [loading, setLoading] = useState(true);
   const [games, setGames] = useState<GameRow[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
