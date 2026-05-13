@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { Opponent } from "@/types/database";
+import { useReturnTo } from "@/hooks/useReturnTo";
 
 interface OpponentsTabProps {
   ageGroupId: string;
@@ -20,6 +21,7 @@ interface OpponentRow extends Opponent {
 
 export function OpponentsTab({ ageGroupId }: OpponentsTabProps) {
   const router = useRouter();
+  const { saveReturnTo } = useReturnTo("opponents");
   const [opponents, setOpponents] = useState<OpponentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -169,9 +171,10 @@ export function OpponentsTab({ ageGroupId }: OpponentsTabProps) {
               {filtered.map((o) => (
                 <tr
                   key={o.id}
-                  onClick={() =>
-                    router.push(`/teams/${ageGroupId}/opponents/${o.id}`)
-                  }
+                  onClick={() => {
+                    saveReturnTo();
+                    router.push(`/teams/${ageGroupId}/opponents/${o.id}`);
+                  }}
                   className="cursor-pointer hover:bg-slate-50"
                 >
                   <td className="px-3 py-2">

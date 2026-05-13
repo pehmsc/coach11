@@ -32,6 +32,7 @@ import {
   isClosedGameStatus,
 } from "@/lib/games/display";
 import { useListStateSync } from "@/hooks/useListStateSync";
+import { useReturnTo } from "@/hooks/useReturnTo";
 
 interface GameRow {
   id: string;
@@ -101,6 +102,7 @@ function groupByMonth(games: GameRow[]): { label: string; games: GameRow[] }[] {
 
 export default function GamesPage() {
   const router = useRouter();
+  const { saveReturnTo } = useReturnTo("games");
   const [loading, setLoading] = useState(true);
   const [games, setGames] = useState<GameRow[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -360,13 +362,14 @@ export default function GamesPage() {
                   key={game.id}
                   game={game}
                   onDuplicate={() => openDuplicateGame(game)}
-                  onClick={() =>
+                  onClick={() => {
+                    saveReturnTo();
                     router.push(
                       game.status === "completed"
                         ? `/games/${game.id}/summary`
                         : `/games/${game.id}`,
-                    )
-                  }
+                    );
+                  }}
                 />
               ))}
             </div>
@@ -407,13 +410,14 @@ export default function GamesPage() {
                           game={game}
                           className="border-slate-100 bg-slate-50 hover:border-slate-200"
                           onDuplicate={() => openDuplicateGame(game)}
-                          onClick={() =>
+                          onClick={() => {
+                            saveReturnTo();
                             router.push(
                               game.status === "completed"
                                 ? `/games/${game.id}/summary`
                                 : `/games/${game.id}`,
-                            )
-                          }
+                            );
+                          }}
                         />
                       ))}
                     </div>

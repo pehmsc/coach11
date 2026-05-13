@@ -12,11 +12,13 @@ import { DuplicateWeekDialog } from "@/components/trainings/DuplicateWeekDialog"
 import { isTrainingClosed } from "@/components/trainings/utils";
 import type { TrainingRow } from "@/components/trainings/types";
 import { useListStateSync } from "@/hooks/useListStateSync";
+import { useReturnTo } from "@/hooks/useReturnTo";
 
 type TabKey = "scheduled" | "closed";
 
 export default function TrainingsPage() {
   const router = useRouter();
+  const { saveReturnTo } = useReturnTo("trainings");
   const data = useTrainingsData();
   const createForm = useTrainingForm();
 
@@ -147,7 +149,10 @@ export default function TrainingsPage() {
         <TrainingSessionList
           sessions={displayedSessions}
           getSummary={data.getSummary}
-          onSessionClick={(session) => router.push(`/trainings/${session.id}`)}
+          onSessionClick={(session) => {
+            saveReturnTo();
+            router.push(`/trainings/${session.id}`);
+          }}
           onDuplicate={activeTab === "scheduled" ? openDuplicateTraining : undefined}
           variant={activeTab === "scheduled" ? "open" : "closed"}
         />

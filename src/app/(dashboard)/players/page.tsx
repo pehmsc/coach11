@@ -37,6 +37,7 @@ import { ApiFetchError, apiFetch } from "@/lib/http/apiFetch";
 import { queryKeys } from "@/lib/query/keys";
 import type { Player, AgeGroup, PlayerStatus } from "@/types/database";
 import { useListStateSync } from "@/hooks/useListStateSync";
+import { useReturnTo } from "@/hooks/useReturnTo";
 
 const POSITIONS = ["GR", "DD", "DC", "DE", "MD", "MC", "MO", "ME", "AV", "EE", "ED", "SA"];
 
@@ -114,6 +115,7 @@ export default function PlayersPage() {
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const ageGroupIdFromUrl = searchParams.get("ageGroupId");
+  const { saveReturnTo } = useReturnTo("players");
 
   const [showForm, setShowForm] = useState(false);
   const [editingPlayer, setEditingPlayer] = useState<Player | null>(null);
@@ -762,6 +764,7 @@ export default function PlayersPage() {
                     {/* Info — tap abre página de detalhe */}
                     <Link
                       href={`/players/${player.id}`}
+                      onClick={() => saveReturnTo()}
                       className="flex-1 min-w-0 -my-1 -ml-1 rounded-md py-1 pl-1 hover:bg-slate-50 transition-colors"
                     >
                       <p className="font-semibold text-slate-900 truncate">

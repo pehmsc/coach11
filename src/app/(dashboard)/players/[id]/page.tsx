@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { AlertCircle } from "lucide-react";
 import { StickyBackLink } from "@/components/navigation/StickyBackLink";
 import { Breadcrumb } from "@/components/navigation/Breadcrumb";
+import { getReturnTo } from "@/hooks/useReturnTo";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PlayerProfileHeader } from "@/components/players/profile/PlayerProfileHeader";
 import {
@@ -33,6 +34,7 @@ export default function PlayerDetailPage() {
   const [canEdit, setCanEdit] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [returnHref] = useState(() => getReturnTo("players", "/players"));
 
   useEffect(() => {
     let cancelled = false;
@@ -81,7 +83,7 @@ export default function PlayerDetailPage() {
   return (
     <div className="mx-auto max-w-2xl p-4 md:p-8">
       <StickyBackLink
-        href="/players"
+        href={returnHref}
         label="Voltar ao plantel"
         wrapperClassName="-mx-4 mb-4 bg-slate-50/95 px-4 py-2 md:-mx-8 md:px-8"
       >
