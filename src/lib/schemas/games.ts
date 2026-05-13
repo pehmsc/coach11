@@ -22,7 +22,6 @@ export const gameUpdateSchema = z
       .nullable()
       .optional(),
     location: z.string().trim().max(200).nullable().optional(),
-    location_address: z.string().trim().max(300).nullable().optional(),
     latitude: z.number().min(-90).max(90).nullable().optional(),
     longitude: z.number().min(-180).max(180).nullable().optional(),
     formatted_address: z.string().trim().max(300).nullable().optional(),

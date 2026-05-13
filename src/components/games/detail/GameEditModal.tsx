@@ -202,7 +202,6 @@ export function GameEditModal({ game, error, editor }: GameEditModalProps) {
               value={{
                 ...EMPTY_LOCATION_FIELDS,
                 location: editor.editLocation,
-                location_address: editor.editLocationAddress,
                 formatted_address: editor.editFormattedAddress,
                 latitude: editor.editLatitude,
                 longitude: editor.editLongitude,
@@ -211,7 +210,6 @@ export function GameEditModal({ game, error, editor }: GameEditModalProps) {
               }}
               onChange={(nextValue) => {
                 editor.setEditLocation(nextValue.location);
-                editor.setEditLocationAddress(nextValue.location_address);
                 editor.setEditFormattedAddress(nextValue.formatted_address);
                 editor.setEditLatitude(nextValue.latitude);
                 editor.setEditLongitude(nextValue.longitude);

@@ -203,7 +203,6 @@ export function useTrainingsData() {
       startTime: string;
       endTime: string;
       location: string;
-      locationAddress: string;
       formattedAddress: string;
       latitude: number | null;
       longitude: number | null;
@@ -236,7 +235,6 @@ export function useTrainingsData() {
             start_time: editFields.startTime,
             end_time: editFields.endTime || null,
             location: editFields.location.trim() || null,
-            location_address: editFields.locationAddress.trim() || null,
             formatted_address: editFields.formattedAddress.trim() || null,
             latitude: editFields.latitude,
             longitude: editFields.longitude,
@@ -305,7 +303,6 @@ export function useTrainingsData() {
             start_time: fields.startTime,
             end_time: fields.endTime || null,
             location: fields.location.trim() || null,
-            location_address: fields.locationAddress.trim() || null,
             formatted_address: fields.formattedAddress.trim() || null,
             latitude: fields.latitude,
             longitude: fields.longitude,

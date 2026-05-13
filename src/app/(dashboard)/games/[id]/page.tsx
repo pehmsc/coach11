@@ -122,7 +122,7 @@ export default function GameDetailPage() {
   const canEditConvocationContent = ces.canEditContent && !isLiveInProgress;
   const canEditKit = ces.baseEditable && !isLiveInProgress;
   const canConfirmConvocation = ces.canConfirm && !isLiveInProgress;
-  const gameLocationLabel = resolveLocationLabel(game.location, game.formatted_address, game.location_address);
+  const gameLocationLabel = resolveLocationLabel(game.location, game.formatted_address);
 
   return (
     <div className="p-4 md:p-8 max-w-2xl mx-auto">
@@ -141,11 +141,10 @@ export default function GameDetailPage() {
         onDelete={() => editor.setShowDeleteConfirm(true)}
       />
 
-      {(game.location || game.location_address || game.formatted_address ||
+      {(game.location || game.formatted_address ||
         (game.latitude != null && game.longitude != null)) && (
         <LocationMapPreview
           location={game.location}
-          locationAddress={game.location_address}
           formattedAddress={game.formatted_address}
           latitude={game.latitude}
           longitude={game.longitude}

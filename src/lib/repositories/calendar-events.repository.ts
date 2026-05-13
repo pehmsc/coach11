@@ -12,7 +12,6 @@ type TrainingWritePayload = {
   start_time: string;
   end_time: string | null | undefined;
   location: string | null | undefined;
-  location_address: string | null | undefined;
   formatted_address: string | null | undefined;
   latitude: number | null | undefined;
   longitude: number | null | undefined;
@@ -43,7 +42,6 @@ type GameWritePayload = {
   opponent_name: string | null | undefined;
   opponent_short_name: string | null | undefined;
   location: string | null | undefined;
-  location_address: string | null | undefined;
   formatted_address: string | null | undefined;
   latitude: number | null | undefined;
   longitude: number | null | undefined;
@@ -68,12 +66,12 @@ export async function getAgeGroupLabelById(
 // Perf: campos específicos — evitar transferir club_id, updated_at e outros
 // campos internos não usados pela UI do calendário.
 const TRAINING_SESSION_CALENDAR_FIELDS =
-  "id, age_group_id, team_id, title, ut_number, week_start_date, session_date, start_time, end_time, location, location_address, formatted_address, latitude, longitude, osm_place_id, location_source, notes, image_url, status, created_at";
+  "id, age_group_id, team_id, title, ut_number, week_start_date, session_date, start_time, end_time, location, formatted_address, latitude, longitude, osm_place_id, location_source, notes, image_url, status, created_at";
 
 // Perf: campos específicos — evitar transferir club_id e outros campos
 // internos não usados pela UI do calendário.
 const GAME_CALENDAR_FIELDS =
-  "id, age_group_id, team_id, competition_id, title, game_datetime, end_time, opponent_name, opponent_short_name, location, location_address, formatted_address, latitude, longitude, osm_place_id, location_source, is_home, notes, image_url, status, score_home, score_away, created_at";
+  "id, age_group_id, team_id, competition_id, title, game_datetime, end_time, opponent_name, opponent_short_name, location, formatted_address, latitude, longitude, osm_place_id, location_source, is_home, notes, image_url, status, score_home, score_away, created_at";
 
 export async function listTrainingSessionsInRange(
   db: CalendarDbClient,

@@ -16,7 +16,6 @@ type Size = "default" | "compact";
 
 type Props = {
   location?: string | null;
-  locationAddress?: string | null;
   formattedAddress?: string | null;
   latitude?: number | null;
   longitude?: number | null;
@@ -66,7 +65,6 @@ function resolveVariantClasses(variant: Variant, accent: Accent, size: Size) {
 
 export function OpenMapsButton({
   location,
-  locationAddress,
   formattedAddress,
   latitude,
   longitude,
@@ -95,21 +93,18 @@ export function OpenMapsButton({
 
   const googleUrl = buildGoogleMapsUrl({
     location,
-    locationAddress,
     formattedAddress,
     latitude,
     longitude,
   });
   const appleUrl = buildAppleMapsUrl({
     location,
-    locationAddress,
     formattedAddress,
     latitude,
     longitude,
   });
   const wazeUrl = buildWazeUrl({
     location,
-    locationAddress,
     formattedAddress,
     latitude,
     longitude,

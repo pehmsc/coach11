@@ -27,7 +27,6 @@ export function TrainingSessionCard({
   const locationLabel = resolveLocationLabel(
     session.location,
     session.formatted_address,
-    session.location_address,
   );
   const displayTitle = getTrainingDisplayTitle(session);
 

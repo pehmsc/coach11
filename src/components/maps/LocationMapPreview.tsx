@@ -15,14 +15,12 @@ type MapLocationChange = {
   latitude: number;
   longitude: number;
   formattedAddress?: string | null;
-  locationAddress?: string | null;
   osmPlaceId?: string | null;
   locationSource?: "google" | "osm" | "manual" | null;
 };
 
 type Props = {
   location?: string | null;
-  locationAddress?: string | null;
   formattedAddress?: string | null;
   latitude?: number | null;
   longitude?: number | null;
@@ -142,7 +140,6 @@ function formatCoordinate(value: number) {
 
 export function LocationMapPreview({
   location,
-  locationAddress,
   formattedAddress,
   latitude,
   longitude,
@@ -174,7 +171,7 @@ export function LocationMapPreview({
     return normalized || null;
   }, [location]);
 
-  const addressQuery = resolveFormattedAddress(formattedAddress, locationAddress);
+  const addressQuery = resolveFormattedAddress(formattedAddress);
   const resolvedLocation = useMemo(() => {
     if (hasCoordinates({ latitude, longitude })) {
       return {
@@ -193,7 +190,6 @@ export function LocationMapPreview({
 
   const resolvedAddress = resolveFormattedAddress(
     resolvedLocation?.formattedAddress ?? formattedAddress,
-    locationAddress,
   );
 
   useEffect(() => {
@@ -351,7 +347,6 @@ export function LocationMapPreview({
         latitude: normalizedLatitude,
         longitude: normalizedLongitude,
         formattedAddress: resolvedAddress,
-        locationAddress: resolvedAddress,
         osmPlaceId: "",
         locationSource: "manual",
       });
@@ -370,11 +365,10 @@ export function LocationMapPreview({
           onLocationChange?.({
             latitude: normalizedLatitude,
             longitude: normalizedLongitude,
-          formattedAddress: nextAddress,
-          locationAddress: nextAddress,
-          osmPlaceId: "",
-          locationSource: "manual",
-        });
+            formattedAddress: nextAddress,
+            osmPlaceId: "",
+            locationSource: "manual",
+          });
       } catch {
         // Ignore reverse lookup failures; the coordinates are still valid.
       } finally {
@@ -524,7 +518,6 @@ export function LocationMapPreview({
         {showDirectionsButton ? (
           <OpenMapsButton
             location={locationTitle}
-            locationAddress={resolvedAddress}
             formattedAddress={resolvedAddress}
             latitude={resolvedLocation?.latitude ?? latitude}
             longitude={resolvedLocation?.longitude ?? longitude}

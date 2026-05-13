@@ -2,7 +2,6 @@ export type LocationSource = "google" | "osm" | "manual";
 
 export type LocationFieldsValue = {
   location: string;
-  location_address: string;
   formatted_address: string;
   latitude: number | null;
   longitude: number | null;
@@ -12,7 +11,6 @@ export type LocationFieldsValue = {
 
 export const EMPTY_LOCATION_FIELDS: LocationFieldsValue = {
   location: "",
-  location_address: "",
   formatted_address: "",
   latitude: null,
   longitude: null,
@@ -22,7 +20,6 @@ export const EMPTY_LOCATION_FIELDS: LocationFieldsValue = {
 
 export type LocationRecordLike = Partial<LocationFieldsValue> & {
   location?: string | null;
-  location_address?: string | null;
   formatted_address?: string | null;
   latitude?: number | null;
   longitude?: number | null;
@@ -59,26 +56,20 @@ export function hasCoordinates(value: {
 
 export function resolveFormattedAddress(
   formattedAddress: string | null | undefined,
-  locationAddress: string | null | undefined,
 ) {
   const formatted =
     typeof formattedAddress === "string" ? formattedAddress.trim() : "";
-  if (formatted) return formatted;
-
-  const manualAddress =
-    typeof locationAddress === "string" ? locationAddress.trim() : "";
-  return manualAddress || null;
+  return formatted || null;
 }
 
 export function resolveLocationLabel(
   location: string | null | undefined,
   formattedAddress: string | null | undefined,
-  locationAddress: string | null | undefined,
 ) {
   const locationLabel = typeof location === "string" ? location.trim() : "";
   if (locationLabel) return locationLabel;
 
-  return resolveFormattedAddress(formattedAddress, locationAddress);
+  return resolveFormattedAddress(formattedAddress);
 }
 
 export function coerceLocationFields(
@@ -86,8 +77,6 @@ export function coerceLocationFields(
 ): LocationFieldsValue {
   return {
     location: typeof value?.location === "string" ? value.location : "",
-    location_address:
-      typeof value?.location_address === "string" ? value.location_address : "",
     formatted_address:
       typeof value?.formatted_address === "string" ? value.formatted_address : "",
     latitude: normalizeNullableNumber(value?.latitude),

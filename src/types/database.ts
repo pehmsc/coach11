@@ -134,7 +134,6 @@ export interface TrainingSession {
   start_time: string;
   end_time?: string;
   location?: string;
-  location_address?: string;
   formatted_address?: string;
   latitude?: number | null;
   longitude?: number | null;
@@ -166,7 +165,6 @@ export interface Game {
   opponent_short_name?: string;
   opponent_id?: string;
   location?: string;
-  location_address?: string;
   formatted_address?: string;
   latitude?: number | null;
   longitude?: number | null;

@@ -9,7 +9,6 @@ export type WeeklyDuplicationSourceSession = {
   start_time?: string | null;
   end_time?: string | null;
   location?: string | null;
-  location_address?: string | null;
   formatted_address?: string | null;
   latitude?: number | null;
   longitude?: number | null;
@@ -30,7 +29,6 @@ export type WeeklyDuplicatedTrainingInsert = {
   start_time: string;
   end_time: string | null;
   location: string | null;
-  location_address: string | null;
   formatted_address: string | null;
   latitude: number | null;
   longitude: number | null;
@@ -79,7 +77,6 @@ export function buildWeeklyDuplicatedTrainings({
         start_time: sourceSession.start_time || "00:00",
         end_time: sourceSession.end_time ?? null,
         location: sourceSession.location ?? null,
-        location_address: sourceSession.location_address ?? null,
         formatted_address: sourceSession.formatted_address ?? null,
         latitude: sourceSession.latitude ?? null,
         longitude: sourceSession.longitude ?? null,

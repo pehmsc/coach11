@@ -116,14 +116,12 @@ export function CalendarDayRow({
                     {resolveLocationLabel(
                       event.location,
                       event.formatted_address,
-                      event.location_address,
                     ) && (
                       <span className="text-xs text-slate-400 flex items-center gap-0.5 truncate">
                         <MapPin size={10} />
                         {resolveLocationLabel(
                           event.location,
                           event.formatted_address,
-                          event.location_address,
                         )}
                       </span>
                     )}

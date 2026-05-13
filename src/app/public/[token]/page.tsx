@@ -33,7 +33,6 @@ type PublicGameRow = {
   opponent_name: string | null;
   opponent_short_name: string | null;
   location: string | null;
-  location_address: string | null;
   formatted_address: string | null;
   is_home: boolean;
   status: string | null;
@@ -49,7 +48,6 @@ type PublicTrainingRow = {
   start_time: string | null;
   end_time: string | null;
   location: string | null;
-  location_address: string | null;
   formatted_address: string | null;
   status: string | null;
 };
@@ -288,7 +286,7 @@ const getPublicCalendarPayload = unstable_cache(
       admin
         .from("games")
         .select(
-          "id, game_datetime, opponent_name, opponent_short_name, location, location_address, formatted_address, is_home, status, score_home, score_away",
+          "id, game_datetime, opponent_name, opponent_short_name, location, formatted_address, is_home, status, score_home, score_away",
         )
         .eq("age_group_id", ageGroupId)
         .in("status", [...PUBLIC_CURRENT_GAME_STATUSES])
@@ -297,7 +295,7 @@ const getPublicCalendarPayload = unstable_cache(
       admin
         .from("training_sessions")
         .select(
-          "id, title, session_date, start_time, end_time, location, location_address, formatted_address, status",
+          "id, title, session_date, start_time, end_time, location, formatted_address, status",
         )
         .eq("age_group_id", ageGroupId)
         .gte("session_date", todayIsoDate)
@@ -307,7 +305,7 @@ const getPublicCalendarPayload = unstable_cache(
       admin
         .from("games")
         .select(
-          "id, game_datetime, opponent_name, opponent_short_name, location, location_address, formatted_address, is_home, status, score_home, score_away",
+          "id, game_datetime, opponent_name, opponent_short_name, location, formatted_address, is_home, status, score_home, score_away",
         )
         .eq("age_group_id", ageGroupId)
         .in("status", [...PUBLIC_RECENT_RESULT_STATUSES])
@@ -366,7 +364,6 @@ export default async function PublicCalendarPage({ params }: PublicPageParams) {
       location: resolveLocationLabel(
         game.location,
         game.formatted_address,
-        game.location_address,
       ),
       status: game.status,
       href: `/public/${access.identifier}/games/${buildPublicGameRef(access.identifier, game.id)}`,
@@ -386,7 +383,6 @@ export default async function PublicCalendarPage({ params }: PublicPageParams) {
         location: resolveLocationLabel(
           training.location,
           training.formatted_address,
-          training.location_address,
         ),
         status: training.status,
         href: `/public/${access.identifier}/trainings/${buildPublicTrainingRef(access.identifier, training.id)}`,

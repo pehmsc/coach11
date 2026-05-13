@@ -88,8 +88,8 @@ export function GameHeader({
           </span>
         )}
       </div>
-      {game.location_address && game.location_address !== gameLocationLabel && (
-        <p className="mt-2 text-sm text-blue-100/90">{game.location_address}</p>
+      {game.formatted_address && game.formatted_address !== gameLocationLabel && (
+        <p className="mt-2 text-sm text-blue-100/90">{game.formatted_address}</p>
       )}
     </div>
   );

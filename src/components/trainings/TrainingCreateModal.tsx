@@ -85,7 +85,6 @@ export function TrainingCreateModal({
               endTime={form.endTime}
               onEndTimeChange={form.setEndTime}
               location={form.location}
-              locationAddress={form.locationAddress}
               formattedAddress={form.formattedAddress}
               latitude={form.latitude}
               longitude={form.longitude}
@@ -93,7 +92,6 @@ export function TrainingCreateModal({
               locationSource={form.locationSource}
               onLocationChange={(nextValue) => {
                 form.setLocation(nextValue.location);
-                form.setLocationAddress(nextValue.location_address);
                 form.setFormattedAddress(nextValue.formatted_address);
                 form.setLatitude(nextValue.latitude);
                 form.setLongitude(nextValue.longitude);
