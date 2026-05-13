@@ -40,6 +40,7 @@ import type { AgeGroup, Player, FootballFormat } from "@/types/database";
 import { AGE_GROUP_STAFF_ROLE_LABELS, getStaffRoleLabel } from "@/lib/team/staff-role";
 import { PermissionsGrid, type PermissionsMap, templateToPermissions } from "@/components/staff/PermissionsGrid";
 import { OpponentsTab } from "@/components/opponents/OpponentsTab";
+import { TeamHub } from "@/components/team-hub/TeamHub";
 
 // Lista completa para o modal de convite de staff no escalão.
 // Inclui age_group_coordinator (não está em AGE_GROUP_STAFF_ROLE_LABELS).
@@ -110,129 +111,7 @@ interface GameRow {
   score_away?: number | null;
 }
 
-interface TrainingRow {
-  id: string;
-  session_date: string;
-  start_time: string;
-  end_time?: string | null;
-  title?: string | null;
-  status: string;
-}
-
 type PageParams = { ageGroupId: string };
-
-// ─── Gráfico pizza SVG interactivo ───────────────────────────────────────────
-
-function InteractivePieChart({
-  slices,
-}: {
-  slices: { color: string; pct: number; label: string; count: number }[];
-}) {
-  const [activeIdx, setActiveIdx] = useState<number | null>(null);
-  const radius = 42;
-  const cx = 50;
-  const cy = 50;
-  const toRad = (deg: number) => (deg * Math.PI) / 180;
-
-  const filtered = slices.filter((s) => s.pct > 0);
-  const total = slices.reduce((a, s) => a + s.count, 0);
-
-  const paths = filtered.reduce<
-    { d: string; color: string; origIdx: number; key: number }[]
-  >((acc, slice, i) => {
-    const cum = acc.reduce((s, _, j) => s + filtered[j].pct, 0);
-    const startAngle = cum * 3.6 - 90;
-    const endAngle = (cum + slice.pct) * 3.6 - 90;
-    const x1 = cx + radius * Math.cos(toRad(startAngle));
-    const y1 = cy + radius * Math.sin(toRad(startAngle));
-    const x2 = cx + radius * Math.cos(toRad(endAngle));
-    const y2 = cy + radius * Math.sin(toRad(endAngle));
-    const largeArc = slice.pct > 50 ? 1 : 0;
-    const origIdx = slices.indexOf(slice);
-    acc.push({
-      d: `M ${cx} ${cy} L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2} Z`,
-      color: slice.color,
-      origIdx,
-      key: i,
-    });
-    return acc;
-  }, []);
-
-  const activeSlice = activeIdx !== null ? slices[activeIdx] : null;
-
-  return (
-    <div className="flex flex-col items-center gap-2">
-      <div className="relative">
-        <svg
-          viewBox="0 0 100 100"
-          className="w-24 h-24 cursor-pointer"
-          onMouseLeave={() => setActiveIdx(null)}
-        >
-          {filtered.length === 0 ? (
-            <circle cx={cx} cy={cy} r={radius} fill="#e2e8f0" />
-          ) : (
-            paths.map((p) => (
-              <path
-                key={p.key}
-                d={p.d}
-                fill={p.color}
-                opacity={activeIdx === null || activeIdx === p.origIdx ? 1 : 0.45}
-                style={{ transition: "opacity 0.15s" }}
-                onMouseEnter={() => setActiveIdx(p.origIdx)}
-                onClick={() =>
-                  setActiveIdx((prev) => (prev === p.origIdx ? null : p.origIdx))
-                }
-              />
-            ))
-          )}
-        </svg>
-      </div>
-
-      {/* Tooltip inline */}
-      <div className="h-8 flex items-center">
-        {activeSlice ? (
-          <div
-            className="flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-medium text-white shadow-md"
-            style={{ backgroundColor: activeSlice.color }}
-          >
-            <span>{activeSlice.label}</span>
-            <span>·</span>
-            <span>{activeSlice.count}</span>
-            <span>({total > 0 ? ((activeSlice.count / total) * 100).toFixed(1) : 0}%)</span>
-          </div>
-        ) : (
-          <p className="text-[11px] text-slate-400 italic">Toca para ver detalhes</p>
-        )}
-      </div>
-
-      {/* Legenda — apenas cor + nome, sem contagem (tooltip já mostra tudo) */}
-      <div className="flex flex-wrap justify-center gap-x-3 gap-y-1">
-        {slices.map((s) => (
-          <div key={s.label} className="flex items-center gap-1.5 text-xs">
-            <span className="h-2.5 w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} />
-            <span className="text-slate-600">{s.label}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ─── Calendário semanal ───────────────────────────────────────────────────────
-
-function getWeekDates(referenceDate: Date): Date[] {
-  const monday = new Date(referenceDate);
-  const day = monday.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  monday.setDate(monday.getDate() + diff);
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + i);
-    return d;
-  });
-}
-
-const DAY_LABELS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
@@ -258,23 +137,12 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
   const [sendingStaffInvite, setSendingStaffInvite] = useState(false);
   const [players, setPlayers] = useState<Player[]>([]);
   const [staff, setStaff] = useState<StaffMember[]>([]);
-  const [weekTrainings, setWeekTrainings] = useState<TrainingRow[]>([]);
-  const [weekGames, setWeekGames] = useState<GameRow[]>([]);
-  const [upcomingGames, setUpcomingGames] = useState<GameRow[]>([]);
-  const [attendanceStats, setAttendanceStats] = useState<Record<string, number>>({});
-  const [completedTrainings, setCompletedTrainings] = useState(0);
-  const [gameResults, setGameResults] = useState({ wins: 0, draws: 0, losses: 0, total: 0 });
-  const [gameMetrics, setGameMetrics] = useState({ goalsFor: 0, goalsAgainst: 0, yellowCards: 0, redCards: 0 });
-  const [recentForm, setRecentForm] = useState<("W" | "D" | "L")[]>([]);
-
-  // Week navigation
-  const [weekOffset, setWeekOffset] = useState(0);
-  const today = useMemo(() => new Date(), []);
-  const weekDates = useMemo(() => {
-    const ref = new Date(today);
-    ref.setDate(today.getDate() + weekOffset * 7);
-    return getWeekDates(ref);
-  }, [today, weekOffset]);
+  const [, setUpcomingGames] = useState<GameRow[]>([]);
+  const [, setAttendanceStats] = useState<Record<string, number>>({});
+  const [, setCompletedTrainings] = useState(0);
+  const [, setGameResults] = useState({ wins: 0, draws: 0, losses: 0, total: 0 });
+  const [, setGameMetrics] = useState({ goalsFor: 0, goalsAgainst: 0, yellowCards: 0, redCards: 0 });
+  const [, setRecentForm] = useState<("W" | "D" | "L")[]>([]);
 
   // Configurações tab — tactical
   const [tacticalSystem, setTacticalSystem] = useState("");
@@ -300,11 +168,6 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
     void loadAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ageGroupId]);
-
-  useEffect(() => {
-    void loadWeekEvents();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ageGroupId, weekDates]);
 
   async function loadAll() {
     setLoading(true);
@@ -480,30 +343,6 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
     setLoading(false);
   }
 
-  // Bug 5 — Calendário: usar game_datetime (não scheduled_at)
-  async function loadWeekEvents() {
-    if (!ageGroupId) return;
-    const start = weekDates[0].toISOString().split("T")[0];
-    const end = weekDates[6].toISOString().split("T")[0];
-
-    const [{ data: trainings }, { data: games }] = await Promise.all([
-      supabase
-        .from("training_sessions")
-        .select("id, session_date, start_time, end_time, title, status")
-        .eq("age_group_id", ageGroupId)
-        .gte("session_date", start)
-        .lte("session_date", end),
-      supabase
-        .from("games")
-        .select("id, game_datetime, opponent_name, is_home, status, competition_id, title")
-        .eq("age_group_id", ageGroupId)
-        .gte("game_datetime", `${start}T00:00:00`)
-        .lte("game_datetime", `${end}T23:59:59`),
-    ]);
-    setWeekTrainings((trainings ?? []) as TrainingRow[]);
-    setWeekGames((games ?? []) as GameRow[]);
-  }
-
   async function handleTacticalSave(system: string) {
     if (!ageGroup || !canManage) return;
     setSavingTactical(true);
@@ -649,24 +488,6 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
     { id: "adversarios", label: "Adversários", icon: Swords },
   ];
 
-  // Performance — presenças (Fix 2: estados e cores correctos)
-  const attTotal = Object.values(attendanceStats).reduce((a, b) => a + b, 0);
-  const getAttCount = (status: string) => attendanceStats[status] ?? 0;
-  const attSlices = [
-    { color: "#22c55e", label: "Presente", status: "present", pct: attTotal > 0 ? (getAttCount("present") / attTotal) * 100 : 0, count: getAttCount("present") },
-    { color: "#ef4444", label: "Ausente", status: "absent", pct: attTotal > 0 ? (getAttCount("absent") / attTotal) * 100 : 0, count: getAttCount("absent") },
-    { color: "#f59e0b", label: "Atrasado", status: "late", pct: attTotal > 0 ? (getAttCount("late") / attTotal) * 100 : 0, count: getAttCount("late") },
-    { color: "#f97316", label: "Lesionado", status: "injured", pct: attTotal > 0 ? (getAttCount("injured") / attTotal) * 100 : 0, count: getAttCount("injured") },
-  ];
-
-  // Performance — jogos
-  const gTotal = gameResults.total;
-  const gameSlices = [
-    { color: "#22c55e", label: "Vitórias", pct: gTotal > 0 ? (gameResults.wins / gTotal) * 100 : 0, count: gameResults.wins },
-    { color: "#94a3b8", label: "Empates", pct: gTotal > 0 ? (gameResults.draws / gTotal) * 100 : 0, count: gameResults.draws },
-    { color: "#ef4444", label: "Derrotas", pct: gTotal > 0 ? (gameResults.losses / gTotal) * 100 : 0, count: gameResults.losses },
-  ];
-
   return (
     <div className="min-h-screen bg-slate-50">
 
@@ -772,307 +593,10 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
 
         {/* ─── TAB GERAL ─────────────────────────────────────────────────── */}
         {tab === "geral" && (
-          <div className="space-y-5">
-
-            {/* Calendário semanal */}
-            <Card>
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base">Calendário semanal</CardTitle>
-                  <div className="flex items-center gap-1">
-                    <Button variant="ghost" size="icon" onClick={() => setWeekOffset((o) => o - 1)}>
-                      <ChevronLeft size={16} />
-                    </Button>
-                    <span className="text-xs text-slate-500 px-1 whitespace-nowrap">
-                      {weekDates[0].getDate()}/{weekDates[0].getMonth() + 1} –{" "}
-                      {weekDates[6].getDate()}/{weekDates[6].getMonth() + 1}
-                    </span>
-                    <Button variant="ghost" size="icon" onClick={() => setWeekOffset((o) => o + 1)}>
-                      <ChevronRight size={16} />
-                    </Button>
-                    {weekOffset !== 0 && (
-                      <Button variant="ghost" size="sm" className="text-xs" onClick={() => setWeekOffset(0)}>
-                        Hoje
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div className="grid grid-cols-7 gap-1">
-                  {weekDates.map((date, i) => {
-                    const dateStr = date.toISOString().split("T")[0];
-                    const isToday = dateStr === today.toISOString().split("T")[0];
-                    const dayTrainings = weekTrainings.filter((t) => t.session_date === dateStr);
-                    // Bug 5 — comparar com game_datetime (não scheduled_at)
-                    const dayGames = weekGames.filter(
-                      (g) => typeof g.game_datetime === "string" && g.game_datetime.startsWith(dateStr),
-                    );
-
-                    return (
-                      <div
-                        key={dateStr}
-                        className={`rounded-lg p-1.5 min-h-[80px] ${isToday ? "bg-emerald-50 border border-emerald-200" : "bg-slate-50"}`}
-                      >
-                        <p className={`text-[10px] font-medium mb-1 ${isToday ? "text-emerald-700" : "text-slate-400"}`}>
-                          {DAY_LABELS[i]}
-                          <br />
-                          <span className={`text-[11px] ${isToday ? "text-emerald-800 font-bold" : "text-slate-600"}`}>
-                            {date.getDate()}
-                          </span>
-                        </p>
-                        {dayTrainings.map((t) => (
-                          <Link key={t.id} href="/trainings">
-                            <div className="text-[9px] bg-emerald-100 text-emerald-800 rounded px-1 py-0.5 mb-0.5 leading-tight truncate">
-                              {t.title || "Treino"} {t.start_time?.slice(0, 5)}
-                            </div>
-                          </Link>
-                        ))}
-                        {dayGames.map((g) => (
-                          <Link key={g.id} href={`/games/${g.id}`}>
-                            <div className="text-[9px] bg-blue-100 text-blue-800 rounded px-1 py-0.5 mb-0.5 leading-tight truncate">
-                              {g.opponent_name ? (g.is_home ? "Casa" : "Fora") : "Jogo"}
-                              {g.game_datetime
-                                ? ` ${new Date(g.game_datetime).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })}`
-                                : ""}
-                            </div>
-                          </Link>
-                        ))}
-                      </div>
-                    );
-                  })}
-                </div>
-                <div className="flex justify-end mt-2">
-                  <Link href="/calendar" className="text-xs text-emerald-600 hover:underline">
-                    Agenda completa →
-                  </Link>
-                </div>
-              </CardContent>
-            </Card>
-
-            <div className="grid md:grid-cols-2 gap-5">
-              {/* Microciclo (placeholder) */}
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">Microciclo</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2 text-sm">
-                    {[
-                      ["Microciclo nº", "—"],
-                      ["Início", "—"],
-                      ["Fim", "—"],
-                      ["Objectivo", "—"],
-                      ["Período", "—"],
-                    ].map(([label, value]) => (
-                      <div key={label} className="flex justify-between">
-                        <span className="text-slate-400">{label}</span>
-                        <span className="text-slate-600">{value}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <p className="text-xs text-slate-400 mt-3">Planeamento disponível em breve.</p>
-                </CardContent>
-              </Card>
-
-              {/* Próximos Jogos — Bug 6 */}
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">Próximos Jogos</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {upcomingGames.length === 0 ? (
-                    <p className="text-sm text-slate-400">Sem jogos agendados.</p>
-                  ) : (
-                    <div className="space-y-3">
-                      {upcomingGames.map((g) => {
-                        const dt = g.game_datetime ? new Date(g.game_datetime) : null;
-                        return (
-                          <Link key={g.id} href={`/games/${g.id}`}>
-                            <div className="flex items-start gap-3 p-2 rounded-lg hover:bg-slate-50 -mx-2">
-                              <div
-                                className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
-                                  g.is_home
-                                    ? "bg-emerald-100 text-emerald-700"
-                                    : "bg-slate-100 text-slate-600"
-                                }`}
-                              >
-                                {g.is_home ? "C" : "F"}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-slate-800 truncate">
-                                  {g.opponent_name ?? g.title ?? "—"}
-                                </p>
-                                {dt && (
-                                  <p className="text-xs text-slate-400">
-                                    {dt.toLocaleDateString("pt-PT")} ·{" "}
-                                    {dt.toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })}
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                          </Link>
-                        );
-                      })}
-                    </div>
-                  )}
-                  <div className="mt-3">
-                    <Link href="/games" className="text-xs text-emerald-600 hover:underline">
-                      Ver todos os jogos →
-                    </Link>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Performance */}
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Performance esta época</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid sm:grid-cols-2 gap-8">
-                  {/* Treinos */}
-                  <div>
-                    <p className="text-sm font-semibold text-slate-700 mb-1 text-center">
-                      Treinos concluídos: {completedTrainings}
-                    </p>
-                    {attTotal === 0 ? (
-                      <p className="text-xs text-slate-400 text-center mt-4">Sem dados de presenças.</p>
-                    ) : (
-                      <>
-                        <InteractivePieChart slices={attSlices} />
-                        <div className="mt-3 space-y-1 text-xs text-slate-600">
-                          <div className="flex justify-between">
-                            <span>Assiduidade</span>
-                            <span className="font-semibold text-slate-800">
-                              {attTotal > 0 ? ((getAttCount("present") / attTotal) * 100).toFixed(1) : 0}%
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>Ausências</span>
-                            <span className="font-semibold text-slate-800">
-                              {attTotal > 0 ? ((getAttCount("absent") / attTotal) * 100).toFixed(1) : 0}%
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>Atrasos</span>
-                            <span className="font-semibold text-slate-800">
-                              {attTotal > 0 ? ((getAttCount("late") / attTotal) * 100).toFixed(1) : 0}%
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>Lesões</span>
-                            <span className="font-semibold text-slate-800">
-                              {attTotal > 0 ? ((getAttCount("injured") / attTotal) * 100).toFixed(1) : 0}%
-                            </span>
-                          </div>
-                        </div>
-                      </>
-                    )}
-                  </div>
-
-                  {/* Jogos */}
-                  <div>
-                    <p className="text-sm font-semibold text-slate-700 mb-1 text-center">
-                      Jogos concluídos: {gTotal}
-                    </p>
-                    {gTotal === 0 ? (
-                      <p className="text-xs text-slate-400 text-center mt-4">Sem jogos concluídos.</p>
-                    ) : (
-                      <>
-                        <InteractivePieChart slices={gameSlices} />
-
-                        {/* Métricas — Forma como primeira linha */}
-                        <div className="mt-3 space-y-1 text-xs text-slate-600">
-                          {recentForm.length > 0 && (
-                            <div className="flex items-center justify-between">
-                              <span>Forma</span>
-                              <div className="flex items-center gap-1 flex-shrink-0">
-                                {recentForm.map((r, i) => (
-                                  <span
-                                    key={i}
-                                    className={`inline-flex h-6 w-6 items-center justify-center rounded text-[11px] font-bold text-white flex-shrink-0 ${
-                                      r === "W" ? "bg-emerald-500" : r === "D" ? "bg-slate-400" : "bg-red-500"
-                                    }`}
-                                  >
-                                    {r === "W" ? "V" : r === "D" ? "E" : "D"}
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                          <div className="flex justify-between">
-                            <span>Golos marcados</span>
-                            <span className="font-semibold text-slate-800">
-                              {gameMetrics.goalsFor}
-                              {gTotal > 0 && (
-                                <span className="font-normal text-slate-400 ml-1">
-                                  ({(gameMetrics.goalsFor / gTotal).toFixed(2)} G/J)
-                                </span>
-                              )}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>Golos sofridos</span>
-                            <span className="font-semibold text-slate-800">
-                              {gameMetrics.goalsAgainst}
-                              {gTotal > 0 && (
-                                <span className="font-normal text-slate-400 ml-1">
-                                  ({(gameMetrics.goalsAgainst / gTotal).toFixed(2)} G/J)
-                                </span>
-                              )}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>Cartão amarelo</span>
-                            <span className="font-semibold text-slate-800">
-                              {gameMetrics.yellowCards}
-                              {gTotal > 0 && (
-                                <span className="font-normal text-slate-400 ml-1">
-                                  ({(gameMetrics.yellowCards / gTotal).toFixed(2)} /J)
-                                </span>
-                              )}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>Cartão vermelho</span>
-                            <span className="font-semibold text-slate-800">
-                              {gameMetrics.redCards}
-                              {gTotal > 0 && (
-                                <span className="font-normal text-slate-400 ml-1">
-                                  ({(gameMetrics.redCards / gTotal).toFixed(2)} /J)
-                                </span>
-                              )}
-                            </span>
-                          </div>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Quick links */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {[
-                { label: "Ver jogos", href: "/games" },
-                { label: "Ver treinos", href: "/trainings" },
-                { label: "Estatísticas", href: "/statistics" },
-                { label: "Plantel", href: "/players" },
-                { label: "Calendário", href: "/calendar" },
-                { label: "Staff", href: "/staff" },
-              ].map((link) => (
-                <Link key={link.href} href={link.href}>
-                  <div className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-700 hover:border-emerald-300 hover:bg-emerald-50 transition-colors">
-                    {link.label}
-                    <ChevronRight size={14} className="text-slate-400" />
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </div>
+          <TeamHub
+            ageGroupId={ageGroupId}
+            onChangeTab={(t) => setTab(t)}
+          />
         )}
 
         {/* ─── TAB ATLETAS ──────────────────────────────────────────────── */}
