@@ -23,6 +23,10 @@ import {
 } from "@/components/games/game-form-fields";
 import { LocationFields } from "@/components/maps/LocationFields";
 import { resolveLocationLabel } from "@/lib/location";
+import {
+  OpponentTypeahead,
+  type OpponentSelectionValue,
+} from "@/components/opponents/OpponentTypeahead";
 import type { CalEvent, ModalMode, EventForm } from "./types";
 
 interface CalendarEventModalProps {
@@ -52,6 +56,9 @@ interface CalendarEventModalProps {
     value: SharedGameFormValues[keyof SharedGameFormValues],
   ) => void;
   onAttendanceCorrection: () => void;
+  opponentSelection: OpponentSelectionValue | null;
+  onOpponentSelectionChange: (opponent: OpponentSelectionValue | null) => void;
+  footballFormat?: string | null;
 }
 
 export function CalendarEventModal({
@@ -78,6 +85,9 @@ export function CalendarEventModal({
   onViewScreen,
   onGameFieldChange,
   onAttendanceCorrection,
+  opponentSelection,
+  onOpponentSelectionChange,
+  footballFormat = null,
 }: CalendarEventModalProps) {
   return (
     <div
@@ -215,6 +225,19 @@ export function CalendarEventModal({
                   onFieldChange={onGameFieldChange}
                   competitionOptions={competitionOptions}
                   showCompetitionSelect
+                  renderOpponentField={() => (
+                    <OpponentTypeahead
+                      ageGroupId={ageGroupId}
+                      footballFormat={footballFormat}
+                      value={opponentSelection}
+                      onChange={onOpponentSelectionChange}
+                      initialLegacyName={
+                        !opponentSelection && form.opponent_name
+                          ? form.opponent_name
+                          : null
+                      }
+                    />
+                  )}
                 />
               )}
 

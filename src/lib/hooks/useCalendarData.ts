@@ -120,6 +120,8 @@ export function useCalendarData() {
           typeof g.end_time === "string"
             ? normalizeTimeValue(g.end_time) || undefined
             : undefined,
+        opponent_id:
+          typeof g.opponent_id === "string" ? g.opponent_id : undefined,
         opponent_name:
           typeof g.opponent_name === "string" ? g.opponent_name : undefined,
         opponent_short_name:

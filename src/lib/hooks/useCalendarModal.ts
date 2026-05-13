@@ -7,6 +7,7 @@ import {
   normalizeManualShortName,
 } from "@/lib/football/short-name";
 import type { SharedGameFormValues } from "@/components/games/game-form-fields";
+import type { OpponentSelectionValue } from "@/components/opponents/OpponentTypeahead";
 import {
   type CalEvent,
   type ModalMode,
@@ -43,6 +44,8 @@ export function useCalendarModal({
   const [saving, setSaving] = useState(false);
   const [opError, setOpError] = useState<string | null>(null);
   const [draftMode, setDraftMode] = useState<"create" | "duplicate">("create");
+  const [opponentSelection, setOpponentSelection] =
+    useState<OpponentSelectionValue | null>(null);
 
   const isEditing = modalMode === "edit_training" || modalMode === "edit_game";
   const isTrainingModal =
@@ -65,6 +68,7 @@ export function useCalendarModal({
       date,
       start_time: type === "training" ? "18:00" : "10:00",
     });
+    setOpponentSelection(null);
     setModalMode(type === "training" ? "add_training" : "add_game");
   }
 
@@ -91,6 +95,17 @@ export function useCalendarModal({
       notes: event.notes || "",
       image_url: event.image_url || "",
     });
+    if (event.type === "game" && event.opponent_id) {
+      setOpponentSelection({
+        id: event.opponent_id,
+        name: event.opponent_name ?? "",
+        short_name: event.opponent_short_name ?? null,
+        logo_url: null,
+        tactical_formation: null,
+      });
+    } else {
+      setOpponentSelection(null);
+    }
     setModalMode(event.type === "training" ? "edit_training" : "edit_game");
   }
 
@@ -120,6 +135,17 @@ export function useCalendarModal({
       notes: selectedEvent.notes || "",
       image_url: selectedEvent.image_url || "",
     });
+    if (selectedEvent.type === "game" && selectedEvent.opponent_id) {
+      setOpponentSelection({
+        id: selectedEvent.opponent_id,
+        name: selectedEvent.opponent_name ?? "",
+        short_name: selectedEvent.opponent_short_name ?? null,
+        logo_url: null,
+        tactical_formation: null,
+      });
+    } else {
+      setOpponentSelection(null);
+    }
     setModalMode(
       selectedEvent.type === "training" ? "add_training" : "add_game",
     );
@@ -132,6 +158,20 @@ export function useCalendarModal({
     setDraftMode("create");
     setForm(EMPTY_FORM);
     setOpError(null);
+    setOpponentSelection(null);
+  }
+
+  function handleOpponentSelectionChange(
+    opponent: OpponentSelectionValue | null,
+  ) {
+    setOpponentSelection(opponent);
+    setForm((prev) => ({
+      ...prev,
+      opponent_name: opponent?.name ?? "",
+      opponent_short_name: opponent?.short_name
+        ? normalizeManualShortName(opponent.short_name, 5) || ""
+        : "",
+    }));
   }
 
   function handleGameFieldChange(
@@ -174,6 +214,7 @@ export function useCalendarModal({
           date: form.date,
           start_time: form.start_time,
           end_time: form.end_time,
+          opponent_id: !isTraining ? opponentSelection?.id ?? null : null,
           opponent_name: form.opponent_name,
           opponent_short_name: normalizeManualShortName(
             form.opponent_short_name,
@@ -288,5 +329,7 @@ export function useCalendarModal({
     saveEvent,
     deleteEvent,
     openAttendanceCorrectionFromCalendar,
+    opponentSelection,
+    handleOpponentSelectionChange,
   };
 }
