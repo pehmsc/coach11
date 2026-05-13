@@ -34,6 +34,7 @@ import {
 import { useListStateSync } from "@/hooks/useListStateSync";
 import { useReturnTo } from "@/hooks/useReturnTo";
 import { useScrollRestoration } from "@/hooks/useScrollRestoration";
+import { ScopeToggle } from "@/components/navigation/ScopeToggle";
 
 interface GameRow {
   id: string;
@@ -351,6 +352,8 @@ export default function GamesPage() {
           Adicionar jogo
         </Button>
       </div>
+
+      <ScopeToggle variant="inline" className="mb-4" />
 
       <div className="space-y-6">
         {groupedUpcomingGames.map(({ label, games: monthGames }) => (

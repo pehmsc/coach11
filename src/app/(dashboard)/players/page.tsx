@@ -39,6 +39,7 @@ import type { Player, AgeGroup, PlayerStatus } from "@/types/database";
 import { useListStateSync } from "@/hooks/useListStateSync";
 import { useReturnTo } from "@/hooks/useReturnTo";
 import { useScrollRestoration } from "@/hooks/useScrollRestoration";
+import { ScopeToggle } from "@/components/navigation/ScopeToggle";
 
 const POSITIONS = ["GR", "DD", "DC", "DE", "MD", "MC", "MO", "ME", "AV", "EE", "ED", "SA"];
 
@@ -489,6 +490,8 @@ export default function PlayersPage() {
           <Plus size={16} className="mr-1" /> Atleta
         </Button>
       </div>
+
+      <ScopeToggle variant="inline" className="mb-4" />
 
       {/* Ordenação */}
       <div className="flex items-center gap-1.5 mb-4 overflow-x-auto pb-1">

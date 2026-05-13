@@ -14,6 +14,7 @@ import type { TrainingRow } from "@/components/trainings/types";
 import { useListStateSync } from "@/hooks/useListStateSync";
 import { useReturnTo } from "@/hooks/useReturnTo";
 import { useScrollRestoration } from "@/hooks/useScrollRestoration";
+import { ScopeToggle } from "@/components/navigation/ScopeToggle";
 
 type TabKey = "scheduled" | "closed";
 
@@ -130,6 +131,8 @@ export default function TrainingsPage() {
             </Button>
           </div>
         </div>
+
+        <ScopeToggle variant="inline" className="mb-4" />
 
         {/* Tabs */}
         <div className="mb-5 flex border-b border-slate-200">
