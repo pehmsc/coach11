@@ -182,7 +182,39 @@ export interface Game {
   equipment?: string;
   opponent_tactical_system?: string;
   additional_info?: string;
+  tactical_system?: string | null;
+  aspects_to_improve?: string | null;
+  team_notes?: string | null;
   created_at: string;
+}
+
+export interface GameOpponentObservation {
+  id: string;
+  game_id: string;
+  opponent_id: string;
+  club_id: string;
+  observation: string;
+  promoted_to_opponent_at?: string | null;
+  promoted_to_field?: "pontos_fortes" | "pontos_fracos" | "atletas_chave" | "notas_gerais" | null;
+  promoted_by?: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by?: string | null;
+}
+
+export interface GameOpponentObservationInsert {
+  game_id: string;
+  opponent_id: string;
+  club_id: string;
+  observation: string;
+  created_by?: string | null;
+}
+
+export interface GameOpponentObservationUpdate {
+  observation?: string;
+  promoted_to_opponent_at?: string | null;
+  promoted_to_field?: "pontos_fortes" | "pontos_fracos" | "atletas_chave" | "notas_gerais" | null;
+  promoted_by?: string | null;
 }
 
 export interface AttendanceRecord {
