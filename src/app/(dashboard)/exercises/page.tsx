@@ -16,6 +16,8 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import type { Exercise, ExerciseCategory } from "@/types/database";
 import { toast } from "sonner";
+import { useListStateSync } from "@/hooks/useListStateSync";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 
 export default function ExercisesPage() {
   const router = useRouter();
@@ -23,8 +25,10 @@ export default function ExercisesPage() {
 
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState<ExerciseCategory | "">("");
+  const [search, setSearch] = useListStateSync<string>("q", "");
+  const [searchInput, setSearchInput] = useState(search);
+  const debouncedSearchInput = useDebouncedValue(searchInput, 300);
+  const [categoryFilter, setCategoryFilter] = useListStateSync<ExerciseCategory | "">("cat", "");
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingExercise, setEditingExercise] = useState<Exercise | null>(null);
@@ -48,6 +52,12 @@ export default function ExercisesPage() {
       setLoading(false);
     }
   }, [categoryFilter, search]);
+
+  useEffect(() => {
+    if (debouncedSearchInput !== search) {
+      setSearch(debouncedSearchInput);
+    }
+  }, [debouncedSearchInput, search, setSearch]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -171,8 +181,8 @@ export default function ExercisesPage() {
               className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
             />
             <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
               placeholder="Pesquisar por nome..."
               className="pl-9"
             />

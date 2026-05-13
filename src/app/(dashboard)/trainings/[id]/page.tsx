@@ -11,6 +11,7 @@ import { RichTextContent } from "@/components/content/RichTextContent";
 import { LocationMapPreview } from "@/components/maps/LocationMapPreview";
 import { StickyBackLink } from "@/components/navigation/StickyBackLink";
 import { Breadcrumb } from "@/components/navigation/Breadcrumb";
+import { getReturnTo } from "@/hooks/useReturnTo";
 import { resolveLocationLabel } from "@/lib/location";
 import { portugalDateTimeToUtc } from "@/lib/events/presence-window";
 import { useTrainingForm } from "@/lib/hooks/useTrainingForm";
@@ -38,6 +39,9 @@ export default function TrainingDetailPage() {
 
   const [loading, setLoading] = useState(true);
   const [ageGroupId, setAgeGroupId] = useState<string | null>(null);
+  const [returnHref] = useState(() =>
+    getReturnTo("trainings", "/trainings"),
+  );
   const [clubInfo, setClubInfo] = useState<{ clubName: string; clubLogoUrl: string | null; teamName: string; season: string | null } | null>(null);
   const [canDelete, setCanDelete] = useState(false);
   const [session, setSession] = useState<TrainingRow | null>(null);
@@ -341,7 +345,7 @@ export default function TrainingDetailPage() {
     <>
       <div className="p-4 md:p-8 max-w-2xl mx-auto">
         <StickyBackLink
-          href="/trainings"
+          href={returnHref}
           label="Voltar aos treinos"
           wrapperClassName="-mx-4 mb-4 bg-slate-50/95 px-4 py-2 md:-mx-8 md:px-8"
         >

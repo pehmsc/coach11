@@ -1,11 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { differenceInMinutes, format, parseISO, subMinutes } from "date-fns";
 import { pt } from "date-fns/locale";
 import { AlertCircle } from "lucide-react";
 import { StickyBackLink } from "@/components/navigation/StickyBackLink";
 import { Breadcrumb } from "@/components/navigation/Breadcrumb";
+import { getReturnTo } from "@/hooks/useReturnTo";
 import { resolveLocationLabel } from "@/lib/location";
 import { getConvocationEditorState } from "@/lib/games/convocation-editor";
 import { LocationMapPreview } from "@/components/maps/LocationMapPreview";
@@ -30,6 +32,8 @@ export default function GameDetailPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const correctionMode = searchParams.get("correction") === "1";
+
+  const [returnHref] = useState(() => getReturnTo("games", "/games"));
 
   const data = useGameDetailData(id, correctionMode);
   const {
@@ -128,7 +132,7 @@ export default function GameDetailPage() {
   return (
     <div className="p-4 md:p-8 max-w-2xl mx-auto">
       <StickyBackLink
-        href="/games"
+        href={returnHref}
         label="Voltar aos jogos"
         wrapperClassName="-mx-4 mb-4 bg-slate-50/95 px-4 py-2 md:-mx-8 md:px-8"
       >

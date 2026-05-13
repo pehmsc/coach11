@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { Tab } from "@/components/statistics/types";
+import { useListStateSync } from "@/hooks/useListStateSync";
 import {
   StatisticsLoadingSkeleton,
   StatisticsEmptyState,
@@ -20,7 +21,7 @@ import { usePlayerSelection } from "@/lib/hooks/usePlayerSelection";
 import { useStatisticsExport } from "@/lib/hooks/useStatisticsExport";
 
 export default function StatisticsPage() {
-  const [activeTab, setActiveTab] = useState<Tab>("attendance");
+  const [activeTab, setActiveTab] = useListStateSync<Tab>("tab", "attendance");
 
   const {
     ageGroupId,

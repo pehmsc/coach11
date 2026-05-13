@@ -11,15 +11,20 @@ import { TrainingCreateModal } from "@/components/trainings/TrainingCreateModal"
 import { DuplicateWeekDialog } from "@/components/trainings/DuplicateWeekDialog";
 import { isTrainingClosed } from "@/components/trainings/utils";
 import type { TrainingRow } from "@/components/trainings/types";
+import { useListStateSync } from "@/hooks/useListStateSync";
+import { useReturnTo } from "@/hooks/useReturnTo";
+import { useScrollRestoration } from "@/hooks/useScrollRestoration";
 
 type TabKey = "scheduled" | "closed";
 
 export default function TrainingsPage() {
   const router = useRouter();
+  const { saveReturnTo } = useReturnTo("trainings");
+  useScrollRestoration("trainings");
   const data = useTrainingsData();
   const createForm = useTrainingForm();
 
-  const [activeTab, setActiveTab] = useState<TabKey>("scheduled");
+  const [activeTab, setActiveTab] = useListStateSync<TabKey>("tab", "scheduled");
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [createMode, setCreateMode] = useState<"create" | "duplicate">("create");
   const [duplicateWeekOpen, setDuplicateWeekOpen] = useState(false);
@@ -146,7 +151,10 @@ export default function TrainingsPage() {
         <TrainingSessionList
           sessions={displayedSessions}
           getSummary={data.getSummary}
-          onSessionClick={(session) => router.push(`/trainings/${session.id}`)}
+          onSessionClick={(session) => {
+            saveReturnTo();
+            router.push(`/trainings/${session.id}`);
+          }}
           onDuplicate={activeTab === "scheduled" ? openDuplicateTraining : undefined}
           variant={activeTab === "scheduled" ? "open" : "closed"}
         />

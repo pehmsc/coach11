@@ -35,6 +35,7 @@ import { toast } from "sonner";
 import { PublicSharePanel } from "@/components/team/PublicSharePanel";
 import { StickyBackLink } from "@/components/navigation/StickyBackLink";
 import { Breadcrumb } from "@/components/navigation/Breadcrumb";
+import { useListStateSync } from "@/hooks/useListStateSync";
 import type { AgeGroup, Player, FootballFormat } from "@/types/database";
 import { AGE_GROUP_STAFF_ROLE_LABELS, getStaffRoleLabel } from "@/lib/team/staff-role";
 import { PermissionsGrid, type PermissionsMap, templateToPermissions } from "@/components/staff/PermissionsGrid";
@@ -240,7 +241,7 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
 
-  const [tab, setTab] = useState<Tab>("geral");
+  const [tab, setTab] = useListStateSync<Tab>("tab", "geral");
   const [loading, setLoading] = useState(true);
 
   // Data

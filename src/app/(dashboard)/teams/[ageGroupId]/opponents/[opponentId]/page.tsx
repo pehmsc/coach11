@@ -31,6 +31,7 @@ import {
 } from "@/lib/games/score-helpers";
 import { StickyBackLink } from "@/components/navigation/StickyBackLink";
 import { Breadcrumb } from "@/components/navigation/Breadcrumb";
+import { getReturnTo } from "@/hooks/useReturnTo";
 import { OpponentLogoUploader } from "@/components/opponents/OpponentLogoUploader";
 import {
   useOpponentAutosave,
@@ -121,6 +122,10 @@ export default function OpponentDetailPage({
   const [opponent, setOpponent] = useState<Opponent | null>(null);
   const [ageGroup, setAgeGroup] = useState<AgeGroupRef | null>(null);
   const [tab, setTab] = useState<DetailTab>("notas");
+  const opponentsFallback = `/teams/${ageGroupId}?tab=adversarios`;
+  const [returnHref] = useState(() =>
+    getReturnTo("opponents", opponentsFallback),
+  );
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
   const [nameError, setNameError] = useState<string | null>(null);
@@ -328,7 +333,7 @@ export default function OpponentDetailPage({
   return (
     <div className="min-h-screen bg-slate-50">
       <StickyBackLink
-        href={`/teams/${ageGroupId}?tab=adversarios`}
+        href={returnHref}
         label="Voltar aos adversários"
         sticky={false}
         wrapperClassName="bg-slate-50 px-4 py-2 max-w-5xl mx-auto"
