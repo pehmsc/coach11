@@ -32,6 +32,7 @@ import {
 import { useListStateSync } from "@/hooks/useListStateSync";
 import { useReturnTo } from "@/hooks/useReturnTo";
 import { useScrollRestoration } from "@/hooks/useScrollRestoration";
+import { useAgeGroupMeta } from "@/hooks/useAgeGroupName";
 
 interface GameRow {
   id: string;
@@ -124,6 +125,7 @@ export function GamesSection({
     GameCompetitionOption[]
   >([]);
   const [ageGroupId, setAgeGroupId] = useState<string | null>(null);
+  const { football_format: footballFormat } = useAgeGroupMeta(ageGroupId);
   const [closedFlag, setClosedFlag] = useListStateSync<"yes" | "no">(
     "closed",
     "no",
@@ -372,6 +374,7 @@ export function GamesSection({
           open={createModalOpen}
           onOpenChange={setCreateModalOpen}
           ageGroupId={ageGroupId}
+          footballFormat={footballFormat}
           competitionOptions={competitionOptions}
           mode={createMode}
           initialValues={duplicateInitialValues}
@@ -484,6 +487,7 @@ export function GamesSection({
         open={createModalOpen}
         onOpenChange={setCreateModalOpen}
         ageGroupId={ageGroupId}
+        footballFormat={footballFormat}
         competitionOptions={competitionOptions}
         mode={createMode}
         initialValues={duplicateInitialValues}

@@ -17,6 +17,7 @@ export default function CalendarPage() {
     teamId,
     setTeamId,
     ageGroupName,
+    footballFormat,
     canDeleteEvents,
     loadError,
     competitionOptions,
@@ -133,6 +134,7 @@ export default function CalendarPage() {
           opError={opError}
           competitionOptions={competitionOptions}
           ageGroupId={ageGroupId}
+          footballFormat={footballFormat}
           onClose={closeModal}
           onSave={saveEvent}
           onDelete={deleteEvent}

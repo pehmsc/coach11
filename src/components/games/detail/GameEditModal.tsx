@@ -7,6 +7,7 @@ import { LocationFields } from "@/components/maps/LocationFields";
 import { NotesEditor } from "@/components/forms/NotesEditor";
 import { EventImagePicker } from "@/components/media/EventImagePicker";
 import { OpponentTypeahead } from "@/components/opponents/OpponentTypeahead";
+import { useAgeGroupMeta } from "@/hooks/useAgeGroupName";
 import type { Game } from "@/types/database";
 import type { GameEditorState } from "@/lib/hooks/useGameEditor";
 
@@ -19,6 +20,9 @@ interface GameEditModalProps {
 export function GameEditModal({ game, error, editor }: GameEditModalProps) {
   const onClose = () => editor.setEditingGame(false);
   const isEditingCompletedGame = game.status === "completed";
+  const { football_format: footballFormat } = useAgeGroupMeta(
+    game.age_group_id ?? null,
+  );
 
   return (
     <div
@@ -75,7 +79,7 @@ export function GameEditModal({ game, error, editor }: GameEditModalProps) {
               {game.age_group_id ? (
                 <OpponentTypeahead
                   ageGroupId={game.age_group_id}
-                  footballFormat={null}
+                  footballFormat={footballFormat}
                   value={editor.editOpponentSelection}
                   onChange={editor.setEditOpponentFromTypeahead}
                   initialLegacyName={
