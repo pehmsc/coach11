@@ -69,7 +69,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
 
     const { data: game, error: gameError } = await supabase
       .from("games")
-      .select("id, team_id, age_group_id, competition_id, game_datetime, end_time, status, title, opponent_name, opponent_short_name, is_home, location, formatted_address, latitude, longitude, osm_place_id, location_source, score_home, score_away, notes, concentration_time, equipment, opponent_tactical_system, additional_info, image_url, game_type")
+      .select("id, team_id, age_group_id, competition_id, game_datetime, end_time, status, title, opponent_name, opponent_short_name, is_home, location, formatted_address, latitude, longitude, osm_place_id, location_source, score_home, score_away, notes, concentration_time, equipment, opponent_tactical_system, additional_info, image_url, game_type, kit_fp_jersey_id, kit_fp_shorts_id, kit_fp_socks_id, kit_gk_jersey_id, kit_gk_shorts_id, kit_gk_socks_id")
       .eq("id", gameId)
       .maybeSingle();
 
@@ -98,11 +98,13 @@ export async function GET(_request: Request, { params }: RouteContext) {
     const isCoordinator = access.isCoordinator;
     const teamId = access.teamId ?? game.team_id ?? null;
 
+    // PR #156a: kits foram migrados para a tabela games. Aqui continuamos a
+    // ler convocations apenas para obter ID/status (id usado por callers
+    // legacy, status para detectar "closed"). Os kit_ids vêm do row de game
+    // já carregado acima (game.kit_fp_*, game.kit_gk_*).
     const { data: convocations, error: convocationError } = await supabase
       .from("convocations")
-      .select(
-        "id, status, created_at, fp_jersey_kit_id, fp_shorts_kit_id, fp_socks_kit_id, gk_jersey_kit_id, gk_shorts_kit_id, gk_socks_kit_id",
-      )
+      .select("id, status, created_at")
       .eq("game_id", gameId)
       .order("created_at", { ascending: false })
       .order("id", { ascending: false });
@@ -116,7 +118,6 @@ export async function GET(_request: Request, { params }: RouteContext) {
 
     const convocationIds = (convocations || []).map((c) => c.id);
     const convocationStatus = toConvocationStatus(convocations?.[0]?.status);
-    const latestConvocation = convocations?.[0] || null;
     const convocationSelections: Record<
       string,
       { responseStatus: string | null; isPresent: boolean | null }
@@ -594,23 +595,17 @@ export async function GET(_request: Request, { params }: RouteContext) {
       convocationCount: convocationIds.length,
       convocationSelections,
       liveCheckpoint,
-      kitSelection: latestConvocation
-        ? {
-            fp_jersey_kit_id: latestConvocation.fp_jersey_kit_id ?? null,
-            fp_shorts_kit_id: latestConvocation.fp_shorts_kit_id ?? null,
-            fp_socks_kit_id: latestConvocation.fp_socks_kit_id ?? null,
-            gk_jersey_kit_id: latestConvocation.gk_jersey_kit_id ?? null,
-            gk_shorts_kit_id: latestConvocation.gk_shorts_kit_id ?? null,
-            gk_socks_kit_id: latestConvocation.gk_socks_kit_id ?? null,
-          }
-        : {
-            fp_jersey_kit_id: null,
-            fp_shorts_kit_id: null,
-            fp_socks_kit_id: null,
-            gk_jersey_kit_id: null,
-            gk_shorts_kit_id: null,
-            gk_socks_kit_id: null,
-          },
+      // PR #156a: kits lidos directamente de games. Forma do payload
+      // mantida (fp_*_kit_id / gk_*_kit_id) para retrocompat com useKitEditor
+      // e o resto da UI.
+      kitSelection: {
+        fp_jersey_kit_id: game.kit_fp_jersey_id ?? null,
+        fp_shorts_kit_id: game.kit_fp_shorts_id ?? null,
+        fp_socks_kit_id: game.kit_fp_socks_id ?? null,
+        gk_jersey_kit_id: game.kit_gk_jersey_id ?? null,
+        gk_shorts_kit_id: game.kit_gk_shorts_id ?? null,
+        gk_socks_kit_id: game.kit_gk_socks_id ?? null,
+      },
       kits,
       players,
     });
