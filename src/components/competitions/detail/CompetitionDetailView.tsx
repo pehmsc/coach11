@@ -203,8 +203,7 @@ export function CompetitionDetailView({ competitionId, ageGroupId }: Props) {
           <div className="space-y-2">
             {games.map((game) => {
               const closed = isClosedGameStatus(game.status);
-              const suffix = closed ? "/summary" : "";
-              const href = `/teams/${ageGroupId}/games/${game.id}${suffix}`;
+              const href = `/teams/${ageGroupId}/games/${game.id}`;
               const dt = game.game_datetime ? parseISO(game.game_datetime) : null;
               const hasResult =
                 closed && game.score_home != null && game.score_away != null;
