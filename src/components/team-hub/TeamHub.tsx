@@ -188,7 +188,7 @@ export function TeamHub({ ageGroupId }: Props) {
           label="Plantel"
           value={counts.players}
           meta="atletas activos"
-          href={`/players?ageGroupId=${ageGroupId}`}
+          href={`/teams/${ageGroupId}/players`}
         />
         <HubCard
           icon={<ClipboardList size={16} />}
@@ -202,14 +202,14 @@ export function TeamHub({ ageGroupId }: Props) {
           label="Jogos"
           value={counts.games.total}
           meta={`${counts.games.completed} concluídos`}
-          href={`/games?team=${ageGroupId}`}
+          href={`/teams/${ageGroupId}/games`}
         />
         <HubCard
           icon={<Dumbbell size={16} />}
           label="Treinos"
           value={counts.trainings.completed}
           meta={`de ${counts.trainings.total} totais`}
-          href={`/trainings?team=${ageGroupId}`}
+          href={`/teams/${ageGroupId}/trainings`}
         />
         <HubCard
           icon={<Trophy size={16} />}

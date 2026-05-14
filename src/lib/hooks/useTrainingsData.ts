@@ -12,10 +12,14 @@ import { parseUtNumberInput } from "@/lib/trainings/ut-numbering";
 import type { Player } from "@/types/database";
 import { useAgeGroup } from "@/contexts/AgeGroupContext";
 
-export function useTrainingsData() {
+export function useTrainingsData(options?: { overrideAgeGroupId?: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { selectedAgeGroupId: contextAgeGroupId } = useAgeGroup();
+  // overrideAgeGroupId força um escalão específico (usado em sub-rotas escalão).
+  // Quando undefined, o hook segue o comportamento legacy (lê de AgeGroupContext).
+  const effectiveContextAgeGroupId =
+    options?.overrideAgeGroupId ?? contextAgeGroupId;
   const [loading, setLoading] = useState(true);
   const [sessions, setSessions] = useState<TrainingRow[]>([]);
   const [attendance, setAttendance] = useState<AttendanceSummary[]>([]);
@@ -44,12 +48,13 @@ export function useTrainingsData() {
     }
 
     // ageGroupId para operações de criação: escalão seleccionado ou default do servidor
-    const agId: string | null = contextAgeGroupId ?? (ctx.ageGroup as { id: string } | null)?.id ?? null;
+    const agId: string | null =
+      effectiveContextAgeGroupId ?? (ctx.ageGroup as { id: string } | null)?.id ?? null;
     setAgeGroupId(agId);
 
     // Só passa ?ageGroupId quando o utilizador escolheu um escalão específico
-    const trainingsUrl = contextAgeGroupId
-      ? `/api/trainings?ageGroupId=${contextAgeGroupId}`
+    const trainingsUrl = effectiveContextAgeGroupId
+      ? `/api/trainings?ageGroupId=${effectiveContextAgeGroupId}`
       : "/api/trainings";
     const trainingsRes = await fetch(trainingsUrl, { cache: "no-store" });
     const trainingsPayload = (await trainingsRes.json().catch(() => null)) as
@@ -73,7 +78,7 @@ export function useTrainingsData() {
     setAttendance(trainingsPayload.summaries || []);
 
     setLoading(false);
-  }, [contextAgeGroupId]);
+  }, [effectiveContextAgeGroupId]);
 
   useEffect(() => {
     void loadData();
