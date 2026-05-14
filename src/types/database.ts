@@ -185,6 +185,18 @@ export interface Game {
   tactical_system?: string | null;
   aspects_to_improve?: string | null;
   team_notes?: string | null;
+  /** Camisola dos jogadores de campo (FK kit_pieces). PR #156a. */
+  kit_fp_jersey_id?: string | null;
+  /** Calções dos jogadores de campo (FK kit_pieces). PR #156a. */
+  kit_fp_shorts_id?: string | null;
+  /** Meias dos jogadores de campo (FK kit_pieces). PR #156a. */
+  kit_fp_socks_id?: string | null;
+  /** Camisola do guarda-redes (FK kit_pieces). PR #156a. */
+  kit_gk_jersey_id?: string | null;
+  /** Calções do guarda-redes (FK kit_pieces). PR #156a. */
+  kit_gk_shorts_id?: string | null;
+  /** Meias do guarda-redes (FK kit_pieces). PR #156a. */
+  kit_gk_socks_id?: string | null;
   created_at: string;
 }
 

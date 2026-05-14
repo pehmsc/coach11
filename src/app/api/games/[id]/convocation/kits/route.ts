@@ -192,21 +192,25 @@ export async function POST(request: Request, { params }: RouteContext) {
       }
     }
 
-    const { data: convocationRows, error: convocationRowsError } = await supabase
+    // PR #156a: kits guardados directamente em games (era em convocations,
+    // que ficou read-only desde 11 Mai). Convocations só é lida agora para
+    // detectar status "closed" (manter regra existente).
+    const { data: latestConvocation, error: convocationStatusError } = await supabase
       .from("convocations")
-      .select("id, status, created_at")
+      .select("status")
       .eq("game_id", gameId)
       .order("created_at", { ascending: false })
-      .order("id", { ascending: false });
+      .order("id", { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-    if (convocationRowsError) {
+    if (convocationStatusError) {
       return NextResponse.json(
         { error: "Erro ao carregar a convocatória." },
         { status: 500 },
       );
     }
 
-    let latestConvocation = convocationRows?.[0] ?? null;
     if (latestConvocation?.status === "closed") {
       return NextResponse.json(
         { error: "A convocatória está fechada e não pode ser alterada." },
@@ -214,43 +218,29 @@ export async function POST(request: Request, { params }: RouteContext) {
       );
     }
 
-    const allConvocationIds = convocationRows?.map((row) => row.id) ?? [];
+    const { error: updateError } = await supabase
+      .from("games")
+      .update({
+        kit_fp_jersey_id: selection.fp_jersey_kit_id,
+        kit_fp_shorts_id: selection.fp_shorts_kit_id,
+        kit_fp_socks_id: selection.fp_socks_kit_id,
+        kit_gk_jersey_id: selection.gk_jersey_kit_id,
+        kit_gk_shorts_id: selection.gk_shorts_kit_id,
+        kit_gk_socks_id: selection.gk_socks_kit_id,
+      })
+      .eq("id", gameId);
 
-    if (!latestConvocation) {
-      const { data: createdConvocation, error: createError } = await supabase
-        .from("convocations")
-        .insert({
-          game_id: gameId,
-          status: "draft",
-          ...selection,
-        })
-        .select("id")
-        .single();
-
-      if (createError || !createdConvocation) {
-        return NextResponse.json(
-          { error: "Não foi possível criar a convocatória." },
-          { status: 500 },
-        );
-      }
-
-      latestConvocation = { id: createdConvocation.id, status: "draft", created_at: null };
-    } else {
-      const updateIds = allConvocationIds.length > 0 ? allConvocationIds : [latestConvocation.id];
-      const { error: updateError } = await supabase
-        .from("convocations")
-        .update({
-          ...selection,
-          status: latestConvocation.status,
-        })
-        .in("id", updateIds);
-
-      if (updateError) {
-        return NextResponse.json(
-          { error: "Não foi possível guardar os equipamentos deste jogo." },
-          { status: 500 },
-        );
-      }
+    if (updateError) {
+      console.error("[PR #156a] Failed to update game kits:", {
+        gameId,
+        code: updateError.code,
+        message: updateError.message,
+        details: updateError.details,
+      });
+      return NextResponse.json(
+        { error: "Não foi possível guardar o equipamento.", details: updateError.message },
+        { status: 500 },
+      );
     }
 
     if (writeGuard.requiresAudit && writeGuard.correctionReason) {
