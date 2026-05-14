@@ -756,7 +756,11 @@ export function PlayersSection({
                     </div>
 
                     <Link
-                      href={`/players/${player.id}`}
+                      href={
+                        ageGroupId
+                          ? `/teams/${ageGroupId}/players/${player.id}`
+                          : `/players/${player.id}`
+                      }
                       onClick={() => saveReturnTo()}
                       className="flex-1 min-w-0 -my-1 -ml-1 rounded-md py-1 pl-1 hover:bg-slate-50 transition-colors"
                     >

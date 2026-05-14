@@ -163,7 +163,11 @@ export function TrainingsSection({
         getSummary={data.getSummary}
         onSessionClick={(session) => {
           saveReturnTo();
-          router.push(`/trainings/${session.id}`);
+          router.push(
+            overrideAgeGroupId
+              ? `/teams/${overrideAgeGroupId}/trainings/${session.id}`
+              : `/trainings/${session.id}`,
+          );
         }}
         onDuplicate={
           activeTab === "scheduled" ? openDuplicateTraining : undefined

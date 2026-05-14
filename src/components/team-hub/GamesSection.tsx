@@ -413,10 +413,11 @@ export function GamesSection({
                   onDuplicate={() => openDuplicateGame(game)}
                   onClick={() => {
                     saveReturnTo();
+                    const suffix = game.status === "completed" ? "/summary" : "";
                     router.push(
-                      game.status === "completed"
-                        ? `/games/${game.id}/summary`
-                        : `/games/${game.id}`,
+                      overrideAgeGroupId
+                        ? `/teams/${overrideAgeGroupId}/games/${game.id}${suffix}`
+                        : `/games/${game.id}${suffix}`,
                     );
                   }}
                 />
