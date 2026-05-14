@@ -154,7 +154,7 @@ export function OpponentCreateModal({
               disabled={submitting}
             />
           </div>
-          {formationOptions.length > 0 && (
+          {formationOptions.length > 0 ? (
             <div className="space-y-1">
               <Label>Formação táctica (opcional)</Label>
               <select
@@ -171,6 +171,14 @@ export function OpponentCreateModal({
                 ))}
               </select>
             </div>
+          ) : (
+            // Defesa em profundidade: se footballFormat não chega (regressão),
+            // não escondemos silenciosamente. O modal continua submissível e
+            // o utilizador pode editar a formação depois na página do adversário.
+            <p className="text-xs text-slate-400">
+              Formato do escalão indisponível — formação táctica pode ser
+              editada depois.
+            </p>
           )}
           {error && <p className="text-sm text-red-600">{error}</p>}
           <div className="flex gap-2 pt-2">

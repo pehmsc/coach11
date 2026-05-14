@@ -16,6 +16,7 @@ export function useCalendarData() {
   const [ageGroupId, setAgeGroupId] = useState<string | null>(null);
   const [teamId, setTeamId] = useState<string | null>(null);
   const [ageGroupName, setAgeGroupName] = useState("");
+  const [footballFormat, setFootballFormat] = useState<string | null>(null);
   const [canDeleteEvents, setCanDeleteEvents] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [competitionOptions, setCompetitionOptions] = useState<GameCompetitionOption[]>([]);
@@ -165,7 +166,12 @@ export function useCalendarData() {
       ]);
       const payload = (await contextRes.json().catch(() => null)) as
         | {
-            ageGroup?: { id?: string; club_name?: string; name?: string } | null;
+            ageGroup?: {
+              id?: string;
+              club_name?: string;
+              name?: string;
+              football_format?: string | null;
+            } | null;
             teamId?: string | null;
             error?: string;
           }
@@ -197,6 +203,7 @@ export function useCalendarData() {
 
       setAgeGroupId(resolvedAgeGroupId);
       setAgeGroupName(resolvedAgeGroupName);
+      setFootballFormat(payload?.ageGroup?.football_format ?? null);
       setTeamId(payload?.teamId ?? null);
 
       const options = (competitionsPayload?.competitions || [])
@@ -245,6 +252,7 @@ export function useCalendarData() {
     teamId,
     setTeamId,
     ageGroupName,
+    footballFormat,
     canDeleteEvents,
     loadError,
     competitionOptions,
