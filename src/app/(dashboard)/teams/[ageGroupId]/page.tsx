@@ -570,27 +570,6 @@ export default function TeamDetailPage({ params }: { params: Promise<PageParams>
 
       <div className="max-w-5xl mx-auto px-4 py-5">
 
-        {/* Card de informação — Bug 2: nome + escalão separados; Bug 4: formato 9x9 */}
-        <Card className="mb-5">
-          <CardContent className="pt-4 pb-4">
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-6 gap-y-3 text-sm">
-              {[
-                ["Nome da equipa", displayName],
-                ["Escalão / Idade", displayAgeLevel],
-                ["Época", ageGroup.season],
-                ["Tipo", formatLabel],
-                ["Sistema táctico", ageGroup.tactical_system || "—"],
-                ["Estado", "Activo"],
-              ].map(([label, value]) => (
-                <div key={label}>
-                  <p className="text-xs text-slate-400 uppercase tracking-wide">{label}</p>
-                  <p className="font-medium text-slate-800 mt-0.5">{value}</p>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
         {/* ─── TAB GERAL ─────────────────────────────────────────────────── */}
         {tab === "geral" && (
           <TeamHub

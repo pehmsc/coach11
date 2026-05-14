@@ -64,6 +64,7 @@ export async function GET(request: Request, { params }: RouteContext) {
       trainingsRes,
       opponentsRes,
       competitionsRes,
+      attendanceRes,
     ] = await Promise.all([
       supabase
         .from("age_groups")
@@ -103,6 +104,13 @@ export async function GET(request: Request, { params }: RouteContext) {
         .from("competitions")
         .select("id, teams!inner(age_group_id)")
         .eq("teams.age_group_id", ageGroupId),
+      supabase
+        .from("training_attendance")
+        .select(
+          "status, training_sessions!inner(age_group_id, status)",
+        )
+        .eq("training_sessions.age_group_id", ageGroupId)
+        .eq("training_sessions.status", "completed"),
     ]);
 
     if (ageGroupRes.error || !ageGroupRes.data) {
@@ -237,6 +245,20 @@ export async function GET(request: Request, { params }: RouteContext) {
       .sort((a, b) => a.datetime.localeCompare(b.datetime))
       .slice(0, 3);
 
+    // Assiduidade = (present + late) / total dos registos de training_attendance
+    // ligados a training_sessions completed deste escalão.
+    let attendanceRate: number | null = null;
+    const attendanceRows = (attendanceRes.data ?? []) as Array<{
+      status: string | null;
+    }>;
+    if (!attendanceRes.error && attendanceRows.length > 0) {
+      const total = attendanceRows.length;
+      const presentOrLate = attendanceRows.filter(
+        (r) => r.status === "present" || r.status === "late",
+      ).length;
+      attendanceRate = Math.round((presentOrLate / total) * 10000) / 100;
+    }
+
     return NextResponse.json({
       success: true,
       ageGroup: ageGroupRes.data,
@@ -263,8 +285,7 @@ export async function GET(request: Request, { params }: RouteContext) {
           conceded: goalsConceded,
           diff: goalsScored - goalsConceded,
         },
-        // attendance_rate fica fora do scope desta PR — sem RPC actualmente.
-        attendance_rate: null,
+        attendance_rate: attendanceRate,
       },
       next_event: nextEvent,
       upcoming_calendar: upcoming,
