@@ -413,11 +413,7 @@ export function GamesSection({
                   onDuplicate={() => openDuplicateGame(game)}
                   onClick={() => {
                     saveReturnTo();
-                    router.push(
-                      game.status === "completed"
-                        ? `/games/${game.id}/summary`
-                        : `/games/${game.id}`,
-                    );
+                    router.push(`/games/${game.id}`);
                   }}
                 />
               ))}
@@ -466,11 +462,7 @@ export function GamesSection({
                           onDuplicate={() => openDuplicateGame(game)}
                           onClick={() => {
                             saveReturnTo();
-                            router.push(
-                              game.status === "completed"
-                                ? `/games/${game.id}/summary`
-                                : `/games/${game.id}`,
-                            );
+                            router.push(`/games/${game.id}`);
                           }}
                         />
                       ))}
