@@ -1,14 +1,14 @@
 "use client";
 
 import { use } from "react";
-import { TeamHub } from "@/components/team-hub/TeamHub";
 import { Breadcrumb } from "@/components/navigation/Breadcrumb";
 import { StickyBackLink } from "@/components/navigation/StickyBackLink";
+import { StaffSection } from "@/components/team-hub/StaffSection";
 import { useAgeGroupName } from "@/hooks/useAgeGroupName";
 
 type PageParams = { ageGroupId: string };
 
-export default function TeamHubPage({
+export default function TeamStaffPage({
   params,
 }: {
   params: Promise<PageParams>;
@@ -19,8 +19,8 @@ export default function TeamHubPage({
   return (
     <div className="min-h-screen bg-slate-50">
       <StickyBackLink
-        href="/teams"
-        label="Voltar aos escalões"
+        href={`/teams/${ageGroupId}`}
+        label="Voltar ao escalão"
         sticky={false}
         wrapperClassName="bg-slate-50 px-4 py-2 max-w-5xl mx-auto"
       >
@@ -29,14 +29,17 @@ export default function TeamHubPage({
             { label: "Equipas", href: "/teams" },
             {
               label: ageGroupName ?? "Escalão",
+              href: `/teams/${ageGroupId}`,
               shortLabel: ageGroupName ?? "Escalão",
             },
+            { label: "Staff" },
           ]}
         />
       </StickyBackLink>
 
       <div className="max-w-5xl mx-auto px-4 py-5">
-        <TeamHub ageGroupId={ageGroupId} />
+        <h1 className="text-xl font-bold text-slate-900 mb-4">Staff</h1>
+        <StaffSection ageGroupId={ageGroupId} />
       </div>
     </div>
   );
