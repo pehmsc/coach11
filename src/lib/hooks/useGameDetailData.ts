@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import type { Game } from "@/types/database";
 import {
   EMPTY_KIT_SELECTION,
@@ -11,8 +10,6 @@ import {
 } from "@/components/games/detail/types";
 
 export function useGameDetailData(id: string, correctionMode: boolean) {
-  const router = useRouter();
-
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [confirmingConvocation, setConfirmingConvocation] = useState(false);
@@ -85,11 +82,6 @@ export function useGameDetailData(id: string, correctionMode: boolean) {
       setCanEditCompleted(coordinatorCanEdit);
 
       const loadedGame = payload.game as Game;
-      if (loadedGame.status === "completed" && (!coordinatorCanEdit || !correctionMode)) {
-        router.replace(`/games/${id}/summary`);
-        return;
-      }
-
       setGame(loadedGame);
 
       if (
