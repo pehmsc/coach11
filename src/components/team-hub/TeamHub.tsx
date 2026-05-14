@@ -216,7 +216,7 @@ export function TeamHub({ ageGroupId }: Props) {
           label="Competições"
           value={counts.competitions}
           meta="associadas"
-          href="/competitions"
+          href={`/teams/${ageGroupId}/competitions`}
         />
         <HubCard
           icon={<Swords size={16} />}
