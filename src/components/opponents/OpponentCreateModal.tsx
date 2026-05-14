@@ -54,11 +54,12 @@ export function OpponentCreateModal({
     footballFormat as FootballFormat | null | undefined,
   );
 
-  async function handleSubmit(e: { preventDefault(): void }) {
-    e.preventDefault();
+  async function handleSubmit() {
+    if (submitting) return;
     const trimmed = name.trim();
     if (!trimmed) {
       setError("Nome obrigatório.");
+      inputRef.current?.focus();
       return;
     }
     setSubmitting(true);
@@ -141,16 +142,30 @@ export function OpponentCreateModal({
             <X size={18} className="text-slate-400" />
           </button>
         </div>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-3 p-4">
+        {/*
+          PR #156d-followup: usar <div> em vez de <form>. Quando este modal
+          é renderizado a partir do CalendarEventModal/GameFormModal (que
+          têm o seu próprio <form onSubmit>), HTML5 não permite forms
+          aninhados — o parser auto-fecha o outer e o submit do botão
+          "Criar e usar" era capturado pelo form externo (validava
+          opponent_name vazio e mostrava toast). Validação manual via
+          handleSubmit() + onKeyDown para preservar Enter.
+        */}
+        <div className="flex flex-col gap-3 p-4">
           <div className="space-y-1">
             <Label>Nome *</Label>
             <Input
               ref={inputRef}
               value={name}
               onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void handleSubmit();
+                }
+              }}
               placeholder="ex: Casa Pia"
               maxLength={120}
-              required
               disabled={submitting}
             />
           </div>
@@ -183,7 +198,8 @@ export function OpponentCreateModal({
           {error && <p className="text-sm text-red-600">{error}</p>}
           <div className="flex gap-2 pt-2">
             <Button
-              type="submit"
+              type="button"
+              onClick={() => void handleSubmit()}
               disabled={submitting}
               className="flex-1 bg-indigo-600 hover:bg-indigo-700"
             >
@@ -202,7 +218,7 @@ export function OpponentCreateModal({
               Cancelar
             </Button>
           </div>
-        </form>
+        </div>
       </div>
     </div>
   );
