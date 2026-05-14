@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { format, parseISO } from "date-fns";
 import { pt } from "date-fns/locale";
 import {
@@ -16,7 +16,6 @@ import {
   Pencil,
   ArrowRight,
 } from "lucide-react";
-import { toast } from "sonner";
 
 type AgeGroupSummary = {
   id: string;
@@ -68,12 +67,8 @@ type HubData = {
   upcoming_calendar: UpcomingItem[];
 };
 
-type InternalTab = "atletas" | "staff" | "planeamento" | "adversarios" | "configuracoes";
-
 interface Props {
   ageGroupId: string;
-  /** Callback para mudar para uma tab interna existente (Staff, Adversários, etc). */
-  onChangeTab: (tab: InternalTab) => void;
 }
 
 type FetchState =
@@ -81,7 +76,7 @@ type FetchState =
   | { status: "error"; message: string }
   | { status: "success"; data: HubData };
 
-export function TeamHub({ ageGroupId, onChangeTab }: Props) {
+export function TeamHub({ ageGroupId }: Props) {
   const [state, setState] = useState<FetchState>({ status: "loading" });
 
   useEffect(() => {
@@ -112,10 +107,6 @@ export function TeamHub({ ageGroupId, onChangeTab }: Props) {
     };
   }, [ageGroupId]);
 
-  const handleEditPlaceholder = useCallback(() => {
-    toast.info("Em breve — modo edição do escalão estará disponível.");
-  }, []);
-
   if (state.status === "loading") return <HubSkeleton />;
   if (state.status === "error") return <HubError message={state.message} />;
 
@@ -143,14 +134,13 @@ export function TeamHub({ ageGroupId, onChangeTab }: Props) {
               : "Sem metadados"}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={handleEditPlaceholder}
+        <Link
+          href={`/teams/${ageGroupId}/settings`}
           className="px-3 py-1.5 text-sm border border-slate-300 rounded-md hover:bg-slate-50 inline-flex items-center gap-1.5 text-slate-700 flex-shrink-0"
         >
           <Pencil size={13} />
           <span className="hidden sm:inline">Editar</span>
-        </button>
+        </Link>
       </div>
 
       {/* Quick stats — 3 KPIs */}
@@ -205,7 +195,7 @@ export function TeamHub({ ageGroupId, onChangeTab }: Props) {
           label="Staff"
           value={counts.staff}
           meta="treinadores"
-          onClick={() => onChangeTab("staff")}
+          href={`/teams/${ageGroupId}/staff`}
         />
         <HubCard
           icon={<Sword size={16} />}
@@ -233,7 +223,7 @@ export function TeamHub({ ageGroupId, onChangeTab }: Props) {
           label="Adversários"
           value={counts.opponents}
           meta="registados"
-          onClick={() => onChangeTab("adversarios")}
+          href={`/teams/${ageGroupId}/opponents`}
         />
         <HubCard
           icon={<BookOpen size={16} />}

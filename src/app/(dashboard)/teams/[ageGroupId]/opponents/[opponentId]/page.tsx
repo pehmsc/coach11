@@ -122,7 +122,7 @@ export default function OpponentDetailPage({
   const [opponent, setOpponent] = useState<Opponent | null>(null);
   const [ageGroup, setAgeGroup] = useState<AgeGroupRef | null>(null);
   const [tab, setTab] = useState<DetailTab>("notas");
-  const opponentsFallback = `/teams/${ageGroupId}?tab=adversarios`;
+  const opponentsFallback = `/teams/${ageGroupId}/opponents`;
   const [returnHref] = useState(() =>
     getReturnTo("opponents", opponentsFallback),
   );
@@ -309,7 +309,7 @@ export default function OpponentDetailPage({
           ? `Adversario apagado. ${affected} jogo(s) mantem o nome mas perdem a ligacao.`
           : "Adversario apagado.",
       );
-      router.replace(`/teams/${ageGroupId}?tab=adversarios`);
+      router.replace(`/teams/${ageGroupId}/opponents`);
     } catch {
       toast.error("Erro de ligacao.");
     } finally {
@@ -347,7 +347,7 @@ export default function OpponentDetailPage({
             },
             {
               label: "Adversários",
-              href: `/teams/${ageGroupId}?tab=adversarios`,
+              href: `/teams/${ageGroupId}/opponents`,
               shortLabel: "Adv.",
             },
             { label: opponent.name },
