@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import { PWAClient } from "@/components/pwa/PWAClient";
 import { QueryProvider } from "@/components/providers/QueryProvider";
+import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
 const geistSans = localFont({
@@ -72,6 +73,7 @@ export default function RootLayout({
         <QueryProvider>
           <PWAClient>{children}</PWAClient>
         </QueryProvider>
+        <Toaster richColors position="top-right" closeButton />
       </body>
     </html>
   );
