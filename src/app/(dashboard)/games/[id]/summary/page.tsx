@@ -10,12 +10,8 @@ import {
   Download,
   FileText,
   Loader2,
-  Lock,
   Pencil,
-  RotateCcw,
   Star,
-  Trash2,
-  Undo2,
   Users,
 } from "lucide-react";
 import { StickyBackLink } from "@/components/navigation/StickyBackLink";
@@ -24,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DeleteGameModal } from "@/components/games/detail/DeleteGameModal";
 import { LineupCorrectionModal } from "@/components/games/summary/LineupCorrectionModal";
+import { SummaryActionsMenu } from "@/components/games/summary/SummaryActionsMenu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { resolveFixtureScoreboardShortNames } from "@/lib/games/display";
 import { formatCardEventLabel } from "@/lib/games/format-card-event-label";
@@ -769,126 +766,74 @@ export default function GameSummaryPage() {
       )}
 
       {summary.canEdit && (
-        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3">
-          <p className="text-xs font-semibold text-amber-800 uppercase mb-2">
-            Modo Edição
+        <div className="-mt-2 mb-4 flex justify-end">
+          <SummaryActionsMenu
+            canEdit={summary.canEdit}
+            isCoordinator={summary.isCoordinator}
+            gameStatus={summary.gameStatus}
+            hasAnyManualRow={hasAnyManualRow}
+            detailHref={`/games/${id}`}
+            onEditStats={() => {
+              setActionError(null);
+              setEditing(true);
+            }}
+            onResetAuto={() => setResetConfirmOpen(true)}
+            onCorrectLineup={() => {
+              setActionError(null);
+              setShowLineupCorrection(true);
+            }}
+            onDelete={() => {
+              setActionError(null);
+              setShowDeleteConfirm(true);
+            }}
+            disabled={editing}
+          />
+        </div>
+      )}
+
+      {editing && (
+        <div className="mb-4 space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
+          <p className="text-xs font-semibold uppercase text-amber-800">
+            A editar estatísticas finais
           </p>
-          {!editing ? (
-            <div className="flex flex-wrap gap-2">
-              {summary.isCoordinator && (
-                <Button
-                  onClick={() => router.push(`/games/${id}?correction=1`)}
-                  variant="outline"
-                  className="border-amber-300 text-amber-900"
-                >
-                  <RotateCcw size={14} className="mr-2" />
-                  Corrigir convocatória
-                </Button>
-              )}
-              <Button
-                onClick={() => {
-                  setActionError(null);
-                  setEditing(true);
-                }}
-                variant="outline"
-                className="border-amber-300 text-amber-900"
-                disabled={
-                  summary.gameStatus === "live" ||
-                  summary.gameStatus === "scheduled"
-                }
-              >
+          <div className="flex items-center gap-3">
+            <label className="text-sm font-medium text-amber-900">
+              Minuto final
+            </label>
+            <input
+              type="number"
+              min={1}
+              max={200}
+              value={finalMinuteDraft}
+              onChange={(event) => setFinalMinuteDraft(event.target.value)}
+              className="w-24 rounded-md border border-amber-300 bg-white px-2 py-1 text-sm"
+            />
+          </div>
+          <div className="flex gap-2">
+            <Button
+              onClick={() => void submitRecalculate()}
+              disabled={savingRecalc}
+              className="bg-amber-600 hover:bg-amber-700"
+            >
+              {savingRecalc ? (
+                <Loader2 size={14} className="mr-2 animate-spin" />
+              ) : (
                 <Pencil size={14} className="mr-2" />
-                Editar Final Stats
-              </Button>
-              <Button
-                onClick={() => setResetConfirmOpen(true)}
-                variant="outline"
-                className="border-amber-300 text-amber-900"
-                disabled={
-                  !hasAnyManualRow ||
-                  summary.gameStatus === "live" ||
-                  summary.gameStatus === "scheduled"
-                }
-                title={
-                  !hasAnyManualRow
-                    ? "Os stats já estão em modo automático."
-                    : undefined
-                }
-              >
-                <Undo2 size={14} className="mr-2" />
-                Repor auto-cálculo
-              </Button>
-              {summary.isCoordinator && summary.gameStatus === "completed" && (
-                <Button
-                  onClick={() => {
-                    setActionError(null);
-                    setShowLineupCorrection(true);
-                  }}
-                  variant="outline"
-                  className="border-amber-300 text-amber-900"
-                  title="Corrigir titulares iniciais retroactivamente (audit log)"
-                >
-                  <Lock size={14} className="mr-2" />
-                  Corrigir titulares
-                </Button>
               )}
-              {summary.isCoordinator && (
-                <Button
-                  onClick={() => {
-                    setActionError(null);
-                    setShowDeleteConfirm(true);
-                  }}
-                  variant="outline"
-                  className="border-red-300 text-red-700 hover:bg-red-50 hover:text-red-800"
-                  title="Apagar jogo e todos os dados associados"
-                >
-                  <Trash2 size={14} className="mr-2" />
-                  Apagar jogo
-                </Button>
-              )}
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <label className="text-sm text-amber-900 font-medium">
-                  Minuto final
-                </label>
-                <input
-                  type="number"
-                  min={1}
-                  max={200}
-                  value={finalMinuteDraft}
-                  onChange={(event) => setFinalMinuteDraft(event.target.value)}
-                  className="w-24 rounded-md border border-amber-300 bg-white px-2 py-1 text-sm"
-                />
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  onClick={() => void submitRecalculate()}
-                  disabled={savingRecalc}
-                  className="bg-amber-600 hover:bg-amber-700"
-                >
-                  {savingRecalc ? (
-                    <Loader2 size={14} className="mr-2 animate-spin" />
-                  ) : (
-                    <Pencil size={14} className="mr-2" />
-                  )}
-                  Guardar
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setActionError(null);
-                    syncDraftsFromSummary(summary);
-                    setEditing(false);
-                  }}
-                  disabled={savingRecalc}
-                >
-                  Cancelar
-                </Button>
-              </div>
-            </div>
-          )}
+              Guardar
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setActionError(null);
+                syncDraftsFromSummary(summary);
+                setEditing(false);
+              }}
+              disabled={savingRecalc}
+            >
+              Cancelar
+            </Button>
+          </div>
         </div>
       )}
 
