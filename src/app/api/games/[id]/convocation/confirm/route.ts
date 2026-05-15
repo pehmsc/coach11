@@ -142,6 +142,59 @@ export async function POST(_request: Request, { params }: RouteContext) {
       );
     }
 
+    // Defesa em profundidade: garantir que existe sempre uma row em `convocations`
+    // para este jogo. A página pública lê `notes` daqui (legacy). Sem esta row,
+    // um utilizador que adicione notas à convocatória não teria onde escrever, então
+    // pre-criamos a row vazia no momento da confirmação.
+    // Não-bloqueante: se falhar, log e segue. O gate principal está em
+    // games.convocation_status === "published".
+    try {
+      const { data: existingConvocation } = await supabase
+        .from("convocations")
+        .select("id")
+        .eq("game_id", gameId)
+        .limit(1)
+        .maybeSingle();
+
+      if (!existingConvocation) {
+        const { data: gameForClub } = await supabase
+          .from("games")
+          .select("age_group_id")
+          .eq("id", gameId)
+          .maybeSingle();
+
+        if (gameForClub?.age_group_id) {
+          const { data: ageGroupForClub } = await supabase
+            .from("age_groups")
+            .select("club_id")
+            .eq("id", gameForClub.age_group_id)
+            .maybeSingle();
+
+          if (ageGroupForClub?.club_id) {
+            const { error: insertConvocationError } = await supabase
+              .from("convocations")
+              .insert({
+                game_id: gameId,
+                club_id: ageGroupForClub.club_id,
+                status: "confirmed",
+              });
+
+            if (insertConvocationError) {
+              console.error(
+                "[convocation/confirm] insert legacy convocations row falhou (não-bloqueante):",
+                insertConvocationError.message,
+              );
+            }
+          }
+        }
+      }
+    } catch (legacyConvocationError) {
+      console.error(
+        "[convocation/confirm] defesa em profundidade da convocations row falhou (não-bloqueante):",
+        legacyConvocationError,
+      );
+    }
+
     if (writeGuard.requiresAudit && writeGuard.correctionReason) {
       await insertConvocationAuditLog({
         actorId: user.id,
