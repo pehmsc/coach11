@@ -93,6 +93,14 @@ export function useLiveGameState(id: string) {
   // Review phase
   const [playerRatings, setPlayerRatings] = useState<Record<string, number>>({});
   const [mvpPlayerId, setMvpPlayerId] = useState<string | null>(null);
+  // Match sheet (ficha pós-jogo, Sprint 3) — hidratada do `game` uma só vez
+  const [liveTacticalSystem, setLiveTacticalSystem] = useState<string>("");
+  const [livePositiveAspects, setLivePositiveAspects] = useState<string>("");
+  const [liveNegativeAspects, setLiveNegativeAspects] = useState<string>("");
+  const [liveAspectsToImprove, setLiveAspectsToImprove] = useState<string>("");
+  const [liveTeamNotes, setLiveTeamNotes] = useState<string>("");
+  const [liveCoachNotes, setLiveCoachNotes] = useState<string>("");
+  const hasHydratedMatchSheetRef = useRef(false);
   const checkpointBackendEnabledRef = useRef(true);
   const lastCheckpointFingerprintRef = useRef<string | null>(null);
   const clockSeconds = useMemo(
@@ -602,6 +610,20 @@ export function useLiveGameState(id: string) {
       router.replace(`/games/${id}/summary`);
     }
   }, [game?.status, id, router]);
+
+  // Hidrata os campos da ficha do jogo a partir do `game` uma só vez quando
+  // ele aparece. Usar ref evita re-hidratação se um refetch sobrepuser
+  // edições locais não-guardadas no <ReviewPanel>.
+  useEffect(() => {
+    if (!game || hasHydratedMatchSheetRef.current) return;
+    setLiveTacticalSystem(game.tactical_system ?? "");
+    setLivePositiveAspects(game.positive_aspects ?? "");
+    setLiveNegativeAspects(game.negative_aspects ?? "");
+    setLiveAspectsToImprove(game.aspects_to_improve ?? "");
+    setLiveTeamNotes(game.team_notes ?? "");
+    setLiveCoachNotes(game.coach_notes ?? "");
+    hasHydratedMatchSheetRef.current = true;
+  }, [game]);
 
   useEffect(() => {
     if (phase !== "pre_match" && kickoffError) {
@@ -1635,6 +1657,39 @@ export function useLiveGameState(id: string) {
 
     setFinalizing(true);
     try {
+      // Match sheet (Sprint 3) — guardar antes da finalização para que não
+      // dependa de extensão ao RPC rpc_finalize_game_auth. PATCH separado em
+      // /api/games/[id]. Atomicidade frouxa: se este falhar, abortamos antes
+      // de gravar estatísticas; se passar e o /live/finalize falhar, os
+      // campos ficam guardados e o jogo continua não-finalizado (retoma).
+      try {
+        const patchRes = await fetch(`/api/games/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tactical_system: liveTacticalSystem.trim() || null,
+            positive_aspects: livePositiveAspects.trim() || null,
+            negative_aspects: liveNegativeAspects.trim() || null,
+            aspects_to_improve: liveAspectsToImprove.trim() || null,
+            team_notes: liveTeamNotes.trim() || null,
+            coach_notes: liveCoachNotes.trim() || null,
+          }),
+        });
+        if (!patchRes.ok) {
+          const patchPayload = await patchRes.json().catch(() => null);
+          const patchMessage =
+            (patchPayload as { error?: string } | null)?.error ||
+            "Erro ao guardar ficha do jogo.";
+          toast.error(`Erro ao guardar ficha do jogo: ${patchMessage}`);
+          setFinalizing(false);
+          return;
+        }
+      } catch {
+        toast.error("Erro ao guardar ficha do jogo.");
+        setFinalizing(false);
+        return;
+      }
+
       const finalMinute = Math.max(1, Math.floor(currentMinute));
       const finalStatsPayload = buildFinalStatsPayload(finalMinute);
 
@@ -1803,6 +1858,19 @@ export function useLiveGameState(id: string) {
     setSelectedSubInId,
     setPlayerRatings,
     setMvpPlayerId,
+    // Match sheet (Sprint 3)
+    liveTacticalSystem,
+    setLiveTacticalSystem,
+    livePositiveAspects,
+    setLivePositiveAspects,
+    liveNegativeAspects,
+    setLiveNegativeAspects,
+    liveAspectsToImprove,
+    setLiveAspectsToImprove,
+    liveTeamNotes,
+    setLiveTeamNotes,
+    liveCoachNotes,
+    setLiveCoachNotes,
 
     // Actions
     pauseClock,

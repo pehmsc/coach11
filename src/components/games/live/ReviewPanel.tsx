@@ -1,6 +1,8 @@
 "use client";
 
-import { Star } from "lucide-react";
+import { useState } from "react";
+import { ChevronDown, ChevronUp, Info, Star } from "lucide-react";
+import { getTacticalSystemOptions } from "@/lib/football/tactical-systems";
 import type { LivePlayer } from "./types";
 
 interface ReviewPanelProps {
@@ -11,6 +13,198 @@ interface ReviewPanelProps {
   concededGoalsByPlayer: Map<string, number>;
   setPlayerRatings: React.Dispatch<React.SetStateAction<Record<string, number>>>;
   setMvpPlayerId: React.Dispatch<React.SetStateAction<string | null>>;
+  // Match sheet (Sprint 3)
+  footballFormat: string | null;
+  liveTacticalSystem: string;
+  livePositiveAspects: string;
+  liveNegativeAspects: string;
+  liveAspectsToImprove: string;
+  liveTeamNotes: string;
+  liveCoachNotes: string;
+  setLiveTacticalSystem: (v: string) => void;
+  setLivePositiveAspects: (v: string) => void;
+  setLiveNegativeAspects: (v: string) => void;
+  setLiveAspectsToImprove: (v: string) => void;
+  setLiveTeamNotes: (v: string) => void;
+  setLiveCoachNotes: (v: string) => void;
+}
+
+type MatchSheetSectionProps = {
+  showFichaSection: boolean;
+  setShowFichaSection: React.Dispatch<React.SetStateAction<boolean>>;
+  footballFormat: string | null;
+  tacticalSystemOptions: readonly string[];
+  liveTacticalSystem: string;
+  livePositiveAspects: string;
+  liveNegativeAspects: string;
+  liveAspectsToImprove: string;
+  liveTeamNotes: string;
+  liveCoachNotes: string;
+  setLiveTacticalSystem: (v: string) => void;
+  setLivePositiveAspects: (v: string) => void;
+  setLiveNegativeAspects: (v: string) => void;
+  setLiveAspectsToImprove: (v: string) => void;
+  setLiveTeamNotes: (v: string) => void;
+  setLiveCoachNotes: (v: string) => void;
+};
+
+function MatchSheetSection(props: MatchSheetSectionProps) {
+  const {
+    showFichaSection,
+    setShowFichaSection,
+    footballFormat,
+    tacticalSystemOptions,
+    liveTacticalSystem,
+    livePositiveAspects,
+    liveNegativeAspects,
+    liveAspectsToImprove,
+    liveTeamNotes,
+    liveCoachNotes,
+    setLiveTacticalSystem,
+    setLivePositiveAspects,
+    setLiveNegativeAspects,
+    setLiveAspectsToImprove,
+    setLiveTeamNotes,
+    setLiveCoachNotes,
+  } = props;
+
+  return (
+    <div className="mb-5 rounded-xl border border-slate-200 overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setShowFichaSection((v) => !v)}
+        className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100 transition-colors"
+      >
+        <div className="text-left">
+          <p className="font-bold text-slate-900 text-sm">Ficha do jogo</p>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Sistema táctico, observações e notas internas (Sprint 3)
+          </p>
+        </div>
+        {showFichaSection ? (
+          <ChevronUp size={18} className="text-slate-400" />
+        ) : (
+          <ChevronDown size={18} className="text-slate-400" />
+        )}
+      </button>
+
+      {showFichaSection && (
+        <div className="p-4 space-y-3 border-t border-slate-200">
+          <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-900">
+            <Info size={14} className="mt-0.5 flex-shrink-0" />
+            <p>
+              <strong>Conteúdo interno.</strong> Guardado ao finalizar o jogo.
+              Não é visível no link público partilhado com atletas e famílias.
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-slate-700">
+              Sistema táctico
+            </label>
+            {tacticalSystemOptions.length > 0 ? (
+              <select
+                value={liveTacticalSystem}
+                onChange={(e) => setLiveTacticalSystem(e.target.value)}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              >
+                <option value="">— Sem indicação —</option>
+                {tacticalSystemOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type="text"
+                value={liveTacticalSystem}
+                onChange={(e) => setLiveTacticalSystem(e.target.value)}
+                placeholder="ex: 1-4-3-3"
+                maxLength={40}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+            )}
+            <p className="text-[10px] text-slate-400">
+              {footballFormat
+                ? `Sugestões para futebol ${footballFormat}.`
+                : "Sem formato definido — texto livre."}
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-slate-700">
+              Aspectos positivos
+            </label>
+            <textarea
+              value={livePositiveAspects}
+              onChange={(e) => setLivePositiveAspects(e.target.value)}
+              rows={3}
+              maxLength={2000}
+              placeholder="O que funcionou bem neste jogo"
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-y"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-slate-700">
+              Aspectos menos positivos
+            </label>
+            <textarea
+              value={liveNegativeAspects}
+              onChange={(e) => setLiveNegativeAspects(e.target.value)}
+              rows={3}
+              maxLength={2000}
+              placeholder="O que não correu bem"
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-y"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-slate-700">
+              Aspectos a melhorar
+            </label>
+            <textarea
+              value={liveAspectsToImprove}
+              onChange={(e) => setLiveAspectsToImprove(e.target.value)}
+              rows={3}
+              maxLength={2000}
+              placeholder="O que trabalhar nos próximos treinos"
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-y"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-slate-700">
+              Notas da equipa
+            </label>
+            <textarea
+              value={liveTeamNotes}
+              onChange={(e) => setLiveTeamNotes(e.target.value)}
+              rows={3}
+              maxLength={2000}
+              placeholder="Notas tácticas e operacionais — visíveis ao staff"
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-y"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-slate-700">
+              Notas privadas do treinador
+            </label>
+            <textarea
+              value={liveCoachNotes}
+              onChange={(e) => setLiveCoachNotes(e.target.value)}
+              rows={3}
+              maxLength={2000}
+              placeholder="Notas pessoais sobre o jogo"
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-y"
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function ReviewPanel({
@@ -21,13 +215,49 @@ export function ReviewPanel({
   concededGoalsByPlayer,
   setPlayerRatings,
   setMvpPlayerId,
+  footballFormat,
+  liveTacticalSystem,
+  livePositiveAspects,
+  liveNegativeAspects,
+  liveAspectsToImprove,
+  liveTeamNotes,
+  liveCoachNotes,
+  setLiveTacticalSystem,
+  setLivePositiveAspects,
+  setLiveNegativeAspects,
+  setLiveAspectsToImprove,
+  setLiveTeamNotes,
+  setLiveCoachNotes,
 }: ReviewPanelProps) {
+  const [showFichaSection, setShowFichaSection] = useState(true);
+  const tacticalSystemOptions = getTacticalSystemOptions(footballFormat);
+
   if (playersWhoNeedPersistentStats.length === 0) {
     return (
-      <div className="mb-5 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-        Este jogo só teve jogadores &quot;Outro&quot;. Os eventos e o resultado vão ser
-        guardados normalmente, sem estatísticas individuais persistentes.
-      </div>
+      <>
+        <div className="mb-5 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          Este jogo só teve jogadores &quot;Outro&quot;. Os eventos e o resultado vão ser
+          guardados normalmente, sem estatísticas individuais persistentes.
+        </div>
+        <MatchSheetSection
+          showFichaSection={showFichaSection}
+          setShowFichaSection={setShowFichaSection}
+          footballFormat={footballFormat}
+          tacticalSystemOptions={tacticalSystemOptions}
+          liveTacticalSystem={liveTacticalSystem}
+          livePositiveAspects={livePositiveAspects}
+          liveNegativeAspects={liveNegativeAspects}
+          liveAspectsToImprove={liveAspectsToImprove}
+          liveTeamNotes={liveTeamNotes}
+          liveCoachNotes={liveCoachNotes}
+          setLiveTacticalSystem={setLiveTacticalSystem}
+          setLivePositiveAspects={setLivePositiveAspects}
+          setLiveNegativeAspects={setLiveNegativeAspects}
+          setLiveAspectsToImprove={setLiveAspectsToImprove}
+          setLiveTeamNotes={setLiveTeamNotes}
+          setLiveCoachNotes={setLiveCoachNotes}
+        />
+      </>
     );
   }
 
@@ -124,6 +354,25 @@ export function ReviewPanel({
           ))}
         </div>
       </div>
+
+      <MatchSheetSection
+        showFichaSection={showFichaSection}
+        setShowFichaSection={setShowFichaSection}
+        footballFormat={footballFormat}
+        tacticalSystemOptions={tacticalSystemOptions}
+        liveTacticalSystem={liveTacticalSystem}
+        livePositiveAspects={livePositiveAspects}
+        liveNegativeAspects={liveNegativeAspects}
+        liveAspectsToImprove={liveAspectsToImprove}
+        liveTeamNotes={liveTeamNotes}
+        liveCoachNotes={liveCoachNotes}
+        setLiveTacticalSystem={setLiveTacticalSystem}
+        setLivePositiveAspects={setLivePositiveAspects}
+        setLiveNegativeAspects={setLiveNegativeAspects}
+        setLiveAspectsToImprove={setLiveAspectsToImprove}
+        setLiveTeamNotes={setLiveTeamNotes}
+        setLiveCoachNotes={setLiveCoachNotes}
+      />
     </>
   );
 }
