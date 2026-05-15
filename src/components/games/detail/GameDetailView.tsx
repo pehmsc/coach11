@@ -201,7 +201,7 @@ export function GameDetailView({ gameId, scope }: Props) {
 
       {game.status === "completed" && correctionMode && canEditCompleted && (
         <CorrectionBanner
-          gameId={id}
+          summaryHref={`${effectiveScope.gameBaseHref}/summary`}
           correctionReason={correctionReason}
           setCorrectionReason={setCorrectionReason}
         />

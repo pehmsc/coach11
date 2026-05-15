@@ -3,13 +3,13 @@
 import { StickyBackLink } from "@/components/navigation/StickyBackLink";
 
 interface CorrectionBannerProps {
-  gameId: string;
+  summaryHref: string;
   correctionReason: string;
   setCorrectionReason: (v: string) => void;
 }
 
 export function CorrectionBanner({
-  gameId,
+  summaryHref,
   correctionReason,
   setCorrectionReason,
 }: CorrectionBannerProps) {
@@ -25,7 +25,7 @@ export function CorrectionBanner({
           </p>
         </div>
         <StickyBackLink
-          href={`/games/${gameId}/summary`}
+          href={summaryHref}
           label="Voltar ao sumário"
           sticky={false}
           wrapperClassName="bg-transparent px-0 py-0"
