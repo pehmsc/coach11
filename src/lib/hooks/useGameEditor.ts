@@ -46,6 +46,13 @@ export function useGameEditor(deps: UseGameEditorDeps) {
   const [editImageUrl, setEditImageUrl] = useState("");
   const [editCompetitionId, setEditCompetitionId] = useState("");
   const [editIsHome, setEditIsHome] = useState(true);
+  // Ficha pós-jogo (Sprint 3)
+  const [editTacticalSystem, setEditTacticalSystem] = useState<string>("");
+  const [editPositiveAspects, setEditPositiveAspects] = useState<string>("");
+  const [editNegativeAspects, setEditNegativeAspects] = useState<string>("");
+  const [editAspectsToImprove, setEditAspectsToImprove] = useState<string>("");
+  const [editTeamNotes, setEditTeamNotes] = useState<string>("");
+  const [editCoachNotes, setEditCoachNotes] = useState<string>("");
   const [competitionOptions, setCompetitionOptions] = useState<GameCompetitionOption[]>([]);
   const [savingGameEdit, setSavingGameEdit] = useState(false);
 
@@ -115,6 +122,12 @@ export function useGameEditor(deps: UseGameEditorDeps) {
     setEditImageUrl(game.image_url ?? "");
     setEditCompetitionId(game.competition_id ?? "");
     setEditIsHome(game.is_home ?? true);
+    setEditTacticalSystem(game.tactical_system ?? "");
+    setEditPositiveAspects(game.positive_aspects ?? "");
+    setEditNegativeAspects(game.negative_aspects ?? "");
+    setEditAspectsToImprove(game.aspects_to_improve ?? "");
+    setEditTeamNotes(game.team_notes ?? "");
+    setEditCoachNotes(game.coach_notes ?? "");
     setEditingGame(true);
   }
 
@@ -163,6 +176,12 @@ export function useGameEditor(deps: UseGameEditorDeps) {
         image_url: editImageUrl.trim() || null,
         competition_id: editCompetitionId || null,
         is_home: editIsHome,
+        tactical_system: editTacticalSystem.trim() || null,
+        positive_aspects: editPositiveAspects.trim() || null,
+        negative_aspects: editNegativeAspects.trim() || null,
+        aspects_to_improve: editAspectsToImprove.trim() || null,
+        team_notes: editTeamNotes.trim() || null,
+        coach_notes: editCoachNotes.trim() || null,
       }),
     });
     const payload = (await res.json().catch(() => ({}))) as
@@ -271,6 +290,18 @@ export function useGameEditor(deps: UseGameEditorDeps) {
     setEditCompetitionId,
     editIsHome,
     setEditIsHome,
+    editTacticalSystem,
+    setEditTacticalSystem,
+    editPositiveAspects,
+    setEditPositiveAspects,
+    editNegativeAspects,
+    setEditNegativeAspects,
+    editAspectsToImprove,
+    setEditAspectsToImprove,
+    editTeamNotes,
+    setEditTeamNotes,
+    editCoachNotes,
+    setEditCoachNotes,
     competitionOptions,
     savingGameEdit,
     openEditGame,

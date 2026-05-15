@@ -1,8 +1,10 @@
 "use client";
 
-import { AlertCircle, Loader2, X } from "lucide-react";
+import { useState } from "react";
+import { AlertCircle, ChevronDown, ChevronUp, Info, Loader2, X } from "lucide-react";
 import { EMPTY_LOCATION_FIELDS } from "@/lib/location";
 import { normalizeManualShortName } from "@/lib/football/short-name";
+import { getTacticalSystemOptions } from "@/lib/football/tactical-systems";
 import { LocationFields } from "@/components/maps/LocationFields";
 import { NotesEditor } from "@/components/forms/NotesEditor";
 import { EventImagePicker } from "@/components/media/EventImagePicker";
@@ -23,6 +25,8 @@ export function GameEditModal({ game, error, editor }: GameEditModalProps) {
   const { football_format: footballFormat } = useAgeGroupMeta(
     game.age_group_id ?? null,
   );
+  const [showFichaSection, setShowFichaSection] = useState(false);
+  const tacticalSystemOptions = getTacticalSystemOptions(footballFormat);
 
   return (
     <div
@@ -236,6 +240,154 @@ export function GameEditModal({ game, error, editor }: GameEditModalProps) {
               accent="blue"
               rows={7}
             />
+
+            <div className="rounded-xl border border-slate-200 overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setShowFichaSection((v) => !v)}
+                className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100 transition-colors"
+              >
+                <div className="text-left">
+                  <p className="font-semibold text-slate-900 text-sm">Ficha do jogo</p>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Sistema táctico, observações e notas internas
+                  </p>
+                </div>
+                {showFichaSection ? (
+                  <ChevronUp size={18} className="text-slate-400" />
+                ) : (
+                  <ChevronDown size={18} className="text-slate-400" />
+                )}
+              </button>
+
+              {showFichaSection && (
+                <div className="p-4 space-y-3 border-t border-slate-200">
+                  <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-900">
+                    <Info size={14} className="mt-0.5 flex-shrink-0" />
+                    <p>
+                      <strong>Conteúdo interno.</strong> Não é visível no link
+                      público partilhado com atletas e famílias — só ao staff
+                      do escalão.
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-slate-700">
+                      Sistema táctico
+                    </label>
+                    {tacticalSystemOptions.length > 0 ? (
+                      <select
+                        value={editor.editTacticalSystem}
+                        onChange={(e) =>
+                          editor.setEditTacticalSystem(e.target.value)
+                        }
+                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">— Sem indicação —</option>
+                        {tacticalSystemOptions.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        value={editor.editTacticalSystem}
+                        onChange={(e) =>
+                          editor.setEditTacticalSystem(e.target.value)
+                        }
+                        placeholder="ex: 1-4-3-3"
+                        maxLength={40}
+                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    )}
+                    <p className="text-[10px] text-slate-400">
+                      {footballFormat
+                        ? `Sugestões para futebol ${footballFormat}.`
+                        : "Sem formato definido — texto livre."}
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-slate-700">
+                      Aspectos positivos
+                    </label>
+                    <textarea
+                      value={editor.editPositiveAspects}
+                      onChange={(e) =>
+                        editor.setEditPositiveAspects(e.target.value)
+                      }
+                      rows={3}
+                      maxLength={2000}
+                      placeholder="O que funcionou bem neste jogo"
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-slate-700">
+                      Aspectos menos positivos
+                    </label>
+                    <textarea
+                      value={editor.editNegativeAspects}
+                      onChange={(e) =>
+                        editor.setEditNegativeAspects(e.target.value)
+                      }
+                      rows={3}
+                      maxLength={2000}
+                      placeholder="O que não correu bem"
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-slate-700">
+                      Aspectos a melhorar
+                    </label>
+                    <textarea
+                      value={editor.editAspectsToImprove}
+                      onChange={(e) =>
+                        editor.setEditAspectsToImprove(e.target.value)
+                      }
+                      rows={3}
+                      maxLength={2000}
+                      placeholder="O que trabalhar nos próximos treinos"
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-slate-700">
+                      Notas da equipa
+                    </label>
+                    <textarea
+                      value={editor.editTeamNotes}
+                      onChange={(e) => editor.setEditTeamNotes(e.target.value)}
+                      rows={3}
+                      maxLength={2000}
+                      placeholder="Notas tácticas e operacionais — visíveis ao staff"
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-slate-700">
+                      Notas privadas do treinador
+                    </label>
+                    <textarea
+                      value={editor.editCoachNotes}
+                      onChange={(e) => editor.setEditCoachNotes(e.target.value)}
+                      rows={3}
+                      maxLength={2000}
+                      placeholder="Notas pessoais sobre o jogo"
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
             {error && <p className="text-sm text-red-600">{error}</p>}
           </div>
           <div className="flex gap-2 border-t bg-white p-5 pt-3 shrink-0 pb-[max(1rem,env(safe-area-inset-bottom))]">
