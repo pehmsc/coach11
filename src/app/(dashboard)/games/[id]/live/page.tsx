@@ -7,6 +7,7 @@ import { StickyBackLink } from "@/components/navigation/StickyBackLink";
 import { Breadcrumb } from "@/components/navigation/Breadcrumb";
 import { useGameLiveController } from "@/lib/hooks/useGameLiveController";
 import { useLiveGameState } from "@/lib/hooks/useLiveGameState";
+import { useAgeGroupMeta } from "@/hooks/useAgeGroupName";
 import { formatClock } from "@/components/games/live/utils";
 import { PreMatchLineup } from "@/components/games/live/PreMatchLineup";
 import { ClockControls } from "@/components/games/live/ClockControls";
@@ -21,6 +22,7 @@ export default function LiveGamePage() {
   const { id } = useParams<{ id: string }>();
 
   const state = useLiveGameState(id);
+  const ageGroupMeta = useAgeGroupMeta(state.game?.age_group_id ?? null);
 
   const {
     liveUnlocked,
@@ -149,6 +151,19 @@ export default function LiveGamePage() {
           concededGoalsByPlayer={state.concededGoalsByPlayer}
           setPlayerRatings={state.setPlayerRatings}
           setMvpPlayerId={state.setMvpPlayerId}
+          footballFormat={ageGroupMeta.football_format ?? null}
+          liveTacticalSystem={state.liveTacticalSystem}
+          livePositiveAspects={state.livePositiveAspects}
+          liveNegativeAspects={state.liveNegativeAspects}
+          liveAspectsToImprove={state.liveAspectsToImprove}
+          liveTeamNotes={state.liveTeamNotes}
+          liveCoachNotes={state.liveCoachNotes}
+          setLiveTacticalSystem={state.setLiveTacticalSystem}
+          setLivePositiveAspects={state.setLivePositiveAspects}
+          setLiveNegativeAspects={state.setLiveNegativeAspects}
+          setLiveAspectsToImprove={state.setLiveAspectsToImprove}
+          setLiveTeamNotes={state.setLiveTeamNotes}
+          setLiveCoachNotes={state.setLiveCoachNotes}
         />
       )}
 
