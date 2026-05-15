@@ -153,6 +153,8 @@ export type GameSummaryScope = {
   breadcrumbItemsPrefix: BreadcrumbItem[];
   /** URL de fallback para "Voltar ao jogo". */
   detailHref: string;
+  /** URL da lista de jogos do scope (usado quando o jogo é apagado). */
+  gamesListHref: string;
   /** Chave do useReturnTo. */
   returnToKey: string;
   /** Label do StickyBackLink. */
@@ -170,6 +172,7 @@ export function GameSummaryView({ gameId, scope }: Props) {
   const effectiveScope: GameSummaryScope = scope ?? {
     breadcrumbItemsPrefix: [{ label: "Jogos", href: "/games" }],
     detailHref: `/games/${id}`,
+    gamesListHref: "/games",
     returnToKey: "games",
     backLabel: "Voltar ao jogo",
   };
@@ -685,7 +688,7 @@ export function GameSummaryView({ gameId, scope }: Props) {
         return;
       }
       toast.success("Jogo apagado com sucesso.");
-      router.replace("/games");
+      router.replace(effectiveScope.gamesListHref);
       router.refresh();
     } catch {
       setActionError("Erro de ligação ao apagar jogo.");
