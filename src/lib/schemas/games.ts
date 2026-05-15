@@ -35,6 +35,9 @@ export const gameUpdateSchema = z
     positive_aspects: z.string().max(2000).nullable().optional(),
     negative_aspects: z.string().max(2000).nullable().optional(),
     coach_notes: z.string().max(2000).nullable().optional(),
+    tactical_system: z.string().trim().max(40).nullable().optional(),
+    aspects_to_improve: z.string().max(2000).nullable().optional(),
+    team_notes: z.string().max(2000).nullable().optional(),
     image_url: z.string().max(2000).nullable().optional(),
   })
   .strict();

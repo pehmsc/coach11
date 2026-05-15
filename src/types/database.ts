@@ -182,9 +182,18 @@ export interface Game {
   equipment?: string;
   opponent_tactical_system?: string;
   additional_info?: string;
+  /** Sistema táctico do nosso clube neste jogo (ex: "1-4-3-3"). Dropdown filtrado pelo football_format do escalão. Parte da ficha pós-jogo (Sprint 3). */
   tactical_system?: string | null;
+  /** Aspectos a melhorar para próximos jogos/treinos. Parte da ficha pós-jogo (Sprint 3). Interno. */
   aspects_to_improve?: string | null;
+  /** Notas tácticas e operacionais da equipa sobre o jogo. Parte da ficha pós-jogo (Sprint 3). Interno — visível ao staff do escalão, não ao público. */
   team_notes?: string | null;
+  /** Aspectos positivos identificados pelo treinador neste jogo. Parte da ficha pós-jogo (Sprint 3). Interno. */
+  positive_aspects?: string | null;
+  /** Aspectos menos positivos identificados pelo treinador neste jogo. Parte da ficha pós-jogo (Sprint 3). Interno. */
+  negative_aspects?: string | null;
+  /** Notas privadas do treinador sobre o jogo. Parte da ficha pós-jogo (Sprint 3). Interno — privado. */
+  coach_notes?: string | null;
   /** Camisola dos jogadores de campo (FK kit_pieces). PR #156a. */
   kit_fp_jersey_id?: string | null;
   /** Calções dos jogadores de campo (FK kit_pieces). PR #156a. */
