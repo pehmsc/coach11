@@ -241,7 +241,8 @@ export function GameEditModal({ game, error, editor }: GameEditModalProps) {
               rows={7}
             />
 
-            <div className="rounded-xl border border-slate-200 overflow-hidden">
+            {isEditingCompletedGame && (
+              <div className="rounded-xl border border-slate-200 overflow-hidden">
               <button
                 type="button"
                 onClick={() => setShowFichaSection((v) => !v)}
@@ -386,7 +387,8 @@ export function GameEditModal({ game, error, editor }: GameEditModalProps) {
                   </div>
                 </div>
               )}
-            </div>
+              </div>
+            )}
 
             {error && <p className="text-sm text-red-600">{error}</p>}
           </div>
