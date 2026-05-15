@@ -1,16 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import { pt } from "date-fns/locale";
-import { Loader2, AlertCircle, Trophy } from "lucide-react";
+import { AlertCircle, Loader2, Pencil, Plus, Trash2, Trophy } from "lucide-react";
+import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { CompetitionFormModal } from "@/components/competitions/CompetitionFormModal";
+import { GameFormModal } from "@/components/games/GameFormModal";
+import { useAgeGroupMeta } from "@/hooks/useAgeGroupName";
 import {
   formatFixtureOpponentLabel,
   isClosedGameStatus,
 } from "@/lib/games/display";
+import type { TeamLabel } from "@/types/database";
 
 type CompetitionRow = {
   id: string;
@@ -53,56 +61,74 @@ type Props = {
 
 export function CompetitionDetailView({ competitionId, ageGroupId }: Props) {
   const supabase = useMemo(() => createClient(), []);
+  const router = useRouter();
+  const { football_format: footballFormat } = useAgeGroupMeta(ageGroupId);
   const [state, setState] = useState<FetchState>({ status: "loading" });
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showAddGameModal, setShowAddGameModal] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const loadCompetition = useCallback(async () => {
+    const [compRes, gamesRes] = await Promise.all([
+      supabase
+        .from("competitions")
+        .select(
+          "id, team_id, name, season, phase, team_label, num_opponents, total_rounds, has_two_legs",
+        )
+        .eq("id", competitionId)
+        .maybeSingle(),
+      supabase
+        .from("games")
+        .select(
+          "id, game_datetime, opponent_name, opponent_short_name, is_home, status, score_home, score_away, title",
+        )
+        .eq("competition_id", competitionId)
+        .order("game_datetime", { ascending: true }),
+    ]);
+
+    if (compRes.error || !compRes.data) {
+      setState({
+        status: "error",
+        message: compRes.error?.message ?? "Competição não encontrada.",
+      });
+      return;
+    }
+    if (gamesRes.error) {
+      setState({
+        status: "error",
+        message: gamesRes.error.message,
+      });
+      return;
+    }
+
+    setState({
+      status: "success",
+      competition: compRes.data as CompetitionRow,
+      games: (gamesRes.data ?? []) as GameRow[],
+    });
+  }, [competitionId, supabase]);
 
   useEffect(() => {
-    let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- async fetch, setState corre dentro do callback
+    void loadCompetition();
+  }, [loadCompetition]);
 
-    void (async () => {
-      const [compRes, gamesRes] = await Promise.all([
-        supabase
-          .from("competitions")
-          .select(
-            "id, team_id, name, season, phase, team_label, num_opponents, total_rounds, has_two_legs",
-          )
-          .eq("id", competitionId)
-          .maybeSingle(),
-        supabase
-          .from("games")
-          .select(
-            "id, game_datetime, opponent_name, opponent_short_name, is_home, status, score_home, score_away, title",
-          )
-          .eq("competition_id", competitionId)
-          .order("game_datetime", { ascending: true }),
-      ]);
-
-      if (cancelled) return;
-      if (compRes.error || !compRes.data) {
-        setState({
-          status: "error",
-          message: compRes.error?.message ?? "Competição não encontrada.",
-        });
-        return;
-      }
-      if (gamesRes.error) {
-        setState({
-          status: "error",
-          message: gamesRes.error.message,
-        });
-        return;
-      }
-
-      setState({
-        status: "success",
-        competition: compRes.data as CompetitionRow,
-        games: (gamesRes.data ?? []) as GameRow[],
-      });
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [competitionId, supabase]);
+  async function handleDelete() {
+    setDeleting(true);
+    const { error } = await supabase
+      .from("competitions")
+      .delete()
+      .eq("id", competitionId);
+    if (error) {
+      toast.error("Erro ao apagar competição: " + error.message);
+      setDeleting(false);
+      return;
+    }
+    toast.success("Competição apagada com sucesso.");
+    router.replace(`/teams/${ageGroupId}/competitions`);
+    router.refresh();
+  }
 
   if (state.status === "loading") {
     return (
@@ -185,6 +211,37 @@ export function CompetitionDetailView({ competitionId, ageGroupId }: Props) {
               </div>
             </div>
           </div>
+
+          <div className="mt-4 grid grid-cols-3 gap-2 sm:flex sm:justify-end sm:gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowEditModal(true)}
+            >
+              <Pencil size={14} className="mr-1" /> Editar
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowDeleteConfirm(true)}
+              disabled={deleting}
+              className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
+            >
+              {deleting ? (
+                <Loader2 size={14} className="mr-1 animate-spin" />
+              ) : (
+                <Trash2 size={14} className="mr-1" />
+              )}
+              Apagar
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowAddGameModal(true)}
+            >
+              <Plus size={14} className="mr-1" /> Adicionar jogo
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
@@ -263,6 +320,49 @@ export function CompetitionDetailView({ competitionId, ageGroupId }: Props) {
           </div>
         )}
       </div>
+
+      <CompetitionFormModal
+        open={showEditModal}
+        onOpenChange={setShowEditModal}
+        teamId={competition.team_id}
+        footballFormat={footballFormat}
+        competitionId={competition.id}
+        initialValues={{
+          name: competition.name,
+          season: competition.season ?? "2025/2026",
+          phase: competition.phase ?? "",
+          team_label: (competition.team_label as TeamLabel) ?? "A",
+          total_rounds: competition.total_rounds?.toString() ?? "",
+          has_two_legs: competition.has_two_legs ?? false,
+        }}
+        onSaved={() => {
+          void loadCompetition();
+        }}
+      />
+
+      <ConfirmDialog
+        open={showDeleteConfirm}
+        onOpenChange={setShowDeleteConfirm}
+        title="Apagar competição?"
+        description="Os jogos associados não serão apagados — apenas desligados desta competição. Esta acção é irreversível."
+        confirmLabel="Apagar"
+        cancelLabel="Cancelar"
+        destructive
+        onConfirm={() => void handleDelete()}
+      />
+
+      <GameFormModal
+        open={showAddGameModal}
+        onOpenChange={setShowAddGameModal}
+        ageGroupId={ageGroupId}
+        teamId={competition.team_id}
+        initialCompetitionId={competition.id}
+        footballFormat={footballFormat}
+        onSaved={() => {
+          setShowAddGameModal(false);
+          void loadCompetition();
+        }}
+      />
     </div>
   );
 }
