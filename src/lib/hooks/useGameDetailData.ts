@@ -14,7 +14,7 @@ export function useGameDetailData(id: string, correctionMode: boolean) {
   const [saving, setSaving] = useState<string | null>(null);
   const [confirmingConvocation, setConfirmingConvocation] = useState(false);
   const [convocationStatus, setConvocationStatus] = useState<
-    "draft" | "confirmed" | "closed"
+    "draft" | "published"
   >("draft");
   const [isEditingConfirmedConvocation, setIsEditingConfirmedConvocation] =
     useState(false);
@@ -84,14 +84,9 @@ export function useGameDetailData(id: string, correctionMode: boolean) {
       const loadedGame = payload.game as Game;
       setGame(loadedGame);
 
-      if (
-        payload.convocationStatus === "confirmed" ||
-        payload.convocationStatus === "closed"
-      ) {
-        setConvocationStatus(payload.convocationStatus);
-      } else {
-        setConvocationStatus("draft");
-      }
+      setConvocationStatus(
+        payload.convocationStatus === "published" ? "published" : "draft",
+      );
       setIsEditingConfirmedConvocation(false);
 
       const sortedPlayers = (

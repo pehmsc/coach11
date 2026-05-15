@@ -25,7 +25,7 @@ interface UseGameConvocationDeps {
   confirmingConvocation: boolean;
   setConfirmingConvocation: React.Dispatch<React.SetStateAction<boolean>>;
   setConvocationStatus: React.Dispatch<
-    React.SetStateAction<"draft" | "confirmed" | "closed">
+    React.SetStateAction<"draft" | "published">
   >;
   setIsEditingConfirmedConvocation: React.Dispatch<
     React.SetStateAction<boolean>
@@ -293,12 +293,12 @@ export function useGameConvocation(deps: UseGameConvocationDeps) {
       });
       const responseBody = await res.json().catch(() => ({}));
 
-      if (!res.ok || responseBody?.status !== "confirmed") {
+      if (!res.ok || responseBody?.status !== "published") {
         setError(responseBody?.error || "Erro ao guardar convocatória.");
         return;
       }
 
-      setConvocationStatus("confirmed");
+      setConvocationStatus("published");
       setIsEditingConfirmedConvocation(false);
       toast.success(
         game?.status === "completed"
