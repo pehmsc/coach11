@@ -24,12 +24,12 @@ type RouteContext = {
   params: Promise<{ id: string }>;
 };
 
-type ConvocationStatus = "draft" | "confirmed" | "closed";
+/** Estado da convocatória, mapeia 1:1 com games.convocation_status na DB. */
+export type ConvocationStatus = "draft" | "published";
 type MatchPhase = "pre_match" | "first_half" | "halftime" | "second_half" | "review" | "completed";
 
 function toConvocationStatus(value: string | null | undefined): ConvocationStatus {
-  if (value === "confirmed" || value === "closed") return value;
-  return "draft";
+  return value === "published" ? "published" : "draft";
 }
 
 function isMissingCheckpointTableError(message: string | null | undefined) {
@@ -69,7 +69,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
 
     const { data: game, error: gameError } = await supabase
       .from("games")
-      .select("id, team_id, age_group_id, competition_id, game_datetime, end_time, status, title, opponent_name, opponent_short_name, is_home, location, formatted_address, latitude, longitude, osm_place_id, location_source, score_home, score_away, notes, concentration_time, equipment, opponent_tactical_system, additional_info, image_url, game_type, kit_fp_jersey_id, kit_fp_shorts_id, kit_fp_socks_id, kit_gk_jersey_id, kit_gk_shorts_id, kit_gk_socks_id")
+      .select("id, team_id, age_group_id, competition_id, game_datetime, end_time, status, convocation_status, title, opponent_name, opponent_short_name, is_home, location, formatted_address, latitude, longitude, osm_place_id, location_source, score_home, score_away, notes, concentration_time, equipment, opponent_tactical_system, additional_info, image_url, game_type, kit_fp_jersey_id, kit_fp_shorts_id, kit_fp_socks_id, kit_gk_jersey_id, kit_gk_shorts_id, kit_gk_socks_id")
       .eq("id", gameId)
       .maybeSingle();
 
@@ -98,13 +98,13 @@ export async function GET(_request: Request, { params }: RouteContext) {
     const isCoordinator = access.isCoordinator;
     const teamId = access.teamId ?? game.team_id ?? null;
 
-    // PR #156a: kits foram migrados para a tabela games. Aqui continuamos a
-    // ler convocations apenas para obter ID/status (id usado por callers
-    // legacy, status para detectar "closed"). Os kit_ids vêm do row de game
-    // já carregado acima (game.kit_fp_*, game.kit_gk_*).
+    // Query mantida para obter `id` legacy (usado por callers que ainda esperam
+    // convocationId/convocationIds no payload). O campo `status` desta tabela
+    // está desalinhado com games.convocation_status após a migração para o
+    // modelo unificado — NÃO usar como truth. Ver `convocationStatus` abaixo.
     const { data: convocations, error: convocationError } = await supabase
       .from("convocations")
-      .select("id, status, created_at")
+      .select("id, created_at")
       .eq("game_id", gameId)
       .order("created_at", { ascending: false })
       .order("id", { ascending: false });
@@ -117,7 +117,11 @@ export async function GET(_request: Request, { params }: RouteContext) {
     }
 
     const convocationIds = (convocations || []).map((c) => c.id);
-    const convocationStatus = toConvocationStatus(convocations?.[0]?.status);
+    // Truth canónica: games.convocation_status (enum binário 'draft' | 'published').
+    const convocationStatus = toConvocationStatus(
+      (game as unknown as { convocation_status?: string | null })
+        .convocation_status,
+    );
     const convocationSelections: Record<
       string,
       { responseStatus: string | null; isPresent: boolean | null }
