@@ -6,7 +6,7 @@ describe("convocation-editor", () => {
     expect(
       getConvocationEditorState({
         gameStatus: "scheduled",
-        convocationStatus: "confirmed",
+        convocationStatus: "published",
         isEditingConfirmed: false,
         canEditCompleted: false,
         correctionMode: false,
@@ -16,7 +16,7 @@ describe("convocation-editor", () => {
       }),
     ).toMatchObject({
       baseEditable: true,
-      effectiveStatus: "confirmed",
+      effectiveStatus: "published",
       canEditContent: false,
       canReopenConfirmed: true,
       canConfirm: false,
@@ -27,7 +27,7 @@ describe("convocation-editor", () => {
     expect(
       getConvocationEditorState({
         gameStatus: "scheduled",
-        convocationStatus: "confirmed",
+        convocationStatus: "published",
         isEditingConfirmed: true,
         canEditCompleted: false,
         correctionMode: false,

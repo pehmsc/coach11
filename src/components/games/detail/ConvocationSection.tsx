@@ -31,7 +31,7 @@ interface ConvocationSectionProps {
   savingLineupPlayer: string | null;
   savingTactical: boolean;
   convocatedCount: number;
-  effectiveConvocationStatus: "draft" | "confirmed" | "closed";
+  effectiveConvocationStatus: "draft" | "published";
   isEditingConfirmedConvocation: boolean;
   canEditConvocationContent: boolean;
   canReopenConfirmedConvocation: boolean;
@@ -106,20 +106,16 @@ export function ConvocationSection({
             </span>
             <span
               className={`text-[11px] font-semibold ${
-                effectiveConvocationStatus === "confirmed"
+                effectiveConvocationStatus === "published"
                   ? "text-emerald-600"
-                  : effectiveConvocationStatus === "closed"
-                    ? "text-slate-500"
-                    : "text-amber-600"
+                  : "text-amber-600"
               }`}
             >
-              {effectiveConvocationStatus === "confirmed"
+              {effectiveConvocationStatus === "published"
                 ? "Guardada"
-                : effectiveConvocationStatus === "closed"
-                  ? "Fechada"
-                  : isEditingConfirmedConvocation
-                    ? "A editar"
-                    : "Rascunho"}
+                : isEditingConfirmedConvocation
+                  ? "A editar"
+                  : "Rascunho"}
             </span>
           </div>
           {canReopenConfirmedConvocation && (
