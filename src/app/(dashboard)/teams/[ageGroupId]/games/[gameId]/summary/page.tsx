@@ -31,6 +31,7 @@ export default function TeamGameSummaryPage({
           },
         ],
         detailHref: `/teams/${ageGroupId}/games/${gameId}`,
+        gamesListHref: `/teams/${ageGroupId}/games`,
         returnToKey: `games:team:${ageGroupId}`,
         backLabel: "Voltar ao jogo",
       }}
