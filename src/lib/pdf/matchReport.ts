@@ -100,10 +100,6 @@ function getScoreText(data: MatchPdfBaseData) {
   }`;
 }
 
-function getMatchModeLabel(data: MatchPdfBaseData) {
-  return `${data.isHome ? "Casa" : "Fora"} · vs ${data.opponentName}`;
-}
-
 function getPdfAutoTableFinalY(doc: unknown, fallback: number) {
   return (
     (doc as { lastAutoTable?: { finalY?: number } }).lastAutoTable?.finalY ?? fallback
@@ -204,19 +200,13 @@ function renderMatchHeader(
   doc.setDrawColor(226, 232, 240);
   doc.setLineWidth(0.5);
   doc.line(margin, y, 210 - margin, y);
-  y += 8;
+  y += 14;
 
   doc.setFontSize(28);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(15, 23, 42);
   doc.text(getScoreText(data), 105, y, { align: "center" });
   y += 12;
-
-  doc.setFontSize(10);
-  doc.setFont("helvetica", "normal");
-  doc.setTextColor(100, 116, 139);
-  doc.text(getMatchModeLabel(data), 105, y, { align: "center" });
-  y += 10;
 
   doc.line(margin, y, 210 - margin, y);
   return y + 8;
@@ -258,16 +248,16 @@ function buildReportEventPlayerLabel(event: MatchPdfEvent) {
   }
 
   if (event.event_type === "substitution_out") {
-    // player_id = leaving, relatedPlayerName = entering
+    // Caracter "→" (U+2192) esta no range Latin-1 da Helvetica do jsPDF.
+    // Nao usar "➜" (U+279C) — renderiza como glifos errados ("'œ").
     return event.relatedPlayerName?.trim()
-      ? `${event.relatedPlayerName} ➜ ${baseName}`
+      ? `${event.relatedPlayerName} → ${baseName}`
       : baseName;
   }
 
   if (event.event_type === "substitution_in") {
-    // player_id = entering, relatedPlayerName = leaving
     return event.relatedPlayerName?.trim()
-      ? `${baseName} ➜ ${event.relatedPlayerName}`
+      ? `${baseName} → ${event.relatedPlayerName}`
       : baseName;
   }
 
