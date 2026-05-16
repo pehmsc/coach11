@@ -100,10 +100,6 @@ function getScoreText(data: MatchPdfBaseData) {
   }`;
 }
 
-function getMatchModeLabel(data: MatchPdfBaseData) {
-  return `${data.isHome ? "Casa" : "Fora"} · vs ${data.opponentName}`;
-}
-
 function getPdfAutoTableFinalY(doc: unknown, fallback: number) {
   return (
     (doc as { lastAutoTable?: { finalY?: number } }).lastAutoTable?.finalY ?? fallback
@@ -211,12 +207,6 @@ function renderMatchHeader(
   doc.setTextColor(15, 23, 42);
   doc.text(getScoreText(data), 105, y, { align: "center" });
   y += 12;
-
-  doc.setFontSize(10);
-  doc.setFont("helvetica", "normal");
-  doc.setTextColor(100, 116, 139);
-  doc.text(getMatchModeLabel(data), 105, y, { align: "center" });
-  y += 10;
 
   doc.line(margin, y, 210 - margin, y);
   return y + 8;
