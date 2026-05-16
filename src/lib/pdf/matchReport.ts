@@ -248,16 +248,18 @@ function buildReportEventPlayerLabel(event: MatchPdfEvent) {
   }
 
   if (event.event_type === "substitution_out") {
-    // Caracter "→" (U+2192) esta no range Latin-1 da Helvetica do jsPDF.
-    // Nao usar "➜" (U+279C) — renderiza como glifos errados ("'œ").
+    // Usar ">" (ASCII U+003E) para a seta de substituicao. A Helvetica
+    // embutida no jsPDF usa WinAnsiEncoding (CP1252) que NAO inclui
+    // setas Unicode como "→" (U+2192) nem "➜" (U+279C) — ambos
+    // renderizam como glifos errados. ASCII e a aposta segura.
     return event.relatedPlayerName?.trim()
-      ? `${event.relatedPlayerName} → ${baseName}`
+      ? `${event.relatedPlayerName} > ${baseName}`
       : baseName;
   }
 
   if (event.event_type === "substitution_in") {
     return event.relatedPlayerName?.trim()
-      ? `${baseName} → ${event.relatedPlayerName}`
+      ? `${baseName} > ${event.relatedPlayerName}`
       : baseName;
   }
 
