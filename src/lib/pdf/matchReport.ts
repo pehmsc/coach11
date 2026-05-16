@@ -248,18 +248,27 @@ function buildReportEventPlayerLabel(event: MatchPdfEvent) {
   }
 
   if (event.event_type === "substitution_out") {
-    // Usar ">" (ASCII U+003E) para a seta de substituicao. A Helvetica
-    // embutida no jsPDF usa WinAnsiEncoding (CP1252) que NAO inclui
-    // setas Unicode como "→" (U+2192) nem "➜" (U+279C) — ambos
-    // renderizam como glifos errados. ASCII e a aposta segura.
+    // Substituicao: "Sai: <jogador que sai> > Entra: <jogador que entra>".
+    // Usar ">" (ASCII U+003E) — a Helvetica embutida no jsPDF usa
+    // WinAnsiEncoding (CP1252) e nao suporta "→" (U+2192) nem "➜"
+    // (U+279C). Prefixos "Sai:"/"Entra:" garantem clareza semantica
+    // independente da ordem visual.
+    //
+    // Em substitution_out:
+    //   player_id (DB) = baseName = quem SAI
+    //   related_player_id (DB) = relatedPlayerName = quem ENTRA
     return event.relatedPlayerName?.trim()
-      ? `${event.relatedPlayerName} > ${baseName}`
+      ? `Sai: ${baseName} > Entra: ${event.relatedPlayerName}`
       : baseName;
   }
 
   if (event.event_type === "substitution_in") {
+    // Em substitution_in (caso raro — filtrado pelo GameSummaryView
+    // quando ha par no mesmo minuto):
+    //   player_id (DB) = baseName = quem ENTRA
+    //   related_player_id (DB) = relatedPlayerName = quem SAI
     return event.relatedPlayerName?.trim()
-      ? `${baseName} > ${event.relatedPlayerName}`
+      ? `Sai: ${event.relatedPlayerName} > Entra: ${baseName}`
       : baseName;
   }
 
