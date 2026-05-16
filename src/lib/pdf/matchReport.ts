@@ -258,16 +258,16 @@ function buildReportEventPlayerLabel(event: MatchPdfEvent) {
   }
 
   if (event.event_type === "substitution_out") {
-    // player_id = leaving, relatedPlayerName = entering
+    // Caracter "→" (U+2192) esta no range Latin-1 da Helvetica do jsPDF.
+    // Nao usar "➜" (U+279C) — renderiza como glifos errados ("'œ").
     return event.relatedPlayerName?.trim()
-      ? `${event.relatedPlayerName} ➜ ${baseName}`
+      ? `${event.relatedPlayerName} → ${baseName}`
       : baseName;
   }
 
   if (event.event_type === "substitution_in") {
-    // player_id = entering, relatedPlayerName = leaving
     return event.relatedPlayerName?.trim()
-      ? `${baseName} ➜ ${event.relatedPlayerName}`
+      ? `${baseName} → ${event.relatedPlayerName}`
       : baseName;
   }
 
