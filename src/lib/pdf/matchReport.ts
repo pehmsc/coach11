@@ -204,7 +204,7 @@ function renderMatchHeader(
   doc.setDrawColor(226, 232, 240);
   doc.setLineWidth(0.5);
   doc.line(margin, y, 210 - margin, y);
-  y += 8;
+  y += 14;
 
   doc.setFontSize(28);
   doc.setFont("helvetica", "bold");
