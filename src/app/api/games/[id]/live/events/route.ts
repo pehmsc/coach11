@@ -229,15 +229,16 @@ export async function POST(request: Request, { params }: RouteContext) {
 
     const [
       { data: liveRows, error: liveRowsError },
-      { data: externalRows, error: externalRowsError },
+      { data: externalSquadRows, error: externalRowsError },
       { data: existingEvents, error: existingEventsError },
     ] =
       await Promise.all([
         supabase.from("game_stats_live").select("player_id, status").eq("game_id", gameId),
         supabase
-          .from("external_player_convocations")
-          .select("id, lineup_status")
-          .eq("game_id", gameId),
+          .from("game_squads")
+          .select("id, initial_lineup_status")
+          .eq("game_id", gameId)
+          .is("player_id", null),
         supabase
           .from("game_events")
           .select(
@@ -263,9 +264,13 @@ export async function POST(request: Request, { params }: RouteContext) {
         onFieldPlayerIds.add(playerId);
       }
     });
-    (externalRows || []).forEach((row) => {
+    // Modelo unificado (Mai 2026): externos em game_squads.player_id IS NULL.
+    // initial_lineup_status === "starter" e o equivalente direto do antigo
+    // external_player_convocations.lineup_status === "on_field" (conversao
+    // documentada em /api/games/[id]/convocation/route.ts:247).
+    (externalSquadRows || []).forEach((row) => {
       if (typeof row.id !== "string") return;
-      if (row.lineup_status === "on_field") {
+      if (row.initial_lineup_status === "starter") {
         onFieldPlayerIds.add(toExternalLivePlayerId(row.id));
       }
     });
