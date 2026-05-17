@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, type ChangeEvent } from "react";
+import { useMemo, useState, type ChangeEvent } from "react";
 import { getTacticalSystemOptions } from "@/lib/football/tactical-systems";
 
 const OTHER_OPTION_VALUE = "__other__";
@@ -29,20 +29,32 @@ export function TacticalSystemPicker({
 }: TacticalSystemPickerProps) {
   const tacticalSystemOptions = getTacticalSystemOptions(footballFormat);
 
+  // "Outro" modo ligado SE:
+  //  - utilizador clicou explicitamente em "Outro" no dropdown (userPickedOther), OU
+  //  - nao ha sugestoes para o footballFormat (sempre livre), OU
+  //  - o value actual nao pertence as sugestoes (e.g. jogo F11 num escalao F9
+  //    ou tactical_system="Outro" legacy guardado em DB)
+  // Modelo declarativo evita useEffect + setState com cascading renders.
+  const [userPickedOther, setUserPickedOther] = useState(false);
+
   const isOtherMode = useMemo(() => {
+    if (userPickedOther) return true;
     if (tacticalSystemOptions.length === 0) return true;
-    if (!value) return false;
-    return !tacticalSystemOptions.includes(value);
-  }, [tacticalSystemOptions, value]);
+    return value !== "" && !tacticalSystemOptions.includes(value);
+  }, [userPickedOther, tacticalSystemOptions, value]);
 
   const selectValue = isOtherMode ? OTHER_OPTION_VALUE : value;
 
   function handleSelectChange(e: ChangeEvent<HTMLSelectElement>) {
     const next = e.target.value;
     if (next === OTHER_OPTION_VALUE) {
-      onChange("");
+      // Preservar value anterior — utilizador pode editar a partir dele.
+      // Marcar escolha explicita para o input livre aparecer mesmo que
+      // o value seja "" (cenario do bug do PR #172).
+      setUserPickedOther(true);
       return;
     }
+    setUserPickedOther(false);
     onChange(next);
   }
 
