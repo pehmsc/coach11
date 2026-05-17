@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ClipboardList, Info, Loader2, Pencil, Save, X } from "lucide-react";
 import { toast } from "sonner";
 import { TacticalSystemPicker } from "@/components/games/TacticalSystemPicker";
@@ -52,6 +52,27 @@ export function MatchSheetSummarySection({
   );
   const [teamNotes, setTeamNotes] = useState(game.team_notes ?? "");
   const [coachNotes, setCoachNotes] = useState(game.coach_notes ?? "");
+
+  // Re-sincronizar state local quando o `game` mudar (e.g. apos
+  // loadSummary trazer novos valores do servidor depois de um save).
+  // Sem isto, o useState so corre na primeira render e o read-only
+  // mostraria valores stale ate o utilizador navegar para outra pagina.
+  useEffect(() => {
+    setTacticalSystem(game.tactical_system ?? "");
+    setPositiveAspects(game.positive_aspects ?? "");
+    setNegativeAspects(game.negative_aspects ?? "");
+    setAspectsToImprove(game.aspects_to_improve ?? "");
+    setTeamNotes(game.team_notes ?? "");
+    setCoachNotes(game.coach_notes ?? "");
+  }, [
+    game.id,
+    game.tactical_system,
+    game.positive_aspects,
+    game.negative_aspects,
+    game.aspects_to_improve,
+    game.team_notes,
+    game.coach_notes,
+  ]);
 
   function resetFromGame() {
     setTacticalSystem(game.tactical_system ?? "");
