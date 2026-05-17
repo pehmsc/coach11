@@ -32,6 +32,9 @@ import {
   exportMatchReportPDF,
   exportMatchStatisticsPDF,
 } from "@/lib/pdf/matchReport";
+import { sortSquadForReport } from "@/lib/games/sort-squad-for-report";
+import { useAgeGroupMeta } from "@/hooks/useAgeGroupName";
+import { MatchSheetSummarySection } from "./MatchSheetSummarySection";
 import type { Game, GameEvent, GameFinalStats } from "@/types/database";
 
 type SummaryPlayer = {
@@ -71,6 +74,7 @@ type ConvocationExportPlayer = {
   first_name: string;
   last_name: string;
   jersey_number: number | null;
+  preferred_position: string | null;
   isConvocated: boolean;
   isExternal?: boolean;
 };
@@ -182,6 +186,9 @@ export function GameSummaryView({ gameId, scope }: Props) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [summary, setSummary] = useState<SummaryPayload | null>(null);
+  const { football_format: footballFormat } = useAgeGroupMeta(
+    summary?.game?.age_group_id ?? null,
+  );
   const [editing, setEditing] = useState(false);
   const [savingRecalc, setSavingRecalc] = useState(false);
   const [ratingDraft, setRatingDraft] = useState<Record<string, string>>({});
@@ -378,13 +385,14 @@ export function GameSummaryView({ gameId, scope }: Props) {
             jersey_number?: number;
             name: string;
             lineupLabel?: string;
+            preferred_position?: string | null;
           }>
         | undefined;
 
       try {
         const convocation = await loadConvocationExport();
         const starterIdSet = new Set(convocation.starterIds ?? []);
-        squad = convocation.players
+        const squadRaw = convocation.players
           .filter((player) => player.isConvocated)
           .map((player) => ({
             jersey_number: player.jersey_number ?? undefined,
@@ -394,10 +402,9 @@ export function GameSummaryView({ gameId, scope }: Props) {
               : convocation.lineupStatuses[player.id]
                 ? "Suplente"
                 : "Convocado",
-          }))
-          .sort((a, b) =>
-            a.name.localeCompare(b.name, "pt", { sensitivity: "base" }),
-          );
+            preferred_position: player.preferred_position ?? null,
+          }));
+        squad = sortSquadForReport(squadRaw);
       } catch {
         squad = undefined;
       }
@@ -430,18 +437,22 @@ export function GameSummaryView({ gameId, scope }: Props) {
             : undefined,
           is_opponent_event: event.is_opponent_event,
         })),
-        players: summary.finalStats.map((row) => ({
-          jersey_number: summary.playersById[row.player_id]?.jersey_number ?? undefined,
-          name: playerFullName(summary.playersById[row.player_id]),
-          lineupLabel: row.lineup_type === "starter" ? "Titular" : "Suplente",
-          minutes_played: row.minutes_played ?? undefined,
-          goals: row.goals ?? 0,
-          own_goals: row.own_goals ?? 0,
-          assists: row.assists ?? 0,
-          goals_conceded: goalsConcededByPlayer.get(row.player_id) ?? 0,
-          yellow_cards: row.yellow_cards ?? 0,
-          red_cards: row.red_cards ?? 0,
-        })),
+        players: sortSquadForReport(
+          summary.finalStats.map((row) => ({
+            jersey_number: summary.playersById[row.player_id]?.jersey_number ?? undefined,
+            name: playerFullName(summary.playersById[row.player_id]),
+            lineupLabel: row.lineup_type === "starter" ? "Titular" : "Suplente",
+            preferred_position:
+              summary.playersById[row.player_id]?.preferred_position ?? null,
+            minutes_played: row.minutes_played ?? undefined,
+            goals: row.goals ?? 0,
+            own_goals: row.own_goals ?? 0,
+            assists: row.assists ?? 0,
+            goals_conceded: goalsConcededByPlayer.get(row.player_id) ?? 0,
+            yellow_cards: row.yellow_cards ?? 0,
+            red_cards: row.red_cards ?? 0,
+          })),
+        ),
         squad,
       });
 
@@ -463,7 +474,7 @@ export function GameSummaryView({ gameId, scope }: Props) {
     try {
       const convocation = await loadConvocationExport();
       const starterIdSet = new Set(convocation.starterIds ?? []);
-      const entries = convocation.players
+      const entriesRaw = convocation.players
         .filter((player) => player.isConvocated)
         .map((player) => ({
           jersey_number: player.jersey_number ?? undefined,
@@ -473,6 +484,7 @@ export function GameSummaryView({ gameId, scope }: Props) {
             : convocation.lineupStatuses[player.id]
               ? "Suplente"
               : "Convocado",
+          preferred_position: player.preferred_position ?? null,
           confirmationLabel: player.isExternal
             ? "—"
             : getResponseStatusLabel(
@@ -481,13 +493,8 @@ export function GameSummaryView({ gameId, scope }: Props) {
           presenceLabel: player.isExternal
             ? "—"
             : getPresenceLabel(convocation.convocationSelections?.[player.id]?.isPresent),
-        }))
-        .sort((a, b) => {
-          const aStarter = a.lineupLabel === "Titular";
-          const bStarter = b.lineupLabel === "Titular";
-          if (aStarter !== bStarter) return aStarter ? -1 : 1;
-          return a.name.localeCompare(b.name, "pt", { sensitivity: "base" });
-        });
+        }));
+      const entries = sortSquadForReport(entriesRaw);
 
       await exportMatchAttendancePDF({
         gameDatetime: summary.game.game_datetime,
@@ -535,18 +542,22 @@ export function GameSummaryView({ gameId, scope }: Props) {
         location: summary.game.location,
         title: summary.game.title,
         statusLabel: getGameStatusLabel(summary.game.status),
-        players: summary.finalStats.map((row) => ({
-          jersey_number: summary.playersById[row.player_id]?.jersey_number ?? undefined,
-          name: playerFullName(summary.playersById[row.player_id]),
-          lineupLabel: row.lineup_type === "starter" ? "Titular" : "Suplente",
-          minutes_played: row.minutes_played ?? undefined,
-          goals: row.goals ?? 0,
-          own_goals: row.own_goals ?? 0,
-          assists: row.assists ?? 0,
-          goals_conceded: statsConcededByPlayer.get(row.player_id) ?? 0,
-          yellow_cards: row.yellow_cards ?? 0,
-          red_cards: row.red_cards ?? 0,
-        })),
+        players: sortSquadForReport(
+          summary.finalStats.map((row) => ({
+            jersey_number: summary.playersById[row.player_id]?.jersey_number ?? undefined,
+            name: playerFullName(summary.playersById[row.player_id]),
+            lineupLabel: row.lineup_type === "starter" ? "Titular" : "Suplente",
+            preferred_position:
+              summary.playersById[row.player_id]?.preferred_position ?? null,
+            minutes_played: row.minutes_played ?? undefined,
+            goals: row.goals ?? 0,
+            own_goals: row.own_goals ?? 0,
+            assists: row.assists ?? 0,
+            goals_conceded: statsConcededByPlayer.get(row.player_id) ?? 0,
+            yellow_cards: row.yellow_cards ?? 0,
+            red_cards: row.red_cards ?? 0,
+          })),
+        ),
       });
 
       capturePdfGenerated("match_statistics_post_game");
@@ -1026,6 +1037,15 @@ export function GameSummaryView({ gameId, scope }: Props) {
           </div>
         </div>
       </div>
+
+      <MatchSheetSummarySection
+        game={summary.game}
+        canEdit={summary.canEdit}
+        footballFormat={footballFormat ?? null}
+        onSaved={() => {
+          void loadSummary({ keepLoading: false });
+        }}
+      />
 
       <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
         <div className="px-4 py-3 bg-slate-50 border-b border-slate-100">
