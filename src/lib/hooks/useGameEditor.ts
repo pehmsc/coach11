@@ -210,7 +210,13 @@ export function useGameEditor(deps: UseGameEditorDeps) {
       const payload = await res.json().catch(() => ({}));
 
       if (!res.ok || !payload?.success) {
-        setError(payload?.error || "Erro ao apagar jogo.");
+        // setError nao mostra UI no detail page com game presente (so
+        // mostra full-page quando game === null). Usar toast.error para
+        // feedback visivel imediato, alinhado com o toast.success ja
+        // existente neste handler.
+        const message =
+          (payload as { error?: string })?.error || "Erro ao apagar jogo.";
+        toast.error(message);
         return;
       }
 
@@ -218,7 +224,7 @@ export function useGameEditor(deps: UseGameEditorDeps) {
       router.replace("/games");
       router.refresh();
     } catch {
-      setError("Erro de ligação ao apagar jogo.");
+      toast.error("Erro de ligação ao apagar jogo.");
     } finally {
       setDeletingGame(false);
       setShowDeleteConfirm(false);
