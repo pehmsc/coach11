@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ChevronDown, ChevronUp, Info, Star } from "lucide-react";
-import { getTacticalSystemOptions } from "@/lib/football/tactical-systems";
+import { TacticalSystemPicker } from "@/components/games/TacticalSystemPicker";
 import type { LivePlayer } from "./types";
 
 interface ReviewPanelProps {
@@ -33,7 +33,6 @@ type MatchSheetSectionProps = {
   showFichaSection: boolean;
   setShowFichaSection: React.Dispatch<React.SetStateAction<boolean>>;
   footballFormat: string | null;
-  tacticalSystemOptions: readonly string[];
   liveTacticalSystem: string;
   livePositiveAspects: string;
   liveNegativeAspects: string;
@@ -53,7 +52,6 @@ function MatchSheetSection(props: MatchSheetSectionProps) {
     showFichaSection,
     setShowFichaSection,
     footballFormat,
-    tacticalSystemOptions,
     liveTacticalSystem,
     livePositiveAspects,
     liveNegativeAspects,
@@ -102,34 +100,12 @@ function MatchSheetSection(props: MatchSheetSectionProps) {
             <label className="text-sm font-medium text-slate-700">
               Sistema táctico
             </label>
-            {tacticalSystemOptions.length > 0 ? (
-              <select
-                value={liveTacticalSystem}
-                onChange={(e) => setLiveTacticalSystem(e.target.value)}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              >
-                <option value="">— Sem indicação —</option>
-                {tacticalSystemOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <input
-                type="text"
-                value={liveTacticalSystem}
-                onChange={(e) => setLiveTacticalSystem(e.target.value)}
-                placeholder="ex: 1-4-3-3"
-                maxLength={40}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              />
-            )}
-            <p className="text-[10px] text-slate-400">
-              {footballFormat
-                ? `Sugestões para futebol ${footballFormat}.`
-                : "Sem formato definido — texto livre."}
-            </p>
+            <TacticalSystemPicker
+              value={liveTacticalSystem}
+              onChange={setLiveTacticalSystem}
+              footballFormat={footballFormat}
+              accent="emerald"
+            />
           </div>
 
           <div className="space-y-1.5">
@@ -230,7 +206,6 @@ export function ReviewPanel({
   setLiveCoachNotes,
 }: ReviewPanelProps) {
   const [showFichaSection, setShowFichaSection] = useState(true);
-  const tacticalSystemOptions = getTacticalSystemOptions(footballFormat);
 
   if (playersWhoNeedPersistentStats.length === 0) {
     return (
@@ -243,7 +218,6 @@ export function ReviewPanel({
           showFichaSection={showFichaSection}
           setShowFichaSection={setShowFichaSection}
           footballFormat={footballFormat}
-          tacticalSystemOptions={tacticalSystemOptions}
           liveTacticalSystem={liveTacticalSystem}
           livePositiveAspects={livePositiveAspects}
           liveNegativeAspects={liveNegativeAspects}
@@ -359,7 +333,6 @@ export function ReviewPanel({
         showFichaSection={showFichaSection}
         setShowFichaSection={setShowFichaSection}
         footballFormat={footballFormat}
-        tacticalSystemOptions={tacticalSystemOptions}
         liveTacticalSystem={liveTacticalSystem}
         livePositiveAspects={livePositiveAspects}
         liveNegativeAspects={liveNegativeAspects}
