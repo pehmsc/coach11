@@ -4,7 +4,7 @@ import { useState } from "react";
 import { AlertCircle, ChevronDown, ChevronUp, Info, Loader2, X } from "lucide-react";
 import { EMPTY_LOCATION_FIELDS } from "@/lib/location";
 import { normalizeManualShortName } from "@/lib/football/short-name";
-import { getTacticalSystemOptions } from "@/lib/football/tactical-systems";
+import { TacticalSystemPicker } from "@/components/games/TacticalSystemPicker";
 import { LocationFields } from "@/components/maps/LocationFields";
 import { NotesEditor } from "@/components/forms/NotesEditor";
 import { EventImagePicker } from "@/components/media/EventImagePicker";
@@ -26,7 +26,6 @@ export function GameEditModal({ game, error, editor }: GameEditModalProps) {
     game.age_group_id ?? null,
   );
   const [showFichaSection, setShowFichaSection] = useState(false);
-  const tacticalSystemOptions = getTacticalSystemOptions(footballFormat);
 
   return (
     <div
@@ -276,38 +275,12 @@ export function GameEditModal({ game, error, editor }: GameEditModalProps) {
                     <label className="text-sm font-medium text-slate-700">
                       Sistema táctico
                     </label>
-                    {tacticalSystemOptions.length > 0 ? (
-                      <select
-                        value={editor.editTacticalSystem}
-                        onChange={(e) =>
-                          editor.setEditTacticalSystem(e.target.value)
-                        }
-                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="">— Sem indicação —</option>
-                        {tacticalSystemOptions.map((option) => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <input
-                        type="text"
-                        value={editor.editTacticalSystem}
-                        onChange={(e) =>
-                          editor.setEditTacticalSystem(e.target.value)
-                        }
-                        placeholder="ex: 1-4-3-3"
-                        maxLength={40}
-                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    )}
-                    <p className="text-[10px] text-slate-400">
-                      {footballFormat
-                        ? `Sugestões para futebol ${footballFormat}.`
-                        : "Sem formato definido — texto livre."}
-                    </p>
+                    <TacticalSystemPicker
+                      value={editor.editTacticalSystem}
+                      onChange={editor.setEditTacticalSystem}
+                      footballFormat={footballFormat}
+                      accent="blue"
+                    />
                   </div>
 
                   <div className="space-y-1.5">
