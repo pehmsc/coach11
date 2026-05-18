@@ -5,6 +5,14 @@ export interface PlayerWithStatus extends Player {
   isBlocked: boolean; // já convocado noutro jogo SOBREPOSTO no mesmo dia
   isExternal?: boolean;
   externalConvocationId?: string | null;
+  /**
+   * Quando o atleta foi convocado via cross-age (i.e., player_id real
+   * dum atleta de outro escalão do mesmo clube), guarda aqui o
+   * `source_age_group_id` para que a UI mostre badge com nome do
+   * escalão de origem. `null`/`undefined` significa atleta do escalão
+   * actual (sem badge).
+   */
+  sourceAgeGroupId?: string | null;
   /** Vermelho/destructive — sobreposição real, jogador bloqueado. */
   sameDayConflictLabel?: string | null;
   /** Amarelo/warning — convocado noutro(s) jogo(s) sem sobreposição, jogador disponível. */
