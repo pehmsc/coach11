@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { useAgeGroup } from "@/contexts/AgeGroupContext";
 
 /**
@@ -37,8 +38,15 @@ export type UseActiveScopeResult = {
  *
  * Zero breaking changes — useAgeGroup continua a funcionar para callers
  * existentes (useTrainingsData, etc).
+ *
+ * Os helpers setGlobal/setTeam/setScope disparam router.refresh() apos
+ * actualizar o context, para que server components (e.g. /dashboard) que
+ * leem o cookie coach11_active_age_group re-rendereizem com o novo valor.
+ * Client components reagem automaticamente via React Context — o refresh
+ * e no-op para esses; apenas server components beneficiam.
  */
 export function useActiveScope(): UseActiveScopeResult {
+  const router = useRouter();
   const {
     ageGroups,
     selectedAgeGroupId,
@@ -65,19 +73,22 @@ export function useActiveScope(): UseActiveScopeResult {
       } else {
         setSelectedAgeGroupId(next.teamId);
       }
+      router.refresh();
     },
-    [setSelectedAgeGroupId],
+    [setSelectedAgeGroupId, router],
   );
 
   const setGlobal = useCallback(() => {
     setSelectedAgeGroupId(null);
-  }, [setSelectedAgeGroupId]);
+    router.refresh();
+  }, [setSelectedAgeGroupId, router]);
 
   const setTeam = useCallback(
     (teamId: string) => {
       setSelectedAgeGroupId(teamId);
+      router.refresh();
     },
-    [setSelectedAgeGroupId],
+    [setSelectedAgeGroupId, router],
   );
 
   const availableTeams = useMemo(
