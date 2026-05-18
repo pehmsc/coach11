@@ -212,11 +212,21 @@ export function GameDetailView({ gameId, scope }: Props) {
       {editor.showExternalPlayerModal && (
         <ExternalPlayerModal
           editor={editor}
+          currentAgeGroupId={game.age_group_id ?? ""}
+          alreadyConvocatedPlayerIds={
+            new Set(
+              players
+                .filter((p) => p.isConvocated && !p.isExternal)
+                .map((p) => p.id),
+            )
+          }
           onSubmit={(e) =>
             void convocation.handleAddExternalPlayer(
               e, editor.externalPlayerName, editor.externalPlayerNumber,
               editor.externalPlayerPosition, editor.setSavingExternalPlayer,
               editor.setShowExternalPlayerModal, editor.resetExternalPlayerForm,
+              editor.externalPlayerMode,
+              editor.crossAgeSelectedPlayerId,
             )
           }
         />

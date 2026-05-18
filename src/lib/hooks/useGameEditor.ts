@@ -89,6 +89,19 @@ export function useGameEditor(deps: UseGameEditorDeps) {
   const [externalPlayerNumber, setExternalPlayerNumber] = useState("");
   const [externalPlayerPosition, setExternalPlayerPosition] = useState("");
   const [savingExternalPlayer, setSavingExternalPlayer] = useState(false);
+  // Cross-age picker (PR N): modal alterna entre "club" (atleta de outro
+  // escalão do mesmo clube) e "free_text" (externo sem registo). Default
+  // "club" porque e o caso mais comum num clube com multiplos escaloes.
+  const [externalPlayerMode, setExternalPlayerMode] = useState<
+    "club" | "free_text"
+  >("club");
+  const [crossAgeSelectedAgeGroupId, setCrossAgeSelectedAgeGroupId] = useState<
+    string | null
+  >(null);
+  const [crossAgeSearchQuery, setCrossAgeSearchQuery] = useState("");
+  const [crossAgeSelectedPlayerId, setCrossAgeSelectedPlayerId] = useState<
+    string | null
+  >(null);
 
   function openEditGame() {
     if (!game) return;
@@ -235,6 +248,11 @@ export function useGameEditor(deps: UseGameEditorDeps) {
     setExternalPlayerName("");
     setExternalPlayerNumber("");
     setExternalPlayerPosition("");
+    // Reset estado cross-age (default: modo "club")
+    setExternalPlayerMode("club");
+    setCrossAgeSelectedAgeGroupId(null);
+    setCrossAgeSearchQuery("");
+    setCrossAgeSelectedPlayerId(null);
   }
 
   function closeExternalPlayerModal() {
@@ -330,6 +348,15 @@ export function useGameEditor(deps: UseGameEditorDeps) {
     setSavingExternalPlayer,
     closeExternalPlayerModal,
     resetExternalPlayerForm,
+    // Cross-age picker (PR N)
+    externalPlayerMode,
+    setExternalPlayerMode,
+    crossAgeSelectedAgeGroupId,
+    setCrossAgeSelectedAgeGroupId,
+    crossAgeSearchQuery,
+    setCrossAgeSearchQuery,
+    crossAgeSelectedPlayerId,
+    setCrossAgeSelectedPlayerId,
   };
 }
 
