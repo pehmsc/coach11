@@ -3,6 +3,7 @@
 import {
   createContext,
   useContext,
+  useEffect,
   useState,
   useCallback,
   useMemo,
@@ -12,6 +13,18 @@ import {
 const LOCAL_STORAGE_KEY = "coach11_selected_age_group_id";
 // Valor sentinela guardado no localStorage para representar "Todos os escalões"
 const ALL_SENTINEL = "__all__";
+
+// Cookie espelho do localStorage para server components (e.g. /dashboard)
+// poderem ler o escalao activo. localStorage continua a ser fonte de verdade
+// no client; cookie e cache server-readable.
+const COOKIE_KEY = "coach11_active_age_group";
+const COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 365; // 1 ano
+
+function writeAgeGroupCookie(value: string | null) {
+  if (typeof document === "undefined") return;
+  const cookieValue = value ?? "";
+  document.cookie = `${COOKIE_KEY}=${encodeURIComponent(cookieValue)}; path=/; max-age=${COOKIE_MAX_AGE_SECONDS}; SameSite=Lax`;
+}
 
 type AgeGroupEntry = { id: string; name: string };
 
@@ -83,6 +96,7 @@ export function AgeGroupProvider({
     } catch {
       // ignore
     }
+    writeAgeGroupCookie(id);
   }, []);
 
   // Escalão efectivo exposto ao contexto
@@ -90,6 +104,13 @@ export function AgeGroupProvider({
     storedSelection === undefined
       ? defaultAgeGroupId  // sem escolha explícita → default do servidor
       : storedSelection;   // null (Todos) ou uuid específico
+
+  // Espelhar o estado efectivo no cookie sempre que mudar (incluindo
+  // primeira hidratacao a partir do localStorage). Server components
+  // como /dashboard leem este cookie para filtrar a vista por escalao.
+  useEffect(() => {
+    writeAgeGroupCookie(effectiveSelectedId);
+  }, [effectiveSelectedId]);
 
   const value = useMemo<AgeGroupContextValue>(
     () => ({
