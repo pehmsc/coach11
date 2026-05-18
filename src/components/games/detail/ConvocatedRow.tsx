@@ -2,6 +2,7 @@
 
 import { Loader2, X } from "lucide-react";
 import { type PlayerWithStatus, getPlayerCardMeta } from "@/components/games/detail/types";
+import { useAgeGroup } from "@/contexts/AgeGroupContext";
 
 interface ConvocatedRowProps {
   player: PlayerWithStatus;
@@ -27,6 +28,15 @@ export function ConvocatedRow({
   const badgeLabel = isGk ? "GR" : isStarter ? "Titular" : "Suplente";
   const playerMeta = getPlayerCardMeta(player);
 
+  // Distincao visual: cross-age (atleta de outro escalao do clube) tem badge
+  // com nome do escalao de origem; externo (free-text sem registo) mantem
+  // tag "(externo)" actual. Atletas do escalao actual sem badge.
+  const { ageGroups } = useAgeGroup();
+  const sourceAgeGroupName =
+    player.sourceAgeGroupId && !player.isExternal
+      ? (ageGroups.find((ag) => ag.id === player.sourceAgeGroupId)?.name ?? null)
+      : null;
+
   return (
     <div
       className={`flex items-center gap-3 p-3 rounded-xl mb-1.5 border-2 ${
@@ -49,9 +59,14 @@ export function ConvocatedRow({
           className={`font-medium text-sm truncate ${isStarter ? "text-blue-900" : "text-slate-700"}`}
         >
           {player.first_name} {player.last_name}
+          {sourceAgeGroupName && (
+            <span className="ml-1.5 align-middle text-[10px] font-semibold bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded">
+              {sourceAgeGroupName}
+            </span>
+          )}
           {player.isExternal && (
-            <span className="ml-1 align-middle text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-              (externo)
+            <span className="ml-1.5 align-middle text-[10px] font-semibold bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded">
+              Externo
             </span>
           )}
         </p>
