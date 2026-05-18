@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import Link from "next/link";
 import Image from "next/image";
 import { DashboardEmptyState } from "@/components/dashboard/DashboardEmptyState";
@@ -230,6 +231,30 @@ export default async function DashboardPage({
 
   const hasSetup = accessibleTeamIds.length > 0;
 
+  // Server component nao tem acesso a useAgeGroup (React Context client).
+  // Le o cookie escrito pelo AgeGroupContext para filtrar a vista por
+  // escalao escolhido no <ScopeToggle>. Cookie ausente ou invalido
+  // mantem comportamento agregado (legacy).
+  const cookieStore = await cookies();
+  const activeAgeGroupCookie = cookieStore.get("coach11_active_age_group")?.value;
+  const activeAgeGroupId =
+    activeAgeGroupCookie && activeAgeGroupCookie.length > 0
+      ? decodeURIComponent(activeAgeGroupCookie)
+      : null;
+
+  let scopedTeamIds = accessibleTeamIds;
+  if (activeAgeGroupId && managedAgeGroups) {
+    const teamIdsForActiveAgeGroup = managedAgeGroups
+      .filter((ag) => ag.id === activeAgeGroupId)
+      .flatMap((ag) => (ag.teams || []).map((t) => t?.id).filter(Boolean))
+      .filter((id): id is string => typeof id === "string");
+    if (teamIdsForActiveAgeGroup.length > 0) {
+      // Interseccao com accessibleTeamIds (defesa: nao expandir alem do permitido)
+      const accessibleSet = new Set(accessibleTeamIds);
+      scopedTeamIds = teamIdsForActiveAgeGroup.filter((id) => accessibleSet.has(id));
+    }
+  }
+
   const now = new Date();
   const todayDate = format(now, "yyyy-MM-dd");
   const pastWindowStart = format(addDays(now, -30), "yyyy-MM-dd");
@@ -243,7 +268,7 @@ export default async function DashboardPage({
       db
         .from("training_sessions")
         .select("*")
-        .in("team_id", accessibleTeamIds)
+        .in("team_id", scopedTeamIds)
         .gte("session_date", pastWindowStart)
         .lte("session_date", futureWindowEnd)
         .neq("status", "cancelled")
@@ -254,7 +279,7 @@ export default async function DashboardPage({
       db
         .from("games")
         .select("*")
-        .in("team_id", accessibleTeamIds)
+        .in("team_id", scopedTeamIds)
         .gte("game_datetime", `${pastWindowStart}T00:00:00`)
         .lte("game_datetime", `${futureWindowEnd}T23:59:59`)
         .neq("status", "cancelled")
@@ -297,7 +322,7 @@ export default async function DashboardPage({
         .from("games")
         .select("id, team_id, opponent_name, opponent_short_name, game_datetime, location, status, is_home")
         .in("id", checkpointGameIds)
-        .in("team_id", accessibleTeamIds)
+        .in("team_id", scopedTeamIds)
         .neq("status", "completed");
 
       const liveGameById = new Map((liveGames || []).map((row) => [row.id, row]));
@@ -338,7 +363,7 @@ export default async function DashboardPage({
       const { data: fallbackLiveGames } = await db
         .from("games")
         .select("id, opponent_name, opponent_short_name, game_datetime, location, status, updated_at, is_home")
-        .in("team_id", accessibleTeamIds)
+        .in("team_id", scopedTeamIds)
         .eq("status", "live")
         .order("updated_at", { ascending: false })
         .limit(1);
