@@ -254,9 +254,9 @@ export function ConvocationSection({
                   +
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm text-slate-700">Outro jogador</p>
+                  <p className="text-sm text-slate-700">Adicionar jogador</p>
                   <p className="text-xs text-slate-500">
-                    Adicionar jogador externo apenas para este jogo
+                    Atleta de outro escalão ou externo sem registo
                   </p>
                 </div>
                 <div className="w-6 h-6 rounded-full border-2 border-emerald-300 bg-white/80 flex-shrink-0" />
