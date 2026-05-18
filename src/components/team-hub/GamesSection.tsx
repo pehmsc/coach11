@@ -33,6 +33,7 @@ import { useListStateSync } from "@/hooks/useListStateSync";
 import { useReturnTo } from "@/hooks/useReturnTo";
 import { useScrollRestoration } from "@/hooks/useScrollRestoration";
 import { useAgeGroupMeta } from "@/hooks/useAgeGroupName";
+import { useAgeGroup } from "@/contexts/AgeGroupContext";
 
 interface GameRow {
   id: string;
@@ -115,6 +116,10 @@ export function GamesSection({
   const router = useRouter();
   const { saveReturnTo } = useReturnTo(returnToKey);
   useScrollRestoration(returnToKey);
+  // overrideAgeGroupId forca um escalao (sub-rota /teams/[id]).
+  // Quando undefined, segue a escolha do <ScopeToggle> via AgeGroupContext.
+  const { selectedAgeGroupId: contextAgeGroupId } = useAgeGroup();
+  const effectiveAgeGroupId = overrideAgeGroupId ?? contextAgeGroupId;
   const [loading, setLoading] = useState(true);
   const [games, setGames] = useState<GameRow[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -172,13 +177,14 @@ export function GamesSection({
         const allGames = Array.isArray(gamesPayload.games)
           ? gamesPayload.games
           : [];
-        // Filtro client-side quando estamos numa sub-rota escalão.
-        const filteredGames = overrideAgeGroupId
-          ? allGames.filter((g) => g.age_group_id === overrideAgeGroupId)
+        // Filtro client-side respeita sub-rota (overrideAgeGroupId) ou
+        // escolha global via <ScopeToggle> (contextAgeGroupId).
+        const filteredGames = effectiveAgeGroupId
+          ? allGames.filter((g) => g.age_group_id === effectiveAgeGroupId)
           : allGames;
         setGames(filteredGames);
         setAgeGroupId(
-          overrideAgeGroupId ??
+          effectiveAgeGroupId ??
             (typeof gamesPayload.ageGroupId === "string"
               ? gamesPayload.ageGroupId
               : filteredGames.length > 0
@@ -209,7 +215,7 @@ export function GamesSection({
     return () => {
       cancelled = true;
     };
-  }, [overrideAgeGroupId]);
+  }, [effectiveAgeGroupId]);
 
   async function loadGames() {
     setLoading(true);
@@ -243,12 +249,12 @@ export function GamesSection({
     }
 
     const allGames = Array.isArray(payload.games) ? payload.games : [];
-    const filteredGames = overrideAgeGroupId
-      ? allGames.filter((g) => g.age_group_id === overrideAgeGroupId)
+    const filteredGames = effectiveAgeGroupId
+      ? allGames.filter((g) => g.age_group_id === effectiveAgeGroupId)
       : allGames;
     setGames(filteredGames);
     setAgeGroupId(
-      overrideAgeGroupId ??
+      effectiveAgeGroupId ??
         (typeof payload.ageGroupId === "string"
           ? payload.ageGroupId
           : filteredGames.length > 0

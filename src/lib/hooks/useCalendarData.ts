@@ -6,8 +6,10 @@ import { normalizeTimeValue } from "@/lib/events/time";
 import { formatFixtureOpponentLabel } from "@/lib/games/display";
 import type { GameCompetitionOption } from "@/components/games/game-form-fields";
 import { type CalEvent, compareEventsByDateTime } from "@/components/calendar/types";
+import { useAgeGroup } from "@/contexts/AgeGroupContext";
 
 export function useCalendarData() {
+  const { selectedAgeGroupId: contextAgeGroupId } = useAgeGroup();
   const [weekStart, setWeekStart] = useState(
     startOfWeek(new Date(), { weekStartsOn: 1 }),
   );
@@ -195,7 +197,9 @@ export function useCalendarData() {
         return;
       }
 
-      const resolvedAgeGroupId = payload?.ageGroup?.id ?? null;
+      // Prioridade: escolha explicita do user (<ScopeToggle>) > default do servidor.
+      const resolvedAgeGroupId =
+        contextAgeGroupId ?? payload?.ageGroup?.id ?? null;
       const resolvedAgeGroupName =
         payload?.ageGroup?.club_name && payload?.ageGroup?.name
           ? `${payload.ageGroup.club_name} · ${payload.ageGroup.name}`
@@ -220,7 +224,7 @@ export function useCalendarData() {
     }
 
     void loadTeam();
-  }, []);
+  }, [contextAgeGroupId]);
 
   // Efeito de bootstrap/sincronização de dados com o backend.
   useEffect(() => {

@@ -5,6 +5,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/http/apiFetch";
 import { useMeContext } from "@/lib/hooks/useMeContext";
 import { queryKeys } from "@/lib/query/keys";
+import { useAgeGroup } from "@/contexts/AgeGroupContext";
 import type { Player } from "@/types/database";
 import type {
   AttendanceStats,
@@ -16,7 +17,9 @@ import { isGoalkeeper } from "@/components/statistics/utils";
 
 export function useStatisticsData() {
   const meContextQuery = useMeContext();
-  const ageGroupId = meContextQuery.data?.ageGroup?.id ?? null;
+  const { selectedAgeGroupId: contextAgeGroupId } = useAgeGroup();
+  // Prioridade: escolha explicita do user (<ScopeToggle>) > default do servidor.
+  const ageGroupId = contextAgeGroupId ?? meContextQuery.data?.ageGroup?.id ?? null;
   const ageGroupName = meContextQuery.data?.ageGroup?.name ?? "Escalão";
 
   const statisticsQuery = useQuery({

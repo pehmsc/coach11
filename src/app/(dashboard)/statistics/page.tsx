@@ -19,6 +19,7 @@ import { exportGameStatsCsv } from "@/lib/csv/statistics";
 import { useStatisticsSorting } from "@/lib/hooks/useStatisticsSorting";
 import { usePlayerSelection } from "@/lib/hooks/usePlayerSelection";
 import { useStatisticsExport } from "@/lib/hooks/useStatisticsExport";
+import { ScopeToggle } from "@/components/navigation/ScopeToggle";
 
 export default function StatisticsPage() {
   const [activeTab, setActiveTab] = useListStateSync<Tab>("tab", "attendance");
@@ -75,6 +76,7 @@ export default function StatisticsPage() {
 
   return (
     <div className="p-4 md:p-8 max-w-4xl mx-auto space-y-5">
+      <ScopeToggle variant="inline" />
       <h1 className="text-2xl font-bold text-slate-900">Estatísticas</h1>
 
       {activeTab === "game" && <YellowCardAlert yellowAlerts={yellowAlerts} />}

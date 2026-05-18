@@ -6,6 +6,7 @@ import { useCalendarModal } from "@/lib/hooks/useCalendarModal";
 import { CalendarHeader } from "@/components/calendar/CalendarHeader";
 import { CalendarDayRow } from "@/components/calendar/CalendarDayRow";
 import { CalendarEventModal } from "@/components/calendar/CalendarEventModal";
+import { ScopeToggle } from "@/components/navigation/ScopeToggle";
 
 export default function CalendarPage() {
   const {
@@ -93,6 +94,7 @@ export default function CalendarPage() {
 
   return (
     <div className="p-4 md:p-8 max-w-2xl mx-auto">
+      <ScopeToggle variant="inline" className="mb-4" />
       <CalendarHeader
         weekStart={weekStart}
         ageGroupName={ageGroupName}

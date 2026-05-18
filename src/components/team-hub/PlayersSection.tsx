@@ -38,6 +38,7 @@ import type { Player, AgeGroup, PlayerStatus } from "@/types/database";
 import { useListStateSync } from "@/hooks/useListStateSync";
 import { useReturnTo } from "@/hooks/useReturnTo";
 import { useScrollRestoration } from "@/hooks/useScrollRestoration";
+import { useAgeGroup } from "@/contexts/AgeGroupContext";
 
 const POSITIONS = ["GR", "DD", "DC", "DE", "MD", "MC", "MO", "ME", "AV", "EE", "ED", "SA"];
 
@@ -117,6 +118,10 @@ export function PlayersSection({
   const queryClient = useQueryClient();
   const { saveReturnTo } = useReturnTo(returnToKey);
   useScrollRestoration(returnToKey);
+  // Prop ageGroupId vem da URL (sub-rota /teams/[id]/players).
+  // Quando null/undefined, segue a escolha do <ScopeToggle> via AgeGroupContext.
+  const { selectedAgeGroupId: contextAgeGroupId } = useAgeGroup();
+  const effectiveAgeGroupId = ageGroupId ?? contextAgeGroupId;
 
   const [showForm, setShowForm] = useState(false);
   const [editingPlayer, setEditingPlayer] = useState<Player | null>(null);
@@ -127,10 +132,12 @@ export function PlayersSection({
   const [form, setForm] = useState(EMPTY_FORM);
 
   const playersQuery = useQuery({
-    queryKey: queryKeys.players(ageGroupId),
+    queryKey: queryKeys.players(effectiveAgeGroupId),
     queryFn: () =>
       apiFetch<PlayersApiPayload>(
-        ageGroupId ? `/api/players?ageGroupId=${ageGroupId}` : "/api/players",
+        effectiveAgeGroupId
+          ? `/api/players?ageGroupId=${effectiveAgeGroupId}`
+          : "/api/players",
       ),
     placeholderData: keepPreviousData,
   });
@@ -144,7 +151,7 @@ export function PlayersSection({
 
   function updatePlayersCache(updater: (current: Player[]) => Player[]) {
     queryClient.setQueryData<PlayersApiPayload>(
-      queryKeys.players(ageGroupId),
+      queryKeys.players(effectiveAgeGroupId),
       (previous) => {
         if (!previous) return previous;
         const currentPlayers = Array.isArray(previous.players)

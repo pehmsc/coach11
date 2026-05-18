@@ -6,7 +6,7 @@ import { SHORT_PRIVATE_CACHE_CONTROL } from "@/lib/http/cache";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { isClosedGameStatus } from "@/lib/games/display";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const supabase = await createClient();
     const {
@@ -18,6 +18,9 @@ export async function GET() {
     }
 
     const db = supabase;
+
+    const { searchParams } = new URL(request.url);
+    const requestedAgeGroupId = searchParams.get("ageGroupId");
 
     const context = await resolveUserTeamContext(db, user.id);
     const isCoordinator = context.source === "coordinator" || context.source === "club_coordinator";
@@ -39,12 +42,21 @@ export async function GET() {
       );
     }
 
-    const teamIds =
+    // teamIds base: todos os acessiveis. Quando o cliente pede um escalao
+    // especifico via ?ageGroupId, filtrar para apenas os teams desse escalao
+    // (intercepta com accessibleTeams para nao expandir alem do permitido).
+    const allAccessibleTeamIds =
       context.accessibleTeamIds.length > 0
         ? context.accessibleTeamIds
         : context.teamId
           ? [context.teamId]
           : [];
+
+    const teamIds = requestedAgeGroupId
+      ? context.accessibleTeams
+          .filter((team) => team.age_group_id === requestedAgeGroupId)
+          .map((team) => team.id)
+      : allAccessibleTeamIds;
 
     const competitionsRes = await db
       .from("competitions")

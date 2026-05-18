@@ -32,6 +32,8 @@ import {
   isClosedGameStatus,
 } from "@/lib/games/display";
 import type { Competition, Game, TeamLabel } from "@/types/database";
+import { useAgeGroup } from "@/contexts/AgeGroupContext";
+import { ScopeToggle } from "@/components/navigation/ScopeToggle";
 
 interface CompetitionWithGames extends Competition {
   games?: Game[];
@@ -106,6 +108,7 @@ type EditingComp = {
 export default function CompetitionsPage() {
   const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
+  const { selectedAgeGroupId: contextAgeGroupId } = useAgeGroup();
 
   const [loading, setLoading] = useState(true);
   const [competitions, setCompetitions] = useState<CompetitionWithGames[]>([]);
@@ -131,7 +134,8 @@ export default function CompetitionsPage() {
 
   useEffect(() => {
     loadData();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contextAgeGroupId]);
 
   useEffect(() => {
     setCompetitionWindowStarts((prev) => {
@@ -157,7 +161,10 @@ export default function CompetitionsPage() {
     setError(null);
     setLoading(true);
     try {
-      const res = await fetch("/api/competitions");
+      const url = contextAgeGroupId
+        ? `/api/competitions?ageGroupId=${contextAgeGroupId}`
+        : "/api/competitions";
+      const res = await fetch(url);
       const payload = (await res.json().catch(() => null)) as CompetitionsPayload | null;
 
       if (!res.ok || !payload?.success) {
@@ -295,6 +302,7 @@ export default function CompetitionsPage() {
 
   return (
     <div className="p-4 md:p-8 max-w-2xl mx-auto">
+      <ScopeToggle variant="inline" className="mb-4" />
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
