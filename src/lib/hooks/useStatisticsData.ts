@@ -18,19 +18,29 @@ import { isGoalkeeper } from "@/components/statistics/utils";
 export function useStatisticsData() {
   const meContextQuery = useMeContext();
   const { selectedAgeGroupId: contextAgeGroupId } = useAgeGroup();
-  // Prioridade: escolha explicita do user (<ScopeToggle>) > default do servidor.
-  const ageGroupId = contextAgeGroupId ?? meContextQuery.data?.ageGroup?.id ?? null;
-  const ageGroupName = meContextQuery.data?.ageGroup?.name ?? "Escalão";
+  // contextAgeGroupId reflecte o estado efectivo do ScopeToggle:
+  //  - null  → user escolheu "Todos os escaloes" (RPC agrega tudo)
+  //  - uuid  → escalao especifico
+  // O AgeGroupContext ja faz fallback para defaultAgeGroupId no Provider.
+  const ageGroupId = contextAgeGroupId;
+  const isAllScopes = contextAgeGroupId === null;
+  const ageGroupName = isAllScopes
+    ? "Todos os escalões"
+    : meContextQuery.data?.ageGroup?.name ?? "Escalão";
 
   const statisticsQuery = useQuery({
-    queryKey: ageGroupId
-      ? queryKeys.statistics.players(ageGroupId)
-      : [...queryKeys.statistics.root(), "players", "none"],
+    queryKey: isAllScopes
+      ? [...queryKeys.statistics.root(), "players", "all"]
+      : ageGroupId
+        ? queryKeys.statistics.players(ageGroupId)
+        : [...queryKeys.statistics.root(), "players", "none"],
     queryFn: () =>
       apiFetch<StatisticsPlayersResponse>(
-        `/api/statistics/players?ageGroupId=${ageGroupId}`,
+        isAllScopes
+          ? "/api/statistics/players?ageGroupId=all"
+          : `/api/statistics/players?ageGroupId=${ageGroupId}`,
       ),
-    enabled: Boolean(ageGroupId),
+    enabled: isAllScopes || Boolean(ageGroupId),
     placeholderData: keepPreviousData,
   });
 
@@ -182,7 +192,9 @@ export function useStatisticsData() {
 
   const loading =
     meContextQuery.isPending ||
-    (Boolean(ageGroupId) && statisticsQuery.isPending && !statisticsQuery.data);
+    ((isAllScopes || Boolean(ageGroupId)) &&
+      statisticsQuery.isPending &&
+      !statisticsQuery.data);
 
   // Yellow card alerts
   const yellowAlerts = useMemo(
