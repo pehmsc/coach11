@@ -13,6 +13,13 @@ interface AttendanceTableProps {
   toggleSelectAllCurrentTab: () => void;
   selectedPlayerIds: Set<string>;
   toggleSelectedPlayer: (playerId: string) => void;
+  /**
+   * Quando true (modo "Todos os escaloes"), mostra nome do escalao como
+   * subtitulo abaixo do nome do atleta. Em modo escalao unico, omitir.
+   */
+  showAgeGroupSubtitle?: boolean;
+  /** Lookup nome de escalao por id (usado so quando showAgeGroupSubtitle). */
+  ageGroupNameById?: Map<string, string>;
 }
 
 export function AttendanceTable({
@@ -23,6 +30,8 @@ export function AttendanceTable({
   toggleSelectAllCurrentTab,
   selectedPlayerIds,
   toggleSelectedPlayer,
+  showAgeGroupSubtitle,
+  ageGroupNameById,
 }: AttendanceTableProps) {
   return (
     <Card>
@@ -151,6 +160,11 @@ export function AttendanceTable({
                   <span className="block truncate">
                     {s.player.first_name} {s.player.last_name}
                   </span>
+                  {showAgeGroupSubtitle && s.player.age_group_id ? (
+                    <span className="block text-[10px] text-slate-400 truncate">
+                      {ageGroupNameById?.get(s.player.age_group_id) ?? "—"}
+                    </span>
+                  ) : null}
                 </td>
                 <td className="py-2 px-2 text-center text-xs text-slate-500 whitespace-nowrap">
                   {s.player.preferred_position ?? "—"}
