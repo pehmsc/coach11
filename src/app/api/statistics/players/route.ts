@@ -37,13 +37,15 @@ export async function GET(request: Request) {
     }
 
     const { searchParams } = new URL(request.url);
-    const ageGroupId = searchParams.get("ageGroupId");
+    const ageGroupIdRaw = searchParams.get("ageGroupId");
+    // Aceita NULL (modo "Todos os escalões") quando o parametro e ausente,
+    // string vazia, ou literal "all". Senao tem de ser UUID valido.
+    const ageGroupId =
+      ageGroupIdRaw === null || ageGroupIdRaw === "" || ageGroupIdRaw === "all"
+        ? null
+        : ageGroupIdRaw;
 
-    if (!ageGroupId) {
-      return NextResponse.json({ error: "ageGroupId obrigatório" }, { status: 400 });
-    }
-
-    if (!isUuid(ageGroupId)) {
+    if (ageGroupId !== null && !isUuid(ageGroupId)) {
       return NextResponse.json({ error: "Sem permissões" }, { status: 403 });
     }
 
@@ -59,9 +61,6 @@ export async function GET(request: Request) {
     if (!payload?.ok) {
       if (payload?.error_code === "forbidden") {
         return NextResponse.json({ error: "Sem permissões" }, { status: 403 });
-      }
-      if (payload?.error_code === "missing_age_group_id") {
-        return NextResponse.json({ error: "ageGroupId obrigatório" }, { status: 400 });
       }
       return NextResponse.json({ error: "Sem permissões" }, { status: 403 });
     }

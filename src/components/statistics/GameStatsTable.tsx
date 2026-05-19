@@ -45,6 +45,9 @@ export function GameStatsTable({
                   className="h-4 w-4 rounded border-slate-300 text-slate-900"
                 />
               </th>
+              <th className="text-center pb-2 font-medium px-1.5 whitespace-nowrap w-12">
+                Nº
+              </th>
               <th className="text-left pb-2 font-medium text-sm">
                 <button
                   type="button"
@@ -54,6 +57,9 @@ export function GameStatsTable({
                   Jogador
                   <SortIcon active={gameSort.key === "player"} dir={gameSort.dir} />
                 </button>
+              </th>
+              <th className="text-center pb-2 font-medium px-1.5 whitespace-nowrap">
+                Posição
               </th>
               <th className="text-center pb-2 font-medium px-1.5" title="Golos">
                 <button
@@ -216,10 +222,18 @@ export function GameStatsTable({
                       className="h-4 w-4 rounded border-slate-300 text-slate-900"
                     />
                   </td>
+                  <td className="py-2 px-1.5 text-center font-mono text-xs text-slate-500 whitespace-nowrap">
+                    {typeof s.player.jersey_number === "number"
+                      ? s.player.jersey_number
+                      : "—"}
+                  </td>
                   <td className="py-2 font-medium text-slate-800 text-sm">
                     <span className="block truncate max-w-[100px]">
                       {s.player.first_name} {s.player.last_name}
                     </span>
+                  </td>
+                  <td className="py-2 px-1.5 text-center text-xs text-slate-500 whitespace-nowrap">
+                    {s.player.preferred_position ?? "—"}
                   </td>
                   <td className="py-2 text-center font-bold text-slate-900 px-1.5">
                     {s.golos || "—"}
