@@ -99,9 +99,9 @@ export function useGameEditor(deps: UseGameEditorDeps) {
     string | null
   >(null);
   const [crossAgeSearchQuery, setCrossAgeSearchQuery] = useState("");
-  const [crossAgeSelectedPlayerId, setCrossAgeSelectedPlayerId] = useState<
-    string | null
-  >(null);
+  const [crossAgeSelectedPlayerIds, setCrossAgeSelectedPlayerIds] = useState<
+    Set<string>
+  >(() => new Set());
 
   function openEditGame() {
     if (!game) return;
@@ -252,7 +252,7 @@ export function useGameEditor(deps: UseGameEditorDeps) {
     setExternalPlayerMode("club");
     setCrossAgeSelectedAgeGroupId(null);
     setCrossAgeSearchQuery("");
-    setCrossAgeSelectedPlayerId(null);
+    setCrossAgeSelectedPlayerIds(new Set());
   }
 
   function closeExternalPlayerModal() {
@@ -355,8 +355,8 @@ export function useGameEditor(deps: UseGameEditorDeps) {
     setCrossAgeSelectedAgeGroupId,
     crossAgeSearchQuery,
     setCrossAgeSearchQuery,
-    crossAgeSelectedPlayerId,
-    setCrossAgeSelectedPlayerId,
+    crossAgeSelectedPlayerIds,
+    setCrossAgeSelectedPlayerIds,
   };
 }
 
