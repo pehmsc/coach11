@@ -17,13 +17,23 @@ import { isGoalkeeper } from "@/components/statistics/utils";
 
 export function useStatisticsData() {
   const meContextQuery = useMeContext();
-  const { selectedAgeGroupId: contextAgeGroupId } = useAgeGroup();
+  const { selectedAgeGroupId: contextAgeGroupId, ageGroups: accessibleAgeGroups } =
+    useAgeGroup();
   // contextAgeGroupId reflecte o estado efectivo do ScopeToggle:
   //  - null  → user escolheu "Todos os escaloes" (RPC agrega tudo)
   //  - uuid  → escalao especifico
   // O AgeGroupContext ja faz fallback para defaultAgeGroupId no Provider.
   const ageGroupId = contextAgeGroupId;
   const isAllScopes = contextAgeGroupId === null;
+
+  // Lookup nome de escalao por id, para mostrar subtitulo em "Todos os
+  // escaloes" sem fetch extra. accessibleAgeGroups vem do AgeGroupContext
+  // que ja filtra pelos escaloes a que o user tem acesso (RLS-aware).
+  const ageGroupNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    accessibleAgeGroups.forEach((ag) => map.set(ag.id, ag.name));
+    return map;
+  }, [accessibleAgeGroups]);
   const ageGroupName = isAllScopes
     ? "Todos os escalões"
     : meContextQuery.data?.ageGroup?.name ?? "Escalão";
@@ -210,5 +220,7 @@ export function useStatisticsData() {
     gameStats,
     loading,
     yellowAlerts,
+    isAllScopes,
+    ageGroupNameById,
   };
 }

@@ -32,6 +32,8 @@ export default function StatisticsPage() {
     gameStats,
     loading,
     yellowAlerts,
+    isAllScopes,
+    ageGroupNameById,
   } = useStatisticsData();
 
   const {
@@ -70,7 +72,13 @@ export default function StatisticsPage() {
     return <StatisticsLoadingSkeleton />;
   }
 
-  if (!ageGroupId || players.length === 0) {
+  // Sem selector valido (nao e "Todos" e tambem nao tem escalao especifico)
+  if (!isAllScopes && !ageGroupId) {
+    return <StatisticsEmptyState />;
+  }
+
+  // Sem atletas no(s) escalao(oes) escolhido(s)
+  if (players.length === 0) {
     return <StatisticsEmptyState />;
   }
 
@@ -95,6 +103,8 @@ export default function StatisticsPage() {
             toggleSelectAllCurrentTab={toggleSelectAllCurrentTab}
             selectedPlayerIds={selectedPlayerIds}
             toggleSelectedPlayer={toggleSelectedPlayer}
+            showAgeGroupSubtitle={isAllScopes}
+            ageGroupNameById={ageGroupNameById}
           />
         </>
       )}
@@ -130,6 +140,8 @@ export default function StatisticsPage() {
             toggleSelectAllCurrentTab={toggleSelectAllCurrentTab}
             selectedPlayerIds={selectedPlayerIds}
             toggleSelectedPlayer={toggleSelectedPlayer}
+            showAgeGroupSubtitle={isAllScopes}
+            ageGroupNameById={ageGroupNameById}
           />
         </>
       )}
