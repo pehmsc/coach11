@@ -104,9 +104,17 @@ export async function GET(request: Request) {
       const hasPendingGames = games.some(
         (row) => !isClosedGameStatus(typeof row.status === "string" ? row.status : null),
       );
+      // Competição ainda aberta se faltam jornadas por criar:
+      // total_rounds definido e jogos existentes < total esperado.
+      // Cobre o caso de todos os jogos criados estarem fechados mas
+      // ainda faltarem jornadas a registar.
+      const hasMissingRounds =
+        typeof competition.total_rounds === "number" &&
+        competition.total_rounds > 0 &&
+        games.length < competition.total_rounds;
       return {
         ...competition,
-        is_active: hasPendingGames || games.length === 0,
+        is_active: hasPendingGames || hasMissingRounds || games.length === 0,
         games,
       };
     });
