@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Loader2, X, Search, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAgeGroup } from "@/contexts/AgeGroupContext";
@@ -12,20 +12,23 @@ interface ExternalPlayerModalProps {
   editor: GameEditorState;
   /** ID do escalão deste jogo — excluído do select cross-age. */
   currentAgeGroupId: string;
-  /** IDs dos atletas já convocados — filtrados do typeahead. */
+  /** IDs dos atletas já convocados — filtrados da lista cross-age. */
   alreadyConvocatedPlayerIds: Set<string>;
-  onSubmit: (e: { preventDefault(): void }) => void;
+  /** Submit do form no modo "Externo (texto livre)". 1 jogador por chamada. */
+  onSubmitExternalFreeText: (e: { preventDefault(): void }) => void;
+  /** Click do botão "Concluído" no modo "Atleta do clube". Recebe N player_ids. */
+  onSubmitClubBatch: (playerIds: string[]) => void | Promise<void>;
 }
 
 export function ExternalPlayerModal({
   editor,
   currentAgeGroupId,
   alreadyConvocatedPlayerIds,
-  onSubmit,
+  onSubmitExternalFreeText,
+  onSubmitClubBatch,
 }: ExternalPlayerModalProps) {
   const { ageGroups } = useAgeGroup();
 
-  // Escalões do clube excluindo o do jogo actual
   const otherAgeGroups = useMemo(
     () => ageGroups.filter((ag) => ag.id !== currentAgeGroupId),
     [ageGroups, currentAgeGroupId],
@@ -33,19 +36,17 @@ export function ExternalPlayerModal({
 
   const [players, setPlayers] = useState<Player[]>([]);
   const [loadingPlayers, setLoadingPlayers] = useState(false);
-  const [highlightIndex, setHighlightIndex] = useState(0);
 
   const {
     externalPlayerMode,
     crossAgeSelectedAgeGroupId,
     crossAgeSearchQuery,
-    crossAgeSelectedPlayerId,
+    crossAgeSelectedPlayerIds,
     setCrossAgeSearchQuery,
-    setCrossAgeSelectedPlayerId,
+    setCrossAgeSelectedPlayerIds,
   } = editor;
 
-  // Carregar atletas quando o escalão muda (modo "club"). setState aqui
-  // reage a mudanca de prop externa — nao ha risco de loop.
+  // Carregar atletas quando o escalão muda (modo "club").
   useEffect(() => {
     if (externalPlayerMode !== "club") return;
     if (!crossAgeSelectedAgeGroupId) {
@@ -64,14 +65,12 @@ export function ExternalPlayerModal({
       .finally(() => setLoadingPlayers(false));
   }, [externalPlayerMode, crossAgeSelectedAgeGroupId, alreadyConvocatedPlayerIds]);
 
-  // Reset search e seleccao quando muda escalao — reage a mudanca de prop
-  // externa, sem possibilidade de loop.
+  // Mudar escalão limpa search e selecção (decisão UX: selecção pertence
+  // ao escalão escolhido — saltar para outro deve recomeçar).
   useEffect(() => {
     setCrossAgeSearchQuery("");
-    setCrossAgeSelectedPlayerId(null);
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setHighlightIndex(0);
-  }, [crossAgeSelectedAgeGroupId, setCrossAgeSearchQuery, setCrossAgeSelectedPlayerId]);
+    setCrossAgeSelectedPlayerIds(new Set());
+  }, [crossAgeSelectedAgeGroupId, setCrossAgeSearchQuery, setCrossAgeSelectedPlayerIds]);
 
   const filteredPlayers = useMemo(() => {
     const q = normalizeForSearch(crossAgeSearchQuery.trim());
@@ -82,33 +81,23 @@ export function ExternalPlayerModal({
     });
   }, [players, crossAgeSearchQuery]);
 
-  function handleSearchKeyDown(e: KeyboardEvent<HTMLInputElement>) {
-    if (filteredPlayers.length === 0) return;
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setHighlightIndex((i) => Math.min(i + 1, filteredPlayers.length - 1));
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setHighlightIndex((i) => Math.max(i - 1, 0));
-    } else if (e.key === "Enter") {
-      e.preventDefault();
-      const player = filteredPlayers[highlightIndex];
-      if (player) {
-        setCrossAgeSelectedPlayerId(player.id);
-        // Submeter automaticamente após Enter no destacado
-        onSubmit({ preventDefault: () => {} });
-      }
-    }
+  function togglePlayerSelection(playerId: string, checked: boolean) {
+    const next = new Set(crossAgeSelectedPlayerIds);
+    if (checked) next.add(playerId);
+    else next.delete(playerId);
+    setCrossAgeSelectedPlayerIds(next);
   }
 
-  const canSubmitClubMode =
-    !!crossAgeSelectedAgeGroupId && !!crossAgeSelectedPlayerId;
+  const selectedCount = crossAgeSelectedPlayerIds.size;
   const canSubmitFreeText =
     editor.externalPlayerName.trim().length >= 2 &&
     editor.externalPlayerNumber.trim() !== "" &&
     editor.externalPlayerPosition.trim() !== "";
-  const canSubmit =
-    externalPlayerMode === "club" ? canSubmitClubMode : canSubmitFreeText;
+
+  function handleConcluidoClick() {
+    if (selectedCount === 0 || editor.savingExternalPlayer) return;
+    void onSubmitClubBatch(Array.from(crossAgeSelectedPlayerIds));
+  }
 
   return (
     <div
@@ -129,7 +118,10 @@ export function ExternalPlayerModal({
           </button>
         </div>
 
-        <form onSubmit={onSubmit} className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <form
+          onSubmit={onSubmitExternalFreeText}
+          className="flex min-h-0 min-w-0 flex-1 flex-col"
+        >
           <div
             className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-5 [overflow-wrap:anywhere]"
             style={{ WebkitOverflowScrolling: "touch" }}
@@ -202,7 +194,7 @@ export function ExternalPlayerModal({
 
                     <div className="space-y-1">
                       <label className="text-sm font-medium text-slate-700">
-                        Atleta
+                        Atletas
                       </label>
                       <div className="relative">
                         <Search
@@ -215,7 +207,12 @@ export function ExternalPlayerModal({
                           onChange={(e) =>
                             setCrossAgeSearchQuery(e.target.value)
                           }
-                          onKeyDown={handleSearchKeyDown}
+                          onKeyDown={(e) => {
+                            // Enter dentro da search dispararia o submit do form
+                            // (que e o handler do modo "Externo"). Em modo "club"
+                            // o submit vem do botao "Concluido", logo prevenimos.
+                            if (e.key === "Enter") e.preventDefault();
+                          }}
                           disabled={
                             !crossAgeSelectedAgeGroupId ||
                             editor.savingExternalPlayer
@@ -230,7 +227,7 @@ export function ExternalPlayerModal({
                       </div>
 
                       {crossAgeSelectedAgeGroupId && (
-                        <div className="mt-2 max-h-[220px] overflow-y-auto border border-slate-200 rounded-lg bg-slate-50/50">
+                        <div className="mt-2 max-h-[260px] overflow-y-auto border border-slate-200 rounded-lg bg-slate-50/50">
                           {loadingPlayers ? (
                             <div className="flex items-center justify-center gap-2 p-4 text-xs text-slate-500">
                               <Loader2 size={12} className="animate-spin" />
@@ -243,10 +240,9 @@ export function ExternalPlayerModal({
                                 : "Nenhum atleta disponível neste escalão (todos já convocados ou plantel vazio)"}
                             </p>
                           ) : (
-                            filteredPlayers.map((player, idx) => {
+                            filteredPlayers.map((player) => {
                               const isSelected =
-                                crossAgeSelectedPlayerId === player.id;
-                              const isHighlighted = highlightIndex === idx;
+                                crossAgeSelectedPlayerIds.has(player.id);
                               const isInactive = player.status !== "active";
                               const statusIcon =
                                 player.status === "injured"
@@ -255,21 +251,28 @@ export function ExternalPlayerModal({
                                     ? "🚫"
                                     : null;
                               return (
-                                <button
+                                <label
                                   key={player.id}
-                                  type="button"
-                                  onClick={() =>
-                                    setCrossAgeSelectedPlayerId(player.id)
-                                  }
-                                  onMouseEnter={() => setHighlightIndex(idx)}
-                                  className={`w-full flex items-center gap-2 px-3 py-2 text-left border-b border-slate-100 last:border-b-0 ${
-                                    isSelected
-                                      ? "bg-blue-100"
-                                      : isHighlighted
-                                        ? "bg-blue-50"
-                                        : ""
-                                  } ${isInactive ? "opacity-70" : ""}`}
+                                  className={`flex items-center gap-2 px-3 py-2 border-b border-slate-100 last:border-b-0 cursor-pointer hover:bg-slate-100/60 ${
+                                    isSelected ? "bg-blue-50" : ""
+                                  } ${isInactive ? "opacity-70" : ""} ${
+                                    editor.savingExternalPlayer
+                                      ? "cursor-not-allowed opacity-60"
+                                      : ""
+                                  }`}
                                 >
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={(e) =>
+                                      togglePlayerSelection(
+                                        player.id,
+                                        e.target.checked,
+                                      )
+                                    }
+                                    disabled={editor.savingExternalPlayer}
+                                    className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 flex-shrink-0"
+                                  />
                                   <span
                                     className={`text-xs font-bold min-w-[28px] text-center px-2 py-0.5 rounded ${
                                       player.jersey_number == null
@@ -295,11 +298,11 @@ export function ExternalPlayerModal({
                                     )}
                                   </span>
                                   {player.preferred_position && (
-                                    <span className="text-[10px] bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded font-semibold">
+                                    <span className="text-[10px] bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded font-semibold flex-shrink-0">
                                       {player.preferred_position}
                                     </span>
                                   )}
-                                </button>
+                                </label>
                               );
                             })
                           )}
@@ -371,25 +374,54 @@ export function ExternalPlayerModal({
           </div>
 
           <div className="flex gap-2 border-t bg-white p-5 pt-3 shrink-0 pb-[max(1rem,env(safe-area-inset-bottom))]">
-            <Button
-              type="submit"
-              disabled={!canSubmit || editor.savingExternalPlayer}
-              className="flex-1 bg-blue-600 hover:bg-blue-700"
-            >
-              {editor.savingExternalPlayer ? (
-                <Loader2 size={16} className="animate-spin" />
-              ) : (
-                "Adicionar"
-              )}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={editor.closeExternalPlayerModal}
-              disabled={editor.savingExternalPlayer}
-            >
-              Cancelar
-            </Button>
+            {externalPlayerMode === "club" ? (
+              <>
+                <Button
+                  type="button"
+                  onClick={handleConcluidoClick}
+                  disabled={
+                    selectedCount === 0 || editor.savingExternalPlayer
+                  }
+                  className="flex-1 bg-blue-600 hover:bg-blue-700"
+                >
+                  {editor.savingExternalPlayer ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : (
+                    `Concluído${selectedCount > 0 ? ` (${selectedCount})` : ""}`
+                  )}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={editor.closeExternalPlayerModal}
+                  disabled={editor.savingExternalPlayer}
+                >
+                  Cancelar
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  type="submit"
+                  disabled={!canSubmitFreeText || editor.savingExternalPlayer}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700"
+                >
+                  {editor.savingExternalPlayer ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : (
+                    "Adicionar"
+                  )}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={editor.closeExternalPlayerModal}
+                  disabled={editor.savingExternalPlayer}
+                >
+                  Cancelar
+                </Button>
+              </>
+            )}
           </div>
         </form>
       </div>

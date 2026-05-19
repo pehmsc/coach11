@@ -220,13 +220,19 @@ export function GameDetailView({ gameId, scope }: Props) {
                 .map((p) => p.id),
             )
           }
-          onSubmit={(e) =>
+          onSubmitExternalFreeText={(e) =>
             void convocation.handleAddExternalPlayer(
               e, editor.externalPlayerName, editor.externalPlayerNumber,
               editor.externalPlayerPosition, editor.setSavingExternalPlayer,
               editor.setShowExternalPlayerModal, editor.resetExternalPlayerForm,
-              editor.externalPlayerMode,
-              editor.crossAgeSelectedPlayerId,
+            )
+          }
+          onSubmitClubBatch={(playerIds) =>
+            void convocation.handleAddClubPlayersBatch(
+              playerIds,
+              editor.setSavingExternalPlayer,
+              editor.setShowExternalPlayerModal,
+              editor.resetExternalPlayerForm,
             )
           }
         />

@@ -358,6 +358,53 @@ export function useGameConvocation(deps: UseGameConvocationDeps) {
     }
   }
 
+  // Constroi um PlayerWithStatus a partir da resposta do endpoint
+  // `/convocation/external` (modo cross-age ou free-text).
+  function buildInsertedPlayerFromResponse(
+    responseBody: { player: Record<string, unknown> },
+    isCrossAge: boolean,
+  ): { player: PlayerWithStatus; playerLocalId: string } {
+    // Em cross-age o `id` da row e o player_id real (atleta de outro
+    // escalao). Em free-text o id e o do game_squads (e expomos como
+    // "external:<id>" no client para distinguir).
+    const rawId = String(responseBody.player.id);
+    const playerLocalId = isCrossAge ? rawId : `external:${rawId}`;
+
+    const sourceAgeGroupId =
+      isCrossAge && typeof responseBody.player.source_age_group_id === "string"
+        ? responseBody.player.source_age_group_id
+        : null;
+
+    const player: PlayerWithStatus = {
+      id: playerLocalId,
+      age_group_id: sourceAgeGroupId ?? game?.age_group_id ?? "",
+      first_name: String(responseBody.player.name || "Jogador"),
+      last_name: "",
+      preferred_position:
+        typeof responseBody.player.position === "string"
+          ? responseBody.player.position
+          : undefined,
+      jersey_number:
+        typeof responseBody.player.jersey_number === "number"
+          ? responseBody.player.jersey_number
+          : undefined,
+      status: "active",
+      created_at:
+        typeof responseBody.player.created_at === "string"
+          ? responseBody.player.created_at
+          : new Date().toISOString(),
+      isConvocated: true,
+      isBlocked: false,
+      isExternal: !isCrossAge,
+      externalConvocationId: isCrossAge ? null : rawId,
+      sourceAgeGroupId,
+      sameDayConflictLabel: null,
+      sameDayInfoLabel: null,
+    };
+
+    return { player, playerLocalId };
+  }
+
   async function handleAddExternalPlayer(
     e: { preventDefault(): void },
     externalPlayerName: string,
@@ -366,42 +413,26 @@ export function useGameConvocation(deps: UseGameConvocationDeps) {
     setSavingExternalPlayer: React.Dispatch<React.SetStateAction<boolean>>,
     setShowExternalPlayerModal: React.Dispatch<React.SetStateAction<boolean>>,
     resetExternalPlayerForm: () => void,
-    // Cross-age (PR N): quando `mode === "club"` e `crossAgePlayerId` esta
-    // definido, envia body `{player_id}` em vez de `{name, number, position}`.
-    // Backend aceita ambos os formatos.
-    mode: "club" | "free_text" = "free_text",
-    crossAgePlayerId: string | null = null,
   ) {
     e.preventDefault();
     setSavingExternalPlayer(true);
     setError(null);
 
-    let body: Record<string, unknown>;
-    if (mode === "club") {
-      if (!crossAgePlayerId) {
-        setError("Escolhe um atleta antes de adicionar.");
-        setSavingExternalPlayer(false);
-        return;
-      }
-      body = { player_id: crossAgePlayerId };
-    } else {
-      const numberValue = Number(externalPlayerNumber);
-      if (!Number.isInteger(numberValue) || numberValue < 0 || numberValue > 99) {
-        setError("O número do jogador deve ser um inteiro entre 0 e 99.");
-        setSavingExternalPlayer(false);
-        return;
-      }
+    const numberValue = Number(externalPlayerNumber);
+    if (!Number.isInteger(numberValue) || numberValue < 0 || numberValue > 99) {
+      setError("O número do jogador deve ser um inteiro entre 0 e 99.");
+      setSavingExternalPlayer(false);
+      return;
+    }
 
-      const payload = buildConvocationPayload({
-        name: externalPlayerName.trim(),
-        number: numberValue,
-        position: externalPlayerPosition.trim(),
-      });
-      if (!payload) {
-        setSavingExternalPlayer(false);
-        return;
-      }
-      body = payload;
+    const body = buildConvocationPayload({
+      name: externalPlayerName.trim(),
+      number: numberValue,
+      position: externalPlayerPosition.trim(),
+    });
+    if (!body) {
+      setSavingExternalPlayer(false);
+      return;
     }
 
     try {
@@ -415,53 +446,14 @@ export function useGameConvocation(deps: UseGameConvocationDeps) {
       if (!res.ok || !responseBody?.player?.id) {
         setError(
           responseBody?.error ||
-            (mode === "club"
-              ? "Erro ao adicionar atleta à convocatória."
-              : "Erro ao adicionar jogador externo à convocatória."),
+            "Erro ao adicionar jogador externo à convocatória.",
         );
         setSavingExternalPlayer(false);
         return;
       }
 
-      const isCrossAge = mode === "club";
-      // Em cross-age o `id` da row e o player_id real (atleta de outro
-      // escalao). Em free-text o id e o do game_squads (e expomos como
-      // "external:<id>" no client para distinguir).
-      const playerLocalId = isCrossAge
-        ? String(responseBody.player.id)
-        : `external:${responseBody.player.id}`;
-
-      const sourceAgeGroupId =
-        isCrossAge && typeof responseBody.player.source_age_group_id === "string"
-          ? responseBody.player.source_age_group_id
-          : null;
-
-      const insertedPlayer: PlayerWithStatus = {
-        id: playerLocalId,
-        age_group_id: sourceAgeGroupId ?? game?.age_group_id ?? "",
-        first_name: String(responseBody.player.name || "Jogador"),
-        last_name: "",
-        preferred_position:
-          typeof responseBody.player.position === "string"
-            ? responseBody.player.position
-            : undefined,
-        jersey_number:
-          typeof responseBody.player.jersey_number === "number"
-            ? responseBody.player.jersey_number
-            : undefined,
-        status: "active",
-        created_at:
-          typeof responseBody.player.created_at === "string"
-            ? responseBody.player.created_at
-            : new Date().toISOString(),
-        isConvocated: true,
-        isBlocked: false,
-        isExternal: !isCrossAge,
-        externalConvocationId: isCrossAge ? null : responseBody.player.id,
-        sourceAgeGroupId,
-        sameDayConflictLabel: null,
-        sameDayInfoLabel: null,
-      };
+      const { player: insertedPlayer, playerLocalId } =
+        buildInsertedPlayerFromResponse(responseBody, false);
 
       setPlayers((prev) => [...prev, insertedPlayer]);
       setLineupStatuses((prev) => ({
@@ -475,14 +467,83 @@ export function useGameConvocation(deps: UseGameConvocationDeps) {
       setShowExternalPlayerModal(false);
       resetExternalPlayerForm();
     } catch {
-      setError(
-        mode === "club"
-          ? "Erro de ligação ao adicionar atleta."
-          : "Erro de ligação ao adicionar jogador externo.",
-      );
+      setError("Erro de ligação ao adicionar jogador externo.");
     } finally {
       setSavingExternalPlayer(false);
     }
+  }
+
+  // Modo "Atleta do clube" (cross-age): faz N POSTs sequenciais. Sequenciais
+  // (nao Promise.all) para evitar race conditions no insert em game_squads
+  // — o backend pode dar conflito UNIQUE se dois POSTs colidirem. Para no
+  // primeiro erro e devolve quantos foram adicionados, para que a UI possa
+  // informar o utilizador (parcial vs total).
+  async function handleAddClubPlayersBatch(
+    playerIds: string[],
+    setSavingExternalPlayer: React.Dispatch<React.SetStateAction<boolean>>,
+    setShowExternalPlayerModal: React.Dispatch<React.SetStateAction<boolean>>,
+    resetExternalPlayerForm: () => void,
+  ): Promise<{ added: number; failed: number }> {
+    if (playerIds.length === 0) return { added: 0, failed: 0 };
+
+    setSavingExternalPlayer(true);
+    setError(null);
+
+    let added = 0;
+    let failed = 0;
+    let firstErrorMessage: string | null = null;
+
+    for (const playerId of playerIds) {
+      try {
+        const res = await fetch(`/api/games/${id}/convocation/external`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ player_id: playerId }),
+        });
+        const responseBody = await res.json().catch(() => ({}));
+
+        if (!res.ok || !responseBody?.player?.id) {
+          failed = playerIds.length - added;
+          firstErrorMessage =
+            responseBody?.error || "Erro ao adicionar atleta à convocatória.";
+          break;
+        }
+
+        const { player: insertedPlayer, playerLocalId } =
+          buildInsertedPlayerFromResponse(responseBody, true);
+
+        setPlayers((prev) => [...prev, insertedPlayer]);
+        setLineupStatuses((prev) => ({
+          ...prev,
+          [playerLocalId]:
+            responseBody.player.lineup_status === "on_field"
+              ? "on_field"
+              : "substitute",
+        }));
+        added += 1;
+      } catch {
+        failed = playerIds.length - added;
+        firstErrorMessage = "Erro de ligação ao adicionar atleta.";
+        break;
+      }
+    }
+
+    setSavingExternalPlayer(false);
+
+    if (added > 0) markConvocationDirty();
+
+    if (failed > 0) {
+      const detail =
+        added > 0
+          ? ` ${added} atleta(s) adicionado(s) antes do erro.`
+          : "";
+      setError((firstErrorMessage ?? "Erro ao adicionar atletas.") + detail);
+      return { added, failed };
+    }
+
+    setShowExternalPlayerModal(false);
+    resetExternalPlayerForm();
+    return { added, failed };
   }
 
   return {
@@ -491,5 +552,6 @@ export function useGameConvocation(deps: UseGameConvocationDeps) {
     togglePlayer,
     handleConfirmConvocation,
     handleAddExternalPlayer,
+    handleAddClubPlayersBatch,
   };
 }
