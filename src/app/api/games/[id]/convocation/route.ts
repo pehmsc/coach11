@@ -131,9 +131,14 @@ export async function GET(_request: Request, { params }: RouteContext) {
     // (convocation_players e convocations ficam só como reads legacy de
     // back-compat para jogos antigos onde o back-fill já criou as rows.)
     const selectedIds = new Set<string>();
+    // Cross-age: atletas convocados via "Atleta do clube" (player_id real
+    // de outro escalao do mesmo clube). Map de player_id → source_age_group_id
+    // populado quando source_age_group_id != game.age_group_id.
+    const crossAgeSourceByPlayerId = new Map<string, string>();
+
     const { data: internalSquadRows, error: internalSquadError } = await supabase
       .from("game_squads")
-      .select("player_id, response_status, is_present")
+      .select("player_id, source_age_group_id, response_status, is_present")
       .eq("game_id", gameId)
       .not("player_id", "is", null);
 
@@ -153,6 +158,15 @@ export async function GET(_request: Request, { params }: RouteContext) {
         isPresent:
           typeof row.is_present === "boolean" ? row.is_present : null,
       };
+
+      // Cross-age: registar source_age_group_id quando difere do escalao do jogo
+      if (
+        typeof row.source_age_group_id === "string" &&
+        row.source_age_group_id.length > 0 &&
+        row.source_age_group_id !== game.age_group_id
+      ) {
+        crossAgeSourceByPlayerId.set(row.player_id, row.source_age_group_id);
+      }
     });
 
     // Ensure all convocated players have a game_stats_live row (bench by default).
@@ -209,6 +223,48 @@ export async function GET(_request: Request, { params }: RouteContext) {
         { error: "Erro ao carregar os jogadores do escalão." },
         { status: 500 },
       );
+    }
+
+    // Cross-age: hidratar dados dos atletas convocados de outros escaloes do
+    // clube. RLS aplica-se via user_can_access_age_group_v2 (cobre
+    // club_memberships → club coordinators). Se o user nao tiver acesso ao
+    // escalao de origem (e.g., staff so de um escalao), o atleta nao e
+    // devolvido pela query e fica omitido na UI — limitacao conhecida e
+    // coerente com modelo de permissoes.
+    const crossAgePlayerIds = Array.from(crossAgeSourceByPlayerId.keys());
+    type CrossAgePlayer = {
+      id: string;
+      age_group_id: string;
+      first_name: string;
+      last_name: string;
+      avatar_url: string | null;
+      jersey_number: number | null;
+      preferred_position: string | null;
+      status: string;
+      created_at: string;
+    };
+    let crossAgePlayersData: CrossAgePlayer[] = [];
+    if (crossAgePlayerIds.length > 0) {
+      const { data: crossData, error: crossError } = await supabase
+        .from("players")
+        .select(
+          "id, age_group_id, first_name, last_name, avatar_url, jersey_number, preferred_position, status, created_at",
+        )
+        .in("id", crossAgePlayerIds);
+
+      if (crossError) {
+        // Defensivo: nao falhar a request inteira. Log para diagnostico.
+        console.error("[convocation] cross-age players query failed:", {
+          code: crossError.code,
+          message: crossError.message,
+          details: crossError.details,
+          hint: crossError.hint,
+          gameId,
+          crossAgePlayerIds,
+        });
+      } else if (Array.isArray(crossData)) {
+        crossAgePlayersData = crossData as CrossAgePlayer[];
+      }
     }
 
     // Modelo unificado: ler externos a partir de game_squads (player_id IS NULL).
@@ -446,8 +502,23 @@ export async function GET(_request: Request, { params }: RouteContext) {
             sameDayInfoLabelByPlayerId.get(player.id) ?? null,
           isExternal: false,
           externalConvocationId: null,
+          sourceAgeGroupId: null,
         };
       }),
+      // Cross-age: atletas de outros escaloes do clube ja convocados
+      ...crossAgePlayersData.map((player) => ({
+        ...player,
+        isConvocated: true,
+        isBlocked: false,
+        sameDayConflictLabel:
+          sameDayConflictLabelByPlayerId.get(player.id) ?? null,
+        sameDayInfoLabel:
+          sameDayInfoLabelByPlayerId.get(player.id) ?? null,
+        isExternal: false,
+        externalConvocationId: null,
+        sourceAgeGroupId:
+          crossAgeSourceByPlayerId.get(player.id) ?? null,
+      })),
       ...externalRows.map((row) => ({
         id: `external:${row.id}`,
         age_group_id: game.age_group_id ?? "",
@@ -465,6 +536,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
         sameDayInfoLabel: null,
         isExternal: true,
         externalConvocationId: row.id,
+        sourceAgeGroupId: null,
       })),
     ];
 
