@@ -917,6 +917,11 @@ export function useLiveGameState(id: string) {
 
   const isLivePhase = phase === "first_half" || phase === "second_half";
   const canRegisterEvents = isLivePhase || !!clockState.runningSinceMs;
+  // Subs e cartoes tambem em halftime (subs tacticas no balneario +
+  // cartoes disciplinares aplicados ao banco). Golos continuam restritos
+  // a jogo activo. Pre_match e review ficam bloqueados como antes.
+  const canRegisterSubstitutionOrCard =
+    canRegisterEvents || phase === "halftime";
   const isFinalized = game?.status === "completed";
 
   // Review: players who actually played (minutes > 0)
@@ -1042,7 +1047,14 @@ export function useLiveGameState(id: string) {
   // ── Event handlers ──
 
   function openModal(type: ModalType) {
-    if (!canRegisterEvents) {
+    const allowedInHalftime =
+      type === "substitution" ||
+      type === "yellow_card" ||
+      type === "red_card";
+    const allowed = allowedInHalftime
+      ? canRegisterSubstitutionOrCard
+      : canRegisterEvents;
+    if (!allowed) {
       toast.error("Inicia a 1ª ou 2ª parte para registar eventos.");
       return;
     }
@@ -1835,6 +1847,7 @@ export function useLiveGameState(id: string) {
     displayEvents,
     isLivePhase,
     canRegisterEvents,
+    canRegisterSubstitutionOrCard,
     isFinalized,
     allRatingsFilled,
     playersOnField,
