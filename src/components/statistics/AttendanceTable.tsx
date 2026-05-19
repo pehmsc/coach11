@@ -44,6 +44,9 @@ export function AttendanceTable({
                   className="h-4 w-4 rounded border-slate-300 text-slate-900"
                 />
               </th>
+              <th className="text-center pb-2 font-medium px-2 whitespace-nowrap w-12">
+                Nº
+              </th>
               <th className="text-left pb-2 font-medium">
                 <button
                   type="button"
@@ -56,6 +59,9 @@ export function AttendanceTable({
                     dir={attendanceSort.dir}
                   />
                 </button>
+              </th>
+              <th className="text-center pb-2 font-medium px-2 whitespace-nowrap">
+                Posição
               </th>
               <th className="text-center pb-2 font-medium px-2 whitespace-nowrap">
                 <button
@@ -136,13 +142,18 @@ export function AttendanceTable({
                     className="h-4 w-4 rounded border-slate-300 text-slate-900"
                   />
                 </td>
+                <td className="py-2 px-2 text-center font-mono text-xs text-slate-500 whitespace-nowrap">
+                  {typeof s.player.jersey_number === "number"
+                    ? s.player.jersey_number
+                    : "—"}
+                </td>
                 <td className="py-2 font-medium text-slate-800 truncate max-w-[130px]">
                   <span className="block truncate">
                     {s.player.first_name} {s.player.last_name}
                   </span>
-                  {s.player.preferred_position && (
-                    <span className="text-xs text-slate-400">{s.player.preferred_position}</span>
-                  )}
+                </td>
+                <td className="py-2 px-2 text-center text-xs text-slate-500 whitespace-nowrap">
+                  {s.player.preferred_position ?? "—"}
                 </td>
                 <td className="py-2 text-center text-slate-500 px-2 font-mono text-xs">
                   {s.minutos}
