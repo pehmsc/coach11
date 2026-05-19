@@ -129,6 +129,7 @@ export default function LiveGamePage() {
       {!state.isFinalized && (
         <EventButtons
           canRegisterEvents={state.canRegisterEvents}
+          canRegisterSubstitutionOrCard={state.canRegisterSubstitutionOrCard}
           openModal={state.openModal}
         />
       )}
