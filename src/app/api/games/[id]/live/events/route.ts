@@ -8,7 +8,10 @@ import {
   GAME_EVENT_SELECT_COLUMNS,
   normalizeStoredGameEventRowsForClient,
 } from "@/lib/games/live-event-participants";
-import { toExternalLivePlayerId } from "@/lib/games/live-player-ids";
+import {
+  isExternalLivePlayerId,
+  toExternalLivePlayerId,
+} from "@/lib/games/live-player-ids";
 import { planAutoRedCardsForSecondYellow } from "@/lib/games/auto-red-from-second-yellow";
 import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -143,6 +146,57 @@ function computeSentOffPlayers(events: Array<{
   });
 
   return { sentOff, yellowByPlayer };
+}
+
+// Replay dos eventos de substituicao ja registados, para reconstruir o
+// estado on-field correcto de EXTERNOS. Internos tem game_stats_live.status
+// actualizado por trigger/RPC e nao precisam de replay; externos nao tem
+// row em game_stats_live, logo initial_lineup_status apenas descreve o
+// estado pre-jogo e fica desactualizado apos a primeira substituicao.
+// Funcao muta o Set in-place; so altera IDs com prefixo "external:".
+function applyHistoricalSubsToOnFieldSet(
+  onFieldPlayerIds: Set<string>,
+  events: Array<{
+    event_type?: string | null;
+    player_id?: string | null;
+    related_player_id?: string | null;
+    is_opponent_event?: boolean | null;
+  }>,
+) {
+  for (const event of events) {
+    if (event.is_opponent_event) continue;
+    if (
+      event.event_type !== "substitution_in" &&
+      event.event_type !== "substitution_out"
+    ) {
+      continue;
+    }
+
+    const playerId =
+      typeof event.player_id === "string" ? event.player_id : null;
+    const relatedPlayerId =
+      typeof event.related_player_id === "string"
+        ? event.related_player_id
+        : null;
+
+    if (event.event_type === "substitution_out") {
+      // playerId saiu, relatedPlayerId entrou
+      if (isExternalLivePlayerId(playerId)) {
+        onFieldPlayerIds.delete(playerId);
+      }
+      if (isExternalLivePlayerId(relatedPlayerId)) {
+        onFieldPlayerIds.add(relatedPlayerId);
+      }
+    } else {
+      // substitution_in: playerId entrou, relatedPlayerId saiu
+      if (isExternalLivePlayerId(playerId)) {
+        onFieldPlayerIds.add(playerId);
+      }
+      if (isExternalLivePlayerId(relatedPlayerId)) {
+        onFieldPlayerIds.delete(relatedPlayerId);
+      }
+    }
+  }
 }
 
 export async function GET(_: Request, { params }: RouteContext) {
@@ -282,6 +336,23 @@ export async function POST(request: Request, { params }: RouteContext) {
         related_player_id?: string | null;
         external_player_convocation_id?: string | null;
         external_related_player_convocation_id?: string | null;
+        is_opponent_event?: boolean | null;
+      }>,
+    );
+
+    // Replay historico das substituicoes para EXTERNOS. Internos sao
+    // geridos por game_stats_live.status (trigger/RPC); externos nao tem
+    // row la, logo initial_lineup_status (lido acima) descreve apenas o
+    // estado pre-jogo. Sem este replay, um externo "substitute" que
+    // entrou via substitution_in continuaria a ser visto como banco e a
+    // proxima sub a tira-lo de campo era rejeitada com "Jogador de saida
+    // nao esta em campo".
+    applyHistoricalSubsToOnFieldSet(
+      onFieldPlayerIds,
+      normalizedExistingEvents as Array<{
+        event_type?: string | null;
+        player_id?: string | null;
+        related_player_id?: string | null;
         is_opponent_event?: boolean | null;
       }>,
     );
