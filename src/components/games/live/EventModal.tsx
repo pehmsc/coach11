@@ -128,6 +128,11 @@ export function EventModal({
                     <span className="text-sm font-medium">
                       {p.first_name} {p.last_name}
                     </span>
+                    {p.preferred_position && (
+                      <span className="inline-flex items-center rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700 flex-shrink-0">
+                        {p.preferred_position}
+                      </span>
+                    )}
                     <span
                       className={`ml-auto inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${getAvailabilityBadgeClasses(availability.label)}`}
                     >
@@ -171,6 +176,11 @@ export function EventModal({
                     <span className="text-sm font-medium">
                       {p.first_name} {p.last_name}
                     </span>
+                    {p.preferred_position && (
+                      <span className="inline-flex items-center rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700 flex-shrink-0">
+                        {p.preferred_position}
+                      </span>
+                    )}
                     <span
                       className={`ml-auto inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${getAvailabilityBadgeClasses(availability.label)}`}
                     >
