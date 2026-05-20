@@ -94,7 +94,10 @@ export default function StatisticsPage() {
       {/* ── TAB: MAPA DE PRESENÇAS ── */}
       {activeTab === "attendance" && (
         <>
-          <AttendanceHeatmap ageGroupId={ageGroupId} />
+          {/* Heatmap so faz sentido para escalao unico — sessoes
+              temporais de escaloes diferentes nao se alinham no mesmo
+              calendario, agregado fica visualmente confuso. */}
+          {!isAllScopes && <AttendanceHeatmap ageGroupId={ageGroupId} />}
           <AttendanceTable
             sortedAttendance={sortedAttendance}
             attendanceSort={attendanceSort}
