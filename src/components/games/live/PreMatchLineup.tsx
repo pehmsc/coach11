@@ -1,5 +1,7 @@
 "use client";
 
+import { useMemo } from "react";
+import { sortSquadForReport } from "@/lib/games/sort-squad-for-report";
 import type { LivePlayer } from "./types";
 
 interface PreMatchLineupProps {
@@ -21,6 +23,23 @@ export function PreMatchLineup({
   startingFirstHalf,
   toggleLineup,
 }: PreMatchLineupProps) {
+  // Ordenacao consistente com o PDF / summary do jogo (sortSquadForReport):
+  // 1) Titulares antes de banco
+  // 2) GR no topo de cada grupo
+  // 3) jersey_number ASC (null/undefined no fim)
+  // 4) Fallback alfabetico por nome
+  const orderedPlayers = useMemo(
+    () =>
+      sortSquadForReport(
+        convocatedPlayers.map((player) => ({
+          ...player,
+          lineupLabel: player.isOnField ? "Titular" : "Banco",
+          name: `${player.first_name} ${player.last_name}`.trim(),
+        })),
+      ),
+    [convocatedPlayers],
+  );
+
   return (
     <>
       {hasExternalConvocatedPlayers && (
@@ -50,7 +69,7 @@ export function PreMatchLineup({
           </div>
         </div>
         <div className="divide-y divide-slate-50">
-          {convocatedPlayers.map((player) => (
+          {orderedPlayers.map((player) => (
             <button
               key={player.id}
               onClick={() => toggleLineup(player.id)}
