@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { differenceInMinutes, format, parseISO, subMinutes } from "date-fns";
 import { pt } from "date-fns/locale";
@@ -102,6 +102,19 @@ export function GameDetailView({ gameId, scope }: Props) {
   });
 
   const convocatedCount = players.filter((p) => p.isConvocated).length;
+
+  // Estabilizar referencia: sem useMemo, cada render do parent produz um
+  // novo Set e o useEffect do <ExternalPlayerModal> dispara refetch a
+  // /api/players sempre que se marca uma checkbox cross-age (flash visual).
+  const alreadyConvocatedPlayerIds = useMemo(
+    () =>
+      new Set(
+        players
+          .filter((p) => p.isConvocated && !p.isExternal)
+          .map((p) => p.id),
+      ),
+    [players],
+  );
 
   if (loading) {
     return (
@@ -213,13 +226,7 @@ export function GameDetailView({ gameId, scope }: Props) {
         <ExternalPlayerModal
           editor={editor}
           currentAgeGroupId={game.age_group_id ?? ""}
-          alreadyConvocatedPlayerIds={
-            new Set(
-              players
-                .filter((p) => p.isConvocated && !p.isExternal)
-                .map((p) => p.id),
-            )
-          }
+          alreadyConvocatedPlayerIds={alreadyConvocatedPlayerIds}
           onSubmitExternalFreeText={(e) =>
             void convocation.handleAddExternalPlayer(
               e, editor.externalPlayerName, editor.externalPlayerNumber,
