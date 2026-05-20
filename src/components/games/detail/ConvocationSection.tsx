@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import {
   Users,
   Shield,
@@ -21,6 +22,7 @@ import {
   getPlayerCardMeta,
   isGkPlayer,
 } from "@/components/games/detail/types";
+import { sortSquadForReport } from "@/lib/games/sort-squad-for-report";
 
 interface ConvocationSectionProps {
   players: PlayerWithStatus[];
@@ -69,21 +71,41 @@ export function ConvocationSection({
 }: ConvocationSectionProps) {
   const convocatedPlayers = players.filter((p) => p.isConvocated);
 
-  const starters = convocatedPlayers
-    .filter((p) => lineupStatuses[p.id] === "on_field")
-    .sort((a, b) => {
-      // GK always first in starters list
-      const aGk = isGkPlayer(a);
-      const bGk = isGkPlayer(b);
-      if (aGk && !bGk) return -1;
-      if (!aGk && bGk) return 1;
-      return a.first_name.localeCompare(b.first_name, "pt", {
-        sensitivity: "base",
-      });
-    });
+  // Ordenacao consistente com <PreMatchLineup> e PDF (sortSquadForReport):
+  // 1) GR no topo de cada grupo
+  // 2) jersey_number ASC (null/undefined no fim)
+  // 3) Fallback alfabetico por nome
+  // O lineupLabel e fixo dentro de cada array — a separacao Titular/Banco
+  // ja foi feita pelos filters acima.
+  const starters = useMemo(
+    () =>
+      sortSquadForReport(
+        convocatedPlayers
+          .filter((p) => lineupStatuses[p.id] === "on_field")
+          .map((p) => ({
+            ...p,
+            lineupLabel: "Titular",
+            name: `${p.first_name} ${p.last_name}`.trim(),
+          })),
+      ),
+    [convocatedPlayers, lineupStatuses],
+  );
 
-  const subs = convocatedPlayers.filter(
-    (p) => lineupStatuses[p.id] === "substitute" || !lineupStatuses[p.id],
+  const subs = useMemo(
+    () =>
+      sortSquadForReport(
+        convocatedPlayers
+          .filter(
+            (p) =>
+              lineupStatuses[p.id] === "substitute" || !lineupStatuses[p.id],
+          )
+          .map((p) => ({
+            ...p,
+            lineupLabel: "Banco",
+            name: `${p.first_name} ${p.last_name}`.trim(),
+          })),
+      ),
+    [convocatedPlayers, lineupStatuses],
   );
 
   const notConvocated = players.filter((p) => !p.isConvocated);
