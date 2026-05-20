@@ -158,6 +158,22 @@ export function GameEditModal({ game, error, editor }: GameEditModalProps) {
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-700">
+                Hora de concentração
+              </label>
+              <input
+                type="time"
+                value={editor.editConcentrationTime}
+                onChange={(event) =>
+                  editor.setEditConcentrationTime(event.target.value)
+                }
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <p className="text-xs text-slate-500">
+                Opcional. Aparece no link público partilhado com famílias.
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-slate-700">
                 Competição
               </label>
               <select
