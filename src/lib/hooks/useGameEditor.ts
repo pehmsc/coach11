@@ -34,6 +34,7 @@ export function useGameEditor(deps: UseGameEditorDeps) {
   const [editDate, setEditDate] = useState("");
   const [editStartTime, setEditStartTime] = useState("00:00");
   const [editEndTime, setEditEndTime] = useState("");
+  const [editConcentrationTime, setEditConcentrationTime] = useState("");
   const [editLocation, setEditLocation] = useState("");
   const [editFormattedAddress, setEditFormattedAddress] = useState("");
   const [editLatitude, setEditLatitude] = useState<number | null>(null);
@@ -125,6 +126,7 @@ export function useGameEditor(deps: UseGameEditorDeps) {
     setEditDate(parsedGameDate ? format(parsedGameDate, "yyyy-MM-dd") : "");
     setEditStartTime(parsedGameDate ? format(parsedGameDate, "HH:mm") : "00:00");
     setEditEndTime(game.end_time?.slice(0, 5) ?? "");
+    setEditConcentrationTime(game.concentration_time?.slice(0, 5) ?? "");
     setEditLocation(game.location ?? "");
     setEditFormattedAddress(game.formatted_address ?? "");
     setEditLatitude(game.latitude ?? null);
@@ -176,6 +178,7 @@ export function useGameEditor(deps: UseGameEditorDeps) {
         title: editTitle.trim() || null,
         game_datetime: gameDatetime,
         end_time: editEndTime || null,
+        concentration_time: editConcentrationTime || null,
         opponent_id: editOpponentSelection?.id ?? null,
         opponent_name: editOpponent.trim(),
         opponent_short_name: normalizedOpponentShortName || null,
@@ -294,6 +297,8 @@ export function useGameEditor(deps: UseGameEditorDeps) {
     setEditStartTime,
     editEndTime,
     setEditEndTime,
+    editConcentrationTime,
+    setEditConcentrationTime,
     editLocation,
     setEditLocation,
     editFormattedAddress,

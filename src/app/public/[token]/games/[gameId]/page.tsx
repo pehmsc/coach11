@@ -16,7 +16,6 @@ import { Breadcrumb } from "@/components/navigation/Breadcrumb";
 import { PublicGameLivePanel } from "@/components/public/PublicGameLivePanel";
 import { PublicRateLimitedState } from "@/components/public/PublicRateLimitedState";
 import {
-  addMinutesToTime,
   extractTimeFromDateTime,
   formatTimeRange,
 } from "@/lib/events/time";
@@ -100,7 +99,7 @@ const getPublicGameDetailPayload = unstable_cache(
       admin
         .from("games")
         .select(
-          "id, game_datetime, end_time, opponent_name, opponent_short_name, location, formatted_address, latitude, longitude, osm_place_id, location_source, notes, is_home, status, score_home, score_away, image_url, title",
+          "id, game_datetime, end_time, concentration_time, opponent_name, opponent_short_name, location, formatted_address, latitude, longitude, osm_place_id, location_source, notes, is_home, status, score_home, score_away, image_url, title",
         )
         .eq("id", resolvedGameId)
         .eq("age_group_id", ageGroupId)
@@ -154,8 +153,11 @@ export default async function PublicGameDetailPage({
   const gameAddress = resolveFormattedAddress(
     game.formatted_address,
   );
-  const concentrationTime = extractTimeFromDateTime(game.game_datetime);
-  const gameTime = addMinutesToTime(concentrationTime, 60);
+  // game.game_datetime guarda a hora real do jogo. concentration_time
+  // (opcional, HH:MM ou HH:MM:SS) e a hora de concentracao definida pelo
+  // coach no form. Quando vazia, mostramos apenas o cartao "Jogo".
+  const gameTime = extractTimeFromDateTime(game.game_datetime);
+  const concentrationTime = game.concentration_time?.slice(0, 5) || null;
 
   // Notas da convocatória (legacy table — fonte de notas público).
   // O squad é sempre lido directamente de game_squads (modelo unificado).
@@ -338,15 +340,21 @@ export default async function PublicGameDetailPage({
               {gameStatusLabel(game.status)}
             </span>
           </div>
-          <div className="mt-5 grid gap-3 sm:grid-cols-2">
-            <div className="rounded-2xl bg-white/10 px-4 py-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-200">
-                Concentração
-              </p>
-              <p className="mt-1 text-2xl font-black text-white">
-                {concentrationTime || "--:--"}
-              </p>
-            </div>
+          <div
+            className={`mt-5 grid gap-3 ${
+              concentrationTime ? "sm:grid-cols-2" : "sm:grid-cols-1"
+            }`}
+          >
+            {concentrationTime && (
+              <div className="rounded-2xl bg-white/10 px-4 py-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-200">
+                  Concentração
+                </p>
+                <p className="mt-1 text-2xl font-black text-white">
+                  {concentrationTime}
+                </p>
+              </div>
+            )}
             <div className="rounded-2xl bg-white/10 px-4 py-3">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-200">
                 Jogo
@@ -392,7 +400,7 @@ export default async function PublicGameDetailPage({
               </p>
               <p>
                 <strong>Horário:</strong>{" "}
-                {formatTimeRange(concentrationTime, game.end_time)}
+                {formatTimeRange(gameTime, game.end_time)}
               </p>
               {gameAddress && (
                 <p>
