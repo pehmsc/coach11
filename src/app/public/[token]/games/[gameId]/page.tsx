@@ -116,7 +116,7 @@ const getPublicGameDetailPayload = unstable_cache(
       ageGroup,
     };
   },
-  ["public-game-detail-v2"],
+  ["public-game-detail-v3"],
   { revalidate: 30 },
 );
 
