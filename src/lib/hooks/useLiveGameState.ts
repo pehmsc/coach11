@@ -19,6 +19,7 @@ import { filterPersistentLiveStatsPlayers } from "@/lib/games/live-persistence";
 import { toExternalLivePlayerId } from "@/lib/games/live-player-ids";
 import { captureClientProductEvent } from "@/lib/observability/posthog-client";
 import { exportMatchReportPDF } from "@/lib/pdf/matchReport";
+import { useLiveClock } from "@/lib/hooks/live/useLiveClock";
 import type { Game, Player, GameEvent, GameEventType } from "@/types/database";
 import type {
   LivePlayer,
@@ -40,7 +41,6 @@ import {
   parseMatchPhase,
   computeClockSecondsAt,
   loadPersistedClock,
-  persistClock,
   sortPlayersByName,
   mergeEvents,
   computeMinutesPlayed,
@@ -57,13 +57,20 @@ export function useLiveGameState(id: string) {
   const [convocatedPlayers, setConvocatedPlayers] = useState<LivePlayer[]>([]);
   const [initialStarterIds, setInitialStarterIds] = useState<string[]>([]);
   const [events, setEvents] = useState<GameEvent[]>([]);
-  const [clockState, setClockState] = useState<ClockState>({
-    baseSeconds: 0,
-    runningSinceMs: null,
-  });
-  const [nowMs, setNowMs] = useState(() => Date.now());
-  const [clockHydrated, setClockHydrated] = useState(false);
   const [phase, setPhase] = useState<MatchPhase>("pre_match");
+  const {
+    clockState,
+    nowMs,
+    clockSeconds,
+    currentMinute,
+    pauseClock,
+    startClock,
+    adjustClockBySeconds,
+    setClockState,
+    setNowMs,
+    setClockHydrated,
+    disableBackendCheckpoint,
+  } = useLiveClock({ id, phase });
   const [savingEvent, setSavingEvent] = useState(false);
   const [savingLineup, setSavingLineup] = useState<string | null>(null);
   const [startingFirstHalf, setStartingFirstHalf] = useState(false);
@@ -101,40 +108,6 @@ export function useLiveGameState(id: string) {
   const [liveTeamNotes, setLiveTeamNotes] = useState<string>("");
   const [liveCoachNotes, setLiveCoachNotes] = useState<string>("");
   const hasHydratedMatchSheetRef = useRef(false);
-  const checkpointBackendEnabledRef = useRef(true);
-  const lastCheckpointFingerprintRef = useRef<string | null>(null);
-  const clockSeconds = useMemo(
-    () => computeClockSecondsAt(clockState, nowMs),
-    [clockState, nowMs],
-  );
-  const elapsedMinutes = Math.floor(clockSeconds / 60);
-  const currentMinute = elapsedMinutes + 1; // 1-based minute for UI and game_events
-
-  const persistCheckpointToBackend = useCallback(
-    async (
-      snapshot: { phase: MatchPhase; baseSeconds: number; runningSinceMs: number | null },
-      options?: { keepalive?: boolean },
-    ) => {
-      if (!checkpointBackendEnabledRef.current) return;
-      try {
-        const res = await fetch(`/api/games/${id}/live/checkpoint`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(snapshot),
-          cache: "no-store",
-          keepalive: options?.keepalive,
-        });
-
-        const payload = await res.json().catch(() => null);
-        if (payload?.missingTable === true) {
-          checkpointBackendEnabledRef.current = false;
-        }
-      } catch {
-        // Ignore transient backend failures. Local checkpoint stays active.
-      }
-    },
-    [id],
-  );
 
   const loadEventsFromBackend = useCallback(async () => {
     const res = await fetch(`/api/games/${id}/live/events`, { cache: "no-store" });
@@ -315,7 +288,7 @@ export function useLiveGameState(id: string) {
       .then(async (res) => {
         const payload = await res.json().catch(() => null);
         if (payload?.missingTable === true) {
-          checkpointBackendEnabledRef.current = false;
+          disableBackendCheckpoint();
           return null;
         }
         if (!res.ok || !payload?.checkpoint) return null;
@@ -585,10 +558,17 @@ export function useLiveGameState(id: string) {
       }
     }
 
-    lastCheckpointFingerprintRef.current = null;
     setClockHydrated(true);
     setLoading(false);
-  }, [id, supabase, loadEventsFromBackend]);
+  }, [
+    id,
+    supabase,
+    loadEventsFromBackend,
+    setClockHydrated,
+    setClockState,
+    setNowMs,
+    disableBackendCheckpoint,
+  ]);
 
   useEffect(() => {
     if (id) void loadData();
@@ -630,99 +610,6 @@ export function useLiveGameState(id: string) {
       setKickoffError(null);
     }
   }, [kickoffError, phase]);
-
-  useEffect(() => {
-    if (!clockHydrated) return;
-    persistClock(id, {
-      version: 1,
-      phase,
-      baseSeconds: clockState.baseSeconds,
-      runningSinceMs: clockState.runningSinceMs,
-      savedAt: Date.now(),
-    });
-  }, [id, phase, clockState.baseSeconds, clockState.runningSinceMs, clockHydrated]);
-
-  useEffect(() => {
-    if (!clockHydrated || !checkpointBackendEnabledRef.current) return;
-    const fingerprint = `${phase}|${clockState.baseSeconds}|${clockState.runningSinceMs ?? "null"}`;
-    if (lastCheckpointFingerprintRef.current === fingerprint) return;
-    lastCheckpointFingerprintRef.current = fingerprint;
-    void persistCheckpointToBackend({
-      phase,
-      baseSeconds: clockState.baseSeconds,
-      runningSinceMs: clockState.runningSinceMs,
-    });
-  }, [
-    phase,
-    clockState.baseSeconds,
-    clockState.runningSinceMs,
-    clockHydrated,
-    persistCheckpointToBackend,
-  ]);
-
-  useEffect(() => {
-    if (typeof window === "undefined" || !clockHydrated || !checkpointBackendEnabledRef.current) {
-      return;
-    }
-
-    const flushOnPageHide = () => {
-      void persistCheckpointToBackend(
-        {
-          phase,
-          baseSeconds: clockState.baseSeconds,
-          runningSinceMs: clockState.runningSinceMs,
-        },
-        { keepalive: true },
-      );
-    };
-
-    window.addEventListener("pagehide", flushOnPageHide);
-    return () => window.removeEventListener("pagehide", flushOnPageHide);
-  }, [
-    phase,
-    clockState.baseSeconds,
-    clockState.runningSinceMs,
-    clockHydrated,
-    persistCheckpointToBackend,
-  ]);
-
-  const pauseClock = useCallback(() => {
-    const now = Date.now();
-    setNowMs(now);
-    setClockState((prev) => {
-      if (!prev.runningSinceMs) return prev;
-      const extra = Math.max(0, Math.floor((now - prev.runningSinceMs) / 1000));
-      return {
-        baseSeconds: prev.baseSeconds + extra,
-        runningSinceMs: null,
-      };
-    });
-  }, []);
-
-  const startClock = useCallback(() => {
-    const now = Date.now();
-    setNowMs(now);
-    setClockState((prev) => {
-      if (prev.runningSinceMs) return prev;
-      return {
-        baseSeconds: prev.baseSeconds,
-        runningSinceMs: now,
-      };
-    });
-  }, []);
-
-  const adjustClockBySeconds = useCallback((deltaSeconds: number) => {
-    const now = Date.now();
-    setNowMs(now);
-    setClockState((prev) => {
-      const current = computeClockSecondsAt(prev, now);
-      const next = Math.max(0, current + deltaSeconds);
-      return {
-        baseSeconds: next,
-        runningSinceMs: prev.runningSinceMs ? now : null,
-      };
-    });
-  }, []);
 
   const saveLivePlayerStatus = useCallback(
     async (
@@ -778,31 +665,6 @@ export function useLiveGameState(id: string) {
     },
     [convocatedPlayers, id],
   );
-
-  useEffect(() => {
-    if (!isRunningPhase(phase) || !clockState.runningSinceMs) return;
-    const interval = setInterval(() => {
-      setNowMs(Date.now());
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [phase, clockState.runningSinceMs]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const syncNow = () => setNowMs(Date.now());
-    const onVisibility = () => {
-      if (!document.hidden) syncNow();
-    };
-
-    window.addEventListener("focus", syncNow);
-    document.addEventListener("visibilitychange", onVisibility);
-
-    return () => {
-      window.removeEventListener("focus", syncNow);
-      document.removeEventListener("visibilitychange", onVisibility);
-    };
-  }, []);
 
   // Score from events
   const score = useMemo(() => {
