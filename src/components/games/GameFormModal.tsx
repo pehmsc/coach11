@@ -51,6 +51,7 @@ const EMPTY_FORM: GameFormExtra = {
   date: "",
   start_time: "15:00",
   end_time: "",
+  concentration_time: "",
   ...EMPTY_LOCATION_FIELDS,
   is_home: true,
   competition_id: "",
@@ -152,6 +153,7 @@ export function GameFormModal({
           date: form.date,
           start_time: form.start_time,
           end_time: form.end_time || null,
+          concentration_time: form.concentration_time || null,
           is_home: form.is_home,
           location: form.location.trim() || null,
           formatted_address: form.formatted_address.trim() || null,
@@ -255,6 +257,7 @@ export function GameFormModal({
               onFieldChange={handleFieldChange}
               competitionOptions={competitionOptions}
               showCompetitionSelect={showCompetitionSelect}
+              showConcentrationTime
               renderOpponentField={
                 canUseTypeahead
                   ? () => (
