@@ -14,6 +14,7 @@ function renderClockControls(opts: RenderOpts = {}) {
   const startClock = vi.fn();
   const setPhase = vi.fn();
   const adjustClockBySeconds = vi.fn();
+  const setClockMinute = vi.fn();
   const handleStartFirstHalf = vi.fn();
 
   const clockState: ClockState = {
@@ -32,6 +33,7 @@ function renderClockControls(opts: RenderOpts = {}) {
       kickoffError={null}
       kickoffState={{ canStart: true, reason: null }}
       adjustClockBySeconds={adjustClockBySeconds}
+      setClockMinute={setClockMinute}
       handleStartFirstHalf={handleStartFirstHalf}
       pauseClock={pauseClock}
       startClock={startClock}
@@ -39,7 +41,7 @@ function renderClockControls(opts: RenderOpts = {}) {
     />,
   );
 
-  return { pauseClock, startClock, setPhase };
+  return { pauseClock, startClock, setPhase, setClockMinute };
 }
 
 describe("ClockControls — confirmation dialog", () => {
@@ -179,5 +181,74 @@ describe("ClockControls — variantes de transição", () => {
 
     expect(pauseClock).toHaveBeenCalledTimes(1);
     expect(setPhase).toHaveBeenCalledWith("review");
+  });
+});
+
+describe("ClockControls — input editável de minuto", () => {
+  it("Enter no input com valor 60 chama setClockMinute(60)", async () => {
+    const user = userEvent.setup();
+    const { setClockMinute } = renderClockControls({ currentMinute: 42 });
+
+    const input = screen.getByLabelText(/minuto de jogo/i);
+    await user.clear(input);
+    await user.type(input, "60{Enter}");
+
+    expect(setClockMinute).toHaveBeenCalledWith(60);
+  });
+
+  it("Blur com valor inválido (>200) restaura o valor original", async () => {
+    const user = userEvent.setup();
+    const { setClockMinute } = renderClockControls({ currentMinute: 42 });
+
+    const input = screen.getByLabelText(/minuto de jogo/i) as HTMLInputElement;
+    await user.clear(input);
+    await user.type(input, "5000");
+    input.blur();
+
+    expect(setClockMinute).not.toHaveBeenCalled();
+    await waitFor(() => expect(input.value).toBe("42"));
+  });
+
+  it("Escape restaura o valor sem chamar setClockMinute", async () => {
+    const user = userEvent.setup();
+    const { setClockMinute } = renderClockControls({ currentMinute: 42 });
+
+    const input = screen.getByLabelText(/minuto de jogo/i) as HTMLInputElement;
+    await user.clear(input);
+    await user.type(input, "99{Escape}");
+
+    expect(setClockMinute).not.toHaveBeenCalled();
+    expect(input.value).toBe("42");
+  });
+
+  it("Sincroniza valor quando currentMinute muda externamente", () => {
+    const setClockMinute = vi.fn();
+    const baseProps = {
+      phase: "first_half" as const,
+      clockState: { baseSeconds: 0, runningSinceMs: null },
+      isLivePhase: true,
+      playersOnField: { length: 11 },
+      startingFirstHalf: false,
+      kickoffError: null,
+      kickoffState: { canStart: true, reason: null },
+      adjustClockBySeconds: vi.fn(),
+      handleStartFirstHalf: vi.fn(),
+      pauseClock: vi.fn(),
+      startClock: vi.fn(),
+      setClockMinute,
+      setPhase: vi.fn(),
+    };
+
+    const { rerender } = render(
+      <ClockControls {...baseProps} currentMinute={10} />,
+    );
+    expect(
+      (screen.getByLabelText(/minuto de jogo/i) as HTMLInputElement).value,
+    ).toBe("10");
+
+    rerender(<ClockControls {...baseProps} currentMinute={25} />);
+    expect(
+      (screen.getByLabelText(/minuto de jogo/i) as HTMLInputElement).value,
+    ).toBe("25");
   });
 });

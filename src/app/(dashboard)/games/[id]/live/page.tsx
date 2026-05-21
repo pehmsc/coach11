@@ -118,6 +118,7 @@ export default function LiveGamePage() {
           kickoffError={state.kickoffError}
           kickoffState={state.kickoffState}
           adjustClockBySeconds={state.adjustClockBySeconds}
+          setClockMinute={state.setClockMinute}
           handleStartFirstHalf={state.handleStartFirstHalf}
           pauseClock={state.pauseClock}
           startClock={state.startClock}

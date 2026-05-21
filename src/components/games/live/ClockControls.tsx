@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Loader2, Plus, Minus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -21,6 +21,7 @@ interface ClockControlsProps {
   kickoffError: string | null;
   kickoffState: { canStart: boolean; reason: string | null };
   adjustClockBySeconds: (delta: number) => void;
+  setClockMinute: (targetMinute: number) => void;
   handleStartFirstHalf: () => void;
   pauseClock: () => void;
   startClock: () => void;
@@ -37,6 +38,7 @@ export function ClockControls({
   kickoffError,
   kickoffState,
   adjustClockBySeconds,
+  setClockMinute,
   handleStartFirstHalf,
   pauseClock,
   startClock,
@@ -44,6 +46,16 @@ export function ClockControls({
 }: ClockControlsProps) {
   const [pendingTransition, setPendingTransition] =
     useState<PendingTransition | null>(null);
+
+  const [minuteInputValue, setMinuteInputValue] = useState<string>(
+    String(currentMinute),
+  );
+  // Sinaliza ao onBlur que deve ignorar o valor pendente (ex: Escape).
+  const skipNextBlurRef = useRef(false);
+
+  useEffect(() => {
+    setMinuteInputValue(String(currentMinute));
+  }, [currentMinute]);
 
   const dialogContent = pendingTransition
     ? transitionContent(pendingTransition, currentMinute)
@@ -59,9 +71,42 @@ export function ClockControls({
         >
           <Minus size={14} />
         </button>
-        <span className="w-10 text-center font-bold text-lg text-slate-900">
-          {currentMinute}&apos;
-        </span>
+        <input
+          type="number"
+          value={minuteInputValue}
+          onChange={(e) => setMinuteInputValue(e.target.value)}
+          onBlur={() => {
+            if (skipNextBlurRef.current) {
+              skipNextBlurRef.current = false;
+              setMinuteInputValue(String(currentMinute));
+              return;
+            }
+            const parsed = Number(minuteInputValue);
+            if (Number.isFinite(parsed) && parsed >= 0 && parsed <= 200) {
+              const intMinute = Math.floor(parsed);
+              if (intMinute !== currentMinute) {
+                setClockMinute(intMinute);
+              }
+              setMinuteInputValue(String(intMinute));
+            } else {
+              setMinuteInputValue(String(currentMinute));
+            }
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.currentTarget.blur();
+            } else if (e.key === "Escape") {
+              skipNextBlurRef.current = true;
+              e.currentTarget.blur();
+            }
+          }}
+          min={0}
+          max={200}
+          step={1}
+          inputMode="numeric"
+          aria-label="Minuto de jogo"
+          className="w-14 text-center font-bold text-lg text-slate-900 bg-white border border-slate-300 rounded px-1 py-0.5 focus:outline-none focus:ring-2 focus:ring-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inline-spin-button]:appearance-none"
+        />
         <button
           onClick={() => adjustClockBySeconds(60)}
           className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center"
