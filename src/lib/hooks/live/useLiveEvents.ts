@@ -17,7 +17,6 @@ import type {
 
 interface UseLiveEventsArgs {
   id: string;
-  currentMinute: number;
   convocatedPlayers: LivePlayer[];
   initialStarterIds: string[];
   setConvocatedPlayers: Dispatch<SetStateAction<LivePlayer[]>>;
@@ -42,7 +41,6 @@ export interface UseLiveEventsReturn {
 
 export function useLiveEvents({
   id,
-  currentMinute,
   convocatedPlayers,
   initialStarterIds,
   setConvocatedPlayers,
@@ -157,6 +155,13 @@ export function useLiveEvents({
       // Sincronizar com servidor (game_stats_live ou external_player_convocations)
       // para que recarregar a página reflicta o estado correcto. Falhas não
       // bloqueiam — refresh corrige; events já foram apagados.
+      //
+      // `endMinute: null` quando jogador vai para banco — ao apagar um evento
+      // de substituição, o jogador "nunca saiu" do ponto de vista da nova
+      // timeline. Escrever `currentMinute` aqui era semanticamente errado e,
+      // se o relógio estivesse num estado anómalo (ex: tab fechada com
+      // `runningSinceMs` antigo), gravava valores absurdos em
+      // `game_stats_live.end_minute` (vistos 1408, 2011 no smoke test do Z4).
       for (const change of playersToSyncToServer) {
         try {
           await saveLivePlayerStatus(
@@ -164,7 +169,7 @@ export function useLiveEvents({
             change.newIsOnField ? "on_field" : "substitute",
             {
               startMinute: change.newIsOnField ? 0 : null,
-              endMinute: change.newIsOnField ? null : currentMinute,
+              endMinute: null,
             },
           );
         } catch (error) {
@@ -179,7 +184,6 @@ export function useLiveEvents({
       events,
       convocatedPlayers,
       initialStarterIds,
-      currentMinute,
       deleteEventsFromBackend,
       setConvocatedPlayers,
       saveLivePlayerStatus,

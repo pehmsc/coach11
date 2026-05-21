@@ -73,6 +73,33 @@ export function computeClockSecondsAt(state: ClockState, atMs: number) {
   return Math.max(0, state.baseSeconds + runningSeconds);
 }
 
+/**
+ * Defesa contra relógio corrupto: se `minute` for um valor absurdo
+ * (>200 min), devolve `null` para que campos derivados em
+ * `game_stats_live` fiquem `null` em vez de gravarem lixo.
+ *
+ * Contexto: `useLiveClock` mantém `runningSinceMs` quando a tab fecha
+ * (faz flush sem pausar). Se o coach volta horas/dias depois sem ter
+ * pausado o jogo, `currentMinute` pode chegar a milhares, gravando
+ * valores impossíveis (1408, 2011) em `game_stats_live`. Os cálculos
+ * de minutos jogados derivam de `game_events`, não destes campos —
+ * por isso o clamp é seguro.
+ *
+ * Limite: 200 min cobre prolongamento + intervalos longos. Acima é
+ * claramente um relógio corrompido.
+ */
+const MAX_PLAUSIBLE_MATCH_MINUTE = 200;
+
+export function clampToValidMatchMinute(
+  minute: number | null | undefined,
+): number | null {
+  if (typeof minute !== "number") return null;
+  if (!Number.isFinite(minute)) return null;
+  if (minute < 0) return null;
+  if (minute > MAX_PLAUSIBLE_MATCH_MINUTE) return null;
+  return Math.floor(minute);
+}
+
 export function clockStorageKey(gameId: string) {
   return `coach11:live-clock:${gameId}`;
 }

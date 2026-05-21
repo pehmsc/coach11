@@ -735,4 +735,130 @@ describe("useLiveEventModal", () => {
       expect(result.current.savingEvent).toBe(false);
     });
   });
+
+  describe("clamp de currentMinute corrupto (#Z5)", () => {
+    // Defesa em profundidade: se useLiveClock estiver hidratado a partir
+    // de runningSinceMs antigo (tab fechada horas antes), currentMinute
+    // pode chegar a milhares. Antes de Z5 isto gravava lixo em
+    // game_stats_live.start_minute/end_minute (vistos 1408, 2011).
+
+    it("confirmSubstitution clampa currentMinute > 200 para null", async () => {
+      const saveLivePlayerStatus = vi.fn().mockResolvedValue(undefined);
+      const { result } = renderHook(() =>
+        useLiveEventModal(
+          createDefaultArgs({
+            currentMinute: 1408,
+            saveLivePlayerStatus,
+            insertEventsToBackend: vi.fn().mockResolvedValue([
+              createEvent({ id: "so", event_type: "substitution_out" }),
+              createEvent({ id: "si", event_type: "substitution_in" }),
+            ]),
+            getPlayerAvailability: vi.fn(
+              (id: string | null | undefined): PlayerAvailability =>
+                id === "out-id"
+                  ? { label: "Em campo", selectable: true }
+                  : { label: "Banco", selectable: true },
+            ),
+          }),
+        ),
+      );
+      act(() => {
+        result.current.setSelectedSubOutId("out-id");
+        result.current.setSelectedSubInId("in-id");
+      });
+      await act(async () => {
+        await result.current.confirmSubstitution();
+      });
+
+      expect(saveLivePlayerStatus).toHaveBeenCalledWith(
+        "out-id",
+        "substitute",
+        expect.objectContaining({ endMinute: null }),
+      );
+      expect(saveLivePlayerStatus).toHaveBeenCalledWith(
+        "in-id",
+        "on_field",
+        expect.objectContaining({ startMinute: null, endMinute: null }),
+      );
+    });
+
+    it("confirmSubstitution preserva currentMinute valido", async () => {
+      const saveLivePlayerStatus = vi.fn().mockResolvedValue(undefined);
+      const { result } = renderHook(() =>
+        useLiveEventModal(
+          createDefaultArgs({
+            currentMinute: 45,
+            saveLivePlayerStatus,
+            insertEventsToBackend: vi.fn().mockResolvedValue([
+              createEvent({ id: "so", event_type: "substitution_out" }),
+              createEvent({ id: "si", event_type: "substitution_in" }),
+            ]),
+            getPlayerAvailability: vi.fn(
+              (id: string | null | undefined): PlayerAvailability =>
+                id === "out-id"
+                  ? { label: "Em campo", selectable: true }
+                  : { label: "Banco", selectable: true },
+            ),
+          }),
+        ),
+      );
+      act(() => {
+        result.current.setSelectedSubOutId("out-id");
+        result.current.setSelectedSubInId("in-id");
+      });
+      await act(async () => {
+        await result.current.confirmSubstitution();
+      });
+
+      expect(saveLivePlayerStatus).toHaveBeenCalledWith(
+        "out-id",
+        "substitute",
+        expect.objectContaining({ endMinute: 45 }),
+      );
+      expect(saveLivePlayerStatus).toHaveBeenCalledWith(
+        "in-id",
+        "on_field",
+        expect.objectContaining({ startMinute: 45, endMinute: null }),
+      );
+    });
+
+    it("applySendOff (via cascade yellow->red) clampa currentMinute corrupto", async () => {
+      // Setup: jogador com 1 yellow existente, levanta 2o yellow.
+      // Cascade gera red automatico -> applySendOff chamado internamente.
+      const existingYellow = createEvent({
+        id: "y1",
+        event_type: "yellow_card",
+        player_id: "p1",
+        minute: 20,
+      });
+      const saveLivePlayerStatus = vi.fn().mockResolvedValue(undefined);
+      const insertEventsToBackend = vi.fn().mockResolvedValue([
+        createEvent({ id: "y2", event_type: "yellow_card", minute: 45 }),
+        createEvent({ id: "r1", event_type: "red_card", minute: 45 }),
+      ]);
+
+      const { result } = renderHook(() =>
+        useLiveEventModal(
+          createDefaultArgs({
+            currentMinute: 2011,
+            events: [existingYellow],
+            insertEventsToBackend,
+            saveLivePlayerStatus,
+            convocatedPlayers: [createPlayer({ id: "p1", isOnField: true })],
+          }),
+        ),
+      );
+      act(() => result.current.setSelectedScorerID("p1"));
+      await act(async () => {
+        await result.current.confirmCard("yellow_card");
+      });
+
+      // applySendOff chamado com endMinute clampado (null em vez de 2011)
+      expect(saveLivePlayerStatus).toHaveBeenCalledWith(
+        "p1",
+        "substitute",
+        expect.objectContaining({ endMinute: null }),
+      );
+    });
+  });
 });

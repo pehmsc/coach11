@@ -3,7 +3,10 @@
 import { useState, useEffect, useCallback } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { toast } from "sonner";
-import { mergeEvents } from "@/components/games/live/utils";
+import {
+  clampToValidMatchMinute,
+  mergeEvents,
+} from "@/components/games/live/utils";
 import { EVENT_LABELS } from "@/components/games/live/types";
 import type {
   LivePlayer,
@@ -171,7 +174,9 @@ export function useLiveEventModal({
 
       try {
         await saveLivePlayerStatus(playerId, "substitute", {
-          endMinute: player.isOnField ? currentMinute : null,
+          endMinute: player.isOnField
+            ? clampToValidMatchMinute(currentMinute)
+            : null,
         });
       } catch {
         // non-blocking: event is already stored
@@ -391,12 +396,15 @@ export function useLiveEventModal({
     }
 
     try {
-      // Update live stats (current status only — minutes calc uses events)
+      // Update live stats (current status only — minutes calc uses events).
+      // Clamp defensivo: se o relógio estiver corrompido (ex: tab fechada
+      // com `runningSinceMs` antigo), grava `null` em vez de valor absurdo.
+      const clampedCurrentMinute = clampToValidMatchMinute(currentMinute);
       await saveLivePlayerStatus(selectedSubOutId, "substitute", {
-        endMinute: currentMinute,
+        endMinute: clampedCurrentMinute,
       });
       await saveLivePlayerStatus(selectedSubInId, "on_field", {
-        startMinute: currentMinute,
+        startMinute: clampedCurrentMinute,
         endMinute: null,
       });
     } catch {

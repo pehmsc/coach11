@@ -34,7 +34,6 @@ type SaveStatusFn = (
 
 interface DefaultArgs {
   id: string;
-  currentMinute: number;
   convocatedPlayers: LivePlayer[];
   initialStarterIds: string[];
   setConvocatedPlayers: ReturnType<typeof vi.fn>;
@@ -53,7 +52,6 @@ beforeEach(() => {
   vi.spyOn(console, "error").mockImplementation(() => {});
   defaultArgs = {
     id: "game-1",
-    currentMinute: 30,
     convocatedPlayers: [],
     initialStarterIds: [],
     setConvocatedPlayers: vi.fn(),
@@ -632,6 +630,127 @@ describe("useLiveEvents", () => {
         await result.current.deleteEvent("og-1");
       });
       expect(saveLivePlayerStatusMock).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("performDelete — endMinute null fix (#Z5)", () => {
+    // Bug: antes de Z5, ao apagar evento e jogador voltar ao banco,
+    // gravava `endMinute: currentMinute`. Com relogio corrupto isto
+    // resultava em valores absurdos em game_stats_live (1408, 2011).
+    // Semanticamente errado tambem: a timeline ja nao reflecte a saida
+    // do jogador apos o delete.
+
+    it("passa endMinute: null quando jogador volta ao banco apos apagar sub", async () => {
+      fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+      const saveLivePlayerStatusMock = vi
+        .fn<SaveStatusFn>()
+        .mockResolvedValue(undefined);
+      // Setup: substituicao p1 (estava em campo) -> p2 (estava no banco)
+      // No estado actual, p2 esta em campo e p1 no banco.
+      // Apagar substitution_out de p1: p1 volta ao campo, p2 volta ao banco.
+      const subOut = createEvent({
+        id: "so-1",
+        event_type: "substitution_out",
+        player_id: "p1",
+        related_player_id: "p2",
+        minute: 30,
+      });
+      const subIn = createEvent({
+        id: "si-1",
+        event_type: "substitution_in",
+        player_id: "p2",
+        related_player_id: "p1",
+        minute: 30,
+      });
+      const setConvocatedPlayersMock = vi.fn((updater: unknown) => {
+        if (typeof updater === "function") {
+          (updater as (prev: LivePlayer[]) => LivePlayer[])([
+            createPlayer({ id: "p1", isOnField: false }),
+            createPlayer({ id: "p2", isOnField: true }),
+          ]);
+        }
+      });
+
+      const { result } = renderHook(() =>
+        useLiveEvents({
+          ...defaultArgs,
+          convocatedPlayers: [
+            createPlayer({ id: "p1", isOnField: false }),
+            createPlayer({ id: "p2", isOnField: true }),
+          ],
+          initialStarterIds: ["p1"],
+          setConvocatedPlayers: setConvocatedPlayersMock,
+          saveLivePlayerStatus: saveLivePlayerStatusMock,
+        }),
+      );
+      act(() => result.current.setEvents([subOut, subIn]));
+      await act(async () => {
+        await result.current.deleteEvent("so-1");
+      });
+
+      // p2 volta ao banco (newIsOnField: false) — endMinute deve ser null
+      const p2Call = saveLivePlayerStatusMock.mock.calls.find(
+        (call) => call[0] === "p2",
+      );
+      expect(p2Call).toBeDefined();
+      expect(p2Call![1]).toBe("substitute");
+      expect(p2Call![2]).toEqual(
+        expect.objectContaining({ endMinute: null }),
+      );
+    });
+
+    it("passa startMinute: 0 quando jogador volta ao campo", async () => {
+      fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+      const saveLivePlayerStatusMock = vi
+        .fn<SaveStatusFn>()
+        .mockResolvedValue(undefined);
+      const subOut = createEvent({
+        id: "so-1",
+        event_type: "substitution_out",
+        player_id: "p1",
+        related_player_id: "p2",
+        minute: 30,
+      });
+      const subIn = createEvent({
+        id: "si-1",
+        event_type: "substitution_in",
+        player_id: "p2",
+        related_player_id: "p1",
+        minute: 30,
+      });
+      const setConvocatedPlayersMock = vi.fn((updater: unknown) => {
+        if (typeof updater === "function") {
+          (updater as (prev: LivePlayer[]) => LivePlayer[])([
+            createPlayer({ id: "p1", isOnField: false }),
+            createPlayer({ id: "p2", isOnField: true }),
+          ]);
+        }
+      });
+
+      const { result } = renderHook(() =>
+        useLiveEvents({
+          ...defaultArgs,
+          convocatedPlayers: [
+            createPlayer({ id: "p1", isOnField: false }),
+            createPlayer({ id: "p2", isOnField: true }),
+          ],
+          initialStarterIds: ["p1"],
+          setConvocatedPlayers: setConvocatedPlayersMock,
+          saveLivePlayerStatus: saveLivePlayerStatusMock,
+        }),
+      );
+      act(() => result.current.setEvents([subOut, subIn]));
+      await act(async () => {
+        await result.current.deleteEvent("so-1");
+      });
+
+      // p1 volta ao campo (newIsOnField: true) — startMinute 0, endMinute null
+      const p1Call = saveLivePlayerStatusMock.mock.calls.find(
+        (call) => call[0] === "p1",
+      );
+      expect(p1Call).toBeDefined();
+      expect(p1Call![1]).toBe("on_field");
+      expect(p1Call![2]).toEqual({ startMinute: 0, endMinute: null });
     });
   });
 });

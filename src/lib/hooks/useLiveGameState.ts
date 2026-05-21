@@ -106,7 +106,6 @@ export function useLiveGameState(id: string) {
     cancelCascadeDelete,
   } = useLiveEvents({
     id,
-    currentMinute,
     convocatedPlayers,
     initialStarterIds,
     setConvocatedPlayers,
