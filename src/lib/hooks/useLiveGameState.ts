@@ -4,7 +4,6 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
-import { getLiveKickoffState } from "@/lib/games/live-kickoff";
 import {
   GAME_EVENT_SELECT_COLUMNS,
   normalizeStoredGameEventRowsForClient,
@@ -14,6 +13,7 @@ import { filterPersistentLiveStatsPlayers } from "@/lib/games/live-persistence";
 import { toExternalLivePlayerId } from "@/lib/games/live-player-ids";
 import { captureClientProductEvent } from "@/lib/observability/posthog-client";
 import { exportMatchReportPDF } from "@/lib/pdf/matchReport";
+import { useLivePhase } from "@/lib/hooks/live/useLivePhase";
 import { useLiveClock } from "@/lib/hooks/live/useLiveClock";
 import { useLiveEvents } from "@/lib/hooks/live/useLiveEvents";
 import { useLiveLineup } from "@/lib/hooks/live/useLiveLineup";
@@ -48,7 +48,45 @@ export function useLiveGameState(id: string) {
   const [game, setGame] = useState<Game | null>(null);
   const [homeClubName, setHomeClubName] = useState<string | null>(null);
   const [homeClubShortName, setHomeClubShortName] = useState<string | null>(null);
-  const [phase, setPhase] = useState<MatchPhase>("pre_match");
+  const [finalizing, setFinalizing] = useState(false);
+  const [exportingPDF, setExportingPDF] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Shadow refs para callbacks de sub-hooks declarados depois do useLivePhase.
+  // Necessário porque useLivePhase é o PRIMEIRO sub-hook (expõe `phase` como
+  // input dos outros), mas `handleStartFirstHalf` precisa de chamar
+  // persistInitialLineupSnapshot (useLiveLineup), setInitialStarterIds
+  // (useLiveLineup) e startClock (useLiveClock). As refs são actualizadas
+  // durante o render após cada sub-hook ser definido — sem race porque o
+  // React garante sequência ordenada de hooks antes do retorno.
+  const persistInitialLineupSnapshotShadow = useRef<
+    (ids: string[]) => Promise<void>
+  >(async () => {});
+  const setInitialStarterIdsShadow = useRef<(ids: string[]) => void>(() => {});
+  const startClockShadow = useRef<() => void>(() => {});
+  // Lazy getter para playersOnField (vem do useLiveDerivedState chamado
+  // depois). Quebra a dependência circular DerivedState↔Phase.
+  const playersOnFieldRef = useRef<LivePlayer[]>([]);
+
+  // 1. useLivePhase (PRIMEIRO — expõe `phase` aos outros sub-hooks)
+  const {
+    phase,
+    setPhase,
+    startingFirstHalf,
+    kickoffError,
+    setKickoffError,
+    clearKickoffError,
+    handleStartFirstHalf,
+  } = useLivePhase({
+    gameId: id,
+    getPlayersOnField: () => playersOnFieldRef.current,
+    persistInitialLineupSnapshot: (ids) =>
+      persistInitialLineupSnapshotShadow.current(ids),
+    setInitialStarterIds: (ids) => setInitialStarterIdsShadow.current(ids),
+    startClock: () => startClockShadow.current(),
+  });
+
+  // 2. useLiveClock
   const {
     clockState,
     nowMs,
@@ -63,11 +101,6 @@ export function useLiveGameState(id: string) {
     setClockHydrated,
     disableBackendCheckpoint,
   } = useLiveClock({ id, phase });
-  const [startingFirstHalf, setStartingFirstHalf] = useState(false);
-  const [kickoffError, setKickoffError] = useState<string | null>(null);
-  const [finalizing, setFinalizing] = useState(false);
-  const [exportingPDF, setExportingPDF] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   // Review phase
   const [playerRatings, setPlayerRatings] = useState<Record<string, number>>({});
@@ -94,8 +127,15 @@ export function useLiveGameState(id: string) {
   } = useLiveLineup({
     id,
     phase,
-    onLineupChange: () => setKickoffError(null),
+    onLineupChange: clearKickoffError,
   });
+
+  // Actualizar shadow refs APÓS useLiveLineup e useLiveClock estarem
+  // definidos. Acontece dentro do render — quando o utilizador clica
+  // "Iniciar 1ª parte", as refs já apontam para as funções reais.
+  persistInitialLineupSnapshotShadow.current = persistInitialLineupSnapshot;
+  setInitialStarterIdsShadow.current = setInitialStarterIds;
+  startClockShadow.current = startClock;
 
   const {
     events,
@@ -491,6 +531,8 @@ export function useLiveGameState(id: string) {
     setClockHydrated,
     setClockState,
     setNowMs,
+    setPhase,
+    setKickoffError,
     disableBackendCheckpoint,
   ]);
 
@@ -529,12 +571,6 @@ export function useLiveGameState(id: string) {
     hasHydratedMatchSheetRef.current = true;
   }, [game]);
 
-  useEffect(() => {
-    if (phase !== "pre_match" && kickoffError) {
-      setKickoffError(null);
-    }
-  }, [kickoffError, phase]);
-
   const {
     score,
     displayEvents,
@@ -562,6 +598,12 @@ export function useLiveGameState(id: string) {
     convocatedPlayers,
     initialStarterIds,
   });
+
+  // Mantém playersOnFieldRef sincronizada com o valor mais recente
+  // para o getter lazy do useLivePhase.handleStartFirstHalf.
+  useEffect(() => {
+    playersOnFieldRef.current = playersOnField;
+  }, [playersOnField]);
 
   const {
     modalType,
@@ -608,42 +650,6 @@ export function useLiveGameState(id: string) {
       ),
     [playerRatings, playersWhoNeedPersistentStats],
   );
-
-  async function handleStartFirstHalf() {
-    const kickoffState = getLiveKickoffState({
-      starters: playersOnField,
-    });
-    const starterPlayerIds = playersOnField.map((player) => player.id);
-    if (!kickoffState.canStart) {
-      setKickoffError(kickoffState.reason);
-      toast.error(kickoffState.reason);
-      return;
-    }
-
-    setStartingFirstHalf(true);
-    setKickoffError(null);
-    try {
-      await persistInitialLineupSnapshot(starterPlayerIds);
-      setInitialStarterIds(starterPlayerIds);
-      setPhase("first_half");
-      startClock();
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Erro ao guardar titulares iniciais.";
-      console.error("[live.kickoff] failed to persist starters", {
-        gameId: id,
-        starterCount: starterPlayerIds.length,
-        error,
-      });
-      setKickoffError(message);
-      toast.error(`Erro ao iniciar jogo: ${message}`);
-    } finally {
-      setStartingFirstHalf(false);
-    }
-  }
-
 
   function buildFinalStatsPayload(finalMinute: number): FinalStatPayloadRow[] {
     const normalizedFinalMinute = Math.max(1, Math.floor(finalMinute));
