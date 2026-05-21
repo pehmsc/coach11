@@ -36,6 +36,8 @@ import {
   computeClockSecondsAt,
   loadPersistedClock,
   computeMinutesPlayed,
+  sanitizeHydratedClockState,
+  isClockStateStale,
 } from "@/components/games/live/utils";
 import { comparePlayersByFootballPriority } from "@/lib/games/sort-players-by-field-status";
 
@@ -56,6 +58,7 @@ export function useLiveGameState(id: string) {
     pauseClock,
     startClock,
     adjustClockBySeconds,
+    setClockMinute,
     setClockState,
     setNowMs,
     setClockHydrated,
@@ -449,13 +452,24 @@ export function useLiveGameState(id: string) {
         if (persistedSeconds < fallbackBaseSeconds) {
           // Events are ahead of local snapshot.
           setPhase(persistedPhase);
-          setClockState({
+          const candidateState: ClockState = {
             baseSeconds: fallbackBaseSeconds,
             runningSinceMs: isRunningPhase(persistedPhase) ? now : null,
-          });
+          };
+          if (isClockStateStale(candidateState, now)) {
+            toast.info(
+              "Relógio retomado em pausa (sessão antiga detectada). Ajusta o minuto se necessário.",
+            );
+          }
+          setClockState(sanitizeHydratedClockState(candidateState, now));
         } else {
           setPhase(persistedPhase);
-          setClockState(persistedClockState);
+          if (isClockStateStale(persistedClockState, now)) {
+            toast.info(
+              "Relógio retomado em pausa (sessão antiga detectada). Ajusta o minuto se necessário.",
+            );
+          }
+          setClockState(sanitizeHydratedClockState(persistedClockState, now));
         }
       } else {
         setPhase("pre_match");
@@ -1065,6 +1079,7 @@ export function useLiveGameState(id: string) {
     pauseClock,
     startClock,
     adjustClockBySeconds,
+    setClockMinute,
     handleStartFirstHalf,
     openModal,
     closeModal,
