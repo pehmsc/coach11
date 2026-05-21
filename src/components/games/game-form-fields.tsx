@@ -20,6 +20,7 @@ export type SharedGameFormValues = {
   date: string;
   start_time: string;
   end_time: string;
+  concentration_time?: string;
   location: string;
   formatted_address: string;
   latitude: number | null;
@@ -40,6 +41,7 @@ type Props = {
   ) => void;
   competitionOptions?: GameCompetitionOption[];
   showCompetitionSelect?: boolean;
+  showConcentrationTime?: boolean;
   compact?: boolean;
   /**
    * Se fornecido, substitui os inputs default de opponent_name + opponent_short_name
@@ -62,6 +64,7 @@ export function GameFormFields({
   onFieldChange,
   competitionOptions = [],
   showCompetitionSelect = true,
+  showConcentrationTime = false,
   compact = false,
   renderOpponentField,
 }: Props) {
@@ -158,6 +161,25 @@ export function GameFormFields({
           className={inputSizeClass}
         />
       </div>
+
+      {showConcentrationTime && (
+        <div className="space-y-1">
+          <Label className={compact ? "text-xs" : undefined}>
+            Hora de concentração
+          </Label>
+          <Input
+            type="time"
+            value={values.concentration_time ?? ""}
+            onChange={(event) =>
+              onFieldChange("concentration_time", event.target.value)
+            }
+            className={inputSizeClass}
+          />
+          <p className="text-xs text-slate-500">
+            Opcional. Aparece no link público partilhado com famílias.
+          </p>
+        </div>
+      )}
 
       <LocationFields
         value={{
