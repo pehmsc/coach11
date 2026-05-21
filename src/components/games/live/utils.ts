@@ -100,6 +100,47 @@ export function clampToValidMatchMinute(
   return Math.floor(minute);
 }
 
+/**
+ * Defesa contra relógio que ficou a correr entre sessões.
+ *
+ * O `pagehide` listener no `useLiveClock` faz **flush sem pausar**
+ * (preserva `runningSinceMs` para retoma rápida em recargas curtas).
+ * Mas se o coach esquece-se de terminar o jogo e volta horas/dias
+ * depois, `now - runningSinceMs` torna-se absurdamente grande — visto
+ * no jogo Real SC (PR Z5 #197).
+ *
+ * Este helper detecta esse caso na hidratação inicial do `loadData`:
+ * se `runningSinceMs` é mais antigo que 6h, devolve um estado pausado
+ * (preserva `baseSeconds` original). Caso contrário, devolve o estado
+ * inalterado.
+ *
+ * 6h é generoso para uso normal: o coach abre/fecha durante o jogo,
+ * `runningSinceMs` é fixo desde o apito inicial (≤ 90min + prolongamento
+ * + intervalo + atrasos). 6h só dispara para "esqueceu-se de terminar".
+ *
+ * Não muda `baseSeconds` — preserva o valor persistido. Coach pode
+ * usar `setClockMinute` para ajustar manualmente após o auto-pause.
+ */
+const STALE_RUNNING_SINCE_THRESHOLD_MS = 6 * 60 * 60 * 1000;
+
+export function sanitizeHydratedClockState(
+  state: ClockState,
+  nowMs: number,
+): ClockState {
+  if (state.runningSinceMs === null) return state;
+  const elapsed = nowMs - state.runningSinceMs;
+  if (elapsed <= STALE_RUNNING_SINCE_THRESHOLD_MS) return state;
+  return {
+    baseSeconds: state.baseSeconds,
+    runningSinceMs: null,
+  };
+}
+
+export function isClockStateStale(state: ClockState, nowMs: number): boolean {
+  if (state.runningSinceMs === null) return false;
+  return nowMs - state.runningSinceMs > STALE_RUNNING_SINCE_THRESHOLD_MS;
+}
+
 export function clockStorageKey(gameId: string) {
   return `coach11:live-clock:${gameId}`;
 }
