@@ -10,6 +10,7 @@ import {
   computeClockSecondsAt,
   isRunningPhase,
   persistClock,
+  clampToValidMatchMinute,
 } from "@/components/games/live/utils";
 
 interface UseLiveClockArgs {
@@ -29,6 +30,7 @@ export interface UseLiveClockReturn {
   pauseClock: () => void;
   startClock: () => void;
   adjustClockBySeconds: (deltaSeconds: number) => void;
+  setClockMinute: (targetMinute: number) => void;
   // Setters (para uso pelo orchestrator durante loadData; encapsulado em PR Z6)
   setClockState: Dispatch<SetStateAction<ClockState>>;
   setNowMs: Dispatch<SetStateAction<number>>;
@@ -90,6 +92,21 @@ export function useLiveClock({ id, phase }: UseLiveClockArgs): UseLiveClockRetur
       const next = Math.max(0, current + deltaSeconds);
       return {
         baseSeconds: next,
+        runningSinceMs: prev.runningSinceMs ? now : null,
+      };
+    });
+  }, []);
+
+  const setClockMinute = useCallback((targetMinute: number) => {
+    const clamped = clampToValidMatchMinute(targetMinute);
+    if (clamped === null) return;
+    const now = Date.now();
+    setNowMs(now);
+    setClockState((prev) => {
+      // currentMinute = floor(seconds / 60) + 1 → seconds = (minute - 1) * 60
+      const targetSeconds = Math.max(0, (clamped - 1) * 60);
+      return {
+        baseSeconds: targetSeconds,
         runningSinceMs: prev.runningSinceMs ? now : null,
       };
     });
@@ -217,6 +234,7 @@ export function useLiveClock({ id, phase }: UseLiveClockArgs): UseLiveClockRetur
     pauseClock,
     startClock,
     adjustClockBySeconds,
+    setClockMinute,
     setClockState,
     setNowMs,
     setClockHydrated,
