@@ -17,6 +17,7 @@ import { exportMatchReportPDF } from "@/lib/pdf/matchReport";
 import { useLiveClock } from "@/lib/hooks/live/useLiveClock";
 import { useLiveEvents } from "@/lib/hooks/live/useLiveEvents";
 import { useLiveLineup } from "@/lib/hooks/live/useLiveLineup";
+import { useLiveDerivedState } from "@/lib/hooks/live/useLiveDerivedState";
 import { useLiveEventModal } from "@/lib/hooks/live/useLiveEventModal";
 import type { Game, Player, GameEvent } from "@/types/database";
 import type {
@@ -25,7 +26,6 @@ import type {
   ClockState,
   PersistedClockState,
   BackendCheckpointState,
-  PlayerAvailability,
   FinalStatPayloadRow,
 } from "@/components/games/live/types";
 import {
@@ -39,7 +39,6 @@ import {
   sanitizeHydratedClockState,
   isClockStateStale,
 } from "@/components/games/live/utils";
-import { comparePlayersByFootballPriority } from "@/lib/games/sort-players-by-field-status";
 
 export function useLiveGameState(id: string) {
   const router = useRouter();
@@ -536,124 +535,33 @@ export function useLiveGameState(id: string) {
     }
   }, [kickoffError, phase]);
 
-  // Score from events
-  const score = useMemo(() => {
-    let home = 0;
-    let away = 0;
-    const ourTeamIsHome = game?.is_home ?? true;
-
-    const incrementScore = (isOurTeamGoal: boolean) => {
-      if (ourTeamIsHome) {
-        if (isOurTeamGoal) home++;
-        else away++;
-      } else {
-        if (isOurTeamGoal) away++;
-        else home++;
-      }
-    };
-
-    events.forEach((e) => {
-      if (e.event_type === "own_goal") {
-        // Opponent own goal => our goal; own team own goal => opponent goal.
-        incrementScore(e.is_opponent_event);
-      } else if (isGoalEventType(e.event_type)) {
-        // Normal goal events follow event side: opponent vs our team.
-        incrementScore(!e.is_opponent_event);
-      }
-    });
-    return { home, away };
-  }, [events, game?.is_home]);
-
-  const displayEvents = useMemo(() => {
-    const sorted = [...events].sort((a, b) => a.minute - b.minute);
-    return sorted.filter((event) => {
-      if (event.event_type !== "substitution_in") return true;
-      return !sorted.some(
-        (other) =>
-          other.event_type === "substitution_out" &&
-          other.minute === event.minute &&
-          other.player_id === event.related_player_id &&
-          other.related_player_id === event.player_id,
-      );
-    });
-  }, [events]);
-
-  const yellowCardsByPlayer = useMemo(() => {
-    const map = new Map<string, number>();
-    events.forEach((event) => {
-      if (event.is_opponent_event || event.event_type !== "yellow_card" || !event.player_id) {
-        return;
-      }
-      map.set(event.player_id, (map.get(event.player_id) ?? 0) + 1);
-    });
-    return map;
-  }, [events]);
-
-  const sentOffPlayerIds = useMemo(() => {
-    const set = new Set<string>();
-    events.forEach((event) => {
-      if (event.is_opponent_event || !event.player_id) return;
-      if (event.event_type === "red_card") {
-        set.add(event.player_id);
-      }
-    });
-    yellowCardsByPlayer.forEach((count, playerId) => {
-      if (count >= 2) set.add(playerId);
-    });
-    return set;
-  }, [events, yellowCardsByPlayer]);
-
-  const availabilityByPlayerId = useMemo(() => {
-    const map = new Map<string, PlayerAvailability>();
-    convocatedPlayers.forEach((player) => {
-      if (sentOffPlayerIds.has(player.id)) {
-        map.set(player.id, { label: "Expulso", selectable: false });
-        return;
-      }
-      map.set(player.id, {
-        label: player.isOnField ? "Em campo" : "Banco",
-        selectable: true,
-      });
-    });
-    return map;
-  }, [convocatedPlayers, sentOffPlayerIds]);
-
-  const getPlayerAvailability = useCallback(
-    (playerId: string | null | undefined): PlayerAvailability => {
-      if (!playerId) return { label: "Banco", selectable: false };
-      return availabilityByPlayerId.get(playerId) ?? { label: "Banco", selectable: false };
-    },
-    [availabilityByPlayerId],
-  );
-
-  const playersOnField = [
-    ...convocatedPlayers.filter(
-      (player) => player.isOnField && !sentOffPlayerIds.has(player.id),
-    ),
-  ].sort(comparePlayersByFootballPriority);
-  const playersOnBench = [
-    ...convocatedPlayers.filter((player) => !player.isOnField),
-  ].sort(comparePlayersByFootballPriority);
-  const playersAvailableToEnter = [
-    ...playersOnBench.filter((player) => !sentOffPlayerIds.has(player.id)),
-  ].sort(comparePlayersByFootballPriority);
-  const suspendedBenchPlayers = [
-    ...playersOnBench.filter((player) => sentOffPlayerIds.has(player.id)),
-  ].sort(comparePlayersByFootballPriority);
-  const hasExternalConvocatedPlayers = convocatedPlayers.some(
-    (player) => player.isExternal === true,
-  );
-  const kickoffState = getLiveKickoffState({
-    starters: playersOnField,
+  const {
+    score,
+    displayEvents,
+    yellowCardsByPlayer,
+    getPlayerAvailability,
+    playersOnField,
+    playersOnBench,
+    playersAvailableToEnter,
+    suspendedBenchPlayers,
+    hasExternalConvocatedPlayers,
+    kickoffState,
+    isLivePhase,
+    canRegisterEvents,
+    canRegisterSubstitutionOrCard,
+    starterIds,
+    computedMinutes,
+    playersWhoNeedPersistentStats,
+    concededGoalsByPlayer,
+  } = useLiveDerivedState({
+    game,
+    phase,
+    clockState,
+    currentMinute,
+    events,
+    convocatedPlayers,
+    initialStarterIds,
   });
-
-  const isLivePhase = phase === "first_half" || phase === "second_half";
-  const canRegisterEvents = isLivePhase || !!clockState.runningSinceMs;
-  // Subs e cartoes tambem em halftime (subs tacticas no balneario +
-  // cartoes disciplinares aplicados ao banco). Golos continuam restritos
-  // a jogo activo. Pre_match e review ficam bloqueados como antes.
-  const canRegisterSubstitutionOrCard =
-    canRegisterEvents || phase === "halftime";
 
   const {
     modalType,
@@ -692,49 +600,6 @@ export function useLiveGameState(id: string) {
   });
 
   const isFinalized = game?.status === "completed";
-
-  // Review: players who actually played (minutes > 0)
-  const starterIds = useMemo(() => {
-    const s = new Set<string>(initialStarterIds);
-    if (s.size === 0) {
-      convocatedPlayers.forEach((player) => {
-        if (player.isOnField) s.add(player.id);
-      });
-    }
-    return s;
-  }, [initialStarterIds, convocatedPlayers]);
-  const minuteForComputedStats = phase === "pre_match" ? 0 : Math.max(1, currentMinute);
-
-  const computedMinutes = useMemo(
-    () =>
-      computeMinutesPlayed(
-        convocatedPlayers,
-        events,
-        starterIds,
-        minuteForComputedStats,
-      ),
-    [convocatedPlayers, events, starterIds, minuteForComputedStats],
-  );
-
-  const playersWhoPlayed = useMemo(
-    () => convocatedPlayers.filter((p) => (computedMinutes.get(p.id) ?? 0) > 0),
-    [convocatedPlayers, computedMinutes],
-  );
-  const playersWhoNeedPersistentStats = useMemo(
-    () => filterPersistentLiveStatsPlayers(playersWhoPlayed),
-    [playersWhoPlayed],
-  );
-
-  const concededGoalsByPlayer = useMemo(() => {
-    const byPlayer = new Map<string, number>();
-    events.forEach((event) => {
-      if (!event.player_id || !event.is_opponent_event || !isGoalEventType(event.event_type)) {
-        return;
-      }
-      byPlayer.set(event.player_id, (byPlayer.get(event.player_id) ?? 0) + 1);
-    });
-    return byPlayer;
-  }, [events]);
 
   const allRatingsFilled = useMemo(
     () =>
