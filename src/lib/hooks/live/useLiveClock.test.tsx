@@ -290,4 +290,45 @@ describe("useLiveClock", () => {
       expect(stored).toBeNull();
     });
   });
+
+  describe("setClockMinute", () => {
+    it("define o minuto correctamente quando pausado", () => {
+      const { result } = renderHook(() =>
+        useLiveClock({ id: "g1", phase: "first_half" }),
+      );
+      act(() => result.current.setClockMinute(45));
+      expect(result.current.currentMinute).toBe(45);
+      expect(result.current.clockState.runningSinceMs).toBeNull();
+    });
+
+    it("preserva runningSinceMs quando a correr", () => {
+      const { result } = renderHook(() =>
+        useLiveClock({ id: "g1", phase: "first_half" }),
+      );
+      act(() => result.current.startClock());
+      expect(result.current.clockState.runningSinceMs).not.toBeNull();
+
+      act(() => result.current.setClockMinute(30));
+      expect(result.current.currentMinute).toBe(30);
+      expect(result.current.clockState.runningSinceMs).not.toBeNull();
+    });
+
+    it("é no-op quando minuto >200", () => {
+      const { result } = renderHook(() =>
+        useLiveClock({ id: "g1", phase: "first_half" }),
+      );
+      const before = result.current.currentMinute;
+      act(() => result.current.setClockMinute(1408));
+      expect(result.current.currentMinute).toBe(before);
+    });
+
+    it("é no-op quando minuto negativo", () => {
+      const { result } = renderHook(() =>
+        useLiveClock({ id: "g1", phase: "first_half" }),
+      );
+      const before = result.current.currentMinute;
+      act(() => result.current.setClockMinute(-5));
+      expect(result.current.currentMinute).toBe(before);
+    });
+  });
 });
