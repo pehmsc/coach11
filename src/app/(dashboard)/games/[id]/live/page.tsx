@@ -197,6 +197,7 @@ export default function LiveGamePage() {
         playersOnField={state.playersOnField}
         playersOnBench={state.playersOnBench}
         suspendedBenchPlayers={state.suspendedBenchPlayers}
+        yellowCardsByPlayer={state.yellowCardsByPlayer}
         ourTeamShortName={ourTeamShortName}
         opponentTeamShortName={opponentTeamShortName}
         getPlayerAvailability={state.getPlayerAvailability}
