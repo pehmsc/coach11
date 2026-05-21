@@ -17,7 +17,8 @@ import { exportMatchReportPDF } from "@/lib/pdf/matchReport";
 import { useLiveClock } from "@/lib/hooks/live/useLiveClock";
 import { useLiveEvents } from "@/lib/hooks/live/useLiveEvents";
 import { useLiveLineup } from "@/lib/hooks/live/useLiveLineup";
-import type { Game, Player, GameEvent, GameEventType } from "@/types/database";
+import { useLiveEventModal } from "@/lib/hooks/live/useLiveEventModal";
+import type { Game, Player, GameEvent } from "@/types/database";
 import type {
   LivePlayer,
   MatchPhase,
@@ -25,11 +26,8 @@ import type {
   PersistedClockState,
   BackendCheckpointState,
   PlayerAvailability,
-  LiveEventInput,
   FinalStatPayloadRow,
-  ModalType,
 } from "@/components/games/live/types";
-import { EVENT_LABELS } from "@/components/games/live/types";
 import {
   normalizeLiveStatus,
   isGoalEventType,
@@ -37,7 +35,6 @@ import {
   parseMatchPhase,
   computeClockSecondsAt,
   loadPersistedClock,
-  mergeEvents,
   computeMinutesPlayed,
 } from "@/components/games/live/utils";
 import { comparePlayersByFootballPriority } from "@/lib/games/sort-players-by-field-status";
@@ -64,24 +61,11 @@ export function useLiveGameState(id: string) {
     setClockHydrated,
     disableBackendCheckpoint,
   } = useLiveClock({ id, phase });
-  const [savingEvent, setSavingEvent] = useState(false);
   const [startingFirstHalf, setStartingFirstHalf] = useState(false);
   const [kickoffError, setKickoffError] = useState<string | null>(null);
   const [finalizing, setFinalizing] = useState(false);
   const [exportingPDF, setExportingPDF] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // Event modal state
-  const [modalType, setModalType] = useState<ModalType | null>(null);
-  const [goalTeamSide, setGoalTeamSide] = useState<"ours" | "opponent" | null>(null);
-  const [goalKind, setGoalKind] = useState<"goal" | "own_goal" | null>(null);
-  // Goal flow: step 1 = scorer, step 2 = assist
-  const [goalStep, setGoalStep] = useState<"scorer" | "assist">("scorer");
-  const [selectedScorerID, setSelectedScorerID] = useState<string | null>(null);
-  const [selectedAssistID, setSelectedAssistID] = useState<string | null>(null);
-  // Substitution
-  const [selectedSubOutId, setSelectedSubOutId] = useState<string | null>(null);
-  const [selectedSubInId, setSelectedSubInId] = useState<string | null>(null);
 
   // Review phase
   const [playerRatings, setPlayerRatings] = useState<Record<string, number>>({});
@@ -657,6 +641,43 @@ export function useLiveGameState(id: string) {
   // a jogo activo. Pre_match e review ficam bloqueados como antes.
   const canRegisterSubstitutionOrCard =
     canRegisterEvents || phase === "halftime";
+
+  const {
+    modalType,
+    goalTeamSide,
+    goalKind,
+    goalStep,
+    selectedScorerID,
+    selectedAssistID,
+    selectedSubOutId,
+    selectedSubInId,
+    savingEvent,
+    setGoalTeamSide,
+    setGoalKind,
+    setGoalStep,
+    setSelectedScorerID,
+    setSelectedAssistID,
+    setSelectedSubOutId,
+    setSelectedSubInId,
+    openModal,
+    closeModal,
+    confirmGoal,
+    confirmCard,
+    confirmSubstitution,
+  } = useLiveEventModal({
+    canRegisterEvents,
+    canRegisterSubstitutionOrCard,
+    currentMinute,
+    events,
+    setEvents,
+    insertEventsToBackend,
+    convocatedPlayers,
+    setConvocatedPlayers,
+    saveLivePlayerStatus,
+    syncConvocatedPlayersFromBackend,
+    getPlayerAvailability,
+  });
+
   const isFinalized = game?.status === "completed";
 
   // Review: players who actually played (minutes > 0)
@@ -745,309 +766,6 @@ export function useLiveGameState(id: string) {
     }
   }
 
-  // ── Event handlers ──
-
-  function openModal(type: ModalType) {
-    const allowedInHalftime =
-      type === "substitution" ||
-      type === "yellow_card" ||
-      type === "red_card";
-    const allowed = allowedInHalftime
-      ? canRegisterSubstitutionOrCard
-      : canRegisterEvents;
-    if (!allowed) {
-      toast.error("Inicia a 1ª ou 2ª parte para registar eventos.");
-      return;
-    }
-    setModalType(type);
-    setGoalTeamSide(null);
-    setGoalKind(null);
-    setGoalStep("scorer");
-    setSelectedScorerID(null);
-    setSelectedAssistID(null);
-    setSelectedSubOutId(null);
-    setSelectedSubInId(null);
-  }
-
-  function closeModal() {
-    setModalType(null);
-    setGoalTeamSide(null);
-    setGoalKind(null);
-    setGoalStep("scorer");
-    setSelectedScorerID(null);
-    setSelectedAssistID(null);
-    setSelectedSubOutId(null);
-    setSelectedSubInId(null);
-  }
-
-  useEffect(() => {
-    if (!modalType) return;
-
-    if (selectedScorerID && !getPlayerAvailability(selectedScorerID).selectable) {
-      setSelectedScorerID(null);
-    }
-    if (selectedAssistID && !getPlayerAvailability(selectedAssistID).selectable) {
-      setSelectedAssistID(null);
-    }
-    if (selectedSubOutId) {
-      const availability = getPlayerAvailability(selectedSubOutId);
-      if (!availability.selectable || availability.label !== "Em campo") {
-        setSelectedSubOutId(null);
-      }
-    }
-    if (selectedSubInId) {
-      const availability = getPlayerAvailability(selectedSubInId);
-      if (!availability.selectable || availability.label !== "Banco") {
-        setSelectedSubInId(null);
-      }
-    }
-  }, [
-    modalType,
-    selectedScorerID,
-    selectedAssistID,
-    selectedSubOutId,
-    selectedSubInId,
-    getPlayerAvailability,
-  ]);
-
-  async function confirmGoal() {
-    if (modalType !== "goal") return;
-    if (!goalTeamSide || !goalKind) {
-      toast.error("Seleciona o lado e o tipo de golo.");
-      return;
-    }
-
-    const eventType: GameEventType = goalKind;
-    const isOpponentEvent =
-      goalKind === "own_goal"
-        ? goalTeamSide === "ours"
-        : goalTeamSide === "opponent";
-    let playerId: string | null = null;
-    let relatedPlayerId: string | null = null;
-
-    if (goalTeamSide === "ours" && goalKind === "goal") {
-      if (!selectedScorerID) {
-        toast.error("Seleciona o marcador.");
-        return;
-      }
-      playerId = selectedScorerID;
-      relatedPlayerId = selectedAssistID || null;
-    } else if (goalTeamSide === "ours" && goalKind === "own_goal") {
-      // Autogolo a nosso favor (do adversário): sem player adversário obrigatório.
-      playerId = null;
-      relatedPlayerId = null;
-    } else if (goalTeamSide === "opponent" && goalKind === "goal") {
-      // Opcional: jogador nosso associado (tipicamente GR).
-      playerId = selectedScorerID || null;
-      relatedPlayerId = null;
-    } else if (goalTeamSide === "opponent" && goalKind === "own_goal") {
-      if (!selectedScorerID) {
-        toast.error("Seleciona o jogador que marcou autogolo.");
-        return;
-      }
-      playerId = selectedScorerID;
-      relatedPlayerId = null;
-    }
-
-    if (!eventType) {
-      toast.error("Tipo de golo inválido.");
-      return;
-    }
-
-    if (playerId && !getPlayerAvailability(playerId).selectable) {
-      toast.error("Jogador expulso não pode ser selecionado.");
-      return;
-    }
-    if (relatedPlayerId && !getPlayerAvailability(relatedPlayerId).selectable) {
-      toast.error("Jogador expulso não pode ser selecionado.");
-      return;
-    }
-
-    setSavingEvent(true);
-    try {
-      const inserted = await insertEventsToBackend([
-        {
-          event_type: eventType,
-          player_id: playerId,
-          related_player_id: relatedPlayerId,
-          minute: currentMinute,
-          is_opponent_event: isOpponentEvent,
-        },
-      ]);
-      setEvents((prev) => mergeEvents(prev, inserted));
-      toast.success(`${EVENT_LABELS[eventType] ?? eventType} — min. ${currentMinute}`);
-    } catch (error) {
-      toast.error(
-        error instanceof Error && error.message !== "live_events_insert_failed"
-          ? error.message
-          : "Erro ao registar golo.",
-      );
-    }
-    setSavingEvent(false);
-    closeModal();
-  }
-
-  async function applySendOff(playerId: string) {
-    const player = convocatedPlayers.find((item) => item.id === playerId);
-    if (!player) return;
-
-    setConvocatedPlayers((prev) =>
-      prev.map((item) =>
-        item.id === playerId ? { ...item, isOnField: false } : item,
-      ),
-    );
-
-    try {
-      await saveLivePlayerStatus(playerId, "substitute", {
-        endMinute: player.isOnField ? currentMinute : null,
-      });
-    } catch {
-      // non-blocking: event is already stored
-    }
-  }
-
-  async function confirmCard(eventType: "yellow_card" | "red_card") {
-    if (!selectedScorerID) {
-      toast.error("Seleciona um jogador.");
-      return;
-    }
-    if (!getPlayerAvailability(selectedScorerID).selectable) {
-      toast.error("Jogador expulso não pode ser selecionado.");
-      return;
-    }
-    setSavingEvent(true);
-    try {
-      const payload: LiveEventInput[] = [
-        {
-          event_type: eventType,
-          player_id: selectedScorerID,
-          minute: currentMinute,
-          is_opponent_event: false,
-        },
-      ];
-
-      if (eventType === "yellow_card") {
-        const yellowCountBefore = events.filter(
-          (event) =>
-            !event.is_opponent_event &&
-            event.event_type === "yellow_card" &&
-            event.player_id === selectedScorerID,
-        ).length;
-        const alreadyRed = events.some(
-          (event) =>
-            !event.is_opponent_event &&
-            event.event_type === "red_card" &&
-            event.player_id === selectedScorerID,
-        );
-        if (!alreadyRed && yellowCountBefore + 1 >= 2) {
-          payload.push({
-            event_type: "red_card",
-            player_id: selectedScorerID,
-            minute: currentMinute,
-            is_opponent_event: false,
-          });
-        }
-      }
-
-      const inserted = await insertEventsToBackend(payload);
-      setEvents((prev) => mergeEvents(prev, inserted));
-      toast.success(`${EVENT_LABELS[eventType]} — min. ${currentMinute}`);
-
-      const hasRed = inserted.some((event) => event.event_type === "red_card");
-      if (eventType === "red_card" || hasRed) {
-        await applySendOff(selectedScorerID);
-        if (eventType === "yellow_card" && hasRed) {
-          toast.info("2º amarelo: vermelho automático aplicado.");
-        }
-      }
-    } catch (error) {
-      toast.error(
-        error instanceof Error && error.message !== "live_events_insert_failed"
-          ? error.message
-          : "Erro ao registar cartão.",
-      );
-    }
-    setSavingEvent(false);
-    closeModal();
-  }
-
-  async function confirmSubstitution() {
-    if (!selectedSubInId || !selectedSubOutId) return;
-
-    const outAvailability = getPlayerAvailability(selectedSubOutId);
-    if (!outAvailability.selectable || outAvailability.label !== "Em campo") {
-      toast.error("Jogador de saída tem de estar em campo e elegível.");
-      return;
-    }
-
-    const inAvailability = getPlayerAvailability(selectedSubInId);
-    if (!inAvailability.selectable || inAvailability.label !== "Banco") {
-      toast.error("Jogador de entrada tem de estar no banco e elegível.");
-      return;
-    }
-
-    setSavingEvent(true);
-
-    let insertedEvents: GameEvent[] = [];
-    try {
-      insertedEvents = await insertEventsToBackend([
-        {
-          event_type: "substitution_out",
-          player_id: selectedSubOutId,
-          related_player_id: selectedSubInId,
-          minute: currentMinute,
-          is_opponent_event: false,
-        },
-        {
-          event_type: "substitution_in",
-          player_id: selectedSubInId,
-          related_player_id: selectedSubOutId,
-          minute: currentMinute,
-          is_opponent_event: false,
-        },
-      ]);
-    } catch (error) {
-      toast.error(
-        error instanceof Error && error.message !== "live_events_insert_failed"
-          ? error.message
-          : "Erro ao registar substituição.",
-      );
-      setSavingEvent(false);
-      return;
-    }
-
-    try {
-      // Update live stats (current status only — minutes calc uses events)
-      await saveLivePlayerStatus(selectedSubOutId, "substitute", {
-        endMinute: currentMinute,
-      });
-      await saveLivePlayerStatus(selectedSubInId, "on_field", {
-        startMinute: currentMinute,
-        endMinute: null,
-      });
-    } catch {
-      toast.error("Erro ao atualizar estado dos jogadores.");
-      setSavingEvent(false);
-      return;
-    }
-
-    setConvocatedPlayers((prev) =>
-      prev.map((p) => {
-        if (p.id === selectedSubOutId) return { ...p, isOnField: false };
-        if (p.id === selectedSubInId) return { ...p, isOnField: true };
-        return p;
-      }),
-    );
-
-    if (insertedEvents.length > 0) {
-      setEvents((prev) => mergeEvents(prev, insertedEvents));
-    }
-
-    toast.success(`Substituição — min. ${currentMinute}`);
-    setSavingEvent(false);
-    closeModal();
-    void syncConvocatedPlayersFromBackend().catch(() => null);
-  }
 
   function buildFinalStatsPayload(finalMinute: number): FinalStatPayloadRow[] {
     const normalizedFinalMinute = Math.max(1, Math.floor(finalMinute));
