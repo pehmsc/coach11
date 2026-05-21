@@ -22,7 +22,22 @@ function isGoalkeeper(player: LivePlayer): boolean {
   return !!player.preferred_position && GOALKEEPER_REGEX.test(player.preferred_position);
 }
 
-function comparePlayers(a: LivePlayer, b: LivePlayer): number {
+/**
+ * Comparator partilhado para ordenar jogadores por prioridade futebolística.
+ *
+ * Regra (derivada de sortSquadForReport):
+ * 1. GR primeiro (preferred_position matches /gr|gk|guarda/i)
+ * 2. Depois ordem ascendente por jersey_number (null/undefined no fim)
+ * 3. Fallback alfabético por first_name + last_name (estabilidade)
+ *
+ * Exportado para uso fora de sortPlayersByFieldStatus, em particular nos
+ * derived state (playersOnField, playersOnBench) que já estão pré-filtrados
+ * por estado e não precisam do agrupamento campo/banco/expulso.
+ */
+export function comparePlayersByFootballPriority(
+  a: LivePlayer,
+  b: LivePlayer,
+): number {
   const aGK = isGoalkeeper(a);
   const bGK = isGoalkeeper(b);
   if (aGK !== bGK) return aGK ? -1 : 1;
@@ -55,8 +70,8 @@ export function sortPlayersByFieldStatus(
   }
 
   return [
-    ...onField.sort(comparePlayers),
-    ...onBench.sort(comparePlayers),
-    ...expelled.sort(comparePlayers),
+    ...onField.sort(comparePlayersByFootballPriority),
+    ...onBench.sort(comparePlayersByFootballPriority),
+    ...expelled.sort(comparePlayersByFootballPriority),
   ];
 }

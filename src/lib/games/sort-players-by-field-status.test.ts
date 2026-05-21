@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { sortPlayersByFieldStatus } from "./sort-players-by-field-status";
+import {
+  sortPlayersByFieldStatus,
+  comparePlayersByFootballPriority,
+} from "./sort-players-by-field-status";
 import type { LivePlayer } from "@/components/games/live/types";
 
 function make(
@@ -171,5 +174,77 @@ describe("sortPlayersByFieldStatus", () => {
       ]);
       expect(result.map((p) => p.id)).toEqual(["2", "1"]);
     });
+  });
+});
+
+describe("comparePlayersByFootballPriority (helper exportado)", () => {
+  it("[1] GR antes de não-GR mesmo com jersey alto", () => {
+    const gr = make({
+      id: "gr",
+      jersey_number: 99,
+      preferred_position: "GR",
+      isOnField: true,
+    });
+    const av = make({
+      id: "av",
+      jersey_number: 10,
+      preferred_position: "AV",
+      isOnField: true,
+    });
+    expect(comparePlayersByFootballPriority(gr, av)).toBeLessThan(0);
+    expect(comparePlayersByFootballPriority(av, gr)).toBeGreaterThan(0);
+  });
+
+  it("[2] jersey ASC entre não-GR", () => {
+    const p7 = make({ id: "p7", jersey_number: 7, isOnField: true });
+    const p3 = make({ id: "p3", jersey_number: 3, isOnField: true });
+    expect(comparePlayersByFootballPriority(p3, p7)).toBeLessThan(0);
+  });
+
+  it("[3] jersey null/undefined vai para o fim", () => {
+    const pNull = make({ id: "p_null", isOnField: true });
+    const p3 = make({ id: "p3", jersey_number: 3, isOnField: true });
+    expect(comparePlayersByFootballPriority(p3, pNull)).toBeLessThan(0);
+  });
+
+  it("[4] fallback alfabético quando jerseys iguais", () => {
+    const pa = make({
+      id: "pa",
+      first_name: "Anabela",
+      jersey_number: 5,
+      isOnField: true,
+    });
+    const pz = make({
+      id: "pz",
+      first_name: "Zé",
+      jersey_number: 5,
+      isOnField: true,
+    });
+    expect(comparePlayersByFootballPriority(pa, pz)).toBeLessThan(0);
+  });
+
+  it("[5] array.sort() aplica a regra completa GR → jersey → nome", () => {
+    const players = [
+      make({
+        id: "p10",
+        jersey_number: 10,
+        preferred_position: "AV",
+        isOnField: true,
+      }),
+      make({
+        id: "p_gr",
+        jersey_number: 99,
+        preferred_position: "GR",
+        isOnField: true,
+      }),
+      make({
+        id: "p3",
+        jersey_number: 3,
+        preferred_position: "DEF",
+        isOnField: true,
+      }),
+    ];
+    const sorted = [...players].sort(comparePlayersByFootballPriority);
+    expect(sorted.map((p) => p.id)).toEqual(["p_gr", "p3", "p10"]);
   });
 });

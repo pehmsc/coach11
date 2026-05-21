@@ -37,10 +37,10 @@ import {
   parseMatchPhase,
   computeClockSecondsAt,
   loadPersistedClock,
-  sortPlayersByName,
   mergeEvents,
   computeMinutesPlayed,
 } from "@/components/games/live/utils";
+import { comparePlayersByFootballPriority } from "@/lib/games/sort-players-by-field-status";
 
 export function useLiveGameState(id: string) {
   const router = useRouter();
@@ -629,20 +629,20 @@ export function useLiveGameState(id: string) {
     [availabilityByPlayerId],
   );
 
-  const playersOnField = sortPlayersByName(
-    convocatedPlayers.filter(
+  const playersOnField = [
+    ...convocatedPlayers.filter(
       (player) => player.isOnField && !sentOffPlayerIds.has(player.id),
     ),
-  );
-  const playersOnBench = sortPlayersByName(
-    convocatedPlayers.filter((player) => !player.isOnField),
-  );
-  const playersAvailableToEnter = sortPlayersByName(
-    playersOnBench.filter((player) => !sentOffPlayerIds.has(player.id)),
-  );
-  const suspendedBenchPlayers = sortPlayersByName(
-    playersOnBench.filter((player) => sentOffPlayerIds.has(player.id)),
-  );
+  ].sort(comparePlayersByFootballPriority);
+  const playersOnBench = [
+    ...convocatedPlayers.filter((player) => !player.isOnField),
+  ].sort(comparePlayersByFootballPriority);
+  const playersAvailableToEnter = [
+    ...playersOnBench.filter((player) => !sentOffPlayerIds.has(player.id)),
+  ].sort(comparePlayersByFootballPriority);
+  const suspendedBenchPlayers = [
+    ...playersOnBench.filter((player) => sentOffPlayerIds.has(player.id)),
+  ].sort(comparePlayersByFootballPriority);
   const hasExternalConvocatedPlayers = convocatedPlayers.some(
     (player) => player.isExternal === true,
   );
