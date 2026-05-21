@@ -1049,6 +1049,7 @@ export function useLiveGameState(id: string) {
     playersWhoNeedPersistentStats,
     computedMinutes,
     concededGoalsByPlayer,
+    yellowCardsByPlayer,
 
     // Setters
     setPhase,

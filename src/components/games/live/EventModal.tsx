@@ -7,6 +7,7 @@ import type { LivePlayer, ModalType, PlayerAvailability } from "./types";
 import { EVENT_LABELS } from "./types";
 import { sortPlayersByName, getAvailabilityBadgeClasses } from "./utils";
 import { sortPlayersByFieldStatus } from "@/lib/games/sort-players-by-field-status";
+import { YellowCardWarningBadge } from "./YellowCardWarningBadge";
 
 interface EventModalProps {
   modalType: ModalType | null;
@@ -22,6 +23,7 @@ interface EventModalProps {
   playersOnField: LivePlayer[];
   playersOnBench: LivePlayer[];
   suspendedBenchPlayers: LivePlayer[];
+  yellowCardsByPlayer: Map<string, number>;
   ourTeamShortName: string;
   opponentTeamShortName: string;
   getPlayerAvailability: (playerId: string | null | undefined) => PlayerAvailability;
@@ -52,6 +54,7 @@ export function EventModal({
   playersOnField,
   playersOnBench,
   suspendedBenchPlayers,
+  yellowCardsByPlayer,
   ourTeamShortName,
   opponentTeamShortName,
   getPlayerAvailability,
@@ -133,6 +136,7 @@ export function EventModal({
                         {p.preferred_position}
                       </span>
                     )}
+                    <YellowCardWarningBadge count={yellowCardsByPlayer.get(p.id)} />
                     <span
                       className={`ml-auto inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${getAvailabilityBadgeClasses(availability.label)}`}
                     >
@@ -181,6 +185,7 @@ export function EventModal({
                         {p.preferred_position}
                       </span>
                     )}
+                    <YellowCardWarningBadge count={yellowCardsByPlayer.get(p.id)} />
                     <span
                       className={`ml-auto inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${getAvailabilityBadgeClasses(availability.label)}`}
                     >
@@ -329,6 +334,7 @@ export function EventModal({
                             {player.preferred_position}
                           </span>
                         )}
+                        <YellowCardWarningBadge count={yellowCardsByPlayer.get(player.id)} />
                         <span
                           className={`ml-auto inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${getAvailabilityBadgeClasses(availability.label)}`}
                         >
@@ -401,6 +407,7 @@ export function EventModal({
                             {player.preferred_position}
                           </span>
                         )}
+                        <YellowCardWarningBadge count={yellowCardsByPlayer.get(player.id)} />
                         <span
                           className={`ml-auto inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${getAvailabilityBadgeClasses(availability.label)}`}
                         >
@@ -504,6 +511,7 @@ export function EventModal({
                         {player.preferred_position}
                       </span>
                     )}
+                    <YellowCardWarningBadge count={yellowCardsByPlayer.get(player.id)} />
                     <span
                       className={`ml-auto inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${getAvailabilityBadgeClasses(availability.label)}`}
                     >
@@ -572,6 +580,7 @@ export function EventModal({
                         {player.preferred_position}
                       </span>
                     )}
+                    <YellowCardWarningBadge count={yellowCardsByPlayer.get(player.id)} />
                     <span
                       className={`ml-auto inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${getAvailabilityBadgeClasses(availability.label)}`}
                     >
@@ -643,6 +652,7 @@ export function EventModal({
                     {p.preferred_position}
                   </span>
                 )}
+                <YellowCardWarningBadge count={yellowCardsByPlayer.get(p.id)} />
                 <span
                   className={`ml-auto inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${getAvailabilityBadgeClasses(availability.label)}`}
                 >
