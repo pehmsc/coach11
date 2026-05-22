@@ -6,7 +6,8 @@ import {
   buildPublicConvocationEntries,
   hasPublicConvocationContent,
   isConvocationPublic,
-  resolvePublicConvocationNotes,
+  resolveConvocationNotes,
+  resolveGamePublicNotes,
 } from "./public-convocation";
 
 describe("public-convocation", () => {
@@ -39,20 +40,33 @@ describe("public-convocation", () => {
     expect(entries.some((entry) => entry.id === "external:external-2")).toBe(true);
   });
 
-  it("prefers dedicated convocation notes and falls back to legacy public game notes", () => {
-    expect(
-      resolvePublicConvocationNotes({
-        convocationNotes: " Trazer caneleiras ",
-        legacyGameNotes: "Texto antigo",
-      }),
-    ).toBe("Trazer caneleiras");
+  it("normalises public game notes without falling back to convocation notes", () => {
+    expect(resolveGamePublicNotes(" Trazer caneleiras ")).toBe(
+      "Trazer caneleiras",
+    );
+    expect(resolveGamePublicNotes("   ")).toBeNull();
+    expect(resolveGamePublicNotes(null)).toBeNull();
+    expect(resolveGamePublicNotes(undefined)).toBeNull();
+  });
 
-    expect(
-      resolvePublicConvocationNotes({
-        convocationNotes: "   ",
-        legacyGameNotes: " Levar equipamento azul ",
-      }),
-    ).toBe("Levar equipamento azul");
+  it("normalises convocation notes without falling back to public game notes", () => {
+    expect(resolveConvocationNotes(" Levar equipamento azul ")).toBe(
+      "Levar equipamento azul",
+    );
+    expect(resolveConvocationNotes("   ")).toBeNull();
+    expect(resolveConvocationNotes(null)).toBeNull();
+    expect(resolveConvocationNotes(undefined)).toBeNull();
+  });
+
+  it("keeps public game notes and convocation notes isolated (no cross fallback)", () => {
+    // Sanity: as duas funções recebem apenas a sua fonte e devolvem null se
+    // vazia — não há partilha implícita entre elas.
+    expect(resolveGamePublicNotes(null)).toBeNull();
+    expect(resolveConvocationNotes("Notas só da convocatória")).toBe(
+      "Notas só da convocatória",
+    );
+    expect(resolveGamePublicNotes("Notas só do jogo")).toBe("Notas só do jogo");
+    expect(resolveConvocationNotes(null)).toBeNull();
   });
 
   it("treats public convocation notes as valid public content even without players", () => {

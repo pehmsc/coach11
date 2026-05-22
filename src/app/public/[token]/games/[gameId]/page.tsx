@@ -25,7 +25,8 @@ import {
   hasPublicConvocationContent,
   isConvocationPublic,
   type PublicConvocationEntry,
-  resolvePublicConvocationNotes,
+  resolveConvocationNotes,
+  resolveGamePublicNotes,
 } from "@/lib/games/public-convocation";
 import { getStarterPlayerIdsFromLiveStats } from "@/lib/games/lineup";
 import { getPublicGameLiveSnapshot } from "@/lib/games/public-live";
@@ -160,10 +161,17 @@ export default async function PublicGameDetailPage({
   const gameTime = extractTimeFromDateTime(game.game_datetime);
   const concentrationTime = game.concentration_time?.slice(0, 5) || null;
 
+  // Notas públicas do jogo (`games.notes`): instruções gerais pré-jogo
+  // (equipamento, ponto de encontro, ...) — sempre visíveis no link público,
+  // independentemente do estado da convocatória. NÃO usar como fallback das
+  // notas de convocatória para não duplicar nem herdar o gate de privacidade.
+  const gamePublicNotes = resolveGamePublicNotes(game.notes);
+
   // Gate de privacidade: a convocatória (lista + notas) só é visível
   // publicamente quando o treinador publica (convocation_status = "published").
   // Em rascunho não consultamos game_squads/convocations — a secção mostra
-  // "Sem convocatória disponível". Não afecta painel ao vivo nem resultado.
+  // "Sem convocatória disponível". Não afecta painel ao vivo, resultado nem
+  // as notas públicas do jogo (resolvidas acima, fora do gate).
   const convocationPublished = isConvocationPublic(game.convocation_status);
 
   const initialLiveSnapshot = await getPublicGameLiveSnapshot(admin, {
@@ -283,10 +291,7 @@ export default async function PublicGameDetailPage({
       })),
     });
 
-    publicConvocationNotes = resolvePublicConvocationNotes({
-      convocationNotes: convocationNotesRow?.notes,
-      legacyGameNotes: game.notes,
-    });
+    publicConvocationNotes = resolveConvocationNotes(convocationNotesRow?.notes);
   }
 
   const hasPublicConvocation = hasPublicConvocationContent({
@@ -419,6 +424,18 @@ export default async function PublicGameDetailPage({
                 </p>
               )}
             </div>
+            {gamePublicNotes ? (
+              <div className="mt-4 rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-600">
+                  <FileText size={14} />
+                  Informações para o jogo
+                </div>
+                <RichTextContent
+                  content={gamePublicNotes}
+                  className="text-sm text-slate-700"
+                />
+              </div>
+            ) : null}
           </div>
         </section>
 
