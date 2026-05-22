@@ -165,6 +165,7 @@ export default function ClubPage() {
   const [kitColors, setKitColors] = useState<Record<string, string>>({});
   const [savingKit, setSavingKit] = useState<string | null>(null);
   const [kitsExpanded, setKitsExpanded] = useState(false);
+  const [invitesExpanded, setInvitesExpanded] = useState(false);
 
   // Members tab
   const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
@@ -1259,13 +1260,26 @@ export default function ClubPage() {
           {/* Convites (pendentes, aceites, orfaos) */}
           {staffInvites.length > 0 && (
             <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Mail size={16} className="text-slate-500" />
-                  Convites
-                </CardTitle>
+              <CardHeader className="pb-0">
+                <button
+                  className="w-full flex items-center justify-between text-left"
+                  onClick={() => setInvitesExpanded((v) => !v)}
+                  aria-expanded={invitesExpanded}
+                >
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Mail size={16} className="text-slate-500" />
+                    Convites
+                    <span className="text-xs font-normal text-slate-400">({staffInvites.length})</span>
+                  </CardTitle>
+                  {invitesExpanded ? (
+                    <ChevronUp size={18} className="text-slate-400" />
+                  ) : (
+                    <ChevronDown size={18} className="text-slate-400" />
+                  )}
+                </button>
               </CardHeader>
-              <CardContent className="space-y-2">
+              {invitesExpanded && (
+                <CardContent className="pt-4 space-y-2">
                 {staffInvites.map((invite) => {
                   const isPending = invite.status === "pending";
                   const isOrphan = invite.status === "orphan";
@@ -1362,7 +1376,8 @@ export default function ClubPage() {
                     </div>
                   );
                 })}
-              </CardContent>
+                </CardContent>
+              )}
             </Card>
           )}
         </>
