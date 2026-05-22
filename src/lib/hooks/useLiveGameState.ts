@@ -14,6 +14,7 @@ import { useLiveLineup } from "@/lib/hooks/live/useLiveLineup";
 import { useLiveDataLoader } from "@/lib/hooks/live/useLiveDataLoader";
 import { useLiveDerivedState } from "@/lib/hooks/live/useLiveDerivedState";
 import { useLiveEventModal } from "@/lib/hooks/live/useLiveEventModal";
+import { useLiveObservations } from "@/lib/hooks/live/useLiveObservations";
 import type {
   LivePlayer,
   FinalStatPayloadRow,
@@ -155,6 +156,19 @@ export function useLiveGameState(id: string) {
     setKickoffError,
     events,
     initialStarterIds,
+  });
+
+  const {
+    observations,
+    savingObservation,
+    observationModalOpen,
+    openObservationModal,
+    closeObservationModal,
+    createObservation,
+    deleteObservation,
+  } = useLiveObservations({
+    gameId: id,
+    hasOpponent: Boolean(game?.opponent_id),
   });
 
   // Hidrata os campos da ficha do jogo a partir do `game` uma só vez quando
@@ -546,6 +560,15 @@ export function useLiveGameState(id: string) {
     setLiveTeamNotes,
     liveCoachNotes,
     setLiveCoachNotes,
+
+    // Observações sobre o adversário (PR B1)
+    observations,
+    savingObservation,
+    observationModalOpen,
+    openObservationModal,
+    closeObservationModal,
+    createObservation,
+    deleteObservation,
 
     // Actions
     pauseClock,
