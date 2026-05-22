@@ -11,6 +11,7 @@ import { useLiveDataLoader } from "@/lib/hooks/live/useLiveDataLoader";
 import { useLiveDerivedState } from "@/lib/hooks/live/useLiveDerivedState";
 import { useLiveEventModal } from "@/lib/hooks/live/useLiveEventModal";
 import { useLiveObservations } from "@/lib/hooks/live/useLiveObservations";
+import { useOpponentObservations } from "@/lib/hooks/useOpponentObservations";
 import { useLiveFinalize } from "@/lib/hooks/live/useLiveFinalize";
 import type { LivePlayer } from "@/components/games/live/types";
 
@@ -151,6 +152,16 @@ export function useLiveGameState(id: string) {
   } = useLiveObservations({
     gameId: id,
     hasOpponent: Boolean(game?.opponent_id),
+  });
+
+  // Promoção de observações (PR B2). `autoLoad: false` — não precisamos da
+  // listagem aqui (já vem do useLiveObservations), só a função `promote`.
+  const {
+    promote: promoteObservations,
+    promoting: promotingObservations,
+  } = useOpponentObservations({
+    opponentId: game?.opponent_id ?? null,
+    autoLoad: false,
   });
 
   const {
@@ -346,6 +357,10 @@ export function useLiveGameState(id: string) {
     closeObservationModal,
     createObservation,
     deleteObservation,
+
+    // Promoção (PR B2)
+    promoteObservations,
+    promotingObservations,
 
     // Actions
     pauseClock,

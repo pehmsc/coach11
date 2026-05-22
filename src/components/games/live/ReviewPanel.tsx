@@ -6,6 +6,7 @@ import { TacticalSystemPicker } from "@/components/games/TacticalSystemPicker";
 import { ObservationsReviewSection } from "./ObservationsReviewSection";
 import type { LivePlayer } from "./types";
 import type { GameOpponentObservation } from "@/types/database";
+import type { PromoteTargetField } from "@/lib/schemas/observations";
 
 interface ReviewPanelProps {
   playersWhoNeedPersistentStats: LivePlayer[];
@@ -32,6 +33,13 @@ interface ReviewPanelProps {
   // Observações sobre o adversário (PR B1)
   observations: GameOpponentObservation[];
   onDeleteObservation: (obsId: string) => void;
+  // Promoção (PR B2)
+  onPromoteObservations?: (
+    observationIds: string[],
+    targetField: PromoteTargetField,
+  ) => Promise<boolean>;
+  currentOpponentFieldValues?: Partial<Record<PromoteTargetField, string | null>>;
+  promotingObservations?: boolean;
 }
 
 type MatchSheetSectionProps = {
@@ -211,6 +219,9 @@ export function ReviewPanel({
   setLiveCoachNotes,
   observations,
   onDeleteObservation,
+  onPromoteObservations,
+  currentOpponentFieldValues,
+  promotingObservations,
 }: ReviewPanelProps) {
   const [showFichaSection, setShowFichaSection] = useState(true);
 
@@ -241,6 +252,9 @@ export function ReviewPanel({
         <ObservationsReviewSection
           observations={observations}
           onDelete={onDeleteObservation}
+          onPromote={onPromoteObservations}
+          currentOpponentFieldValues={currentOpponentFieldValues}
+          promoting={promotingObservations}
         />
       </>
     );
@@ -360,6 +374,9 @@ export function ReviewPanel({
       <ObservationsReviewSection
         observations={observations}
         onDelete={onDeleteObservation}
+        onPromote={onPromoteObservations}
+        currentOpponentFieldValues={currentOpponentFieldValues}
+        promoting={promotingObservations}
       />
     </>
   );
