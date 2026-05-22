@@ -13,7 +13,6 @@ import {
   History,
   StickyNote,
   Info as InfoIcon,
-  MessageSquare,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -967,22 +966,6 @@ function HistoricoTab({
           })}
         </ul>
       )}
-
-      <section className="rounded-xl border border-slate-100 bg-white p-4">
-        <h3 className="text-sm font-semibold text-slate-900 mb-1">
-          Observacoes pos-jogo
-        </h3>
-        <p className="text-xs text-slate-500">
-          Notas registadas durante jogos serao consolidadas aqui.
-        </p>
-        <div className="mt-3 rounded-lg border border-dashed border-slate-200 bg-slate-50 p-4 text-center">
-          <MessageSquare size={20} className="mx-auto mb-1 text-slate-300" />
-          <p className="text-xs font-semibold text-slate-700">Em breve</p>
-          <p className="text-[11px] text-slate-500">
-            Disponivel na Sprint 3 com o modulo de Ficha de Jogo.
-          </p>
-        </div>
-      </section>
     </div>
   );
 }
