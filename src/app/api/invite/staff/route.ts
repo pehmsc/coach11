@@ -1,11 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { Resend } from "resend";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { normalizeEmail } from "@/lib/auth/beta-access";
 import { ensureInviteAuthUser } from "@/lib/auth/invite-auth-user";
-import { getCanonicalAppUrl } from "@/lib/config/canonical-app-url";
+import { sendStaffInviteEmail } from "@/lib/email/staff-invite";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { captureServerProductEvent } from "@/lib/observability/posthog-server";
 import { resolveUserTeamContext } from "@/lib/auth/team-context";
@@ -53,20 +52,6 @@ const StaffInviteSchema = z.object({
   permissions: z.array(AreaPermissionsSchema).max(20).optional(),
   ageGroupIds: z.array(z.string().uuid()).min(1).max(20).optional(),
 });
-
-const roleLabel: Record<string, string> = {
-  club_coordinator: "Coordenador de Clube",
-  age_group_coordinator: "Coordenador de Escalão",
-  head_coach: "Treinador Principal",
-  assistant_coach: "Treinador Adjunto",
-  intern_coach: "Treinador Estagiário",
-  goalkeeper_coach: "Treinador de Guarda-Redes",
-  fitness_coach: "Preparador Físico",
-  physiotherapist: "Fisioterapeuta",
-  doctor: "Médico",
-  analyst: "Analista / Observador",
-  team_manager: "Team Manager",
-};
 
 export async function POST(request: Request) {
   let userId: string | null = null;
@@ -287,90 +272,16 @@ export async function POST(request: Request) {
       coordinatorName = user.user_metadata.full_name;
     }
 
-    // 🔗 URL registo (base canónica, sem host headers)
-    const appUrl = getCanonicalAppUrl();
-    const inviteUrl = `${appUrl}/invite?code=${inviteCode}&email=${encodeURIComponent(normalizedEmail)}`;
-
-    // 📧 Configuração Resend
-    if (!process.env.RESEND_API_KEY) {
-      console.error("RESEND_API_KEY não definida.");
-      await captureServerProductEvent({
-        distinctId: user.id,
-        event: "staff_invited",
-        properties: {
-          age_group_id: ageGroup.id,
-          invite_role: role,
-          invite_id: createdInvite?.id ?? null,
-          email_sent: false,
-        },
-      });
-      return NextResponse.json({
-        success: true,
-        inviteId: createdInvite?.id ?? null,
-        inviteCode,
-        emailSent: false,
-        warning: "Convite criado mas email não enviado (API key em falta).",
-      });
-    }
-
-    const resend = new Resend(process.env.RESEND_API_KEY);
-
-    const fromEmail =
-      process.env.RESEND_FROM_EMAIL || "Coach11 <noreply@coach11.app>";
-
-    // ✉️ Enviar email
-    const { error: emailError } = await resend.emails.send({
-      from: fromEmail,
-      to: [normalizedEmail],
-      subject: `Convite para juntar ao ${ageGroup.club_name} — ${ageGroup.name}`,
-      html: `
-        <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f8fafc;padding:20px;">
-          <div style="max-width:480px;margin:auto;background:#ffffff;border-radius:16px;overflow:hidden;">
-            <div style="background:#0f172a;padding:28px;text-align:center;">
-              <h1 style="color:#ffffff;margin:0;font-size:28px;font-weight:800;">
-                COACH<span style="color:#34d399;">11</span>
-              </h1>
-            </div>
-            <div style="padding:32px;">
-              <p>Olá, <strong>${firstName}</strong>!</p>
-              <p><strong>${coordinatorName}</strong> convidou-te para:</p>
-              <p style="font-weight:600;">${ageGroup.club_name} · ${ageGroup.name}</p>
-              <p>Função: ${roleLabel[role] || role}</p>
-              <div style="margin:20px 0;padding:16px;border:2px dashed #cbd5e1;border-radius:12px;text-align:center;">
-                <span style="font-size:24px;font-weight:800;letter-spacing:6px;">
-                  ${inviteCode}
-                </span>
-              </div>
-              <a href="${inviteUrl}"
-                style="display:block;background:#059669;color:white;text-decoration:none;text-align:center;padding:12px;border-radius:10px;">
-                Criar conta e aceitar convite →
-              </a>
-            </div>
-          </div>
-        </div>
-      `,
+    const emailResult = await sendStaffInviteEmail({
+      to: normalizedEmail,
+      firstName,
+      inviteCode,
+      role,
+      clubName: ageGroup.club_name,
+      ageGroupName: ageGroup.name,
+      coordinatorName,
     });
 
-    if (emailError) {
-      console.error("Resend error:", emailError);
-      await captureServerProductEvent({
-        distinctId: user.id,
-        event: "staff_invited",
-        properties: {
-          age_group_id: ageGroup.id,
-          invite_role: role,
-          invite_id: createdInvite?.id ?? null,
-          email_sent: false,
-        },
-      });
-      return NextResponse.json({
-        success: true,
-        inviteId: createdInvite?.id ?? null,
-        inviteCode,
-        emailSent: false,
-        warning: "Convite criado mas email não enviado.",
-      });
-    }
     await captureServerProductEvent({
       distinctId: user.id,
       event: "staff_invited",
@@ -378,9 +289,24 @@ export async function POST(request: Request) {
         age_group_id: ageGroup.id,
         invite_role: role,
         invite_id: createdInvite?.id ?? null,
-        email_sent: true,
+        email_sent: emailResult.sent,
       },
     });
+
+    if (!emailResult.sent) {
+      const warning =
+        emailResult.reason === "missing_api_key"
+          ? "Convite criado mas email não enviado (API key em falta)."
+          : "Convite criado mas email não enviado.";
+      return NextResponse.json({
+        success: true,
+        inviteId: createdInvite?.id ?? null,
+        inviteCode,
+        emailSent: false,
+        warning,
+      });
+    }
+
     return NextResponse.json({
       success: true,
       inviteId: createdInvite?.id ?? null,
