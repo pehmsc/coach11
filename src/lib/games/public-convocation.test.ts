@@ -5,6 +5,7 @@ vi.mock("server-only", () => ({}));
 import {
   buildPublicConvocationEntries,
   hasPublicConvocationContent,
+  isConvocationPublic,
   resolvePublicConvocationNotes,
 } from "./public-convocation";
 
@@ -68,5 +69,12 @@ describe("public-convocation", () => {
         notes: "   ",
       }),
     ).toBe(false);
+  });
+
+  it("only treats convocation as public when status is 'published'", () => {
+    expect(isConvocationPublic("published")).toBe(true);
+    expect(isConvocationPublic("draft")).toBe(false);
+    expect(isConvocationPublic(null)).toBe(false);
+    expect(isConvocationPublic(undefined)).toBe(false);
   });
 });
