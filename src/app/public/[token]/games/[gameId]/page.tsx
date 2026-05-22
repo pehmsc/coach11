@@ -23,6 +23,7 @@ import { resolveFormattedAddress, resolveLocationLabel } from "@/lib/location";
 import {
   buildPublicConvocationEntries,
   hasPublicConvocationContent,
+  isConvocationPublic,
   type PublicConvocationEntry,
   resolvePublicConvocationNotes,
 } from "@/lib/games/public-convocation";
@@ -99,7 +100,7 @@ const getPublicGameDetailPayload = unstable_cache(
       admin
         .from("games")
         .select(
-          "id, game_datetime, end_time, concentration_time, opponent_name, opponent_short_name, location, formatted_address, latitude, longitude, osm_place_id, location_source, notes, is_home, status, score_home, score_away, image_url, title",
+          "id, game_datetime, end_time, concentration_time, opponent_name, opponent_short_name, location, formatted_address, latitude, longitude, osm_place_id, location_source, notes, is_home, status, score_home, score_away, image_url, title, convocation_status",
         )
         .eq("id", resolvedGameId)
         .eq("age_group_id", ageGroupId)
@@ -159,17 +160,12 @@ export default async function PublicGameDetailPage({
   const gameTime = extractTimeFromDateTime(game.game_datetime);
   const concentrationTime = game.concentration_time?.slice(0, 5) || null;
 
-  // Notas da convocatória (legacy table — fonte de notas público).
-  // O squad é sempre lido directamente de game_squads (modelo unificado).
-  const { data: convocationNotesRow } = await admin
-    .from("convocations")
-    .select("notes")
-    .eq("game_id", game.id)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  // Gate de privacidade: a convocatória (lista + notas) só é visível
+  // publicamente quando o treinador publica (convocation_status = "published").
+  // Em rascunho não consultamos game_squads/convocations — a secção mostra
+  // "Sem convocatória disponível". Não afecta painel ao vivo nem resultado.
+  const convocationPublished = isConvocationPublic(game.convocation_status);
 
-  let convocationPlayers: PublicConvocationEntry[] = [];
   const initialLiveSnapshot = await getPublicGameLiveSnapshot(admin, {
     id: game.id,
     is_home: game.is_home ?? true,
@@ -178,112 +174,121 @@ export default async function PublicGameDetailPage({
     score_away: game.score_away ?? null,
   });
 
-  // Modelo unificado: ler internos e externos a partir de game_squads.
-  // PUBLIC_SQUAD_COLUMNS exclui `initial_lineup_status` para defesa em
-  // profundidade — mas precisamos do `initial_lineup_status` para deduzir
-  // `starterIds` dos externos (visível no público). Para internos usamos
-  // `game_stats_live` (legacy mas a fonte real é o coach decidir public).
-  const [
-    internalSquadsRes,
-    { data: liveRows },
-    externalSquadsRes,
-  ] = await Promise.all([
-    admin
-      .from("game_squads")
-      .select("player_id, initial_lineup_status")
-      .eq("game_id", game.id)
-      .not("player_id", "is", null),
-    admin
-      .from("game_stats_live")
-      .select("player_id, status, start_minute")
-      .eq("game_id", game.id),
-    admin
-      .from("game_squads")
-      .select("id, external_name, initial_lineup_status, created_at")
-      .eq("game_id", game.id)
-      .is("player_id", null)
-      .order("created_at", { ascending: true }),
-  ]);
+  let convocationPlayers: PublicConvocationEntry[] = [];
+  let publicConvocationNotes: string | null = null;
 
-  const internalSquadsRaw =
-    internalSquadsRes.error
+  if (convocationPublished) {
+    const { data: convocationNotesRow } = await admin
+      .from("convocations")
+      .select("notes")
+      .eq("game_id", game.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const [
+      internalSquadsRes,
+      { data: liveRows },
+      externalSquadsRes,
+    ] = await Promise.all([
+      admin
+        .from("game_squads")
+        .select("player_id, initial_lineup_status")
+        .eq("game_id", game.id)
+        .not("player_id", "is", null),
+      admin
+        .from("game_stats_live")
+        .select("player_id, status, start_minute")
+        .eq("game_id", game.id),
+      admin
+        .from("game_squads")
+        .select("id, external_name, initial_lineup_status, created_at")
+        .eq("game_id", game.id)
+        .is("player_id", null)
+        .order("created_at", { ascending: true }),
+    ]);
+
+    const internalSquadsRaw =
+      internalSquadsRes.error
+        ? []
+        : (
+            (internalSquadsRes.data || []) as Array<{
+              player_id: string | null;
+              initial_lineup_status: string | null;
+            }>
+          );
+
+    const playerIds = Array.from(
+      new Set(
+        internalSquadsRaw
+          .map((row) => row.player_id)
+          .filter((value): value is string => typeof value === "string"),
+      ),
+    );
+
+    const starterIds = getStarterPlayerIdsFromLiveStats(
+      ((liveRows || []) as Array<{
+        player_id?: string | null;
+        status?: string | null;
+        start_minute?: number | null;
+      }>),
+    );
+
+    const externalPlayers = externalSquadsRes.error
       ? []
       : (
-          (internalSquadsRes.data || []) as Array<{
-            player_id: string | null;
+          (externalSquadsRes.data || []) as Array<{
+            id: string;
+            external_name: string | null;
             initial_lineup_status: string | null;
           }>
-        );
+        ).map((row) => ({
+          id: row.id,
+          name: row.external_name,
+          lineup_status:
+            row.initial_lineup_status === "starter" ? "on_field" : "substitute",
+        }));
 
-  const playerIds = Array.from(
-    new Set(
-      internalSquadsRaw
-        .map((row) => row.player_id)
-        .filter((value): value is string => typeof value === "string"),
-    ),
-  );
-
-  const starterIds = getStarterPlayerIdsFromLiveStats(
-    ((liveRows || []) as Array<{
-      player_id?: string | null;
-      status?: string | null;
-      start_minute?: number | null;
-    }>),
-  );
-
-  const externalPlayers = externalSquadsRes.error
-    ? []
-    : (
-        (externalSquadsRes.data || []) as Array<{
-          id: string;
-          external_name: string | null;
-          initial_lineup_status: string | null;
-        }>
-      ).map((row) => ({
-        id: row.id,
-        name: row.external_name,
-        lineup_status:
-          row.initial_lineup_status === "starter" ? "on_field" : "substitute",
-      }));
-
-  let squadPlayers: Array<{
-    id: string;
-    first_name: string | null;
-    last_name: string | null;
-  }> = [];
-
-  if (playerIds.length > 0) {
-    const { data: players } = await admin
-      .from("players")
-      .select("id, first_name, last_name")
-      .in("id", playerIds);
-
-    squadPlayers = (players || []) as Array<{
+    let squadPlayers: Array<{
       id: string;
       first_name: string | null;
       last_name: string | null;
-    }>;
+    }> = [];
+
+    if (playerIds.length > 0) {
+      const { data: players } = await admin
+        .from("players")
+        .select("id, first_name, last_name")
+        .in("id", playerIds);
+
+      squadPlayers = (players || []) as Array<{
+        id: string;
+        first_name: string | null;
+        last_name: string | null;
+      }>;
+    }
+
+    convocationPlayers = buildPublicConvocationEntries({
+      selectedPlayerIds: playerIds,
+      squadPlayers: squadPlayers.map((player) => ({
+        id: player.id,
+        firstName: player.first_name,
+        lastName: player.last_name,
+      })),
+      starterIds,
+      externalPlayers: externalPlayers.map((player) => ({
+        id: player.id,
+        name: player.name,
+        lineupStatus: player.lineup_status,
+      })),
+    });
+
+    publicConvocationNotes = resolvePublicConvocationNotes({
+      convocationNotes: convocationNotesRow?.notes,
+      legacyGameNotes: game.notes,
+    });
   }
 
-  convocationPlayers = buildPublicConvocationEntries({
-    selectedPlayerIds: playerIds,
-    squadPlayers: squadPlayers.map((player) => ({
-      id: player.id,
-      firstName: player.first_name,
-      lastName: player.last_name,
-    })),
-    starterIds,
-    externalPlayers: externalPlayers.map((player) => ({
-      id: player.id,
-      name: player.name,
-      lineupStatus: player.lineup_status,
-    })),
-  });
-
-  const publicConvocationNotes = resolvePublicConvocationNotes({
-    convocationNotes: convocationNotesRow?.notes,
-    legacyGameNotes: game.notes,
-  });
   const hasPublicConvocation = hasPublicConvocationContent({
     playerCount: convocationPlayers.length,
     notes: publicConvocationNotes,

@@ -111,3 +111,7 @@ export function hasPublicConvocationContent(params: {
 }) {
   return params.playerCount > 0 || normalizePublicConvocationNotes(params.notes) !== null;
 }
+
+export function isConvocationPublic(status: string | null | undefined) {
+  return status === "published";
+}
