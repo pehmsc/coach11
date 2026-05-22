@@ -69,7 +69,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
 
     const { data: game, error: gameError } = await supabase
       .from("games")
-      .select("id, team_id, age_group_id, competition_id, game_datetime, end_time, status, convocation_status, title, opponent_name, opponent_short_name, is_home, location, formatted_address, latitude, longitude, osm_place_id, location_source, score_home, score_away, notes, concentration_time, equipment, opponent_tactical_system, additional_info, image_url, game_type, kit_fp_jersey_id, kit_fp_shorts_id, kit_fp_socks_id, kit_gk_jersey_id, kit_gk_shorts_id, kit_gk_socks_id")
+      .select("id, team_id, age_group_id, competition_id, game_datetime, end_time, status, convocation_status, title, opponent_id, opponent_name, opponent_short_name, is_home, location, formatted_address, latitude, longitude, osm_place_id, location_source, score_home, score_away, notes, concentration_time, equipment, opponent_tactical_system, additional_info, image_url, game_type, kit_fp_jersey_id, kit_fp_shorts_id, kit_fp_socks_id, kit_gk_jersey_id, kit_gk_shorts_id, kit_gk_socks_id")
       .eq("id", gameId)
       .maybeSingle();
 
