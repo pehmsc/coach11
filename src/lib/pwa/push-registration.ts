@@ -139,28 +139,6 @@ export function getWebPushClientSupport(): WebPushClientSupport {
   };
 }
 
-export async function requestWebPushPermissionFromUserAction() {
-  const support = getWebPushClientSupport();
-
-  if (!support.featureFlagEnabled || !support.hasVapidPublicKey) {
-    return { granted: false as const, reason: "disabled" as const };
-  }
-
-  if (support.requiresIOSInstall) {
-    return { granted: false as const, reason: "ios_install_required" as const };
-  }
-
-  if (!support.browserSupported) {
-    return { granted: false as const, reason: "unsupported" as const };
-  }
-
-  const permission = await Notification.requestPermission();
-  return {
-    granted: permission === "granted",
-    reason: permission,
-  };
-}
-
 export async function getWebPushStatus() {
   const res = await fetch("/api/push/status", {
     cache: "no-store",
