@@ -234,7 +234,11 @@ export async function PATCH(request: Request, { params }: RouteContext) {
   }
 }
 
-// DELETE /api/club/members/[profileId] — remover membro do clube
+// DELETE /api/club/members/[profileId] — eliminar conta do membro por completo
+// Apaga auth.users -> CASCADE para profiles, club_memberships, age_group_staff,
+// staff_permissions, team_staff, staff_invites.invited_by. Conteudo de autoria
+// (exercicios, microciclos, observacoes, etc.) preserva-se com created_by NULL
+// via FKs ON DELETE SET NULL (migration 20260522222107).
 export async function DELETE(_request: Request, { params }: RouteContext) {
   try {
     const { profileId } = await params;
@@ -252,28 +256,30 @@ export async function DELETE(_request: Request, { params }: RouteContext) {
     if (authResult instanceof NextResponse) return authResult;
     const { clubId } = authResult;
 
-    // Buscar age_group_staff do membro para apagar permissões primeiro
-    const { data: staffEntries } = await admin
-      .from("age_group_staff")
-      .select("id")
+    // Confirmar que o membro pertence a este clube antes de apagar a conta.
+    const { data: targetMembership } = await admin
+      .from("club_memberships")
+      .select("profile_id")
       .eq("profile_id", profileId)
-      .eq("club_id", clubId);
+      .eq("club_id", clubId)
+      .maybeSingle();
 
-    if (staffEntries && staffEntries.length > 0) {
-      const staffIds = staffEntries.map((s) => s.id);
-      await admin.from("staff_permissions").delete().in("staff_id", staffIds);
-      await admin
-        .from("age_group_staff")
-        .delete()
-        .eq("profile_id", profileId)
-        .eq("club_id", clubId);
+    if (!targetMembership) {
+      return NextResponse.json({ error: "Membro não encontrado neste clube." }, { status: 404 });
     }
 
-    await admin
-      .from("club_memberships")
-      .delete()
-      .eq("profile_id", profileId)
-      .eq("club_id", clubId);
+    const { error: deleteError } = await admin.auth.admin.deleteUser(profileId);
+    if (deleteError) {
+      console.error("[api.club.members.delete] auth.admin.deleteUser falhou", {
+        profileId,
+        clubId,
+        error: deleteError.message,
+      });
+      return NextResponse.json(
+        { error: `Não foi possível eliminar a conta: ${deleteError.message}` },
+        { status: 500 },
+      );
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {
