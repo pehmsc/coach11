@@ -60,8 +60,10 @@ export async function GET() {
 
     const profileIds = memberships.map((m) => m.profile_id);
 
-    // Buscar perfis, escalões, ligações de staff e convites pendentes em paralelo
-    const [profilesRes, ageGroupsRes, ageGroupStaffRes, pendingInvitesRes] = await Promise.all([
+    // Buscar perfis, escalões, ligações de staff e TODOS os convites do clube em paralelo.
+    // Os convites incluem pendentes, aceites com user vivo e "orfaos" (aceites cujo
+    // accepted_by ja nao existe em auth.users) para a gestao de convites na pagina do clube.
+    const [profilesRes, ageGroupsRes, ageGroupStaffRes, invitesRes] = await Promise.all([
       admin
         .from("profiles")
         .select("id, full_name, email, phone, avatar_url")
@@ -77,9 +79,10 @@ export async function GET() {
         .eq("club_id", clubId),
       admin
         .from("staff_invites")
-        .select("id, first_name, last_name, email, role, invite_code, created_at, age_group_id")
+        .select(
+          "id, first_name, last_name, email, role, invite_code, created_at, invite_sent_at, accepted_at, accepted_by, age_group_id",
+        )
         .eq("club_id", clubId)
-        .is("accepted_at", null)
         .order("created_at", { ascending: false }),
     ]);
 
@@ -137,18 +140,36 @@ export async function GET() {
       };
     });
 
-    const pendingInvites = (pendingInvitesRes.data ?? []).map((inv) => ({
-      id: inv.id,
-      first_name: inv.first_name,
-      last_name: inv.last_name,
-      email: inv.email,
-      role: inv.role,
-      invite_code: inv.invite_code,
-      created_at: inv.created_at,
-      age_group_name: inv.age_group_id ? (ageGroupIdToName.get(inv.age_group_id) ?? null) : null,
-    }));
+    // Estado deriva-se de accepted_at + accepted_by.
+    // accepted_by passa a NULL automaticamente quando o auth.user e apagado
+    // (FK ON DELETE SET NULL, migration 20260522222107) — esse e o sinal de "orfao".
+    const invites = (invitesRes.data ?? []).map((inv) => {
+      const hasLiveUser = inv.accepted_by != null;
+      let status: "pending" | "accepted" | "orphan";
+      if (!inv.accepted_at) {
+        status = "pending";
+      } else if (hasLiveUser) {
+        status = "accepted";
+      } else {
+        status = "orphan";
+      }
+      return {
+        id: inv.id,
+        first_name: inv.first_name,
+        last_name: inv.last_name,
+        email: inv.email,
+        role: inv.role,
+        invite_code: inv.invite_code,
+        created_at: inv.created_at,
+        invite_sent_at: inv.invite_sent_at,
+        accepted_at: inv.accepted_at,
+        status,
+        has_live_user: hasLiveUser,
+        age_group_name: inv.age_group_id ? (ageGroupIdToName.get(inv.age_group_id) ?? null) : null,
+      };
+    });
 
-    return NextResponse.json({ members, pendingInvites });
+    return NextResponse.json({ members, invites });
   } catch (error) {
     return respondInternalError("api.club.members.get", error);
   }

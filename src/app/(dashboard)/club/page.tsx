@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, ImageIcon, ChevronDown, ChevronUp, Plus, Copy, Check, X, Mail, Trash2, Pencil } from "lucide-react";
+import { Loader2, ImageIcon, ChevronDown, ChevronUp, Plus, Copy, Check, X, Mail, Trash2, Pencil, Send, AlertCircle } from "lucide-react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { toast } from "sonner";
 import {
@@ -111,6 +111,8 @@ type StaffMember = {
   age_group_name?: string | null;
 };
 
+type StaffInviteStatus = "pending" | "accepted" | "orphan";
+
 type StaffInvite = {
   id: string;
   first_name: string;
@@ -118,8 +120,10 @@ type StaffInvite = {
   email: string;
   role: string;
   invite_code: string;
-  accepted_at?: string;
+  accepted_at?: string | null;
   invite_sent_at: string;
+  status: StaffInviteStatus;
+  has_live_user: boolean;
   age_group_name?: string | null;
 };
 
@@ -177,6 +181,10 @@ export default function ClubPage() {
   const [confirmRemoveMemberId, setConfirmRemoveMemberId] = useState<string | null>(null);
   const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
   const [cancelingInviteId, setCancelingInviteId] = useState<string | null>(null);
+  const [resendingInviteId, setResendingInviteId] = useState<string | null>(null);
+  const [confirmInviteAction, setConfirmInviteAction] = useState<
+    { id: string; action: "revoke" | "clear" } | null
+  >(null);
 
   // Edit member dialog
   const [editingMember, setEditingMember] = useState<StaffMember | null>(null);
@@ -267,20 +275,27 @@ export default function ClubPage() {
         }),
       );
 
-      // Convites pendentes — apenas visíveis para club_coordinator
+      // Convites (pendentes, aceites e orfaos) — apenas visiveis para club_coordinator
       if (isClubCoord || isSuper) {
-        const rawPendingInvites = (mp?.pendingInvites as Array<Record<string, unknown>>) || [];
+        const rawInvites = (mp?.invites as Array<Record<string, unknown>>) || [];
         setStaffInvites(
-          rawPendingInvites.map((inv) => ({
-            id: String(inv.id ?? ""),
-            first_name: String(inv.first_name ?? ""),
-            last_name: String(inv.last_name ?? ""),
-            email: String(inv.email ?? ""),
-            role: String(inv.role ?? ""),
-            invite_code: String(inv.invite_code ?? ""),
-            invite_sent_at: String(inv.created_at ?? ""),
-            age_group_name: typeof inv.age_group_name === "string" ? inv.age_group_name : null,
-          })),
+          rawInvites.map((inv) => {
+            const status =
+              inv.status === "accepted" || inv.status === "orphan" ? inv.status : "pending";
+            return {
+              id: String(inv.id ?? ""),
+              first_name: String(inv.first_name ?? ""),
+              last_name: String(inv.last_name ?? ""),
+              email: String(inv.email ?? ""),
+              role: String(inv.role ?? ""),
+              invite_code: String(inv.invite_code ?? ""),
+              invite_sent_at: String(inv.invite_sent_at ?? inv.created_at ?? ""),
+              accepted_at: typeof inv.accepted_at === "string" ? inv.accepted_at : null,
+              status: status as StaffInviteStatus,
+              has_live_user: inv.has_live_user === true,
+              age_group_name: typeof inv.age_group_name === "string" ? inv.age_group_name : null,
+            };
+          }),
         );
       }
     } else {
@@ -599,17 +614,34 @@ export default function ClubPage() {
     setRemovingMemberId(null);
   }
 
-  async function handleCancelInvite(inviteId: string) {
+  async function handleDeleteInvite(inviteId: string, action: "revoke" | "clear") {
     setCancelingInviteId(inviteId);
     const res = await fetch(`/api/invite/staff/${inviteId}`, { method: "DELETE" });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      toast.error(data?.error || "Erro ao cancelar convite.");
+      toast.error(data?.error || "Erro ao remover convite.");
     } else {
       setStaffInvites((prev) => prev.filter((inv) => inv.id !== inviteId));
-      toast.success("Convite cancelado.");
+      toast.success(action === "clear" ? "Registo limpo." : "Convite revogado.");
     }
     setCancelingInviteId(null);
+    setConfirmInviteAction(null);
+  }
+
+  async function handleResendInvite(inviteId: string) {
+    setResendingInviteId(inviteId);
+    const res = await fetch(`/api/invite/staff/${inviteId}/resend`, { method: "POST" });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      toast.error(data?.error || "Erro ao reenviar convite.");
+    } else {
+      const nowIso = new Date().toISOString();
+      setStaffInvites((prev) =>
+        prev.map((inv) => (inv.id === inviteId ? { ...inv, invite_sent_at: nowIso } : inv)),
+      );
+      toast.success("Email reenviado.");
+    }
+    setResendingInviteId(null);
   }
 
   async function handleOpenEdit(member: StaffMember) {
@@ -1224,62 +1256,112 @@ export default function ClubPage() {
             </CardContent>
           </Card>
 
-          {/* Convites pendentes */}
+          {/* Convites (pendentes, aceites, orfaos) */}
           {staffInvites.length > 0 && (
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
                   <Mail size={16} className="text-slate-500" />
-                  Convites pendentes
+                  Convites
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
-                {staffInvites.map((invite) => (
-                  <div key={invite.id} className="flex items-center gap-3 p-3 bg-amber-50 border border-amber-100 rounded-xl">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-sm font-semibold text-slate-800">
-                          {invite.first_name} {invite.last_name}
+                {staffInvites.map((invite) => {
+                  const isPending = invite.status === "pending";
+                  const isOrphan = invite.status === "orphan";
+                  const cardClasses = isPending
+                    ? "bg-amber-50 border-amber-100"
+                    : isOrphan
+                      ? "bg-slate-50 border-slate-200"
+                      : "bg-emerald-50/60 border-emerald-100";
+                  const badge = isPending
+                    ? { label: "Pendente", classes: "text-amber-700 bg-amber-100" }
+                    : isOrphan
+                      ? { label: "Órfão", classes: "text-slate-600 bg-slate-200" }
+                      : { label: "Aceite", classes: "text-emerald-700 bg-emerald-100" };
+                  const isBusy =
+                    cancelingInviteId === invite.id || resendingInviteId === invite.id;
+                  return (
+                    <div
+                      key={invite.id}
+                      className={`flex items-center gap-3 p-3 border rounded-xl ${cardClasses}`}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-sm font-semibold text-slate-800">
+                            {invite.first_name} {invite.last_name}
+                          </p>
+                          <span
+                            className={`text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-full shrink-0 ${badge.classes}`}
+                          >
+                            {badge.label}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          {getStaffRoleLabel(invite.role)}
+                          {invite.age_group_name ? ` · ${invite.age_group_name}` : ""}
                         </p>
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-full shrink-0">
-                          Pendente
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-500 mt-0.5">
-                        {getStaffRoleLabel(invite.role)}
-                        {invite.age_group_name ? ` · ${invite.age_group_name}` : ""}
-                      </p>
-                      <p className="text-xs text-slate-400 truncate">{invite.email}</p>
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        onClick={() => copyCode(invite.invite_code)}
-                        className="p-1.5 hover:bg-amber-100 rounded-lg text-amber-600"
-                        title="Copiar código"
-                      >
-                        {copiedCode === invite.invite_code ? (
-                          <Check size={14} className="text-emerald-600" />
-                        ) : (
-                          <Copy size={14} />
+                        <p className="text-xs text-slate-400 truncate">{invite.email}</p>
+                        {isOrphan && (
+                          <p className="text-[11px] text-slate-500 mt-1 flex items-center gap-1">
+                            <AlertCircle size={11} className="shrink-0" />
+                            A conta associada já não existe.
+                          </p>
                         )}
-                      </button>
-                      {canManage && (
-                        <button
-                          onClick={() => void handleCancelInvite(invite.id)}
-                          disabled={cancelingInviteId === invite.id}
-                          className="p-1.5 hover:bg-red-50 rounded-lg text-slate-300 hover:text-red-500 transition-colors"
-                          title="Cancelar convite"
-                        >
-                          {cancelingInviteId === invite.id ? (
-                            <Loader2 size={14} className="animate-spin" />
-                          ) : (
-                            <X size={14} />
-                          )}
-                        </button>
-                      )}
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {isPending && (
+                          <button
+                            onClick={() => copyCode(invite.invite_code)}
+                            className="p-1.5 hover:bg-amber-100 rounded-lg text-amber-600"
+                            title="Copiar código"
+                          >
+                            {copiedCode === invite.invite_code ? (
+                              <Check size={14} className="text-emerald-600" />
+                            ) : (
+                              <Copy size={14} />
+                            )}
+                          </button>
+                        )}
+                        {canManage && isPending && (
+                          <button
+                            onClick={() => void handleResendInvite(invite.id)}
+                            disabled={isBusy}
+                            className="p-1.5 hover:bg-amber-100 rounded-lg text-amber-700 transition-colors disabled:opacity-50"
+                            title="Reenviar email"
+                          >
+                            {resendingInviteId === invite.id ? (
+                              <Loader2 size={14} className="animate-spin" />
+                            ) : (
+                              <Send size={14} />
+                            )}
+                          </button>
+                        )}
+                        {canManage && (isPending || isOrphan) && (
+                          <button
+                            onClick={() =>
+                              setConfirmInviteAction({
+                                id: invite.id,
+                                action: isOrphan ? "clear" : "revoke",
+                              })
+                            }
+                            disabled={isBusy}
+                            className="p-1.5 hover:bg-red-50 rounded-lg text-slate-400 hover:text-red-500 transition-colors disabled:opacity-50"
+                            title={isOrphan ? "Limpar registo" : "Revogar convite"}
+                          >
+                            {cancelingInviteId === invite.id ? (
+                              <Loader2 size={14} className="animate-spin" />
+                            ) : isOrphan ? (
+                              <Trash2 size={14} />
+                            ) : (
+                              <X size={14} />
+                            )}
+                          </button>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </CardContent>
             </Card>
           )}
@@ -1596,6 +1678,57 @@ export default function ClubPage() {
           </div>
         </div>
       )}
+
+      {/* ─── Modal: Confirmar revogar/limpar convite ─── */}
+      {confirmInviteAction && (() => {
+        const target = staffInvites.find((inv) => inv.id === confirmInviteAction.id);
+        if (!target) return null;
+        const isClear = confirmInviteAction.action === "clear";
+        const title = isClear ? "Limpar registo do convite" : "Revogar convite";
+        const description = isClear
+          ? `Vai apagar o registo do convite de ${target.first_name} ${target.last_name}. A conta associada já não existe — isto apenas remove o registo órfão.`
+          : `Vai revogar o convite pendente de ${target.first_name} ${target.last_name} (${target.email}). Esta acção não pode ser desfeita.`;
+        const confirmLabel = isClear ? "Limpar" : "Revogar";
+        return (
+          <div
+            className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
+            onClick={() => setConfirmInviteAction(null)}
+          >
+            <div
+              className="bg-white rounded-2xl w-full max-w-sm shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6 space-y-4">
+                <h3 className="font-bold text-slate-900 text-lg">{title}</h3>
+                <p className="text-sm text-slate-600">{description}</p>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+                    disabled={cancelingInviteId === confirmInviteAction.id}
+                    onClick={() =>
+                      void handleDeleteInvite(confirmInviteAction.id, confirmInviteAction.action)
+                    }
+                  >
+                    {cancelingInviteId === confirmInviteAction.id ? (
+                      <Loader2 size={16} className="animate-spin" />
+                    ) : (
+                      confirmLabel
+                    )}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setConfirmInviteAction(null)}
+                  >
+                    Cancelar
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ─── Modal: Confirmar apagar clube ─── */}
       {showDeleteModal && (
