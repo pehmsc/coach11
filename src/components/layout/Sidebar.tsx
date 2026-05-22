@@ -27,7 +27,7 @@ export function Sidebar({ profile, avatarUrl, source, teamRole }: SidebarProps) 
   const pathname = usePathname();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { unreadMessages: unreadMessagesCount, unreadNotifications: unreadNotificationsCount } = useUnreadCounts();
+  const { unreadNotifications: unreadNotificationsCount } = useUnreadCounts();
   const navSections = getAppNavSections();
   const mainSection = navSections.find((section) => section.id === "main");
   const settingsSection = navSections.find((section) => section.id === "settings");
@@ -78,11 +78,7 @@ export function Sidebar({ profile, avatarUrl, source, teamRole }: SidebarProps) 
             const isActive = isNavItemActive(pathname, item);
             const Icon = item.icon;
             const badgeCount =
-              item.badgeKey === "messages"
-                ? unreadMessagesCount
-                : item.badgeKey === "notifications"
-                  ? unreadNotificationsCount
-                  : 0;
+              item.badgeKey === "notifications" ? unreadNotificationsCount : 0;
 
             return (
               <Link

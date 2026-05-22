@@ -35,7 +35,6 @@ export function MobileSideNavDrawer({
   avatarUrl,
   source,
   teamRole,
-  unreadMessagesCount,
   unreadNotificationsCount,
 }: {
   open: boolean;
@@ -44,7 +43,6 @@ export function MobileSideNavDrawer({
   avatarUrl?: string | null;
   source?: string | null;
   teamRole?: string | null;
-  unreadMessagesCount: number;
   unreadNotificationsCount: number;
 }) {
   const pathname = usePathname();
@@ -220,11 +218,7 @@ export function MobileSideNavDrawer({
             {mainSection?.items.map((item) => {
               const isActive = isNavItemActive(pathname, item);
               const badgeCount =
-                item.badgeKey === "messages"
-                  ? unreadMessagesCount
-                  : item.badgeKey === "notifications"
-                    ? unreadNotificationsCount
-                    : 0;
+                item.badgeKey === "notifications" ? unreadNotificationsCount : 0;
               return (
                 <Link
                   key={item.id}

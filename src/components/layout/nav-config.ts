@@ -9,7 +9,6 @@ import {
   Calendar,
   Dumbbell,
   Home,
-  MessageSquare,
   Settings,
   Shield,
   Sword,
@@ -24,7 +23,7 @@ export type NavProfile = {
   is_super_coordinator?: boolean | null;
 } | null;
 
-export type AppNavBadgeKey = "notifications" | "messages";
+export type AppNavBadgeKey = "notifications";
 
 export type AppNavItem = {
   id: string;
@@ -54,13 +53,6 @@ const NAV_ITEMS = {
     href: "/calendar",
     label: "Calendário",
     icon: Calendar,
-  },
-  messages: {
-    id: "messages",
-    href: "/messages",
-    label: "Mensagens",
-    icon: MessageSquare,
-    badgeKey: "messages" as const,
   },
   players: {
     id: "players",

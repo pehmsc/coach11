@@ -381,7 +381,6 @@ export async function deleteAgeGroupCascade(
     await optionalDeleteByIn(admin, "competitions", "id", competitionIds);
 
     await optionalDeleteByEq(admin, "trainings", "team_id", teamId);
-    await optionalDeleteByEq(admin, "team_messages", "team_id", teamId);
     await optionalDeleteByEq(admin, "kit_pieces", "team_id", teamId);
   }
 
@@ -414,7 +413,6 @@ export async function deleteAgeGroupCascade(
   await optionalDeleteByEq(admin, "grounds", "age_group_id", ageGroupId);
   await optionalDeleteByEq(admin, "opponents", "age_group_id", ageGroupId);
   await optionalDeleteByEq(admin, "notifications", "age_group_id", ageGroupId);
-  await optionalDeleteByEq(admin, "team_messages", "age_group_id", ageGroupId);
   await optionalDeleteByEq(admin, "public_share_tokens", "age_group_id", ageGroupId);
   await optionalDeleteByEq(admin, "beta_invites", "target_age_group_id", ageGroupId);
   await optionalDeleteByEq(admin, "staff_invites", "age_group_id", ageGroupId);
