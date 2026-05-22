@@ -1,0 +1,21 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "next": {
+    "entry": [
+      "next.config.{js,ts,mjs}",
+      "src/instrumentation.ts"
+    ]
+  },
+  "vitest": {
+    "config": ["vitest.config.{js,ts}"]
+  },
+  "entry": [
+    "src/app/**/{page,layout,route,template,default,error,global-error,loading,not-found}.{ts,tsx}",
+    "sentry.*.config.ts",
+    "scripts/*.mjs",
+    "**/*.test.{ts,tsx}"
+  ],
+  "ignore": [],
+  "ignoreDependencies": [],
+  "ignoreExportsUsedInFile": true
+}
