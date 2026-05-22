@@ -6,6 +6,7 @@ import { format, parseISO } from "date-fns";
 import { pt } from "date-fns/locale";
 import {
   AlertTriangle,
+  Check,
   ClipboardList,
   Loader2,
   Trash2,
@@ -35,14 +36,12 @@ import { Breadcrumb } from "@/components/navigation/Breadcrumb";
 import { getReturnTo } from "@/hooks/useReturnTo";
 import { OpponentLogoUploader } from "@/components/opponents/OpponentLogoUploader";
 import { OpponentObservationsTab } from "@/components/games/observations/OpponentObservationsTab";
-import {
-  useOpponentAutosave,
-  type SaveStatus,
-} from "@/components/opponents/useOpponentAutosave";
 import type { FootballFormat, Opponent } from "@/types/database";
 import { opponentUpdateSchema } from "@/lib/validations/opponent";
 
 type DetailTab = "notas" | "observacoes" | "historico" | "info";
+
+type SaveStatus = "idle" | "saving" | "saved" | "error";
 
 type GameRow = {
   id: string;
@@ -75,6 +74,72 @@ type AgeGroupRef = {
   football_format: FootballFormat;
 };
 
+type DraftFields = {
+  tactical_formation: string | null;
+  short_name: string | null;
+  pontos_fortes: string | null;
+  pontos_fracos: string | null;
+  atletas_chave: string | null;
+  notas_gerais: string | null;
+  home_ground: string | null;
+  home_ground_address: string | null;
+  home_ground_lat: number | null;
+  home_ground_lng: number | null;
+  coach_name: string | null;
+  phone: string | null;
+  contact_info: string | null;
+  youth_academy_notes: string | null;
+};
+
+const DRAFT_FIELDS: (keyof DraftFields)[] = [
+  "tactical_formation",
+  "short_name",
+  "pontos_fortes",
+  "pontos_fracos",
+  "atletas_chave",
+  "notas_gerais",
+  "home_ground",
+  "home_ground_address",
+  "home_ground_lat",
+  "home_ground_lng",
+  "coach_name",
+  "phone",
+  "contact_info",
+  "youth_academy_notes",
+];
+
+function buildDraft(opponent: Opponent): DraftFields {
+  return {
+    tactical_formation: opponent.tactical_formation ?? null,
+    short_name: opponent.short_name ?? null,
+    pontos_fortes: opponent.pontos_fortes ?? null,
+    pontos_fracos: opponent.pontos_fracos ?? null,
+    atletas_chave: opponent.atletas_chave ?? null,
+    notas_gerais: opponent.notas_gerais ?? null,
+    home_ground: opponent.home_ground ?? null,
+    home_ground_address: opponent.home_ground_address ?? null,
+    home_ground_lat: opponent.home_ground_lat ?? null,
+    home_ground_lng: opponent.home_ground_lng ?? null,
+    coach_name: opponent.coach_name ?? null,
+    phone: opponent.phone ?? null,
+    contact_info: opponent.contact_info ?? null,
+    youth_academy_notes: opponent.youth_academy_notes ?? null,
+  };
+}
+
+function diffDraft(
+  draft: DraftFields,
+  base: DraftFields,
+): Partial<DraftFields> {
+  const out: Partial<DraftFields> = {};
+  for (const key of DRAFT_FIELDS) {
+    if (draft[key] !== base[key]) {
+      (out as Record<string, unknown>)[key] = draft[key];
+    }
+  }
+  return out;
+}
+
 function initialsFor(name: string, shortName?: string | null): string {
   if (shortName?.trim()) return shortName.trim().slice(0, 2).toUpperCase();
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -82,34 +147,6 @@ function initialsFor(name: string, shortName?: string | null): string {
     return (parts[0][0] + parts[1][0]).toUpperCase();
   }
   return name.slice(0, 2).toUpperCase();
-}
-
-function SaveIndicator({ status, error }: { status: SaveStatus; error: string | null }) {
-  if (status === "saving") {
-    return (
-      <span className="ml-2 inline-flex items-center gap-1 text-xs text-slate-500">
-        <Loader2 size={11} className="animate-spin" /> A guardar...
-      </span>
-    );
-  }
-  if (status === "saved") {
-    return (
-      <span className="ml-2 text-xs text-emerald-600 transition-opacity">
-        ✓ Guardado
-      </span>
-    );
-  }
-  if (status === "error") {
-    return (
-      <span
-        className="ml-2 text-xs text-red-600"
-        title={error ?? undefined}
-      >
-        ✗ Falha
-      </span>
-    );
-  }
-  return null;
 }
 
 export default function OpponentDetailPage({
@@ -140,15 +177,22 @@ export default function OpponentDetailPage({
   const [stats, setStats] = useState<GamesPayload["stats"] | null>(null);
   const [gamesLoading, setGamesLoading] = useState(false);
 
-  const autosave = useOpponentAutosave({
-    ageGroupId,
-    opponentId,
-    onSaved: (patch) => {
-      setOpponent((prev) =>
-        prev ? ({ ...prev, ...(patch as Partial<Opponent>) }) : prev,
-      );
-    },
-  });
+  const [draft, setDraft] = useState<DraftFields | null>(null);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  const baseDraft = useMemo(
+    () => (opponent ? buildDraft(opponent) : null),
+    [opponent],
+  );
+
+  const dirtyDiff = useMemo(() => {
+    if (!draft || !baseDraft) return {};
+    return diffDraft(draft, baseDraft);
+  }, [draft, baseDraft]);
+
+  const isDirty = Object.keys(dirtyDiff).length > 0;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -166,9 +210,9 @@ export default function OpponentDetailPage({
         return;
       }
       setOpponent(oppPayload.opponent);
+      setDraft(buildDraft(oppPayload.opponent));
       setNameDraft(oppPayload.opponent.name);
 
-      // age_groups endpoint pode ou nao estar disponivel — fallback opcional
       if (agRes && agRes.ok) {
         const agJson = await agRes.json().catch(() => null);
         const found = (agJson?.ageGroups ?? agJson?.age_groups ?? []).find(
@@ -192,6 +236,16 @@ export default function OpponentDetailPage({
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!isDirty) return;
+    function handler(e: BeforeUnloadEvent) {
+      e.preventDefault();
+      e.returnValue = "";
+    }
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [isDirty]);
 
   const loadGames = useCallback(async () => {
     setGamesLoading(true);
@@ -222,6 +276,87 @@ export default function OpponentDetailPage({
     () => getFormationsForFormat(ageGroup?.football_format),
     [ageGroup?.football_format],
   );
+
+  const updateDraft = useCallback(
+    <K extends keyof DraftFields>(field: K, value: DraftFields[K]) => {
+      setDraft((prev) => (prev ? { ...prev, [field]: value } : prev));
+      if (saveStatus !== "idle") {
+        setSaveStatus("idle");
+        setSaveError(null);
+      }
+      if (fieldErrors[field as string]) {
+        setFieldErrors((prev) => {
+          const next = { ...prev };
+          delete next[field as string];
+          return next;
+        });
+      }
+    },
+    [saveStatus, fieldErrors],
+  );
+
+  async function handleSave() {
+    if (!opponent || !draft || !isDirty) return;
+
+    const payload: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(dirtyDiff)) {
+      if (typeof value === "string") {
+        const trimmed = value.trim();
+        payload[key] = trimmed === "" ? null : trimmed;
+      } else {
+        payload[key] = value;
+      }
+    }
+
+    const parsed = opponentUpdateSchema.safeParse(payload);
+    if (!parsed.success) {
+      const errs: Record<string, string> = {};
+      for (const issue of parsed.error.issues) {
+        const path = issue.path[0];
+        if (typeof path === "string") {
+          errs[path] = issue.message;
+        }
+      }
+      setFieldErrors(errs);
+      setSaveStatus("error");
+      setSaveError("Existem campos invalidos.");
+      toast.error("Existem campos invalidos.");
+      return;
+    }
+
+    setSaveStatus("saving");
+    setSaveError(null);
+    setFieldErrors({});
+    try {
+      const res = await fetch(
+        `/api/age-groups/${ageGroupId}/opponents/${opponentId}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        },
+      );
+      const body = await res.json().catch(() => null);
+      if (!res.ok || !body?.success) {
+        const msg = body?.error || "Erro ao guardar.";
+        setSaveStatus("error");
+        setSaveError(msg);
+        toast.error(msg);
+        return;
+      }
+      setOpponent(body.opponent);
+      setDraft(buildDraft(body.opponent));
+      setSaveStatus("saved");
+      toast.success("Alteracoes guardadas.");
+      setTimeout(() => {
+        setSaveStatus((s) => (s === "saved" ? "idle" : s));
+      }, 2000);
+    } catch {
+      setSaveStatus("error");
+      setSaveError("Erro de ligacao.");
+      toast.error("Erro de ligacao.");
+    }
+  }
 
   async function saveName() {
     if (!opponent) return;
@@ -259,19 +394,6 @@ export default function OpponentDetailPage({
     } finally {
       setSavingName(false);
     }
-  }
-
-  function patch(field: keyof Opponent, value: string | number | null) {
-    if (!opponent) return;
-    const next: Partial<Opponent> = { [field]: value };
-    setOpponent({ ...opponent, ...next });
-    // Validar inline com Zod (apenas o campo afectado)
-    const candidate = { [field]: value };
-    const result = opponentUpdateSchema.safeParse(candidate);
-    if (!result.success) {
-      return; // erro de validacao impede o PATCH; UI mostra inline em campos especificos
-    }
-    autosave.schedule({ [field]: value } as Record<string, unknown>);
   }
 
   async function openDelete() {
@@ -328,9 +450,10 @@ export default function OpponentDetailPage({
       </div>
     );
   }
-  if (!opponent) return null;
+  if (!opponent || !draft) return null;
 
   const initials = initialsFor(opponent.name, opponent.short_name);
+  const showSaveBar = tab === "notas" || tab === "info";
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -463,14 +586,13 @@ export default function OpponentDetailPage({
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto px-4 py-4">
+      <div className={`max-w-5xl mx-auto px-4 py-4 ${showSaveBar && isDirty ? "pb-24" : ""}`}>
         {tab === "notas" && (
           <NotasTab
-            opponent={opponent}
+            draft={draft}
             formations={formations}
-            patch={patch}
-            saveStatus={autosave.status}
-            saveError={autosave.errorMessage}
+            updateDraft={updateDraft}
+            fieldErrors={fieldErrors}
           />
         )}
         {tab === "observacoes" && (
@@ -488,13 +610,21 @@ export default function OpponentDetailPage({
         )}
         {tab === "info" && (
           <InfoTab
-            opponent={opponent}
-            patch={patch}
-            saveStatus={autosave.status}
-            saveError={autosave.errorMessage}
+            draft={draft}
+            updateDraft={updateDraft}
+            fieldErrors={fieldErrors}
           />
         )}
       </div>
+
+      {showSaveBar && (isDirty || saveStatus === "saving" || saveStatus === "saved" || saveStatus === "error") && (
+        <SaveBar
+          status={saveStatus}
+          error={saveError}
+          isDirty={isDirty}
+          onSave={() => void handleSave()}
+        />
+      )}
 
       {showDelete && (
         <div
@@ -565,33 +695,95 @@ export default function OpponentDetailPage({
   );
 }
 
+// ─── SaveBar ────────────────────────────────────────────────────────────────────
+
+function SaveBar({
+  status,
+  error,
+  isDirty,
+  onSave,
+}: {
+  status: SaveStatus;
+  error: string | null;
+  isDirty: boolean;
+  onSave: () => void;
+}) {
+  const statusLabel = (() => {
+    if (status === "saving") return "A guardar...";
+    if (status === "saved") return "✓ Guardado";
+    if (status === "error") return error ?? "✗ Falha";
+    if (isDirty) return "Alterações por guardar";
+    return "";
+  })();
+
+  const statusColor = (() => {
+    if (status === "saving") return "text-slate-500";
+    if (status === "saved") return "text-emerald-600";
+    if (status === "error") return "text-red-600";
+    if (isDirty) return "text-amber-700";
+    return "text-slate-500";
+  })();
+
+  return (
+    <div className="fixed bottom-0 inset-x-0 z-40 border-t border-slate-200 bg-white/95 backdrop-blur shadow-[0_-2px_12px_rgba(0,0,0,0.04)]">
+      <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+        <p className={`text-sm font-medium ${statusColor}`}>{statusLabel}</p>
+        <Button
+          onClick={onSave}
+          disabled={!isDirty || status === "saving"}
+          className="bg-emerald-600 hover:bg-emerald-700"
+        >
+          {status === "saving" ? (
+            <>
+              <Loader2 size={14} className="mr-1.5 animate-spin" />
+              A guardar...
+            </>
+          ) : status === "saved" && !isDirty ? (
+            <>
+              <Check size={14} className="mr-1.5" />
+              Guardado
+            </>
+          ) : (
+            "Guardar alterações"
+          )}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Tab: Notas ────────────────────────────────────────────────────────────────
 
+const TEXTAREA_CLASS =
+  "w-full bg-white rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500";
+
+function FieldError({ message }: { message?: string }) {
+  if (!message) return null;
+  return <p className="mt-1 text-xs text-red-600">{message}</p>;
+}
+
 function NotasTab({
-  opponent,
+  draft,
   formations,
-  patch,
-  saveStatus,
-  saveError,
+  updateDraft,
+  fieldErrors,
 }: {
-  opponent: Opponent;
+  draft: DraftFields;
   formations: readonly string[];
-  patch: (field: keyof Opponent, value: string | number | null) => void;
-  saveStatus: SaveStatus;
-  saveError: string | null;
+  updateDraft: <K extends keyof DraftFields>(field: K, value: DraftFields[K]) => void;
+  fieldErrors: Record<string, string>;
 }) {
   return (
     <div className="grid gap-3 md:grid-cols-2">
       <div>
         <label className="block text-xs font-semibold uppercase text-slate-500 mb-1">
           Formacao tactica
-          <SaveIndicator status={saveStatus} error={saveError} />
         </label>
         <Select
-          value={opponent.tactical_formation ?? ""}
-          onValueChange={(v) => patch("tactical_formation", v || null)}
+          value={draft.tactical_formation ?? ""}
+          onValueChange={(v) => updateDraft("tactical_formation", v || null)}
         >
-          <SelectTrigger>
+          <SelectTrigger className="w-full">
             <SelectValue placeholder="Selecionar formacao" />
           </SelectTrigger>
           <SelectContent>
@@ -602,6 +794,7 @@ function NotasTab({
             ))}
           </SelectContent>
         </Select>
+        <FieldError message={fieldErrors.tactical_formation} />
       </div>
 
       <div>
@@ -610,10 +803,11 @@ function NotasTab({
         </label>
         <Input
           maxLength={5}
-          value={opponent.short_name ?? ""}
-          onChange={(e) => patch("short_name", e.target.value)}
+          value={draft.short_name ?? ""}
+          onChange={(e) => updateDraft("short_name", e.target.value)}
           placeholder="Ex: SLB"
         />
+        <FieldError message={fieldErrors.short_name} />
       </div>
 
       <div className="md:col-span-2">
@@ -622,11 +816,12 @@ function NotasTab({
         </label>
         <textarea
           rows={3}
-          value={opponent.pontos_fortes ?? ""}
-          onChange={(e) => patch("pontos_fortes", e.target.value)}
-          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          value={draft.pontos_fortes ?? ""}
+          onChange={(e) => updateDraft("pontos_fortes", e.target.value)}
+          className={TEXTAREA_CLASS}
           placeholder="Ex: rapidos no contra-ataque, fortes na bola parada..."
         />
+        <FieldError message={fieldErrors.pontos_fortes} />
       </div>
 
       <div className="md:col-span-2">
@@ -635,11 +830,12 @@ function NotasTab({
         </label>
         <textarea
           rows={3}
-          value={opponent.pontos_fracos ?? ""}
-          onChange={(e) => patch("pontos_fracos", e.target.value)}
-          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          value={draft.pontos_fracos ?? ""}
+          onChange={(e) => updateDraft("pontos_fracos", e.target.value)}
+          className={TEXTAREA_CLASS}
           placeholder="Ex: defesa central lenta, problemas nos cantos..."
         />
+        <FieldError message={fieldErrors.pontos_fracos} />
       </div>
 
       <div className="md:col-span-2">
@@ -648,11 +844,12 @@ function NotasTab({
         </label>
         <textarea
           rows={3}
-          value={opponent.atletas_chave ?? ""}
-          onChange={(e) => patch("atletas_chave", e.target.value)}
-          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          value={draft.atletas_chave ?? ""}
+          onChange={(e) => updateDraft("atletas_chave", e.target.value)}
+          className={TEXTAREA_CLASS}
           placeholder="Ex: #10 finalizador, #7 alas..."
         />
+        <FieldError message={fieldErrors.atletas_chave} />
       </div>
 
       <div className="md:col-span-2">
@@ -661,11 +858,12 @@ function NotasTab({
         </label>
         <textarea
           rows={3}
-          value={opponent.notas_gerais ?? ""}
-          onChange={(e) => patch("notas_gerais", e.target.value)}
-          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          value={draft.notas_gerais ?? ""}
+          onChange={(e) => updateDraft("notas_gerais", e.target.value)}
+          className={TEXTAREA_CLASS}
           placeholder="Outras observacoes..."
         />
+        <FieldError message={fieldErrors.notas_gerais} />
       </div>
     </div>
   );
@@ -792,62 +990,63 @@ function HistoricoTab({
 // ─── Tab: Info ─────────────────────────────────────────────────────────────────
 
 function InfoTab({
-  opponent,
-  patch,
-  saveStatus,
-  saveError,
+  draft,
+  updateDraft,
+  fieldErrors,
 }: {
-  opponent: Opponent;
-  patch: (field: keyof Opponent, value: string | number | null) => void;
-  saveStatus: SaveStatus;
-  saveError: string | null;
+  draft: DraftFields;
+  updateDraft: <K extends keyof DraftFields>(field: K, value: DraftFields[K]) => void;
+  fieldErrors: Record<string, string>;
 }) {
-  // Inicializa local state uma vez na montagem (Opponent ja carregado).
-  // Inputs nao-controlados pelo prop apos isto — onBlur compara com prop.
-  const [phoneLocal, setPhoneLocal] = useState(opponent.phone ?? "");
-  const [phoneError, setPhoneError] = useState<string | null>(null);
   const [latLocal, setLatLocal] = useState(
-    opponent.home_ground_lat != null ? String(opponent.home_ground_lat) : "",
+    draft.home_ground_lat != null ? String(draft.home_ground_lat) : "",
   );
   const [lngLocal, setLngLocal] = useState(
-    opponent.home_ground_lng != null ? String(opponent.home_ground_lng) : "",
+    draft.home_ground_lng != null ? String(draft.home_ground_lng) : "",
   );
+  const [prevLat, setPrevLat] = useState(draft.home_ground_lat);
+  const [prevLng, setPrevLng] = useState(draft.home_ground_lng);
+  const [latLngError, setLatLngError] = useState<string | null>(null);
 
-  function handlePhoneBlur() {
-    const trimmed = phoneLocal.trim();
-    if (trimmed === "" && opponent.phone != null) {
-      patch("phone", null);
-      setPhoneError(null);
-      return;
-    }
-    const regex = /^(\+351\s?)?[239]\d{2}\s?\d{3}\s?\d{3}$/;
-    if (trimmed && !regex.test(trimmed)) {
-      setPhoneError("Formato invalido (ex: +351 912 345 678).");
-      return;
-    }
-    setPhoneError(null);
-    if (trimmed !== (opponent.phone ?? "")) {
-      patch("phone", trimmed || null);
-    }
+  if (draft.home_ground_lat !== prevLat) {
+    setPrevLat(draft.home_ground_lat);
+    setLatLocal(draft.home_ground_lat != null ? String(draft.home_ground_lat) : "");
+  }
+  if (draft.home_ground_lng !== prevLng) {
+    setPrevLng(draft.home_ground_lng);
+    setLngLocal(draft.home_ground_lng != null ? String(draft.home_ground_lng) : "");
   }
 
-  function handleLatLngBlur() {
-    const lat = latLocal.trim() === "" ? null : Number(latLocal);
-    const lng = lngLocal.trim() === "" ? null : Number(lngLocal);
-    if (lat !== null && (!Number.isFinite(lat) || lat < -90 || lat > 90)) {
-      toast.error("Latitude invalida.");
+  function commitLat(raw: string) {
+    const trimmed = raw.trim();
+    if (trimmed === "") {
+      updateDraft("home_ground_lat", null);
+      setLatLngError(null);
       return;
     }
-    if (lng !== null && (!Number.isFinite(lng) || lng < -180 || lng > 180)) {
-      toast.error("Longitude invalida.");
+    const num = Number(trimmed);
+    if (!Number.isFinite(num) || num < -90 || num > 90) {
+      setLatLngError("Latitude invalida.");
       return;
     }
-    if (lat !== (opponent.home_ground_lat ?? null)) {
-      patch("home_ground_lat", lat);
+    setLatLngError(null);
+    updateDraft("home_ground_lat", num);
+  }
+
+  function commitLng(raw: string) {
+    const trimmed = raw.trim();
+    if (trimmed === "") {
+      updateDraft("home_ground_lng", null);
+      setLatLngError(null);
+      return;
     }
-    if (lng !== (opponent.home_ground_lng ?? null)) {
-      patch("home_ground_lng", lng);
+    const num = Number(trimmed);
+    if (!Number.isFinite(num) || num < -180 || num > 180) {
+      setLatLngError("Longitude invalida.");
+      return;
     }
+    setLatLngError(null);
+    updateDraft("home_ground_lng", num);
   }
 
   return (
@@ -855,13 +1054,13 @@ function InfoTab({
       <div>
         <label className="block text-xs font-semibold uppercase text-slate-500 mb-1">
           Campo (nome)
-          <SaveIndicator status={saveStatus} error={saveError} />
         </label>
         <Input
-          value={opponent.home_ground ?? ""}
-          onChange={(e) => patch("home_ground", e.target.value)}
+          value={draft.home_ground ?? ""}
+          onChange={(e) => updateDraft("home_ground", e.target.value)}
           placeholder="Ex: Campo Municipal de Lourel"
         />
+        <FieldError message={fieldErrors.home_ground} />
       </div>
 
       <div>
@@ -869,10 +1068,11 @@ function InfoTab({
           Treinador
         </label>
         <Input
-          value={opponent.coach_name ?? ""}
-          onChange={(e) => patch("coach_name", e.target.value)}
+          value={draft.coach_name ?? ""}
+          onChange={(e) => updateDraft("coach_name", e.target.value)}
           placeholder="Nome do treinador"
         />
+        <FieldError message={fieldErrors.coach_name} />
       </div>
 
       <div>
@@ -880,15 +1080,12 @@ function InfoTab({
           Telefone
         </label>
         <Input
-          value={phoneLocal}
-          onChange={(e) => setPhoneLocal(e.target.value)}
-          onBlur={handlePhoneBlur}
+          value={draft.phone ?? ""}
+          onChange={(e) => updateDraft("phone", e.target.value)}
           placeholder="+351 912 345 678"
-          aria-invalid={!!phoneError}
+          aria-invalid={!!fieldErrors.phone}
         />
-        {phoneError && (
-          <p className="mt-1 text-xs text-red-600">{phoneError}</p>
-        )}
+        <FieldError message={fieldErrors.phone} />
       </div>
 
       <div>
@@ -896,10 +1093,11 @@ function InfoTab({
           Outros contactos
         </label>
         <Input
-          value={opponent.contact_info ?? ""}
-          onChange={(e) => patch("contact_info", e.target.value)}
+          value={draft.contact_info ?? ""}
+          onChange={(e) => updateDraft("contact_info", e.target.value)}
           placeholder="Email, redes sociais..."
         />
+        <FieldError message={fieldErrors.contact_info} />
       </div>
 
       <div className="md:col-span-2">
@@ -908,11 +1106,12 @@ function InfoTab({
         </label>
         <textarea
           rows={2}
-          value={opponent.home_ground_address ?? ""}
-          onChange={(e) => patch("home_ground_address", e.target.value)}
-          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          value={draft.home_ground_address ?? ""}
+          onChange={(e) => updateDraft("home_ground_address", e.target.value)}
+          className={TEXTAREA_CLASS}
           placeholder="Rua, codigo postal, cidade"
         />
+        <FieldError message={fieldErrors.home_ground_address} />
       </div>
 
       <div>
@@ -924,7 +1123,7 @@ function InfoTab({
           step="0.000001"
           value={latLocal}
           onChange={(e) => setLatLocal(e.target.value)}
-          onBlur={handleLatLngBlur}
+          onBlur={(e) => commitLat(e.target.value)}
           placeholder="Ex: 38.7223"
         />
       </div>
@@ -937,10 +1136,13 @@ function InfoTab({
           step="0.000001"
           value={lngLocal}
           onChange={(e) => setLngLocal(e.target.value)}
-          onBlur={handleLatLngBlur}
+          onBlur={(e) => commitLng(e.target.value)}
           placeholder="Ex: -9.1393"
         />
       </div>
+      {latLngError && (
+        <p className="md:col-span-2 -mt-2 text-xs text-red-600">{latLngError}</p>
+      )}
 
       <div className="md:col-span-2">
         <label className="block text-xs font-semibold uppercase text-slate-500 mb-1">
@@ -948,11 +1150,12 @@ function InfoTab({
         </label>
         <textarea
           rows={3}
-          value={opponent.youth_academy_notes ?? ""}
-          onChange={(e) => patch("youth_academy_notes", e.target.value)}
-          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          value={draft.youth_academy_notes ?? ""}
+          onChange={(e) => updateDraft("youth_academy_notes", e.target.value)}
+          className={TEXTAREA_CLASS}
           placeholder="Informacoes sobre formacao do adversario..."
         />
+        <FieldError message={fieldErrors.youth_academy_notes} />
       </div>
     </div>
   );

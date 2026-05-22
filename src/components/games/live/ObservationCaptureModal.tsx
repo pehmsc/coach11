@@ -80,7 +80,7 @@ function ObservationCaptureModalInner({
         rows={5}
         maxLength={2000}
         placeholder="Ex: extremo esquerdo n.º 7 muito rápido em transição, dificulta marcação individual…"
-        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
+        className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
       />
       <p className="text-xs text-slate-400">
         Cmd/Ctrl+Enter para guardar · Esc para fechar
