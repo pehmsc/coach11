@@ -31,7 +31,7 @@ export async function GET() {
 
     const { data: ageGroups, error } = await admin
       .from("age_groups")
-      .select("id, name")
+      .select("id, name, football_format")
       .eq("club_id", membership.club_id)
       .order("name");
 
