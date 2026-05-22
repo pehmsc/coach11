@@ -3,7 +3,9 @@
 import { useState } from "react";
 import { ChevronDown, ChevronUp, Info, Star } from "lucide-react";
 import { TacticalSystemPicker } from "@/components/games/TacticalSystemPicker";
+import { ObservationsReviewSection } from "./ObservationsReviewSection";
 import type { LivePlayer } from "./types";
+import type { GameOpponentObservation } from "@/types/database";
 
 interface ReviewPanelProps {
   playersWhoNeedPersistentStats: LivePlayer[];
@@ -27,6 +29,9 @@ interface ReviewPanelProps {
   setLiveAspectsToImprove: (v: string) => void;
   setLiveTeamNotes: (v: string) => void;
   setLiveCoachNotes: (v: string) => void;
+  // Observações sobre o adversário (PR B1)
+  observations: GameOpponentObservation[];
+  onDeleteObservation: (obsId: string) => void;
 }
 
 type MatchSheetSectionProps = {
@@ -204,6 +209,8 @@ export function ReviewPanel({
   setLiveAspectsToImprove,
   setLiveTeamNotes,
   setLiveCoachNotes,
+  observations,
+  onDeleteObservation,
 }: ReviewPanelProps) {
   const [showFichaSection, setShowFichaSection] = useState(true);
 
@@ -230,6 +237,10 @@ export function ReviewPanel({
           setLiveAspectsToImprove={setLiveAspectsToImprove}
           setLiveTeamNotes={setLiveTeamNotes}
           setLiveCoachNotes={setLiveCoachNotes}
+        />
+        <ObservationsReviewSection
+          observations={observations}
+          onDelete={onDeleteObservation}
         />
       </>
     );
@@ -345,6 +356,10 @@ export function ReviewPanel({
         setLiveAspectsToImprove={setLiveAspectsToImprove}
         setLiveTeamNotes={setLiveTeamNotes}
         setLiveCoachNotes={setLiveCoachNotes}
+      />
+      <ObservationsReviewSection
+        observations={observations}
+        onDelete={onDeleteObservation}
       />
     </>
   );

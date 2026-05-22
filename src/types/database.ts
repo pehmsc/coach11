@@ -215,6 +215,8 @@ export interface GameOpponentObservation {
   opponent_id: string;
   club_id: string;
   observation: string;
+  /** Minuto do jogo na captura. NULL se capturada fora do jogo. PR B1. */
+  minute?: number | null;
   promoted_to_opponent_at?: string | null;
   promoted_to_field?: "pontos_fortes" | "pontos_fracos" | "atletas_chave" | "notas_gerais" | null;
   promoted_by?: string | null;
@@ -228,6 +230,7 @@ export interface GameOpponentObservationInsert {
   opponent_id: string;
   club_id: string;
   observation: string;
+  minute?: number | null;
   created_by?: string | null;
 }
 

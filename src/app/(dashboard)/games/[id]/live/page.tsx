@@ -16,6 +16,7 @@ import { EventsLog } from "@/components/games/live/EventsLog";
 import { ReviewPanel } from "@/components/games/live/ReviewPanel";
 import { FinalizeSection } from "@/components/games/live/FinalizeSection";
 import { EventModal } from "@/components/games/live/EventModal";
+import { ObservationCaptureModal } from "@/components/games/live/ObservationCaptureModal";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 export default function LiveGamePage() {
@@ -132,6 +133,8 @@ export default function LiveGamePage() {
           canRegisterEvents={state.canRegisterEvents}
           canRegisterSubstitutionOrCard={state.canRegisterSubstitutionOrCard}
           openModal={state.openModal}
+          onOpenObservation={state.openObservationModal}
+          observationsDisabled={!state.game?.opponent_id}
         />
       )}
 
@@ -166,6 +169,8 @@ export default function LiveGamePage() {
           setLiveAspectsToImprove={state.setLiveAspectsToImprove}
           setLiveTeamNotes={state.setLiveTeamNotes}
           setLiveCoachNotes={state.setLiveCoachNotes}
+          observations={state.observations}
+          onDeleteObservation={state.deleteObservation}
         />
       )}
 
@@ -213,6 +218,15 @@ export default function LiveGamePage() {
         confirmGoal={state.confirmGoal}
         confirmCard={state.confirmCard}
         confirmSubstitution={state.confirmSubstitution}
+      />
+
+      {/* ── OBSERVAÇÃO MODAL (PR B1) ── */}
+      <ObservationCaptureModal
+        open={state.observationModalOpen}
+        currentMinute={state.currentMinute}
+        saving={state.savingObservation}
+        onClose={state.closeObservationModal}
+        onSave={(text, minute) => void state.createObservation(text, minute)}
       />
 
       {/* Confirmação ao apagar 1º amarelo que dispararia cascata

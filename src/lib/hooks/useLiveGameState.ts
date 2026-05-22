@@ -10,6 +10,7 @@ import { useLiveLineup } from "@/lib/hooks/live/useLiveLineup";
 import { useLiveDataLoader } from "@/lib/hooks/live/useLiveDataLoader";
 import { useLiveDerivedState } from "@/lib/hooks/live/useLiveDerivedState";
 import { useLiveEventModal } from "@/lib/hooks/live/useLiveEventModal";
+import { useLiveObservations } from "@/lib/hooks/live/useLiveObservations";
 import { useLiveFinalize } from "@/lib/hooks/live/useLiveFinalize";
 import type { LivePlayer } from "@/components/games/live/types";
 
@@ -22,8 +23,9 @@ export function useLiveGameState(id: string) {
   // input dos outros), mas `handleStartFirstHalf` precisa de chamar
   // persistInitialLineupSnapshot (useLiveLineup), setInitialStarterIds
   // (useLiveLineup) e startClock (useLiveClock). As refs são actualizadas
-  // durante o render após cada sub-hook ser definido — sem race porque o
-  // React garante sequência ordenada de hooks antes do retorno.
+  // num useEffect (após commit) — sem race porque handleStartFirstHalf só
+  // é chamado no click do utilizador, momento em que as refs já apontam
+  // para as funções reais.
   const persistInitialLineupSnapshotShadow = useRef<
     (ids: string[]) => Promise<void>
   >(async () => {});
@@ -134,6 +136,21 @@ export function useLiveGameState(id: string) {
     setKickoffError,
     events,
     initialStarterIds,
+  });
+
+  // Observações sobre o adversário (PR B1). Posicionado após o
+  // useLiveDataLoader porque precisa de `game?.opponent_id`.
+  const {
+    observations,
+    savingObservation,
+    observationModalOpen,
+    openObservationModal,
+    closeObservationModal,
+    createObservation,
+    deleteObservation,
+  } = useLiveObservations({
+    gameId: id,
+    hasOpponent: Boolean(game?.opponent_id),
   });
 
   const {
@@ -320,6 +337,15 @@ export function useLiveGameState(id: string) {
     setLiveTeamNotes,
     liveCoachNotes,
     setLiveCoachNotes,
+
+    // Observações sobre o adversário (PR B1)
+    observations,
+    savingObservation,
+    observationModalOpen,
+    openObservationModal,
+    closeObservationModal,
+    createObservation,
+    deleteObservation,
 
     // Actions
     pauseClock,
