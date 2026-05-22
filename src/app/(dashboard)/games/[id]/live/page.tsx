@@ -171,6 +171,8 @@ export default function LiveGamePage() {
           setLiveCoachNotes={state.setLiveCoachNotes}
           observations={state.observations}
           onDeleteObservation={state.deleteObservation}
+          onPromoteObservations={state.promoteObservations}
+          promotingObservations={state.promotingObservations}
         />
       )}
 

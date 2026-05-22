@@ -6,6 +6,7 @@ import { format, parseISO } from "date-fns";
 import { pt } from "date-fns/locale";
 import {
   AlertTriangle,
+  ClipboardList,
   Loader2,
   Trash2,
   History,
@@ -33,6 +34,7 @@ import { StickyBackLink } from "@/components/navigation/StickyBackLink";
 import { Breadcrumb } from "@/components/navigation/Breadcrumb";
 import { getReturnTo } from "@/hooks/useReturnTo";
 import { OpponentLogoUploader } from "@/components/opponents/OpponentLogoUploader";
+import { OpponentObservationsTab } from "@/components/games/observations/OpponentObservationsTab";
 import {
   useOpponentAutosave,
   type SaveStatus,
@@ -40,7 +42,7 @@ import {
 import type { FootballFormat, Opponent } from "@/types/database";
 import { opponentUpdateSchema } from "@/lib/validations/opponent";
 
-type DetailTab = "notas" | "historico" | "info";
+type DetailTab = "notas" | "observacoes" | "historico" | "info";
 
 type GameRow = {
   id: string;
@@ -436,6 +438,7 @@ export default function OpponentDetailPage({
           <div className="flex gap-0 overflow-x-auto -mx-4 px-4">
             {([
               { id: "notas", label: "Notas", icon: StickyNote },
+              { id: "observacoes", label: "Observações", icon: ClipboardList },
               {
                 id: "historico",
                 label: games.length > 0 ? `Historico (${games.length})` : "Historico",
@@ -468,6 +471,12 @@ export default function OpponentDetailPage({
             patch={patch}
             saveStatus={autosave.status}
             saveError={autosave.errorMessage}
+          />
+        )}
+        {tab === "observacoes" && (
+          <OpponentObservationsTab
+            opponent={opponent}
+            onPromoted={() => void load()}
           />
         )}
         {tab === "historico" && (
