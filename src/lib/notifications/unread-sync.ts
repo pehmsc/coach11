@@ -1,6 +1,5 @@
 export type UnreadCountPatch = {
   notifications?: number;
-  messages?: number;
 };
 
 const UNREAD_COUNTS_EVENT = "coach11:unread-counts";

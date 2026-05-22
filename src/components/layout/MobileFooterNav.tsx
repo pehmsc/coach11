@@ -25,7 +25,7 @@ export function MobileFooterNav({
   teamRole?: string | null;
 }) {
   const pathname = usePathname();
-  const { unreadMessages: unreadMessagesCount, unreadNotifications: unreadNotificationsCount } = useUnreadCounts();
+  const { unreadNotifications: unreadNotificationsCount } = useUnreadCounts();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   return (
@@ -37,7 +37,6 @@ export function MobileFooterNav({
         avatarUrl={avatarUrl}
         source={source}
         teamRole={teamRole}
-        unreadMessagesCount={unreadMessagesCount}
         unreadNotificationsCount={unreadNotificationsCount}
       />
 
@@ -79,11 +78,7 @@ export function MobileFooterNav({
             const isActive = isNavItemActive(pathname, item);
             const label = item.mobileLabel || item.label;
             const badgeCount =
-              item.badgeKey === "messages"
-                ? unreadMessagesCount
-                : item.badgeKey === "notifications"
-                  ? unreadNotificationsCount
-                  : 0;
+              item.badgeKey === "notifications" ? unreadNotificationsCount : 0;
 
             return (
               <Link

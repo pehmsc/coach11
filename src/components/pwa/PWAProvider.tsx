@@ -237,16 +237,12 @@ export function PWAProvider({
 
     function handleServiceWorkerMessage(event: MessageEvent) {
       const data = event.data as
-        | { type?: string; badgeCount?: number; messageBadgeCount?: number }
+        | { type?: string; badgeCount?: number }
         | undefined;
       if (data?.type !== "COACH11_PUSH_RECEIVED") return;
 
       if (typeof data.badgeCount === "number") {
         dispatchUnreadCountPatch({ notifications: data.badgeCount });
-      }
-
-      if (typeof data.messageBadgeCount === "number") {
-        dispatchUnreadCountPatch({ messages: data.messageBadgeCount });
       }
     }
 
