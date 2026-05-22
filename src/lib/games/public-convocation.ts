@@ -95,14 +95,20 @@ export function buildPublicConvocationEntries({
   return entries.sort(comparePublicConvocationEntries);
 }
 
-export function resolvePublicConvocationNotes(params: {
-  convocationNotes?: string | null | undefined;
-  legacyGameNotes?: string | null | undefined;
-}) {
-  return (
-    normalizePublicConvocationNotes(params.convocationNotes) ||
-    normalizePublicConvocationNotes(params.legacyGameNotes)
-  );
+// Notas do jogo (`games.notes`) e notas da convocatória (`convocations.notes`)
+// são dois campos públicos distintos com regras diferentes:
+// - Notas do jogo: instruções gerais pré-jogo (sempre visíveis no público).
+// - Notas da convocatória: contextualizam a lista de convocados (só visíveis
+//   quando a convocatória está publicada).
+// As funções abaixo não fazem fallback cruzado entre as duas para evitar que
+// uma nota apareça duplicada em ambas as secções nem que a nota pública do
+// jogo herde a regra de privacidade da convocatória.
+export function resolveGamePublicNotes(notes: string | null | undefined) {
+  return normalizePublicConvocationNotes(notes);
+}
+
+export function resolveConvocationNotes(notes: string | null | undefined) {
+  return normalizePublicConvocationNotes(notes);
 }
 
 export function hasPublicConvocationContent(params: {
