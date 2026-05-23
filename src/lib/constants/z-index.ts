@@ -16,7 +16,6 @@
  * modalTop    │ z-[90]   │ Modals that appear above other modals (TrainingCreateModal,
  * │          │           │   CalendarEventModal, OpenMapsButton chooser)
  * modalConfirm│ z-[100]  │ Confirmation dialogs nested inside an open modal
- * │          │           │   (e.g. TrainingDetailModal delete confirm)
  * appModal    │ z-[140]  │ AppModal base component (highest modal priority)
  * mapOverlay  │ z-[500]  │ Absolute overlays INSIDE the Leaflet map shell
  * │          │           │   (must exceed Leaflet's internal z-indexes ~400-500)
