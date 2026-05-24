@@ -68,6 +68,10 @@ const SRC_ALLOWED_EXCEPTIONS = new Map([
   ["src/app/(dashboard)/dashboard/page.tsx", new Set(["src-admin-client"])],
   // CLUB_COORD_ALL_AGE_GROUPS: club_coordinator vê todos os escalões do clube — boundary legítima
   ["src/lib/auth/team-context.ts", new Set(["src-club-id-filter"])],
+  // INSIGHTS-AGE-GROUP-SELECT: o seletor de equipa na página de insights precisa de listar
+  // os escalões do clube escolhido (gate ado por RLS). Boundary legítima para um dashboard
+  // de agregação cross-age-group dentro de um club_id.
+  ["src/app/(dashboard)/insights/page.tsx", new Set(["src-club-id-filter"])],
 ]);
 
 const MIGRATION_ALLOWED_EXCEPTIONS = new Map([
@@ -91,6 +95,14 @@ const MIGRATION_ALLOWED_EXCEPTIONS = new Map([
     // tem acesso dentro de um club_id. Sem este wrapper teríamos de replicar a lógica
     // (membership + super-coordinator bypass) inline em cada agregação futura.
     "supabase/migrations/20260524074907_create_get_club_insights.sql",
+    new Set(["sql-club-wrapper-usage"]),
+  ],
+  [
+    // INSIGHTS-AGE-GROUP-FILTER: substitui a RPC anterior para adicionar p_age_group_id e
+    // corrigir o cálculo de game_minutes (passa a tempo total dos jogos em vez de soma de
+    // minutos-atleta). Mantém a mesma justificação da migration INSIGHTS-FASE-1 para o uso
+    // de user_can_access_club como helper de gating.
+    "supabase/migrations/20260524225300_get_club_insights_age_group_and_game_minutes.sql",
     new Set(["sql-club-wrapper-usage"]),
   ],
 ]);

@@ -20,13 +20,14 @@ import type { ClubInsights } from "@/types/database";
 type Tab = "trainings" | "games";
 
 type ClubOption = { id: string; name: string };
+type AgeGroupOption = { id: string; name: string };
 
-function formatMinutes(mins: number) {
-  if (!mins || mins <= 0) return "0";
-  if (mins < 60) return `${mins}`;
-  const hours = Math.floor(mins / 60);
-  const rem = Math.round(mins % 60);
-  return rem === 0 ? `${hours}h` : `${hours}h${rem.toString().padStart(2, "0")}`;
+const ALL_AGE_GROUPS = "__all__";
+const minutesFormatter = new Intl.NumberFormat("pt-PT");
+
+function formatMinutesRaw(mins: number) {
+  if (!mins || mins <= 0) return "0 min";
+  return `${minutesFormatter.format(mins)} min`;
 }
 
 function KpiCard({
@@ -60,6 +61,9 @@ export default function InsightsPage() {
   const [clubs, setClubs] = useState<ClubOption[]>([]);
   const [clubsLoading, setClubsLoading] = useState(true);
   const [selectedClubId, setSelectedClubId] = useState<string>("");
+  const [ageGroups, setAgeGroups] = useState<AgeGroupOption[]>([]);
+  const [ageGroupsLoading, setAgeGroupsLoading] = useState(false);
+  const [selectedAgeGroupId, setSelectedAgeGroupId] = useState<string>(ALL_AGE_GROUPS);
   const [activeTab, setActiveTab] = useState<Tab>("trainings");
 
   useEffect(() => {
@@ -112,17 +116,53 @@ export default function InsightsPage() {
     };
   }, [supabase]);
 
+  useEffect(() => {
+    let cancelled = false;
+    setSelectedAgeGroupId(ALL_AGE_GROUPS);
+
+    if (!selectedClubId) {
+      setAgeGroups([]);
+      return;
+    }
+
+    async function loadAgeGroups() {
+      setAgeGroupsLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from("age_groups")
+          .select("id, name")
+          .eq("club_id", selectedClubId)
+          .order("name");
+        if (error) throw error;
+        if (cancelled) return;
+        setAgeGroups(((data as AgeGroupOption[] | null) ?? []).map((a) => ({ id: a.id, name: a.name })));
+      } catch {
+        if (!cancelled) setAgeGroups([]);
+      } finally {
+        if (!cancelled) setAgeGroupsLoading(false);
+      }
+    }
+    void loadAgeGroups();
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase, selectedClubId]);
+
   const fetchInsights = useCallback(async (): Promise<ClubInsights | null> => {
     if (!selectedClubId) return null;
     const { data, error } = await supabase
-      .rpc("get_club_insights", { p_club_id: selectedClubId })
+      .rpc("get_club_insights", {
+        p_club_id: selectedClubId,
+        p_season: null,
+        p_age_group_id: selectedAgeGroupId === ALL_AGE_GROUPS ? null : selectedAgeGroupId,
+      })
       .single();
     if (error) throw error;
     return (data as ClubInsights | null) ?? null;
-  }, [supabase, selectedClubId]);
+  }, [supabase, selectedClubId, selectedAgeGroupId]);
 
   const insightsQuery = useQuery({
-    queryKey: ["insights", "club", selectedClubId],
+    queryKey: ["insights", "club", selectedClubId, "ageGroup", selectedAgeGroupId],
     queryFn: fetchInsights,
     enabled: Boolean(selectedClubId),
     placeholderData: keepPreviousData,
@@ -146,6 +186,13 @@ export default function InsightsPage() {
     };
   }, [insights, gamesTotal]);
 
+  const scopeIsAll = selectedAgeGroupId === ALL_AGE_GROUPS;
+  const scopeHelperText = insights
+    ? scopeIsAll
+      ? `Agrega ${insights.age_groups_count} ${insights.age_groups_count === 1 ? "escalão" : "escalões"} deste clube${insights.players_count > 0 ? ` · ${insights.players_count} atletas` : ""}.`
+      : `Equipa única${insights.players_count > 0 ? ` · ${insights.players_count} atletas` : ""}.`
+    : null;
+
   return (
     <div className="p-4 md:p-8 max-w-4xl mx-auto space-y-5">
       <div className="flex items-center gap-2">
@@ -154,45 +201,74 @@ export default function InsightsPage() {
       </div>
 
       <Card>
-        <CardContent className="pt-4 pb-4 space-y-2">
-          <label
-            htmlFor="insights-club-select"
-            className="text-[11px] uppercase tracking-wide text-slate-500 font-semibold"
-          >
-            Clube
-          </label>
-          <div className="relative">
-            <select
-              id="insights-club-select"
-              aria-label="Selecionar clube"
-              value={selectedClubId}
-              onChange={(e) => setSelectedClubId(e.target.value)}
-              disabled={clubsLoading || clubs.length === 0}
-              className="w-full appearance-none bg-white border border-slate-300 rounded-lg px-3 py-2 pr-8 text-sm text-slate-900 focus:outline-none focus:border-emerald-500 disabled:bg-slate-50 disabled:text-slate-400 cursor-pointer"
+        <CardContent className="pt-4 pb-4 space-y-3">
+          <div className="space-y-2">
+            <label
+              htmlFor="insights-club-select"
+              className="text-[11px] uppercase tracking-wide text-slate-500 font-semibold"
             >
-              {clubsLoading ? (
-                <option value="">A carregar clubes…</option>
-              ) : clubs.length === 0 ? (
-                <option value="">Sem clubes acessíveis</option>
-              ) : (
-                clubs.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))
-              )}
-            </select>
-            <ChevronDown
-              size={14}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
-            />
+              Clube
+            </label>
+            <div className="relative">
+              <select
+                id="insights-club-select"
+                aria-label="Selecionar clube"
+                value={selectedClubId}
+                onChange={(e) => setSelectedClubId(e.target.value)}
+                disabled={clubsLoading || clubs.length === 0}
+                className="w-full appearance-none bg-white border border-slate-300 rounded-lg px-3 py-2 pr-8 text-sm text-slate-900 focus:outline-none focus:border-emerald-500 disabled:bg-slate-50 disabled:text-slate-400 cursor-pointer"
+              >
+                {clubsLoading ? (
+                  <option value="">A carregar clubes…</option>
+                ) : clubs.length === 0 ? (
+                  <option value="">Sem clubes acessíveis</option>
+                ) : (
+                  clubs.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))
+                )}
+              </select>
+              <ChevronDown
+                size={14}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+              />
+            </div>
           </div>
-          {insights ? (
-            <p className="text-xs text-slate-500">
-              Agrega {insights.age_groups_count}{" "}
-              {insights.age_groups_count === 1 ? "escalão" : "escalões"} deste clube
-              {insights.players_count > 0 ? ` · ${insights.players_count} atletas` : ""}.
-            </p>
+
+          <div className="space-y-2">
+            <label
+              htmlFor="insights-age-group-select"
+              className="text-[11px] uppercase tracking-wide text-slate-500 font-semibold"
+            >
+              Equipa
+            </label>
+            <div className="relative">
+              <select
+                id="insights-age-group-select"
+                aria-label="Selecionar equipa"
+                value={selectedAgeGroupId}
+                onChange={(e) => setSelectedAgeGroupId(e.target.value)}
+                disabled={!selectedClubId || ageGroupsLoading}
+                className="w-full appearance-none bg-white border border-slate-300 rounded-lg px-3 py-2 pr-8 text-sm text-slate-900 focus:outline-none focus:border-emerald-500 disabled:bg-slate-50 disabled:text-slate-400 cursor-pointer"
+              >
+                <option value={ALL_AGE_GROUPS}>Todas as equipas</option>
+                {ageGroups.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown
+                size={14}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+              />
+            </div>
+          </div>
+
+          {scopeHelperText ? (
+            <p className="text-xs text-slate-500">{scopeHelperText}</p>
           ) : null}
         </CardContent>
       </Card>
@@ -267,7 +343,7 @@ export default function InsightsPage() {
             <KpiCard
               icon={Clock}
               label="Minutos de treino"
-              value={formatMinutes(insights.training_minutes)}
+              value={formatMinutesRaw(insights.training_minutes)}
               helper="Sessões concluídas"
             />
             <KpiCard
@@ -331,8 +407,8 @@ export default function InsightsPage() {
             <KpiCard
               icon={Clock}
               label="Minutos de jogo"
-              value={formatMinutes(insights.game_minutes)}
-              helper="Soma dos jogadores"
+              value={formatMinutesRaw(insights.game_minutes)}
+              helper="Tempo total disputado"
             />
           </div>
 
