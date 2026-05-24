@@ -84,7 +84,7 @@ export function CompetitionDetailView({ competitionId, ageGroupId }: Props) {
           "id, game_datetime, opponent_name, opponent_short_name, is_home, status, score_home, score_away, title",
         )
         .eq("competition_id", competitionId)
-        .order("game_datetime", { ascending: true }),
+        .order("game_datetime", { ascending: false }),
     ]);
 
     if (compRes.error || !compRes.data) {
