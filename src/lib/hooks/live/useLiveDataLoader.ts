@@ -35,6 +35,8 @@ interface UseLiveDataLoaderArgs {
   supabase: SupabaseClient;
   /** Do useRouter() do Next.js — apenas o método `replace` é necessário. */
   router: { replace: (url: string) => void };
+  /** URL para onde redirecionar quando o jogo ja esta `completed` ao carregar. */
+  summaryHref: string;
 
   // Callbacks do useLiveClock
   setClockHydrated: (hydrated: boolean) => void;
@@ -73,6 +75,7 @@ export function useLiveDataLoader({
   id,
   supabase,
   router,
+  summaryHref,
   setClockHydrated,
   setClockState,
   setNowMs,
@@ -496,9 +499,9 @@ export function useLiveDataLoader({
   // Effect 3: redirect para summary se status === completed
   useEffect(() => {
     if (game?.status === "completed") {
-      router.replace(`/games/${id}/summary`);
+      router.replace(summaryHref);
     }
-  }, [game?.status, id, router]);
+  }, [game?.status, router, summaryHref]);
 
   return {
     loading,

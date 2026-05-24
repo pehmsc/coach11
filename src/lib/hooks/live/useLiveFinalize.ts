@@ -21,6 +21,8 @@ interface UseLiveFinalizeArgs {
   id: string;
   /** Do useRouter() do Next.js — apenas `.push` é necessário. */
   router: { push: (url: string) => void };
+  /** URL para onde redirecionar após `finalizeGame()`. */
+  summaryHref: string;
 
   // Do useLiveDataLoader
   game: Game | null;
@@ -80,6 +82,7 @@ export interface UseLiveFinalizeReturn {
 export function useLiveFinalize({
   id,
   router,
+  summaryHref,
   game,
   setGame,
   phase,
@@ -285,7 +288,7 @@ export function useLiveFinalize({
           : prev,
       );
       toast.success("Jogo finalizado e estatísticas guardadas!");
-      router.push(`/games/${id}/summary`);
+      router.push(summaryHref);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Erro interno ao finalizar jogo.";
