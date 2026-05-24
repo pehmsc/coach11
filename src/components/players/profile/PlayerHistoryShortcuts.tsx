@@ -3,25 +3,40 @@
 import Link from "next/link";
 import { Calendar, ChevronRight, Dumbbell } from "lucide-react";
 
+export type PlayerHistoryHrefs = {
+  games: string;
+  trainings: string;
+};
+
 interface PlayerHistoryShortcutsProps {
   playerId: string;
+  hrefs?: PlayerHistoryHrefs;
+}
+
+function defaultHrefs(playerId: string): PlayerHistoryHrefs {
+  return {
+    games: `/players/${playerId}/games`,
+    trainings: `/players/${playerId}/trainings`,
+  };
 }
 
 export function PlayerHistoryShortcuts({
   playerId,
+  hrefs,
 }: PlayerHistoryShortcutsProps) {
+  const resolved = hrefs ?? defaultHrefs(playerId);
   const items = [
     {
       label: "Histórico de jogos",
       description: "Lista cronológica com mini-stats por linha.",
       icon: Calendar,
-      href: `/players/${playerId}/games`,
+      href: resolved.games,
     },
     {
       label: "Histórico de treinos",
       description: "Presença, falta, justificação por sessão.",
       icon: Dumbbell,
-      href: `/players/${playerId}/trainings`,
+      href: resolved.trainings,
     },
   ];
 

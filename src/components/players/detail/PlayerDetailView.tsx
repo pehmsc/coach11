@@ -11,7 +11,10 @@ import {
   PlayerStatsGroup,
   type PlayerSeasonStats,
 } from "@/components/players/profile/PlayerStatsGroup";
-import { PlayerHistoryShortcuts } from "@/components/players/profile/PlayerHistoryShortcuts";
+import {
+  PlayerHistoryShortcuts,
+  type PlayerHistoryHrefs,
+} from "@/components/players/profile/PlayerHistoryShortcuts";
 import type { Player } from "@/types/database";
 
 interface PlayerResponse {
@@ -39,6 +42,11 @@ export type PlayerDetailScope = {
   returnToKey: string;
   /** Label do StickyBackLink. */
   backLabel: string;
+  /**
+   * Hrefs custom para os shortcuts de histórico (jogos/treinos).
+   * Quando omitido, usa as rotas globais `/players/[id]/{games,trainings}`.
+   */
+  historyHrefs?: PlayerHistoryHrefs;
 };
 
 const GLOBAL_SCOPE: PlayerDetailScope = {
@@ -142,7 +150,7 @@ export function PlayerDetailView({ playerId, scope = GLOBAL_SCOPE }: Props) {
             onSaved={(updated) => setPlayer(updated)}
           />
           <PlayerStatsGroup stats={stats} status={player.status} />
-          <PlayerHistoryShortcuts playerId={playerId} />
+          <PlayerHistoryShortcuts playerId={playerId} hrefs={scope.historyHrefs} />
         </div>
       ) : null}
     </div>
