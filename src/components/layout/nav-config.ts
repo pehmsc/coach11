@@ -12,6 +12,7 @@ import {
   Settings,
   Shield,
   Sword,
+  TrendingUp,
   Trophy,
   Users,
 } from "lucide-react";
@@ -117,6 +118,12 @@ const NAV_ITEMS = {
     mobileLabel: "Stats",
     icon: BarChart2,
   },
+  insights: {
+    id: "insights",
+    href: "/insights",
+    label: "Insights",
+    icon: TrendingUp,
+  },
   settings: {
     id: "settings",
     href: "/settings",
@@ -139,6 +146,7 @@ const BASE_APP_NAV_SECTIONS: AppNavSection[] = [
       NAV_ITEMS.club,
       NAV_ITEMS.teams,
       NAV_ITEMS.statistics,
+      NAV_ITEMS.insights,
     ],
   },
   {
@@ -157,6 +165,7 @@ const BASE_MOBILE_APP_NAV_SECTIONS: AppNavSection[] = [
       NAV_ITEMS.exercises,
       NAV_ITEMS.club,
       NAV_ITEMS.teams,
+      NAV_ITEMS.insights,
       NAV_ITEMS.notifications,
     ],
   },

@@ -84,6 +84,15 @@ const MIGRATION_ALLOWED_EXCEPTIONS = new Map([
     "supabase/migrations/20260326010000_normalize_coordinator_roles.sql",
     new Set(["sql-team-staff-write"]),
   ],
+  [
+    // INSIGHTS-FASE-1: RPC de agregação de KPIs por clube. user_can_access_club é o
+    // helper de gating de leitura cross-age-group já existente — apropriado aqui porque
+    // a métrica do clube é, por construção, a soma de todos os escalões a que o user
+    // tem acesso dentro de um club_id. Sem este wrapper teríamos de replicar a lógica
+    // (membership + super-coordinator bypass) inline em cada agregação futura.
+    "supabase/migrations/20260524074907_create_get_club_insights.sql",
+    new Set(["sql-club-wrapper-usage"]),
+  ],
 ]);
 
 const SRC_RULES = [
