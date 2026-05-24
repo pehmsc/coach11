@@ -69,8 +69,8 @@ export function extractTimeFromDateTime(
  *
  * - `longWithoutYear`: "domingo, 24 de maio · 19:20" (GameDetailView)
  * - `longWithYear`:    "domingo, 24 de maio de 2026 · 19:20" (detalhe publico)
- * - `shortWithYear`:   "24 de mai. de 2026 · 19:20" (lista publica)
- * - `shortWithoutYear`:"24 de mai. · 19:20" (GameSummaryView, scoreboard live)
+ * - `shortWithYear`:   "24/05/2026 · 19:20" (lista publica)
+ * - `shortWithoutYear`:"24/05 · 19:20" (GameSummaryView, scoreboard live)
  * - `monthYear`:       "maio de 2026" (agregacao por mes em GamesSection)
  */
 export type GameDateTimeFormat =
@@ -142,6 +142,60 @@ export function formatGameDateTime(
   }).format(date);
 
   return `${datePart} · ${timePart}`;
+}
+
+export type GameDateTimeParts = {
+  /** Dia do mes, ex: "24". */
+  day: string;
+  /** Mes abreviado em pt-PT lowercase, ex: "mai". */
+  monthShort: string;
+  /** Hora HH:MM, ex: "18:20". */
+  time: string;
+};
+
+/**
+ * Decompoe um datetime em partes (dia/mes-curto/hora) para usos em
+ * componentes que renderizam cada campo separadamente (ex: card de
+ * jogo em GamesSection com layout vertical). Forca `Europe/Lisbon` por
+ * defeito.
+ *
+ * Devolve `null` para input null/undefined/invalido — o caller decide
+ * o fallback visual.
+ *
+ * Nota sobre `monthShort`: Intl pt-PT com `month: "short"` devolve
+ * formato numerico "05" em vez de textual "mai". Para preservar o UX
+ * original (abreviado textual), uso `month: "long"` ("maio") + slice
+ * para 3 chars. Output: "mai", "jun", etc — o CSS `capitalize` do
+ * caller transforma em "Mai", "Jun".
+ */
+export function formatGameDateTimeParts(
+  value: string | null | undefined,
+  timeZone: string = "Europe/Lisbon",
+): GameDateTimeParts | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  const date = new Date(value.trim());
+  if (Number.isNaN(date.getTime())) return null;
+
+  const day = new Intl.DateTimeFormat("pt-PT", {
+    day: "numeric",
+    timeZone,
+  }).format(date);
+  const monthLong = new Intl.DateTimeFormat("pt-PT", {
+    month: "long",
+    timeZone,
+  }).format(date);
+  const time = new Intl.DateTimeFormat("pt-PT", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone,
+  }).format(date);
+
+  return {
+    day,
+    monthShort: monthLong.slice(0, 3).toLowerCase(),
+    time,
+  };
 }
 
 export function formatTimeRange(

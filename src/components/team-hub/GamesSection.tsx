@@ -6,6 +6,10 @@ import { format, parseISO } from "date-fns";
 import { pt } from "date-fns/locale";
 import { formatGameDateTime } from "@/lib/events/time";
 import {
+  extractTimeFromDateTime,
+  formatGameDateTimeParts,
+} from "@/lib/events/time";
+import {
   Loader2,
   Sword,
   Home,
@@ -285,9 +289,8 @@ export function GamesSection({
       opponent_short_name:
         normalizeManualShortName(source.opponent_short_name, 5) || "",
       date: "",
-      start_time: source.game_datetime
-        ? source.game_datetime.split("T")[1]?.substring(0, 5) || "15:00"
-        : "15:00",
+      start_time:
+        extractTimeFromDateTime(source.game_datetime) || "15:00",
       end_time: source.end_time?.slice(0, 5) || "",
       location: source.location || "",
       formatted_address: source.formatted_address || "",
@@ -515,7 +518,7 @@ function GameCard({
   onClick: () => void;
   onDuplicate: () => void;
 }) {
-  const dt = parseISO(game.game_datetime);
+  const parts = formatGameDateTimeParts(game.game_datetime);
   const hasResult =
     isClosedGameStatus(game.status) &&
     game.score_home != null &&
@@ -528,12 +531,12 @@ function GameCard({
     >
       <div className="flex-shrink-0 w-12 text-center">
         <p className="text-lg font-bold text-slate-900 leading-none">
-          {format(dt, "d")}
+          {parts?.day ?? "—"}
         </p>
         <p className="text-xs text-slate-400 capitalize">
-          {format(dt, "MMM", { locale: pt })}
+          {parts?.monthShort ?? "—"}
         </p>
-        <p className="text-[10px] text-slate-300">{format(dt, "HH:mm")}</p>
+        <p className="text-[10px] text-slate-300">{parts?.time ?? "--:--"}</p>
       </div>
 
       <div className="flex-shrink-0 flex flex-col items-center gap-0.5">
