@@ -90,7 +90,13 @@ export default async function DashboardLayout({
             style={{ ["--coach11-top-inset" as string]: topInset }}
           >
             {/* Sidebar — visível apenas em desktop */}
-            <Sidebar profile={profile} avatarUrl={avatarUrl} source={analyticsContext?.source ?? null} teamRole={analyticsContext?.teamRole ?? null} />
+            <Sidebar
+              profile={profile}
+              avatarUrl={avatarUrl}
+              source={analyticsContext?.source ?? null}
+              teamRole={analyticsContext?.teamRole ?? null}
+              planType={analyticsContext?.club?.plan_type ?? "club"}
+            />
 
             {/* Conteúdo principal */}
             <main
@@ -101,7 +107,13 @@ export default async function DashboardLayout({
             </main>
 
             {/* Navegação inferior — visível apenas em mobile */}
-            <BottomNav profile={profile} avatarUrl={avatarUrl} source={analyticsContext?.source ?? null} teamRole={analyticsContext?.teamRole ?? null} />
+            <BottomNav
+              profile={profile}
+              avatarUrl={avatarUrl}
+              source={analyticsContext?.source ?? null}
+              teamRole={analyticsContext?.teamRole ?? null}
+              planType={analyticsContext?.club?.plan_type ?? "club"}
+            />
           </div>
         </AgeGroupProvider>
       </UnreadNotificationsProvider>

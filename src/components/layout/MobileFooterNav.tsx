@@ -9,6 +9,7 @@ import {
   MOBILE_FOOTER_NAV_ITEMS,
   isNavItemActive,
   type NavProfile,
+  type PlanType,
 } from "@/components/layout/nav-config";
 import { UserAvatar } from "@/components/layout/UserAvatar";
 import { cn } from "@/lib/utils";
@@ -18,11 +19,13 @@ export function MobileFooterNav({
   avatarUrl,
   source,
   teamRole,
+  planType = "club",
 }: {
   profile: NavProfile;
   avatarUrl?: string | null;
   source?: string | null;
   teamRole?: string | null;
+  planType?: PlanType;
 }) {
   const pathname = usePathname();
   const { unreadNotifications: unreadNotificationsCount } = useUnreadCounts();
@@ -37,6 +40,7 @@ export function MobileFooterNav({
         avatarUrl={avatarUrl}
         source={source}
         teamRole={teamRole}
+        planType={planType}
         unreadNotificationsCount={unreadNotificationsCount}
       />
 

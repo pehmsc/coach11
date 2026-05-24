@@ -132,7 +132,38 @@ const NAV_ITEMS = {
   },
 } satisfies Record<string, AppNavItem>;
 
-const BASE_APP_NAV_SECTIONS: AppNavSection[] = [
+/**
+ * Tipo de plano do clube. Reflecte clubs.plan_type.
+ *
+ * - `'club'`     — sales-led, multi-team. Nav remove items "single-team
+ *   legacy" (Plantel/Jogos/Treinos/Competicoes) — esses sao acessiveis via
+ *   Equipas -> Escalao -> tab.
+ * - `'individual'` — self-service, treinador unico. Nav single-team classica
+ *   (items acessiveis directos), sem Equipas/Clube (irrelevantes).
+ */
+export type PlanType = "individual" | "club";
+
+const CLUB_APP_NAV_SECTIONS: AppNavSection[] = [
+  {
+    id: "main",
+    items: [
+      NAV_ITEMS.dashboard,
+      NAV_ITEMS.calendar,
+      NAV_ITEMS.notifications,
+      NAV_ITEMS.teams,
+      NAV_ITEMS.club,
+      NAV_ITEMS.insights,
+      NAV_ITEMS.statistics,
+      NAV_ITEMS.exercises,
+    ],
+  },
+  {
+    id: "settings",
+    items: [NAV_ITEMS.settings],
+  },
+];
+
+const INDIVIDUAL_APP_NAV_SECTIONS: AppNavSection[] = [
   {
     id: "main",
     items: [
@@ -142,11 +173,10 @@ const BASE_APP_NAV_SECTIONS: AppNavSection[] = [
       NAV_ITEMS.competitions,
       NAV_ITEMS.games,
       NAV_ITEMS.trainings,
+      NAV_ITEMS.players,
       NAV_ITEMS.exercises,
-      NAV_ITEMS.club,
-      NAV_ITEMS.teams,
-      NAV_ITEMS.statistics,
       NAV_ITEMS.insights,
+      NAV_ITEMS.statistics,
     ],
   },
   {
@@ -155,16 +185,33 @@ const BASE_APP_NAV_SECTIONS: AppNavSection[] = [
   },
 ];
 
-const BASE_MOBILE_APP_NAV_SECTIONS: AppNavSection[] = [
+const CLUB_MOBILE_APP_NAV_SECTIONS: AppNavSection[] = [
+  {
+    id: "main",
+    items: [
+      NAV_ITEMS.teams,
+      NAV_ITEMS.club,
+      NAV_ITEMS.insights,
+      NAV_ITEMS.statistics,
+      NAV_ITEMS.exercises,
+      NAV_ITEMS.notifications,
+    ],
+  },
+  {
+    id: "settings",
+    items: [NAV_ITEMS.settings],
+  },
+];
+
+const INDIVIDUAL_MOBILE_APP_NAV_SECTIONS: AppNavSection[] = [
   {
     id: "main",
     items: [
       NAV_ITEMS.competitions,
       NAV_ITEMS.games,
       NAV_ITEMS.trainings,
+      NAV_ITEMS.players,
       NAV_ITEMS.exercises,
-      NAV_ITEMS.club,
-      NAV_ITEMS.teams,
       NAV_ITEMS.insights,
       NAV_ITEMS.notifications,
     ],
@@ -195,16 +242,41 @@ function cloneSections(sections: AppNavSection[]) {
   }));
 }
 
-export function getAppNavSections() {
-  return cloneSections(BASE_APP_NAV_SECTIONS);
+/**
+ * Devolve secoes do sidebar desktop conforme persona do clube.
+ *
+ * - `'club'` (default): nav multi-team cleanup A — items single-team legacy
+ *   (Plantel/Jogos/Treinos/Competicoes) removidos, Equipas como entrada
+ *   principal.
+ * - `'individual'`: nav single-team classica — items directos, sem
+ *   Equipas/Clube.
+ */
+export function getAppNavSectionsForPlan(planType: PlanType = "club") {
+  const source =
+    planType === "individual"
+      ? INDIVIDUAL_APP_NAV_SECTIONS
+      : CLUB_APP_NAV_SECTIONS;
+  return cloneSections(source);
 }
 
-export function getMobileAppNavSections() {
-  return cloneSections(BASE_MOBILE_APP_NAV_SECTIONS);
+/** Devolve secoes do drawer mobile conforme persona do clube. */
+export function getMobileAppNavSectionsForPlan(planType: PlanType = "club") {
+  const source =
+    planType === "individual"
+      ? INDIVIDUAL_MOBILE_APP_NAV_SECTIONS
+      : CLUB_MOBILE_APP_NAV_SECTIONS;
+  return cloneSections(source);
 }
 
-export function getNavSection(sectionId: AppNavSection["id"]) {
-  return getAppNavSections().find((section) => section.id === sectionId) || null;
+export function getNavSection(
+  sectionId: AppNavSection["id"],
+  planType: PlanType = "club",
+) {
+  return (
+    getAppNavSectionsForPlan(planType).find(
+      (section) => section.id === sectionId,
+    ) || null
+  );
 }
 
 export function isNavItemActive(pathname: string, item: AppNavItem) {

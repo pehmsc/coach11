@@ -9,10 +9,11 @@ import { createClient } from "@/lib/supabase/client";
 import { clearClientCaches } from "@/lib/query/cache-clear";
 import { InstallPWAButton } from "@/components/pwa/InstallPWAButton";
 import {
-  getMobileAppNavSections,
+  getMobileAppNavSectionsForPlan,
   getContextRoleLabel,
   isNavItemActive,
   type NavProfile,
+  type PlanType,
 } from "@/components/layout/nav-config";
 import { UserAvatar } from "@/components/layout/UserAvatar";
 import { ScopeToggle } from "@/components/navigation/ScopeToggle";
@@ -35,6 +36,7 @@ export function MobileSideNavDrawer({
   avatarUrl,
   source,
   teamRole,
+  planType = "club",
   unreadNotificationsCount,
 }: {
   open: boolean;
@@ -43,6 +45,7 @@ export function MobileSideNavDrawer({
   avatarUrl?: string | null;
   source?: string | null;
   teamRole?: string | null;
+  planType?: PlanType;
   unreadNotificationsCount: number;
 }) {
   const pathname = usePathname();
@@ -135,7 +138,7 @@ export function MobileSideNavDrawer({
     router.refresh();
   }
 
-  const navSections = getMobileAppNavSections();
+  const navSections = getMobileAppNavSectionsForPlan(planType);
   const mainSection = navSections.find(
     (section) => section.id === "main",
   );
