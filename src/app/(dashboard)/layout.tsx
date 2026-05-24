@@ -9,6 +9,7 @@ import { UnreadNotificationsProvider } from "@/contexts/UnreadNotificationsConte
 import { AuthenticatedAnalyticsProvider } from "@/components/observability/AuthenticatedAnalyticsProvider";
 import { getCachedUserTeamContext, type UserTeamContext } from "@/lib/auth/team-context";
 import { AgeGroupProvider } from "@/contexts/AgeGroupContext";
+import { PlanTypeCookieWriter } from "@/components/auth/PlanTypeCookieWriter";
 
 export default async function DashboardLayout({
   children,
@@ -85,6 +86,9 @@ export default async function DashboardLayout({
           source={analyticsContext?.source ?? null}
           defaultAgeGroupId={analyticsContext?.ageGroup?.id ?? null}
         >
+          <PlanTypeCookieWriter
+            planType={analyticsContext?.club?.plan_type ?? "club"}
+          />
           <div
             className="min-h-screen bg-slate-50"
             style={{ ["--coach11-top-inset" as string]: topInset }}
