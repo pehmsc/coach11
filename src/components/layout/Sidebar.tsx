@@ -9,9 +9,10 @@ import { clearClientCaches } from "@/lib/query/cache-clear";
 import type { Profile } from "@/types/database";
 import { useUnreadCounts } from "@/contexts/UnreadNotificationsContext";
 import {
-  getAppNavSections,
+  getAppNavSectionsForPlan,
   getContextRoleLabel,
   isNavItemActive,
+  type PlanType,
 } from "@/components/layout/nav-config";
 import { UserAvatar } from "@/components/layout/UserAvatar";
 import { ScopeToggle } from "@/components/navigation/ScopeToggle";
@@ -21,14 +22,22 @@ interface SidebarProps {
   avatarUrl?: string | null;
   source?: string | null;
   teamRole?: string | null;
+  /** Plano do clube do utilizador (default 'club' = nav multi-team). */
+  planType?: PlanType;
 }
 
-export function Sidebar({ profile, avatarUrl, source, teamRole }: SidebarProps) {
+export function Sidebar({
+  profile,
+  avatarUrl,
+  source,
+  teamRole,
+  planType = "club",
+}: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const queryClient = useQueryClient();
   const { unreadNotifications: unreadNotificationsCount } = useUnreadCounts();
-  const navSections = getAppNavSections();
+  const navSections = getAppNavSectionsForPlan(planType);
   const mainSection = navSections.find((section) => section.id === "main");
   const settingsSection = navSections.find((section) => section.id === "settings");
 

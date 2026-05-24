@@ -1,11 +1,19 @@
 import { cache } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+export type ClubPlanType = "individual" | "club";
+
 export type TeamContextClub = {
   id: string;
   name: string;
   slug: string;
   logo_url: string | null;
+  /**
+   * Segmentacao de produto. 'individual' = treinador self-service (nav
+   * single-team simplificada). 'club' = sales-led (nav multi-team completa).
+   * Default 'club' garantido pela coluna; aqui usa-se non-null por seguranca.
+   */
+  plan_type: ClubPlanType;
 };
 
 export type TeamContextAgeGroup = {
@@ -255,11 +263,13 @@ export async function resolveUserTeamContext(
   if (targetClubId) {
     const { data: clubData } = await admin
       .from("clubs")
-      .select("id, name, slug, logo_url")
+      .select("id, name, slug, logo_url, plan_type")
       .eq("id", targetClubId)
       .maybeSingle();
     if (clubData) {
-      club = clubData as TeamContextClub;
+      const planType: ClubPlanType =
+        clubData.plan_type === "individual" ? "individual" : "club";
+      club = { ...clubData, plan_type: planType } as TeamContextClub;
     }
   }
 
