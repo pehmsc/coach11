@@ -11,6 +11,11 @@ import {
 
 const ADMIN_LINKS = [
   {
+    href: "/admin/clubs",
+    title: "Clubes",
+    description: "Lista de clientes (clubes sales-led e treinadores individuais) com contagens.",
+  },
+  {
     href: "/admin/beta-invites",
     title: "Beta Invites",
     description: "Criar, listar, copiar e revogar convites beta de coordenadores.",
