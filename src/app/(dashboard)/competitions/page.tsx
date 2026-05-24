@@ -53,24 +53,7 @@ type CompetitionsPayload = {
 
 const COMPETITION_GAMES_WINDOW_SIZE = 5;
 
-function extractRoundNumber(title: string | null | undefined) {
-  if (!title) return null;
-  const match = title.match(/\b(?:jornada|j)\s*(\d+)\b/i);
-  if (!match) return null;
-  const round = Number.parseInt(match[1], 10);
-  return Number.isFinite(round) ? round : null;
-}
-
 function compareCompetitionGames(a: Game, b: Game) {
-  const roundA = extractRoundNumber(a.title);
-  const roundB = extractRoundNumber(b.title);
-
-  if (roundA !== null || roundB !== null) {
-    if (roundA === null) return 1;
-    if (roundB === null) return -1;
-    if (roundA !== roundB) return roundB - roundA;
-  }
-
   return new Date(b.game_datetime).getTime() - new Date(a.game_datetime).getTime();
 }
 
