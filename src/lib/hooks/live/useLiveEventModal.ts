@@ -186,21 +186,40 @@ export function useLiveEventModal({
   );
 
   const confirmGoal = useCallback(async () => {
-    if (modalType !== "goal") return;
-    if (!goalTeamSide || !goalKind) {
-      toast.error("Seleciona o lado e o tipo de golo.");
+    const isPenalty = modalType === "penalty_goal";
+    if (modalType !== "goal" && !isPenalty) return;
+    if (!goalTeamSide) {
+      toast.error("Seleciona o lado.");
+      return;
+    }
+    if (!isPenalty && !goalKind) {
+      toast.error("Seleciona o tipo de golo.");
       return;
     }
 
-    const eventType: GameEventType = goalKind;
-    const isOpponentEvent =
-      goalKind === "own_goal"
+    const eventType: GameEventType = isPenalty
+      ? "penalty_goal"
+      : (goalKind as GameEventType);
+    const isOpponentEvent = isPenalty
+      ? goalTeamSide === "opponent"
+      : goalKind === "own_goal"
         ? goalTeamSide === "ours"
         : goalTeamSide === "opponent";
     let playerId: string | null = null;
     let relatedPlayerId: string | null = null;
 
-    if (goalTeamSide === "ours" && goalKind === "goal") {
+    if (isPenalty && goalTeamSide === "ours") {
+      if (!selectedScorerID) {
+        toast.error("Seleciona o marcador do penálti.");
+        return;
+      }
+      playerId = selectedScorerID;
+      relatedPlayerId = null;
+    } else if (isPenalty && goalTeamSide === "opponent") {
+      // Penálti do adversário — jogador nosso opcional (tipicamente GR).
+      playerId = selectedScorerID || null;
+      relatedPlayerId = null;
+    } else if (goalTeamSide === "ours" && goalKind === "goal") {
       if (!selectedScorerID) {
         toast.error("Seleciona o marcador.");
         return;

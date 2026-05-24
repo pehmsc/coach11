@@ -68,6 +68,7 @@ export type ModalType = GameEventType | "substitution";
 
 export const EVENT_LABELS: Record<string, string> = {
   goal: "⚽ Golo",
+  penalty_goal: "⚽ Penálti",
   assist: "🅰️ Assistência",
   own_goal: "⚽ Autogolo",
   yellow_card: "🟨 Cartão Amarelo",
