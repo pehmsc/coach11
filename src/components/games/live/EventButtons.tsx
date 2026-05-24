@@ -26,9 +26,16 @@ export function EventButtons({
       <button
         onClick={() => openModal("goal")}
         disabled={!canRegisterEvents}
-        className="col-span-2 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm font-medium hover:bg-emerald-100 transition-colors disabled:opacity-40"
+        className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm font-medium hover:bg-emerald-100 transition-colors disabled:opacity-40"
       >
         ⚽ Golo
+      </button>
+      <button
+        onClick={() => openModal("penalty_goal")}
+        disabled={!canRegisterEvents}
+        className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm font-medium hover:bg-emerald-100 transition-colors disabled:opacity-40"
+      >
+        🥅 Penálti
       </button>
       <button
         onClick={() => openModal("yellow_card")}

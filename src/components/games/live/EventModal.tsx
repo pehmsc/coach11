@@ -86,7 +86,9 @@ export function EventModal({
             ? "🔄 Substituição"
             : modalType === "goal"
               ? "⚽ Golo"
-              : EVENT_LABELS[modalType] ?? modalType}
+              : modalType === "penalty_goal"
+                ? "🥅 Penálti"
+                : EVENT_LABELS[modalType] ?? modalType}
           {modalType === "goal" &&
           goalTeamSide === "ours" &&
           goalKind === "goal" &&
@@ -608,6 +610,191 @@ export function EventModal({
                   variant="outline"
                   onClick={() => {
                     setGoalKind(null);
+                    setSelectedScorerID(null);
+                  }}
+                >
+                  ← Voltar
+                </Button>
+              </div>
+            </>
+          )}
+        </>
+      )}
+
+      {/* PENALTY GOAL (golo sem assistência) */}
+      {modalType === "penalty_goal" && (
+        <>
+          {!goalTeamSide && (
+            <>
+              <p className="text-xs font-semibold text-slate-500 uppercase mb-2">
+                Quem marcou o penálti?
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  onClick={() => {
+                    setGoalTeamSide("ours");
+                    setSelectedScorerID(null);
+                    setSelectedAssistID(null);
+                  }}
+                  className="bg-emerald-600 hover:bg-emerald-700"
+                >
+                  {ourTeamShortName}
+                </Button>
+                <Button
+                  onClick={() => {
+                    setGoalTeamSide("opponent");
+                    const firstOnField = playersOnField[0] ?? null;
+                    const preferredGoalkeeper =
+                      playersOnField.find((player) =>
+                        /gr|gk|guarda/i.test(player.preferred_position ?? ""),
+                      ) ?? firstOnField;
+                    setSelectedScorerID(preferredGoalkeeper?.id ?? null);
+                    setSelectedAssistID(null);
+                  }}
+                  className="bg-red-600 hover:bg-red-700"
+                >
+                  {opponentTeamShortName}
+                </Button>
+              </div>
+            </>
+          )}
+
+          {goalTeamSide === "ours" && (
+            <>
+              <p className="text-xs font-semibold text-slate-500 uppercase mb-2">
+                Marcador
+              </p>
+              {sortPlayersByFieldStatus(convocatedPlayers, sentOffPlayerIds).map((player) => {
+                const availability = getPlayerAvailability(player.id);
+                const isDisabled = !availability.selectable;
+                const isSelected = selectedScorerID === player.id;
+
+                return (
+                  <button
+                    key={player.id}
+                    onClick={() => setSelectedScorerID(player.id)}
+                    disabled={isDisabled}
+                    className={`w-full flex items-center gap-3 p-2.5 rounded-xl mb-1 text-left transition-colors ${
+                      isSelected
+                        ? "bg-emerald-50 border-2 border-emerald-300"
+                        : "bg-slate-50 border border-slate-100"
+                    } ${isDisabled ? "opacity-50 cursor-not-allowed" : ""}`}
+                  >
+                    <span className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                      {player.jersey_number || "—"}
+                    </span>
+                    <span className="text-sm font-medium truncate">
+                      {player.first_name} {player.last_name}
+                    </span>
+                    {player.preferred_position && (
+                      <span className="inline-flex items-center rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700 flex-shrink-0">
+                        {player.preferred_position}
+                      </span>
+                    )}
+                    <YellowCardWarningBadge count={yellowCardsByPlayer.get(player.id)} />
+                    <span
+                      className={`ml-auto inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${getAvailabilityBadgeClasses(availability.label)}`}
+                    >
+                      {availability.label}
+                    </span>
+                    {isSelected && (
+                      <Check size={14} className="text-emerald-500" />
+                    )}
+                  </button>
+                );
+              })}
+              <div className="flex gap-2 pt-1">
+                <Button
+                  onClick={() => void confirmGoal()}
+                  disabled={savingEvent || !selectedScorerID}
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                >
+                  {savingEvent ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : (
+                    "Confirmar penálti"
+                  )}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setGoalTeamSide(null);
+                    setSelectedScorerID(null);
+                  }}
+                >
+                  ← Voltar
+                </Button>
+              </div>
+            </>
+          )}
+
+          {goalTeamSide === "opponent" && (
+            <>
+              <p className="text-xs font-semibold text-slate-500 uppercase mb-2">
+                Jogador associado ao penálti sofrido (opcional)
+              </p>
+              {(playersOnField.length > 0
+                ? playersOnField
+                : sortPlayersByName(convocatedPlayers)
+              ).map((player) => {
+                const availability = getPlayerAvailability(player.id);
+                const isDisabled = !availability.selectable;
+                const isSelected = selectedScorerID === player.id;
+
+                return (
+                  <button
+                    key={player.id}
+                    onClick={() =>
+                      setSelectedScorerID(
+                        selectedScorerID === player.id ? null : player.id,
+                      )
+                    }
+                    disabled={isDisabled}
+                    className={`w-full flex items-center gap-3 p-2.5 rounded-xl mb-1 text-left transition-colors ${
+                      isSelected
+                        ? "bg-rose-50 border-2 border-rose-300"
+                        : "bg-slate-50 border border-slate-100"
+                    } ${isDisabled ? "opacity-50 cursor-not-allowed" : ""}`}
+                  >
+                    <span className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                      {player.jersey_number || "—"}
+                    </span>
+                    <span className="text-sm font-medium truncate">
+                      {player.first_name} {player.last_name}
+                    </span>
+                    {player.preferred_position && (
+                      <span className="inline-flex items-center rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700 flex-shrink-0">
+                        {player.preferred_position}
+                      </span>
+                    )}
+                    <YellowCardWarningBadge count={yellowCardsByPlayer.get(player.id)} />
+                    <span
+                      className={`ml-auto inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${getAvailabilityBadgeClasses(availability.label)}`}
+                    >
+                      {availability.label}
+                    </span>
+                    {isSelected && (
+                      <Check size={14} className="text-rose-500" />
+                    )}
+                  </button>
+                );
+              })}
+              <div className="flex gap-2 pt-1">
+                <Button
+                  onClick={() => void confirmGoal()}
+                  disabled={savingEvent}
+                  className="flex-1 bg-red-600 hover:bg-red-700"
+                >
+                  {savingEvent ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : (
+                    "Confirmar penálti adversário"
+                  )}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setGoalTeamSide(null);
                     setSelectedScorerID(null);
                   }}
                 >

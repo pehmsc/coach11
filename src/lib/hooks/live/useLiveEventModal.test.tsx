@@ -434,6 +434,88 @@ describe("useLiveEventModal", () => {
     });
   });
 
+  describe("confirmGoal — penalty_goal", () => {
+    it("rejects when modal aberto sem lado escolhido", async () => {
+      const insertEventsToBackend = vi.fn();
+      const { result } = renderHook(() =>
+        useLiveEventModal(createDefaultArgs({ insertEventsToBackend })),
+      );
+      act(() => result.current.openModal("penalty_goal"));
+      await act(async () => {
+        await result.current.confirmGoal();
+      });
+      expect(insertEventsToBackend).not.toHaveBeenCalled();
+    });
+
+    it("rejects ours penalty sem marcador", async () => {
+      const insertEventsToBackend = vi.fn();
+      const { result } = renderHook(() =>
+        useLiveEventModal(createDefaultArgs({ insertEventsToBackend })),
+      );
+      act(() => result.current.openModal("penalty_goal"));
+      act(() => {
+        result.current.setGoalTeamSide("ours");
+      });
+      await act(async () => {
+        await result.current.confirmGoal();
+      });
+      expect(insertEventsToBackend).not.toHaveBeenCalled();
+    });
+
+    it("ours: grava event_type=penalty_goal sem assistência", async () => {
+      const insertEventsToBackend = vi
+        .fn()
+        .mockResolvedValue([createEvent({ event_type: "penalty_goal" })]);
+      const { result } = renderHook(() =>
+        useLiveEventModal(createDefaultArgs({ insertEventsToBackend })),
+      );
+      act(() => result.current.openModal("penalty_goal"));
+      act(() => {
+        result.current.setGoalTeamSide("ours");
+        result.current.setSelectedScorerID("p1");
+        // Mesmo que se tentasse marcar assistência, o fluxo do penálti
+        // ignora-a e grava related_player_id=null.
+        result.current.setSelectedAssistID("p2");
+      });
+      await act(async () => {
+        await result.current.confirmGoal();
+      });
+      expect(insertEventsToBackend).toHaveBeenCalledWith([
+        expect.objectContaining({
+          event_type: "penalty_goal",
+          player_id: "p1",
+          related_player_id: null,
+          is_opponent_event: false,
+        }),
+      ]);
+    });
+
+    it("opponent: grava penalty_goal com is_opponent_event=true e GR opcional", async () => {
+      const insertEventsToBackend = vi
+        .fn()
+        .mockResolvedValue([createEvent({ event_type: "penalty_goal" })]);
+      const { result } = renderHook(() =>
+        useLiveEventModal(createDefaultArgs({ insertEventsToBackend })),
+      );
+      act(() => result.current.openModal("penalty_goal"));
+      act(() => {
+        result.current.setGoalTeamSide("opponent");
+        // GR não obrigatório — deixamos null
+      });
+      await act(async () => {
+        await result.current.confirmGoal();
+      });
+      expect(insertEventsToBackend).toHaveBeenCalledWith([
+        expect.objectContaining({
+          event_type: "penalty_goal",
+          player_id: null,
+          related_player_id: null,
+          is_opponent_event: true,
+        }),
+      ]);
+    });
+  });
+
   describe("confirmCard", () => {
     it("rejects when no scorer selected", async () => {
       const insertEventsToBackend = vi.fn();
