@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { extractTimeFromDateTime, formatGameDateTime } from "./time";
+import {
+  extractTimeFromDateTime,
+  formatGameDateTime,
+  formatGameDateTimeParts,
+} from "./time";
 
 describe("extractTimeFromDateTime", () => {
   describe("ISO com timezone — converte para Europe/Lisbon (default)", () => {
@@ -161,5 +165,42 @@ describe("formatGameDateTime", () => {
         formatGameDateTime(DST_INPUT, "shortWithoutYear", "UTC"),
       ).toBe("24/05 · 17:20");
     });
+  });
+});
+
+describe("formatGameDateTimeParts", () => {
+  // 2026-05-24T17:20:00Z = 2026-05-24 18:20 Lisboa (DST)
+  const DST_INPUT = "2026-05-24T17:20:00+00:00";
+
+  it("decompoe em day/monthShort/time com TZ Lisbon (DST)", () => {
+    expect(formatGameDateTimeParts(DST_INPUT)).toEqual({
+      day: "24",
+      monthShort: "mai",
+      time: "18:20",
+    });
+  });
+
+  it("aplica shift de dia quando UTC cai no dia seguinte em Lisbon DST", () => {
+    // 2026-05-24T23:30Z = 2026-05-25 00:30 Lisboa
+    expect(formatGameDateTimeParts("2026-05-24T23:30:00+00:00")).toEqual({
+      day: "25",
+      monthShort: "mai",
+      time: "00:30",
+    });
+  });
+
+  it("respeita timezone explicito (UTC mantem o numero raw)", () => {
+    expect(formatGameDateTimeParts(DST_INPUT, "UTC")).toEqual({
+      day: "24",
+      monthShort: "mai",
+      time: "17:20",
+    });
+  });
+
+  it("devolve null para input null/undefined/invalid", () => {
+    expect(formatGameDateTimeParts(null)).toBeNull();
+    expect(formatGameDateTimeParts(undefined)).toBeNull();
+    expect(formatGameDateTimeParts("  ")).toBeNull();
+    expect(formatGameDateTimeParts("not-a-date")).toBeNull();
   });
 });
