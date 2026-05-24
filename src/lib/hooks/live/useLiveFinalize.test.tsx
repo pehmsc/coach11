@@ -55,6 +55,7 @@ function createDefaultArgs(overrides: ArgsOverrides = {}) {
   return {
     id: "g1",
     router: { push: vi.fn() },
+    summaryHref: "/games/g1/summary",
     game: createGame(),
     setGame: vi.fn(),
     phase: "review" as const,

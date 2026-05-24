@@ -263,7 +263,7 @@ export function GameDetailView({ gameId, scope }: Props) {
           canStartLive={canStartLive}
           isLiveInProgress={isLiveInProgress}
           minutesUntilLive={minutesUntilLive}
-          onNavigate={() => router.push(`/games/${id}/live`)}
+          onNavigate={() => router.push(`${effectiveScope.gameBaseHref}/live`)}
         />
       )}
 

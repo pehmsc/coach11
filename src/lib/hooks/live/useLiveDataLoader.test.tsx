@@ -59,6 +59,7 @@ function createDefaultArgs(overrides: ArgsOverrides = {}) {
     id: "g1",
     supabase: createMockSupabase(),
     router: { replace: vi.fn() },
+    summaryHref: "/games/g1/summary",
     setClockHydrated: vi.fn(),
     setClockState: vi.fn(),
     setNowMs: vi.fn(),

@@ -15,9 +15,19 @@ import { useOpponentObservations } from "@/lib/hooks/useOpponentObservations";
 import { useLiveFinalize } from "@/lib/hooks/live/useLiveFinalize";
 import type { LivePlayer } from "@/components/games/live/types";
 
-export function useLiveGameState(id: string) {
+export interface UseLiveGameStateOptions {
+  /**
+   * URL para onde redireccionar quando o jogo for finalizado ou ja estiver
+   * `completed` ao carregar. Default: `/games/${id}/summary` (rota legacy).
+   * Multi-team passa `/teams/${ageGroupId}/games/${id}/summary`.
+   */
+  summaryHref?: string;
+}
+
+export function useLiveGameState(id: string, options?: UseLiveGameStateOptions) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
+  const summaryHref = options?.summaryHref ?? `/games/${id}/summary`;
 
   // Shadow refs para callbacks de sub-hooks declarados depois do useLivePhase.
   // Necessário porque useLivePhase é o PRIMEIRO sub-hook (expõe `phase` como
@@ -125,6 +135,7 @@ export function useLiveGameState(id: string) {
     id,
     supabase,
     router,
+    summaryHref,
     setClockHydrated,
     setClockState,
     setNowMs,
@@ -261,6 +272,7 @@ export function useLiveGameState(id: string) {
   } = useLiveFinalize({
     id,
     router,
+    summaryHref,
     game,
     setGame,
     phase,
