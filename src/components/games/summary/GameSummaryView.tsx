@@ -2,8 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { format, parseISO } from "date-fns";
-import { pt } from "date-fns/locale";
+import { formatGameDateTime } from "@/lib/events/time";
 import {
   AlertCircle,
   BarChart3,
@@ -740,7 +739,7 @@ export function GameSummaryView({ gameId, scope }: Props) {
   const game = summary.game;
   const mvp = summary.finalStats.find((row) => row.is_mvp);
   const matchDateTimeLabel = game.game_datetime
-    ? format(parseISO(game.game_datetime), "d MMM · HH:mm", { locale: pt })
+    ? formatGameDateTime(game.game_datetime, "shortWithoutYear")
     : "Sem data";
   const matchMetaLabel = game.location
     ? `${matchDateTimeLabel} · ${game.location}`

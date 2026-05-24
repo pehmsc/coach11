@@ -63,6 +63,87 @@ export function extractTimeFromDateTime(
   return normalizeTimeValue(trimmed);
 }
 
+/**
+ * Variantes de formato para `formatGameDateTime`. Reflectem os 5 formatos
+ * que existiam dispersos pelo codigo antes da uniformizacao via PR B.
+ *
+ * - `longWithoutYear`: "domingo, 24 de maio · 19:20" (GameDetailView)
+ * - `longWithYear`:    "domingo, 24 de maio de 2026 · 19:20" (detalhe publico)
+ * - `shortWithYear`:   "24 de mai. de 2026 · 19:20" (lista publica)
+ * - `shortWithoutYear`:"24 de mai. · 19:20" (GameSummaryView, scoreboard live)
+ * - `monthYear`:       "maio de 2026" (agregacao por mes em GamesSection)
+ */
+export type GameDateTimeFormat =
+  | "longWithoutYear"
+  | "longWithYear"
+  | "shortWithYear"
+  | "shortWithoutYear"
+  | "monthYear";
+
+/**
+ * Formata um datetime para display, forcando timezone `Europe/Lisbon` por
+ * defeito. Substitui usos espalhados de `format(parseISO(...), ..., { locale: pt })`
+ * do date-fns que ficavam sujeitos a TZ do runtime (UTC no Vercel SSR vs
+ * local no browser).
+ *
+ * - Aceita ISO com TZ explicito (Z, +00, +00:00, -05:00).
+ * - Aceita ISO naive (sem TZ) — interpreta como UTC (consistente com como
+ *   o Postgres serializa `timestamptz`).
+ * - Devolve "Data por definir" para input null/undefined; devolve o input
+ *   original (sem alterar) se o parse falhar.
+ */
+export function formatGameDateTime(
+  value: string | null | undefined,
+  format: GameDateTimeFormat,
+  timeZone: string = "Europe/Lisbon",
+): string {
+  if (typeof value !== "string" || !value.trim()) return "Data por definir";
+  const date = new Date(value.trim());
+  if (Number.isNaN(date.getTime())) return value;
+
+  if (format === "monthYear") {
+    return new Intl.DateTimeFormat("pt-PT", {
+      month: "long",
+      year: "numeric",
+      timeZone,
+    }).format(date);
+  }
+
+  const dateOpts: Intl.DateTimeFormatOptions = (() => {
+    switch (format) {
+      case "longWithoutYear":
+        return { weekday: "long", day: "numeric", month: "long", timeZone };
+      case "longWithYear":
+        return {
+          weekday: "long",
+          day: "numeric",
+          month: "long",
+          year: "numeric",
+          timeZone,
+        };
+      case "shortWithYear":
+        return {
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+          timeZone,
+        };
+      case "shortWithoutYear":
+        return { day: "numeric", month: "short", timeZone };
+    }
+  })();
+
+  const datePart = new Intl.DateTimeFormat("pt-PT", dateOpts).format(date);
+  const timePart = new Intl.DateTimeFormat("pt-PT", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone,
+  }).format(date);
+
+  return `${datePart} · ${timePart}`;
+}
+
 export function formatTimeRange(
   startTime: string | null | undefined,
   endTime: string | null | undefined,

@@ -2,8 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { differenceInMinutes, format, parseISO, subMinutes } from "date-fns";
-import { pt } from "date-fns/locale";
+import { differenceInMinutes, parseISO, subMinutes } from "date-fns";
+import { formatGameDateTime } from "@/lib/events/time";
 import { AlertCircle } from "lucide-react";
 import { StickyBackLink } from "@/components/navigation/StickyBackLink";
 import { Breadcrumb, type BreadcrumbItem } from "@/components/navigation/Breadcrumb";
@@ -149,7 +149,7 @@ export function GameDetailView({ gameId, scope }: Props) {
   if (!game) return null;
 
   const gameDate = game.game_datetime
-    ? format(parseISO(game.game_datetime), "EEEE, d 'de' MMMM · HH:mm", { locale: pt })
+    ? formatGameDateTime(game.game_datetime, "longWithoutYear")
     : "—";
   const isCompetition = !!game.competition_id;
   const gameDateTime = game.game_datetime ? parseISO(game.game_datetime) : null;
