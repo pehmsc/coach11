@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import { pt } from "date-fns/locale";
+import { formatGameDateTime } from "@/lib/events/time";
 import {
   Loader2,
   Sword,
@@ -88,7 +89,7 @@ function statusBadge(game: GameRow) {
 function groupByMonth(games: GameRow[]): { label: string; games: GameRow[] }[] {
   const map = new Map<string, GameRow[]>();
   for (const game of games) {
-    const key = format(parseISO(game.game_datetime), "MMMM yyyy", { locale: pt });
+    const key = formatGameDateTime(game.game_datetime, "monthYear");
     const bucket = map.get(key) ?? [];
     bucket.push(game);
     map.set(key, bucket);

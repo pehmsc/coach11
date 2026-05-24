@@ -6,8 +6,7 @@
 import { unstable_cache } from "next/cache";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
-import { format, parseISO } from "date-fns";
-import { pt } from "date-fns/locale";
+import { formatGameDateTime } from "@/lib/events/time";
 import { Clock3, FileText, MapPin, ShieldCheck } from "lucide-react";
 import { RichTextContent } from "@/components/content/RichTextContent";
 import { LocationMapPreview } from "@/components/maps/LocationMapPreview";
@@ -41,16 +40,6 @@ export const revalidate = 30;
 type PublicGameDetailParams = {
   params: Promise<{ token: string; gameId: string }>;
 };
-
-function formatGameDate(value: string | null | undefined) {
-  if (!value) return "Data por definir";
-
-  try {
-    return format(parseISO(value), "EEEE, d MMMM yyyy · HH:mm", { locale: pt });
-  } catch {
-    return value;
-  }
-}
 
 function gameStatusLabel(status: string | null | undefined) {
   switch (status) {
@@ -332,7 +321,7 @@ export default async function PublicGameDetailPage({
           <div className="mt-4 flex flex-wrap gap-3 text-sm text-slate-300">
             <span className="inline-flex items-center gap-1">
               <Clock3 size={14} />
-              {formatGameDate(game.game_datetime)}
+              {formatGameDateTime(game.game_datetime, "longWithYear")}
             </span>
             {gameLocationLabel && (
               <span className="inline-flex items-center gap-1">

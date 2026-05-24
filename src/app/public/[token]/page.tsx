@@ -2,8 +2,6 @@ import Link from "next/link";
 import { unstable_cache } from "next/cache";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
-import { format, parseISO } from "date-fns";
-import { pt } from "date-fns/locale";
 import { CalendarDays, Clock3, Dumbbell, MapPin, ShieldCheck, Swords } from "lucide-react";
 import { hasPublicConvocationContent } from "@/lib/games/public-convocation";
 import {
@@ -11,7 +9,10 @@ import {
   PUBLIC_RECENT_RESULT_STATUSES,
   sortPublicCurrentGames,
 } from "@/lib/events/public-calendar";
-import { buildDateTimeFromDateAndTime } from "@/lib/events/time";
+import {
+  buildDateTimeFromDateAndTime,
+  formatGameDateTime,
+} from "@/lib/events/time";
 import { resolveLocationLabel } from "@/lib/location";
 import { PublicRateLimitedState } from "@/components/public/PublicRateLimitedState";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -75,16 +76,6 @@ type PublicCalendarItem =
       meta: string;
       hasPublicConvocation?: boolean;
     };
-
-function formatGameDate(value: string | null | undefined) {
-  if (!value) return "Data por definir";
-
-  try {
-    return format(parseISO(value), "d MMM yyyy · HH:mm", { locale: pt });
-  } catch {
-    return value;
-  }
-}
 
 function buildTrainingDateTime(
   sessionDate: string | null | undefined,
@@ -368,7 +359,7 @@ export default async function PublicCalendarPage({ params }: PublicPageParams) {
       status: game.status,
       href: `/public/${access.identifier}/games/${buildPublicGameRef(access.identifier, game.id)}`,
       title: gameTitle(game),
-      meta: formatGameDate(game.game_datetime),
+      meta: formatGameDateTime(game.game_datetime, "shortWithYear"),
       hasPublicConvocation: game.hasPublicConvocation === true,
     })),
     ...upcomingTrainings.map((training) => {
@@ -387,7 +378,7 @@ export default async function PublicCalendarPage({ params }: PublicPageParams) {
         status: training.status,
         href: `/public/${access.identifier}/trainings/${buildPublicTrainingRef(access.identifier, training.id)}`,
         title: training.title?.trim() || "Treino",
-        meta: formatGameDate(startsAt),
+        meta: formatGameDateTime(startsAt, "shortWithYear"),
       };
     }),
   ]
@@ -513,7 +504,7 @@ export default async function PublicCalendarPage({ params }: PublicPageParams) {
                       {gameTitle(game)}
                     </p>
                     <p className="mt-1 text-sm text-slate-500">
-                      {formatGameDate(game.game_datetime)}
+                      {formatGameDateTime(game.game_datetime, "shortWithYear")}
                     </p>
                   </div>
                   <div className="text-right">

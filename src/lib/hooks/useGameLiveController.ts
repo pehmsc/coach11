@@ -1,5 +1,5 @@
-import { format, parseISO } from "date-fns";
-import { pt } from "date-fns/locale";
+import { parseISO } from "date-fns";
+import { formatGameDateTime } from "@/lib/events/time";
 import { resolveFixtureScoreboardShortNames } from "@/lib/games/display";
 import type { Game } from "@/types/database";
 
@@ -21,7 +21,7 @@ export function useGameLiveController({
     ? now >= new Date(gameStartAt.getTime() - 10 * 60 * 1000)
     : true;
   const matchDateTimeLabel = game?.game_datetime
-    ? format(parseISO(game.game_datetime), "d MMM · HH:mm", { locale: pt })
+    ? formatGameDateTime(game.game_datetime, "shortWithoutYear")
     : "Sem data";
   const matchMetaLabel = game?.location
     ? `${matchDateTimeLabel} · ${game.location}`
