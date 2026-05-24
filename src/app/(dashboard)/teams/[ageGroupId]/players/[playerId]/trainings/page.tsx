@@ -1,12 +1,12 @@
 "use client";
 
 import { use } from "react";
-import { PlayerDetailView } from "@/components/players/detail/PlayerDetailView";
+import { PlayerTrainingsHistoryView } from "@/components/players/history/PlayerTrainingsHistoryView";
 import { useAgeGroupMeta } from "@/hooks/useAgeGroupName";
 
 type PageParams = { ageGroupId: string; playerId: string };
 
-export default function TeamPlayerDetailPage({
+export default function TeamPlayerHistoryTrainingsPage({
   params,
 }: {
   params: Promise<PageParams>;
@@ -15,7 +15,7 @@ export default function TeamPlayerDetailPage({
   const { name: ageGroupName } = useAgeGroupMeta(ageGroupId);
 
   return (
-    <PlayerDetailView
+    <PlayerTrainingsHistoryView
       playerId={playerId}
       scope={{
         breadcrumbItemsPrefix: [
@@ -29,14 +29,14 @@ export default function TeamPlayerDetailPage({
             label: "Plantel",
             href: `/teams/${ageGroupId}/players`,
           },
+          {
+            label: "Atleta",
+            href: `/teams/${ageGroupId}/players/${playerId}`,
+          },
         ],
-        fallbackReturnHref: `/teams/${ageGroupId}/players`,
-        returnToKey: `players:team:${ageGroupId}`,
-        backLabel: "Voltar ao plantel",
-        historyHrefs: {
-          games: `/teams/${ageGroupId}/players/${playerId}/games`,
-          trainings: `/teams/${ageGroupId}/players/${playerId}/trainings`,
-        },
+        fallbackReturnHref: `/teams/${ageGroupId}/players/${playerId}`,
+        returnToKey: `player:team:${ageGroupId}:${playerId}`,
+        backLabel: "Voltar ao perfil",
       }}
     />
   );
