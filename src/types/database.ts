@@ -479,3 +479,23 @@ export interface TrainingPhaseExercise {
   created_at: string;
   exercise?: Exercise | null;
 }
+
+export interface ClubInsights {
+  club_id: string;
+  age_groups_count: number;
+  players_count: number;
+  trainings_completed: number;
+  trainings_total: number;
+  trainings_present: number;
+  training_minutes: number;
+  games_played: number;
+  games_won: number;
+  games_drawn: number;
+  games_lost: number;
+  game_minutes: number;
+  goals_for: number;
+  goals_against: number;
+  assists: number;
+  yellow_cards: number;
+  red_cards: number;
+}
