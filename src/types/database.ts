@@ -480,6 +480,24 @@ export interface TrainingPhaseExercise {
   exercise?: Exercise | null;
 }
 
+export type ClubRankingMetric = "goals" | "assists" | "minutes" | "trainings";
+
+export interface ClubPlayerRanking {
+  player_id: string;
+  full_name: string;
+  preferred_position: string | null;
+  jersey_number: number | null;
+  age_group_id: string;
+  age_group_name: string;
+  avatar_url: string | null;
+  photo_consent_given: boolean;
+  goals: number;
+  assists: number;
+  total_minutes: number;
+  trainings_present: number;
+  metric_value: number;
+}
+
 export interface ClubInsights {
   club_id: string;
   age_groups_count: number;
