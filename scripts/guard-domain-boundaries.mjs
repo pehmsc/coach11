@@ -105,6 +105,15 @@ const MIGRATION_ALLOWED_EXCEPTIONS = new Map([
     "supabase/migrations/20260524225300_get_club_insights_age_group_and_game_minutes.sql",
     new Set(["sql-club-wrapper-usage"]),
   ],
+  [
+    // INSIGHTS-FASE-2-RANKINGS: RPC de rankings de atletas (top-N por métrica).
+    // Mesma justificação das outras migrations de insights: user_can_access_club
+    // é o helper de gating de leitura cross-age-group já existente — apropriado
+    // aqui porque o ranking é, por construção, a soma de todos os escalões a que
+    // o user tem acesso dentro de um club_id (com filtro opcional por escalão).
+    "supabase/migrations/20260525001600_create_get_club_player_rankings.sql",
+    new Set(["sql-club-wrapper-usage"]),
+  ],
 ]);
 
 const SRC_RULES = [

@@ -15,6 +15,10 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ResultsDonut } from "@/components/insights/charts/ResultsDonut";
+import { GoalsBar } from "@/components/insights/charts/GoalsBar";
+import { TrainingsBar } from "@/components/insights/charts/TrainingsBar";
+import { PlayerRankingCard } from "@/components/insights/PlayerRankingCard";
 import type { ClubInsights } from "@/types/database";
 
 type Tab = "trainings" | "games";
@@ -378,6 +382,24 @@ export default function InsightsPage() {
               </p>
             </CardContent>
           </Card>
+
+          <Card>
+            <CardContent className="pt-4 pb-4 space-y-3">
+              <p className="text-xs uppercase tracking-wide text-slate-500 font-semibold">
+                Sessões: concluídas vs planeadas
+              </p>
+              <TrainingsBar
+                completed={insights.trainings_completed}
+                total={insights.trainings_total}
+              />
+            </CardContent>
+          </Card>
+
+          <PlayerRankingCard
+            clubId={selectedClubId}
+            ageGroupId={scopeIsAll ? null : selectedAgeGroupId}
+            showAgeGroupName={scopeIsAll}
+          />
         </>
       ) : (
         <>
@@ -456,6 +478,38 @@ export default function InsightsPage() {
               )}
             </CardContent>
           </Card>
+
+          <Card>
+            <CardContent className="pt-4 pb-4 space-y-3">
+              <p className="text-xs uppercase tracking-wide text-slate-500 font-semibold">
+                Distribuição V-E-D
+              </p>
+              <ResultsDonut
+                wins={insights.games_won}
+                draws={insights.games_drawn}
+                losses={insights.games_lost}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="pt-4 pb-4 space-y-3">
+              <p className="text-xs uppercase tracking-wide text-slate-500 font-semibold">
+                Golos: marcados vs sofridos
+              </p>
+              <GoalsBar
+                goalsFor={insights.goals_for}
+                goalsAgainst={insights.goals_against}
+                label={scopeIsAll ? "Clube" : "Equipa"}
+              />
+            </CardContent>
+          </Card>
+
+          <PlayerRankingCard
+            clubId={selectedClubId}
+            ageGroupId={scopeIsAll ? null : selectedAgeGroupId}
+            showAgeGroupName={scopeIsAll}
+          />
         </>
       )}
     </div>
