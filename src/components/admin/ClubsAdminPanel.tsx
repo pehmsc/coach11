@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertCircle, Building2, Users } from "lucide-react";
+import Link from "next/link";
+import { AlertCircle, Building2, ChevronRight, Users } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { pt } from "date-fns/locale";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -180,10 +181,11 @@ export function ClubsAdminPanel() {
         ) : (
           <ul className="space-y-2">
             {visibleClubs.map((club) => (
-              <li
-                key={club.id}
-                className="flex items-center gap-3 rounded-xl border border-slate-100 bg-white p-3"
-              >
+              <li key={club.id}>
+                <Link
+                  href={`/admin/clubs/${club.id}/snapshot`}
+                  className="flex items-center gap-3 rounded-xl border border-slate-100 bg-white p-3 transition-colors hover:border-emerald-300 hover:bg-emerald-50/30"
+                >
                 <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500 overflow-hidden">
                   {club.logo_url ? (
                     /* eslint-disable-next-line @next/next/no-img-element */
@@ -238,6 +240,12 @@ export function ClubsAdminPanel() {
                     {club.n_players}
                   </span>
                 </div>
+                <ChevronRight
+                  size={16}
+                  className="flex-shrink-0 text-slate-300"
+                  aria-hidden="true"
+                />
+                </Link>
               </li>
             ))}
           </ul>
