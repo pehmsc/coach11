@@ -11,6 +11,10 @@ type ClubRow = {
   logo_url: string | null;
   plan_type: string;
   created_at: string;
+  pending_coordinator_name: string | null;
+  pending_coordinator_email: string | null;
+  pending_coordinator_phone: string | null;
+  pending_coordinator_invite_sent_at: string | null;
 };
 
 type AgeGroupRow = {
@@ -39,6 +43,13 @@ export type AdminClubSnapshotCoordinator = {
   joined_at: string | null;
 };
 
+export type AdminClubSnapshotPendingCoordinator = {
+  name: string;
+  email: string;
+  phone: string | null;
+  invite_sent_at: string | null;
+};
+
 export type AdminClubSnapshotPayload = {
   club: {
     id: string;
@@ -56,6 +67,7 @@ export type AdminClubSnapshotPayload = {
     games_last_7d: number;
   };
   coordinators: AdminClubSnapshotCoordinator[];
+  pending_coordinator: AdminClubSnapshotPendingCoordinator | null;
   age_groups: AdminClubSnapshotAgeGroup[];
 };
 
@@ -79,7 +91,9 @@ export async function GET(
 
     const { data: clubRow, error: clubError } = await access.admin
       .from("clubs")
-      .select("id, name, slug, logo_url, plan_type, created_at")
+      .select(
+        "id, name, slug, logo_url, plan_type, created_at, pending_coordinator_name, pending_coordinator_email, pending_coordinator_phone, pending_coordinator_invite_sent_at",
+      )
       .eq("id", clubId)
       .maybeSingle();
 
@@ -261,6 +275,16 @@ export async function GET(
         .filter((v): v is AdminClubSnapshotCoordinator => v !== null);
     }
 
+    const pendingCoordinator: AdminClubSnapshotPendingCoordinator | null =
+      club.pending_coordinator_email
+        ? {
+            name: club.pending_coordinator_name ?? "(sem nome)",
+            email: club.pending_coordinator_email,
+            phone: club.pending_coordinator_phone,
+            invite_sent_at: club.pending_coordinator_invite_sent_at,
+          }
+        : null;
+
     const payload: AdminClubSnapshotPayload = {
       club: {
         id: club.id,
@@ -278,6 +302,7 @@ export async function GET(
         games_last_7d: totalGamesRes.count ?? 0,
       },
       coordinators,
+      pending_coordinator: pendingCoordinator,
       age_groups: ageGroupsEnriched,
     };
 
