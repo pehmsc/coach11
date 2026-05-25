@@ -224,6 +224,112 @@ export async function markBetaInviteAccepted(
   }
 }
 
+const UUID_PATTERN =
+  /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/u;
+
+function extractClubIdFromInviteMetadata(
+  metadata: unknown,
+): string | null {
+  if (!metadata || typeof metadata !== "object") return null;
+  const candidate = (metadata as Record<string, unknown>).club_id;
+  if (typeof candidate !== "string") return null;
+  return UUID_PATTERN.test(candidate) ? candidate : null;
+}
+
+/**
+ * Quando um beta_invite criado pelo wizard de admin (`/admin/clubs/new` +
+ * `/admin/clubs/[id]/invite-coordinator`) tem `metadata.club_id`, este
+ * helper liga automaticamente a conta autenticada ao clube como
+ * `club_coordinator` e limpa o registo de coordenador pendente do clube.
+ *
+ * Idempotente — se ja existe `club_memberships(profile_id, club_id)`
+ * para esse par, faz no-op.
+ *
+ * Chamar **depois** de `markBetaInviteAccepted` para garantir que o
+ * status do invite ja esta 'accepted' (audit trail consistente).
+ */
+export async function linkInviteToClubMembership(
+  userId: string,
+  email: string | null | undefined,
+  admin?: SupabaseClient,
+) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return;
+
+  const db = getAdminClient(admin);
+  const activeInvite = await getActiveBetaInviteForEmail(normalizedEmail, db);
+
+  if (
+    !activeInvite ||
+    activeInvite.invite_type !== "beta_coordinator"
+  ) {
+    return;
+  }
+
+  const clubId = extractClubIdFromInviteMetadata(activeInvite.metadata);
+  if (!clubId) return;
+
+  // Garante uma entry `club_memberships` para o (profile, club) — idempotente
+  // via onConflict no par natural (assumindo que existe unique constraint;
+  // caso contrario, primeiro fazemos lookup defensivo).
+  const { data: existing, error: existingError } = await db
+    .from("club_memberships")
+    .select("club_id, role")
+    .eq("profile_id", userId)
+    .eq("club_id", clubId)
+    .maybeSingle();
+
+  if (existingError) {
+    throw new Error(
+      `club_membership_lookup_failed:${existingError.message}`,
+    );
+  }
+
+  if (!existing) {
+    const { error: insertError } = await db
+      .from("club_memberships")
+      .insert({
+        profile_id: userId,
+        club_id: clubId,
+        role: "club_coordinator",
+      });
+    if (insertError) {
+      throw new Error(
+        `club_membership_insert_failed:${insertError.message}`,
+      );
+    }
+  } else if (
+    existing.role !== "club_coordinator" &&
+    existing.role !== "owner" &&
+    existing.role !== "admin"
+  ) {
+    // Upgrade role para club_coordinator se estiver com role inferior
+    // (ex: 'staff' inicialmente). Mantem owner/admin sem alteracao.
+    const { error: updateError } = await db
+      .from("club_memberships")
+      .update({ role: "club_coordinator" })
+      .eq("profile_id", userId)
+      .eq("club_id", clubId);
+    if (updateError) {
+      throw new Error(
+        `club_membership_role_upgrade_failed:${updateError.message}`,
+      );
+    }
+  }
+
+  // Limpa os campos pending_coordinator_* — coordenador "real" entrou,
+  // dados pendentes ja nao sao a fonte de verdade.
+  await db
+    .from("clubs")
+    .update({
+      pending_coordinator_name: null,
+      pending_coordinator_email: null,
+      pending_coordinator_phone: null,
+      pending_coordinator_invite_sent_at: null,
+    })
+    .eq("id", clubId);
+}
+
 export async function getBetaOnboardingState(
   userId: string,
   email: string | null | undefined,

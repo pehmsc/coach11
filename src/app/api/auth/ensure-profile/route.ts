@@ -4,6 +4,7 @@ import {
   getBetaOnboardingState,
   markBetaInviteAccepted,
   isBetaAllowed,
+  linkInviteToClubMembership,
 } from "@/lib/auth/beta-access.server";
 import {
   isSuperCoordinatorEmail,
@@ -172,6 +173,22 @@ export async function POST() {
 
     if (activeBetaInvite) {
       await markBetaInviteAccepted(normalizedEmail, admin);
+      // Liga o profile ao clube alvo se o invite veio do wizard de admin
+      // (metadata.club_id presente). Idempotente.
+      try {
+        await linkInviteToClubMembership(user.id, normalizedEmail, admin);
+      } catch (linkError) {
+        console.error("[ensure-profile] link-invite-to-club failed", {
+          profileId: user.id,
+          emailLower: normalizedEmail,
+          error:
+            linkError instanceof Error
+              ? linkError.message
+              : String(linkError),
+        });
+        // Nao falha o ensure-profile — utilizador continua logado;
+        // a associacao pode ser feita manualmente depois pelo operador.
+      }
     }
 
     const onboarding = await getBetaOnboardingState(user.id, normalizedEmail, admin);

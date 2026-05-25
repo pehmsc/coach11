@@ -48,7 +48,9 @@ const SRC_ALLOWED_EXCEPTIONS = new Map([
   ["src/app/api/staff/[id]/route.ts", new Set(["src-admin-client"])],
   ["src/app/api/messages/route.ts", new Set(["src-admin-client"])],
   ["src/lib/auth/invite-auth-user.ts", new Set(["src-admin-client"])],
-  ["src/lib/auth/beta-access.server.ts", new Set(["src-admin-client"])],
+  // beta-access.server: linkInviteToClubMembership liga profile a clube alvo
+  // do invite (metadata.club_id) — boundary legitima de gestao de membership.
+  ["src/lib/auth/beta-access.server.ts", new Set(["src-admin-client", "src-club-id-filter"])],
   ["src/lib/auth/super-user.server.ts", new Set(["src-admin-client"])],
   // PUBLIC_SSR: SSR sem sessão auth
   ["src/app/public/[token]/page.tsx", new Set(["src-admin-client"])],
