@@ -537,26 +537,10 @@ export default function SettingsPage() {
                 </CardContent>
               </Card>
 
-              {profile?.is_super_coordinator && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">Admin</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <p className="text-sm text-slate-500">
-                      Ferramentas internas concentradas na página principal de administração.
-                    </p>
-                    <div className="grid gap-2">
-                      <Link
-                        href="/admin"
-                        className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 transition-colors hover:border-emerald-300 hover:text-emerald-700"
-                      >
-                        Admin Home
-                      </Link>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
+              {/* Backoffice deixou de ser acessivel via Settings — acesso
+                  exclusivo via /admin/login com URL directa. Mantemos a
+                  flag is_super_coordinator no profile para o gate do layout
+                  (backoffice). */}
             </>
           )}
         </div>
