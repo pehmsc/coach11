@@ -98,6 +98,8 @@ export async function GET(
       club.plan_type === "individual" ? "individual" : "club";
 
     const now = Date.now();
+    const nowIso = new Date(now).toISOString();
+    const todayDateOnly = toIsoDateOnly(new Date(now));
     const since7dIso = new Date(now - SEVEN_DAYS_MS).toISOString();
     const since7dDate = toIsoDateOnly(new Date(now - SEVEN_DAYS_MS));
 
@@ -160,10 +162,15 @@ export async function GET(
             .select("id", { count: "exact", head: true })
             .eq("age_group_id", ag.id)
             .gte("game_datetime", since7dIso),
+          // "Ultima actividade" = ultimo evento que JA ACONTECEU. Filtrar por
+          // <= now para excluir treinos/jogos agendados no futuro — caso
+          // contrario o snapshot mostrava "daqui a 2 meses" como ultima
+          // actividade quando havia eventos agendados.
           access.admin
             .from("training_sessions")
             .select("session_date")
             .eq("age_group_id", ag.id)
+            .lte("session_date", todayDateOnly)
             .order("session_date", { ascending: false })
             .limit(1)
             .maybeSingle(),
@@ -171,6 +178,7 @@ export async function GET(
             .from("games")
             .select("game_datetime")
             .eq("age_group_id", ag.id)
+            .lte("game_datetime", nowIso)
             .order("game_datetime", { ascending: false })
             .limit(1)
             .maybeSingle(),
