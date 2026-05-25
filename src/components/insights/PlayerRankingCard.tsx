@@ -1,8 +1,18 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { Goal, Sparkles, Clock, Dumbbell, Loader2 } from "lucide-react";
+import {
+  Goal,
+  Sparkles,
+  Clock,
+  Dumbbell,
+  UserMinus,
+  HeartPulse,
+  Timer,
+  Trophy,
+  Loader2,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { PlayerAvatar } from "@/components/insights/PlayerAvatar";
@@ -11,10 +21,13 @@ import type {
   ClubRankingMetric,
 } from "@/types/database";
 
-const METRIC_META: Record<
-  ClubRankingMetric,
-  { label: string; icon: typeof Goal; suffix: (n: number) => string }
-> = {
+type MetricMeta = {
+  label: string;
+  icon: typeof Goal;
+  suffix: (n: number) => string;
+};
+
+const METRIC_META: Record<ClubRankingMetric, MetricMeta> = {
   goals: {
     label: "Marcadores",
     icon: Goal,
@@ -30,19 +43,32 @@ const METRIC_META: Record<
     icon: Clock,
     suffix: () => "min",
   },
-  trainings: {
+  matches: {
+    label: "Jogos",
+    icon: Trophy,
+    suffix: (n) => (n === 1 ? "jogo" : "jogos"),
+  },
+  trainings_present: {
     label: "Presenças",
     icon: Dumbbell,
     suffix: (n) => (n === 1 ? "treino" : "treinos"),
   },
+  trainings_absent: {
+    label: "Ausências",
+    icon: UserMinus,
+    suffix: (n) => (n === 1 ? "falta" : "faltas"),
+  },
+  trainings_injured: {
+    label: "Lesionados",
+    icon: HeartPulse,
+    suffix: (n) => (n === 1 ? "treino" : "treinos"),
+  },
+  trainings_late: {
+    label: "Atrasos",
+    icon: Timer,
+    suffix: (n) => (n === 1 ? "atraso" : "atrasos"),
+  },
 };
-
-const METRIC_ORDER: ClubRankingMetric[] = [
-  "goals",
-  "assists",
-  "minutes",
-  "trainings",
-];
 
 type Props = {
   clubId: string;
@@ -50,6 +76,8 @@ type Props = {
   ageGroupId: string | null;
   /** Mostra o nome do escalão de cada atleta (relevante quando ageGroupId=null). */
   showAgeGroupName: boolean;
+  /** Métricas disponíveis nas pills (define o conjunto e a ordem). */
+  metrics: ClubRankingMetric[];
   limit?: number;
 };
 
@@ -57,10 +85,20 @@ export function PlayerRankingCard({
   clubId,
   ageGroupId,
   showAgeGroupName,
+  metrics,
   limit = 10,
 }: Props) {
   const supabase = useMemo(() => createClient(), []);
-  const [metric, setMetric] = useState<ClubRankingMetric>("goals");
+  const [metric, setMetric] = useState<ClubRankingMetric>(metrics[0]);
+
+  // Se o conjunto de métricas mudar (mudança de tab) e a métrica seleccionada
+  // já não pertencer ao novo conjunto, volta à primeira da lista.
+  useEffect(() => {
+    if (!metrics.includes(metric)) {
+      setMetric(metrics[0]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [metrics]);
 
   const rankingQuery = useQuery({
     queryKey: [
@@ -109,7 +147,7 @@ export function PlayerRankingCard({
           aria-label="Métrica do ranking"
           className="flex gap-1 p-1 bg-slate-100 rounded-xl overflow-x-auto"
         >
-          {METRIC_ORDER.map((m) => {
+          {metrics.map((m) => {
             const meta = METRIC_META[m];
             const Icon = meta.icon;
             const active = metric === m;

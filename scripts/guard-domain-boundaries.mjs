@@ -118,6 +118,15 @@ const MIGRATION_ALLOWED_EXCEPTIONS = new Map([
     "supabase/migrations/20260525001600_create_get_club_player_rankings.sql",
     new Set(["sql-club-wrapper-usage"]),
   ],
+  [
+    // INSIGHTS-RANKINGS-SPLIT-METRICS: substitui a RPC anterior para separar
+    // métricas de treino e de jogo (present/absent/injured/late e
+    // goals/assists/minutes/matches). Mantém a mesma justificação das outras
+    // migrations de insights para o uso de user_can_access_club como helper
+    // de gating.
+    "supabase/migrations/20260525120100_get_club_player_rankings_split_metrics.sql",
+    new Set(["sql-club-wrapper-usage"]),
+  ],
 ]);
 
 const SRC_RULES = [
