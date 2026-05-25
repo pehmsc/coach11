@@ -87,18 +87,9 @@ export async function POST(request: Request) {
       );
     }
 
-    // Compose notes block com info do coordenador + notas livres.
-    const noteLines: string[] = [];
-    noteLines.push("=== Coordenador / responsavel (recolhido no wizard) ===");
-    noteLines.push(`Nome: ${data.coordinator_name}`);
-    noteLines.push(`Email: ${data.coordinator_email}`);
-    noteLines.push(`Telefone: ${data.coordinator_phone}`);
-    if (data.operator_notes) {
-      noteLines.push("");
-      noteLines.push("=== Notas adicionais ===");
-      noteLines.push(data.operator_notes);
-    }
-    const composedNotes = noteLines.join("\n");
+    // Dados do coordenador vao para colunas dedicadas (pending_coordinator_*).
+    // O wizard nao cria automaticamente profile/membership — convite e
+    // accao manual a partir do snapshot.
 
     // --- Insert clube ---
     const insertPayload = {
@@ -117,7 +108,11 @@ export async function POST(request: Request) {
       expected_age_groups_count: data.expected_age_groups_count ?? null,
       expected_players_count: data.expected_players_count ?? null,
       expected_users_count: data.expected_users_count ?? null,
-      notes: composedNotes,
+      pending_coordinator_name: data.coordinator_name,
+      pending_coordinator_email: data.coordinator_email.toLowerCase(),
+      pending_coordinator_phone: data.coordinator_phone,
+      pending_coordinator_invite_sent_at: null,
+      notes: data.operator_notes ?? null,
     };
 
     const { data: created, error: insertError } = await access.admin

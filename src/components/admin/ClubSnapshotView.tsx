@@ -2,14 +2,25 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { AlertCircle, Building2, ChevronLeft, ShieldCheck } from "lucide-react";
+import {
+  AlertCircle,
+  Building2,
+  CheckCircle2,
+  ChevronLeft,
+  Loader2,
+  Mail,
+  ShieldCheck,
+} from "lucide-react";
 import { formatDistanceToNow, parseISO } from "date-fns";
 import { pt } from "date-fns/locale";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatGameDateTime } from "@/lib/events/time";
 import type {
   AdminClubSnapshotAgeGroup,
   AdminClubSnapshotPayload,
+  AdminClubSnapshotPendingCoordinator,
 } from "@/app/api/admin/clubs/[id]/snapshot/route";
 
 interface Props {
@@ -85,6 +96,25 @@ export function ClubSnapshotView({ clubId }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [accessedAtIso] = useState(() => new Date().toISOString());
 
+  async function refresh() {
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/clubs/${clubId}/snapshot`, {
+        cache: "no-store",
+      });
+      const payload = (await res.json().catch(() => null)) as
+        | { success?: boolean; snapshot?: AdminClubSnapshotPayload; error?: string }
+        | null;
+      if (!res.ok || !payload?.snapshot) {
+        setError(payload?.error || "Erro ao carregar snapshot.");
+        return;
+      }
+      setSnapshot(payload.snapshot);
+    } catch {
+      setError("Erro de ligacao.");
+    }
+  }
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -156,7 +186,13 @@ export function ClubSnapshotView({ clubId }: Props) {
     );
   }
 
-  const { club, totals, coordinators, age_groups: ageGroups } = snapshot;
+  const {
+    club,
+    totals,
+    coordinators,
+    pending_coordinator: pendingCoordinator,
+    age_groups: ageGroups,
+  } = snapshot;
 
   return (
     <div className="space-y-6">
@@ -222,6 +258,15 @@ export function ClubSnapshotView({ clubId }: Props) {
         <KpiCard label="Jogos / 7d" value={totals.games_last_7d} />
       </div>
 
+      <PendingCoordinatorCard
+        clubId={clubId}
+        pendingCoordinator={pendingCoordinator}
+        hasRegisteredCoordinator={coordinators.length > 0}
+        onInviteSent={() => {
+          void refresh();
+        }}
+      />
+
       <div className="rounded-2xl border border-slate-100 bg-white p-4">
         <h2 className="text-sm font-semibold text-slate-900">
           {coordinators.length === 1
@@ -230,7 +275,9 @@ export function ClubSnapshotView({ clubId }: Props) {
         </h2>
         {coordinators.length === 0 ? (
           <p className="mt-2 text-xs text-slate-500">
-            Nenhum membro com role club_coordinator/owner/admin encontrado.
+            {pendingCoordinator
+              ? "O coordenador pendente ainda não se registou (ver card acima)."
+              : "Nenhum membro com role club_coordinator/owner/admin encontrado."}
           </p>
         ) : (
           <ul className="mt-3 space-y-3">
@@ -309,10 +356,125 @@ export function ClubSnapshotView({ clubId }: Props) {
       <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-[11px] text-slate-600">
         <p className="font-semibold">Snapshot v1</p>
         <p className="mt-1">
-          Esta view e read-only. Acções de suporte (reset password, reenviar
-          convite), audit log e metricas PostHog (DAU/eventos por clube) ficam
-          para PRs incrementais.
+          Read-only. Outras acções de suporte (reset password, marcar status
+          de billing, ver audit log) e métricas PostHog ficam para PRs
+          incrementais.
         </p>
+      </div>
+    </div>
+  );
+}
+
+function PendingCoordinatorCard({
+  clubId,
+  pendingCoordinator,
+  hasRegisteredCoordinator,
+  onInviteSent,
+}: {
+  clubId: string;
+  pendingCoordinator: AdminClubSnapshotPendingCoordinator | null;
+  hasRegisteredCoordinator: boolean;
+  onInviteSent: () => void;
+}) {
+  const [sending, setSending] = useState(false);
+
+  if (!pendingCoordinator) return null;
+
+  // Se ja ha coordenador registado, o pending e historico — mostra apenas
+  // info compacta sem botao.
+  const isHistorical = hasRegisteredCoordinator;
+  const wasSent = pendingCoordinator.invite_sent_at !== null;
+
+  async function handleSendInvite() {
+    setSending(true);
+    try {
+      const res = await fetch(
+        `/api/admin/clubs/${clubId}/invite-coordinator`,
+        { method: "POST" },
+      );
+      const payload = (await res.json().catch(() => null)) as
+        | { success?: boolean; emailSent?: boolean; warning?: string; error?: string }
+        | null;
+      if (!res.ok || !payload?.success) {
+        toast.error(payload?.error || "Erro a enviar convite.");
+        return;
+      }
+      if (payload.emailSent) {
+        toast.success(`Convite enviado a ${pendingCoordinator?.email}.`);
+      } else if (payload.warning) {
+        toast.warning(payload.warning);
+      } else {
+        toast.success("Convite registado.");
+      }
+      onInviteSent();
+    } catch {
+      toast.error("Erro de ligação.");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <div
+      className={`rounded-2xl border p-4 ${
+        isHistorical
+          ? "border-slate-100 bg-slate-50/50"
+          : "border-amber-200 bg-amber-50/60"
+      }`}
+    >
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div className="flex items-start gap-3 min-w-0 flex-1">
+          <div className="size-10 flex-shrink-0 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center">
+            <Mail size={18} aria-hidden="true" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h2 className="text-sm font-semibold text-slate-900">
+              {isHistorical
+                ? "Coordenador (dados recolhidos no onboarding)"
+                : wasSent
+                  ? "Coordenador pendente — convite enviado"
+                  : "Coordenador pendente — sem convite ainda"}
+            </h2>
+            <p className="mt-1 text-sm font-semibold text-slate-900">
+              {pendingCoordinator.name}
+            </p>
+            <p className="text-xs text-slate-600">
+              {pendingCoordinator.email}
+              {pendingCoordinator.phone ? (
+                <>
+                  {" "}
+                  · {pendingCoordinator.phone}
+                </>
+              ) : null}
+            </p>
+            {wasSent ? (
+              <p className="mt-1 text-[11px] text-slate-500 inline-flex items-center gap-1">
+                <CheckCircle2 size={11} className="text-emerald-600" aria-hidden="true" />
+                Convite enviado {fmtRelative(pendingCoordinator.invite_sent_at)}
+              </p>
+            ) : null}
+          </div>
+        </div>
+
+        {!isHistorical ? (
+          <Button
+            type="button"
+            onClick={() => void handleSendInvite()}
+            disabled={sending}
+            className="bg-emerald-600 hover:bg-emerald-700"
+          >
+            {sending ? (
+              <>
+                <Loader2 size={14} className="mr-1.5 animate-spin" />
+                A enviar...
+              </>
+            ) : wasSent ? (
+              "Reenviar convite"
+            ) : (
+              "Enviar convite"
+            )}
+          </Button>
+        ) : null}
       </div>
     </div>
   );
