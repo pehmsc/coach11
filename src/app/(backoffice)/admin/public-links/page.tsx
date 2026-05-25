@@ -1,6 +1,7 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ChevronLeft } from "lucide-react";
 import { PublicLinksAdminPanel } from "@/components/admin/PublicLinksAdminPanel";
-import { StickyBackLink } from "@/components/navigation/StickyBackLink";
 import { getSuperUserAccess } from "@/lib/auth/super-user.server";
 
 export default async function AdminPublicLinksPage() {
@@ -10,8 +11,14 @@ export default async function AdminPublicLinksPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-4 p-4 md:p-8">
-      <StickyBackLink href="/admin" label="Voltar ao Admin" />
+    <div className="space-y-4">
+      <Link
+        href="/admin"
+        className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-900"
+      >
+        <ChevronLeft size={14} aria-hidden="true" />
+        Voltar ao Admin
+      </Link>
       <PublicLinksAdminPanel />
     </div>
   );

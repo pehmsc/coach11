@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { StickyBackLink } from "@/components/navigation/StickyBackLink";
 import { getSuperUserAccess } from "@/lib/auth/super-user.server";
 import {
   getAdminObservabilityMetrics,
@@ -119,15 +118,13 @@ export default async function AdminPage() {
   const metrics = await getAdminObservabilityMetrics();
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 p-4 md:p-8">
-      <StickyBackLink href="/settings" label="Voltar às Configurações">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Admin</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Backoffice — gestão de clientes, convites, links públicos e auditoria.
-          </p>
-        </div>
-      </StickyBackLink>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-slate-900">Admin</h1>
+        <p className="mt-1 text-sm text-slate-500">
+          Gestão de clientes, convites, links públicos e auditoria.
+        </p>
+      </div>
 
       <div className="grid gap-4 md:grid-cols-3">
         {ADMIN_LINKS.map((item) => (
