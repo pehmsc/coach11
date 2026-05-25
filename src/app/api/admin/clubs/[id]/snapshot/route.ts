@@ -119,16 +119,21 @@ export async function GET(
           .from("age_group_staff")
           .select("id", { count: "exact", head: true })
           .eq("club_id", clubId),
+        // "Ultimos 7d" estritamente passado — exclui eventos agendados no
+        // futuro (caso contrario contava treinos/jogos planeados ate 7+ dias
+        // a frente como se ja tivessem acontecido).
         access.admin
           .from("training_sessions")
           .select("id", { count: "exact", head: true })
           .eq("club_id", clubId)
-          .gte("session_date", since7dDate),
+          .gte("session_date", since7dDate)
+          .lte("session_date", todayDateOnly),
         access.admin
           .from("games")
           .select("id", { count: "exact", head: true })
           .eq("club_id", clubId)
-          .gte("game_datetime", since7dIso),
+          .gte("game_datetime", since7dIso)
+          .lte("game_datetime", nowIso),
       ]);
 
     const ageGroups = (ageGroupsRes.data || []) as AgeGroupRow[];
@@ -156,12 +161,14 @@ export async function GET(
             .from("training_sessions")
             .select("id", { count: "exact", head: true })
             .eq("age_group_id", ag.id)
-            .gte("session_date", since7dDate),
+            .gte("session_date", since7dDate)
+            .lte("session_date", todayDateOnly),
           access.admin
             .from("games")
             .select("id", { count: "exact", head: true })
             .eq("age_group_id", ag.id)
-            .gte("game_datetime", since7dIso),
+            .gte("game_datetime", since7dIso)
+            .lte("game_datetime", nowIso),
           // "Ultima actividade" = ultimo evento que JA ACONTECEU. Filtrar por
           // <= now para excluir treinos/jogos agendados no futuro — caso
           // contrario o snapshot mostrava "daqui a 2 meses" como ultima
