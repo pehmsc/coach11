@@ -29,6 +29,10 @@ const SRC_ALLOWED_EXCEPTIONS = new Map([
     "src/app/api/admin/clubs/[id]/snapshot/route.ts",
     new Set(["src-club-id-filter"]), // backoffice snapshot por clube (super-user gate)
   ],
+  [
+    "src/app/api/admin/clubs/create/route.ts",
+    new Set(["src-club-id-filter"]), // backoffice cria clube manualmente (super-user gate)
+  ],
   // createAdminClient — ficheiros legítimos que precisam de service_role.
   // AUTH_MGMT: auth.admin.createUser/deleteUser/updateUser
   ["src/app/api/auth/ensure-profile/route.ts", new Set(["src-admin-client"])],
