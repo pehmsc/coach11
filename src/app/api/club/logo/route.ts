@@ -5,7 +5,7 @@ import { respondInternalError } from "@/lib/http/respond-internal-error";
 
 export const runtime = "nodejs";
 
-const ACCEPTED_EXTENSIONS = new Set(["png", "jpg", "jpeg", "webp", "svg"]);
+const ACCEPTED_EXTENSIONS = new Set(["png", "jpg", "jpeg", "webp"]);
 const ACCEPTED_MIME_PREFIX = "image/";
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 
@@ -65,7 +65,7 @@ export async function POST(request: Request) {
 
     if (!mimeType.startsWith(ACCEPTED_MIME_PREFIX) && !ACCEPTED_EXTENSIONS.has(extension)) {
       return NextResponse.json(
-        { error: "Formato inválido. Usa PNG, JPG, WEBP ou SVG." },
+        { error: "Formato inválido. Usa PNG, JPG ou WEBP." },
         { status: 400 },
       );
     }
@@ -112,7 +112,6 @@ export async function POST(request: Request) {
           "image/jpeg",
           "image/jpg",
           "image/webp",
-          "image/svg+xml",
         ],
       });
       const retry = await admin.storage.from("club-logos").upload(filePath, fileBytes, {

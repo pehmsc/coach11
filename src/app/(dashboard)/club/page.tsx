@@ -451,23 +451,13 @@ export default function ClubPage() {
   async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    // BUG-2: permitir upload mesmo sem ageGroup (club_coordinator sem escalão)
-    if (!ageGroup && !isClubCoordinator && !isSuperCoordinator) return;
+    if (!isClubCoordinator && !isSuperCoordinator) return;
     setUploadingLogo(true);
 
     const formData = new FormData();
-    let endpoint = "/api/team/logo";
+    formData.set("file", file);
 
-    if (ageGroup) {
-      formData.set("ageGroupId", ageGroup.id);
-      formData.set("file", file);
-    } else {
-      // Sem ageGroup: usar endpoint específico do clube (actualiza clubs.logo_url)
-      formData.set("file", file);
-      endpoint = "/api/club/logo";
-    }
-
-    const res = await fetch(endpoint, {
+    const res = await fetch("/api/club/logo", {
       method: "POST",
       body: formData,
       credentials: "include",
@@ -883,7 +873,7 @@ export default function ClubPage() {
                     className="hidden"
                     onChange={handleLogoUpload}
                   />
-                  {canManage ? (
+                  {(isClubCoordinator || isSuperCoordinator) ? (
                     <Button
                       variant="outline"
                       size="sm"
@@ -895,9 +885,9 @@ export default function ClubPage() {
                     </Button>
                   ) : null}
                   <p className="text-xs text-slate-400 mt-1">
-                    {canManage
-                      ? "PNG, JPG, SVG"
-                      : "Só o coordenador pode alterar o logótipo."}
+                    {(isClubCoordinator || isSuperCoordinator)
+                      ? "PNG, JPG, WEBP"
+                      : "Só o coordenador do clube pode alterar o logótipo."}
                   </p>
                 </div>
               </div>
