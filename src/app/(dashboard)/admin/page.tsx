@@ -122,9 +122,9 @@ export default async function AdminPage() {
     <div className="mx-auto max-w-4xl space-y-6 p-4 md:p-8">
       <StickyBackLink href="/settings" label="Voltar às Configurações">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Admin Beta</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Admin</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Ferramentas internas para convite beta, links públicos e auditoria.
+            Backoffice — gestão de clientes, convites, links públicos e auditoria.
           </p>
         </div>
       </StickyBackLink>

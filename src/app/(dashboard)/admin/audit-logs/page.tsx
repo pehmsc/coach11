@@ -11,7 +11,7 @@ export default async function AdminAuditLogsPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-4 p-4 md:p-8">
-      <StickyBackLink href="/settings" label="Voltar às Configurações" />
+      <StickyBackLink href="/admin" label="Voltar ao Admin" />
       <AuditLogsAdminPanel />
     </div>
   );
