@@ -238,14 +238,21 @@ export function ClubSnapshotView({ clubId }: Props) {
             </div>
           </div>
 
-          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-            <p className="font-semibold flex items-center gap-1.5">
-              <ShieldCheck size={13} aria-hidden="true" />
-              Snapshot read-only
-            </p>
-            <p className="mt-0.5 text-[11px]">
-              Acesso de suporte · {accessedAtLabel}
-            </p>
+          <div className="flex flex-col items-end gap-2">
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              <p className="font-semibold flex items-center gap-1.5">
+                <ShieldCheck size={13} aria-hidden="true" />
+                Snapshot read-only
+              </p>
+              <p className="mt-0.5 text-[11px]">
+                Acesso de suporte · {accessedAtLabel}
+              </p>
+            </div>
+            <Link href={`/admin/clubs/${clubId}/edit`}>
+              <Button type="button" variant="outline" className="text-xs">
+                Editar cliente
+              </Button>
+            </Link>
           </div>
         </div>
       </div>
