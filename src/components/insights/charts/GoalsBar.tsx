@@ -5,7 +5,6 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
-  Legend,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -60,7 +59,6 @@ export function GoalsBar({
             }}
             formatter={(value) => [`${Number(value)} golos`, label]}
           />
-          <Legend wrapperStyle={{ fontSize: 11 }} />
           <Bar dataKey="value" radius={[6, 6, 0, 0]} maxBarSize={64}>
             {data.map((d) => (
               <Cell key={d.kind} fill={d.fill} />

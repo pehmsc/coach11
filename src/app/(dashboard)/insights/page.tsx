@@ -399,6 +399,12 @@ export default function InsightsPage() {
             clubId={selectedClubId}
             ageGroupId={scopeIsAll ? null : selectedAgeGroupId}
             showAgeGroupName={scopeIsAll}
+            metrics={[
+              "trainings_present",
+              "trainings_absent",
+              "trainings_injured",
+              "trainings_late",
+            ]}
           />
         </>
       ) : (
@@ -509,6 +515,7 @@ export default function InsightsPage() {
             clubId={selectedClubId}
             ageGroupId={scopeIsAll ? null : selectedAgeGroupId}
             showAgeGroupName={scopeIsAll}
+            metrics={["goals", "assists", "minutes", "matches"]}
           />
         </>
       )}

@@ -1,6 +1,13 @@
 "use client";
 
-import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+import {
+  Cell,
+  Legend,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+} from "recharts";
 
 const COLOR_WIN = "#10b981"; // emerald-500
 const COLOR_DRAW = "#f59e0b"; // amber-500
@@ -38,6 +45,7 @@ export function ResultsDonut({
             data={data}
             dataKey="value"
             nameKey="name"
+            cx="35%"
             innerRadius="55%"
             outerRadius="85%"
             paddingAngle={1}
@@ -60,6 +68,13 @@ export function ResultsDonut({
               borderRadius: 8,
               border: "1px solid #e2e8f0",
             }}
+          />
+          <Legend
+            layout="vertical"
+            align="right"
+            verticalAlign="middle"
+            iconType="square"
+            wrapperStyle={{ fontSize: 11, paddingLeft: 8 }}
           />
         </PieChart>
       </ResponsiveContainer>
