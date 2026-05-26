@@ -39,8 +39,8 @@ const UpdateClubSchema = z
       .string()
       .trim()
       .min(2)
-      .max(80)
-      .regex(/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/u, "Slug invalido.")
+      .max(20)
+      .regex(/^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/u, "Sigla invalida.")
       .optional(),
     tier: TierEnum.optional(),
     legal_name: z.string().trim().min(2).max(200).nullable().optional(),

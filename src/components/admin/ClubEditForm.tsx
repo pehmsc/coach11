@@ -224,7 +224,7 @@ export function ClubEditForm({ clubId }: Props) {
           Editar cliente — {club.name}
         </h1>
         <p className="mt-1 text-sm text-slate-500">
-          Edição total. Mudanças aplicam-se imediatamente. Slug e tier têm
+          Edição total. Mudanças aplicam-se imediatamente. Sigla e tier têm
           implicações descritas abaixo.
         </p>
       </div>
@@ -274,16 +274,17 @@ export function ClubEditForm({ clubId }: Props) {
             <Field label="Nome do clube *" value={form.name} onChange={(v) => patch("name", v)} />
             <div>
               <Label className="text-xs font-semibold text-slate-700 mb-1 block">
-                Slug *
+                Sigla *
               </Label>
               <Input
                 value={form.slug}
-                onChange={(e) => patch("slug", e.target.value.toLowerCase())}
+                onChange={(e) => patch("slug", e.target.value)}
                 className="font-mono"
+                placeholder="CFB"
               />
               {slugChanged ? (
                 <p className="mt-1 text-[11px] text-amber-700">
-                  ⚠ Mudança de slug quebra links partilhados antigos (`coach11.app/{club.slug}`).
+                  ⚠ Mudança de sigla — referências antigas (badges, etiquetas) podem ficar desactualizadas.
                 </p>
               ) : null}
             </div>

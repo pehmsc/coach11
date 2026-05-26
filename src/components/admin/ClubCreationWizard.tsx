@@ -242,7 +242,7 @@ export function ClubCreationWizard() {
               onSelect={() => patch("tier", "standard")}
               title="Clube · Standard"
               subtitle="Clube pequeno"
-              description="≤30 staff, DB partilhada, coach11.app/[slug]."
+              description="≤30 staff, DB partilhada."
               price="€50-100/mês"
               accent="emerald"
             />
@@ -272,7 +272,7 @@ export function ClubCreationWizard() {
           <div>
             <h2 className="text-lg font-semibold text-slate-900">Dados do clube</h2>
             <p className="mt-1 text-sm text-slate-500">
-              Slug introduzido manualmente. Verificamos unicidade ao submeter.
+              Sigla introduzida manualmente. Verificamos unicidade ao submeter.
             </p>
           </div>
 
@@ -284,10 +284,10 @@ export function ClubCreationWizard() {
               placeholder="CF Os Belenenses"
             />
             <Field
-              label="Slug * (minúsculas, dígitos, hífens)"
+              label="Sigla * (letras, dígitos, hífens — ex: CFB)"
               value={form.slug}
-              onChange={(v) => patch("slug", v.toLowerCase())}
-              placeholder="cf-os-belenenses"
+              onChange={(v) => patch("slug", v)}
+              placeholder="CFB"
               mono
             />
             <Field
@@ -616,7 +616,7 @@ function ConfirmReview({ form }: { form: FormState }) {
     <div className="rounded-xl border border-slate-100 bg-slate-50 p-4 space-y-3 text-sm">
       <Row label="Tier" value={form.tier === "pro" ? "Clube · Pro" : "Clube · Standard"} />
       <Row label="Nome" value={form.name} />
-      <Row label="Slug" value={<span className="font-mono">{form.slug}</span>} />
+      <Row label="Sigla" value={<span className="font-mono">{form.slug}</span>} />
       {form.legal_name ? <Row label="Razão social" value={form.legal_name} /> : null}
       <Row label="NIF" value={form.nif} />
       <Row label="País" value={form.country} />
