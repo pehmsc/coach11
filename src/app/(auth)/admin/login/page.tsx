@@ -124,8 +124,9 @@ function BackofficeLoginForm() {
       <div className="mb-6 flex items-center gap-2">
         <ShieldCheck size={22} className="text-emerald-400" />
         <div>
-          <h1 className="text-base font-semibold text-white">
-            Backoffice Coach11
+          <h1 className="text-base font-semibold">
+            <span className="text-white">Backoffice · Coach</span>
+            <span className="text-emerald-400">11</span>
           </h1>
           <p className="text-xs text-slate-400">
             Acesso reservado a coordenadores principais.

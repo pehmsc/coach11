@@ -40,8 +40,8 @@ export function BackofficeHeader({ fullName, email, avatarUrl }: Props) {
           className="flex items-center gap-2 text-sm font-semibold"
         >
           <ShieldCheck size={18} className="text-emerald-400" />
-          <span className="text-white">Backoffice</span>
-          <span className="text-emerald-400">Coach11</span>
+          <span className="text-white">Backoffice · Coach</span>
+          <span className="-ml-1.5 text-emerald-400">11</span>
         </Link>
 
         <div className="flex items-center gap-3">
