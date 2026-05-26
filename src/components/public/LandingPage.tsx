@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
+import Link from "next/link";
 import {
   Timer,
   Smartphone,
@@ -129,14 +131,23 @@ export default function LandingPage() {
       {/* ═══ NAV ═══ */}
       <nav className="fixed top-0 z-50 w-full border-b border-white/5 bg-slate-950/80 backdrop-blur-xl">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500 font-bold text-white text-sm">
-              C11
-            </div>
+          <Link
+            href="/"
+            className="flex items-center gap-2 transition-opacity hover:opacity-80"
+            aria-label="Coach11 — voltar ao topo"
+          >
+            <Image
+              src="/icons/icon-192.png"
+              alt="Coach11"
+              width={36}
+              height={36}
+              className="h-9 w-9 rounded-lg"
+              priority
+            />
             <span className="text-lg font-bold tracking-tight">
               Coach<span className="text-emerald-400">11</span>
             </span>
-          </div>
+          </Link>
 
           {/* Desktop nav */}
           <div className="hidden items-center gap-8 md:flex">
@@ -646,14 +657,22 @@ export default function LandingPage() {
       {/* ═══ FOOTER ═══ */}
       <footer className="border-t border-white/5 py-8">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 md:flex-row">
-          <div className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-emerald-500 text-xs font-bold text-white">
-              C11
-            </div>
+          <Link
+            href="/"
+            className="flex items-center gap-2 transition-opacity hover:opacity-80"
+            aria-label="Coach11 — voltar ao topo"
+          >
+            <Image
+              src="/icons/icon-192.png"
+              alt="Coach11"
+              width={28}
+              height={28}
+              className="h-7 w-7 rounded-md"
+            />
             <span className="text-sm font-semibold">
               Coach<span className="text-emerald-400">11</span>
             </span>
-          </div>
+          </Link>
           <p className="text-xs text-white/30">
             &copy; 2026 Coach11. Feito em Lisboa para treinadores de formacao.
           </p>
