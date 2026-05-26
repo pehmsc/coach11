@@ -2,14 +2,37 @@ import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+const PROSE_CLASSES =
+  "space-y-10 text-white/80 leading-relaxed [&_h2]:text-xl [&_h2]:font-bold [&_h2]:text-white [&_h2]:mb-3 [&_h2]:mt-10 [&_h3]:text-base [&_h3]:font-semibold [&_h3]:text-white [&_h3]:mt-6 [&_h3]:mb-2 [&_p]:mb-3 [&_ul]:list-disc [&_ul]:pl-6 [&_ul]:space-y-1.5 [&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:space-y-1.5 [&_a]:text-emerald-400 [&_a]:underline [&_a:hover]:text-emerald-300 [&_strong]:text-white";
+
 interface Props {
   title: string;
   intro?: string;
   lastUpdated?: string;
+  /**
+   * When true (default), wraps children in <article> with prose-like typography
+   * applied to descendant h2/h3/p/ul/a/strong. Disable when the page mixes
+   * custom layouts (grids of cards, forms) with body copy, and use
+   * <LegalProse> for the prose blocks instead.
+   */
+  prose?: boolean;
+  /** Optional wider main column (default `max-w-3xl`). */
+  wide?: boolean;
   children: ReactNode;
 }
 
-export function LegalPageLayout({ title, intro, lastUpdated, children }: Props) {
+export function LegalProse({ children }: { children: ReactNode }) {
+  return <div className={PROSE_CLASSES}>{children}</div>;
+}
+
+export function LegalPageLayout({
+  title,
+  intro,
+  lastUpdated,
+  prose = true,
+  wide = false,
+  children,
+}: Props) {
   return (
     <div className="min-h-screen bg-slate-950 text-white antialiased">
       <nav className="fixed top-0 z-50 w-full border-b border-white/5 bg-slate-950/80 backdrop-blur-xl">
@@ -40,7 +63,9 @@ export function LegalPageLayout({ title, intro, lastUpdated, children }: Props) 
         </div>
       </nav>
 
-      <main className="mx-auto max-w-3xl px-6 pt-32 pb-20">
+      <main
+        className={`mx-auto px-6 pt-32 pb-20 ${wide ? "max-w-5xl" : "max-w-3xl"}`}
+      >
         <header className="mb-12 border-b border-white/10 pb-8">
           <h1 className="mb-3 text-3xl font-extrabold tracking-tight md:text-4xl">
             {title}
@@ -55,9 +80,11 @@ export function LegalPageLayout({ title, intro, lastUpdated, children }: Props) 
           ) : null}
         </header>
 
-        <article className="space-y-10 text-white/80 leading-relaxed [&_h2]:text-xl [&_h2]:font-bold [&_h2]:text-white [&_h2]:mb-3 [&_h2]:mt-10 [&_h3]:text-base [&_h3]:font-semibold [&_h3]:text-white [&_h3]:mt-6 [&_h3]:mb-2 [&_p]:mb-3 [&_ul]:list-disc [&_ul]:pl-6 [&_ul]:space-y-1.5 [&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:space-y-1.5 [&_a]:text-emerald-400 [&_a]:underline [&_a:hover]:text-emerald-300 [&_strong]:text-white">
-          {children}
-        </article>
+        {prose ? (
+          <article className={PROSE_CLASSES}>{children}</article>
+        ) : (
+          <div className="space-y-12 text-white/80">{children}</div>
+        )}
       </main>
 
       <footer className="border-t border-white/5 py-8">
@@ -79,11 +106,17 @@ export function LegalPageLayout({ title, intro, lastUpdated, children }: Props) 
             </span>
           </Link>
           <div className="flex items-center gap-4 text-xs text-white/40">
-            <Link href="/privacidade" className="transition hover:text-white/70">
-              Privacidade
+            <Link href="/precos" className="transition hover:text-white/70">
+              Preços
+            </Link>
+            <Link href="/contacto" className="transition hover:text-white/70">
+              Contacto
             </Link>
             <Link href="/faqs" className="transition hover:text-white/70">
               FAQs
+            </Link>
+            <Link href="/privacidade" className="transition hover:text-white/70">
+              Privacidade
             </Link>
           </div>
           <p className="text-xs text-white/30">

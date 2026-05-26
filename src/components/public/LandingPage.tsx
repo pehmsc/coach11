@@ -21,6 +21,7 @@ import {
   Menu,
   X,
 } from "lucide-react";
+import { PlanCard, PLANS } from "@/components/public/PlanCard";
 
 // ── Animated counter hook ──
 function useCounter(target: number, duration = 2000, trigger = true) {
@@ -160,18 +161,21 @@ export default function LandingPage() {
             <a href="#comparison" className="text-sm text-white/60 transition hover:text-white">
               Comparar
             </a>
+            <a href="#planos" className="text-sm text-white/60 transition hover:text-white">
+              Planos
+            </a>
             <a
               href="/login"
               className="text-sm text-white/60 transition hover:text-white"
             >
               Entrar
             </a>
-            <a
-              href="#cta"
+            <Link
+              href="/contacto"
               className="rounded-lg bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-400"
             >
-              Comecar
-            </a>
+              Começar
+            </Link>
           </div>
 
           {/* Mobile toggle */}
@@ -196,6 +200,9 @@ export default function LandingPage() {
               <a href="#comparison" className="text-sm text-white/60" onClick={() => setMobileMenu(false)}>
                 Comparar
               </a>
+              <a href="#planos" className="text-sm text-white/60" onClick={() => setMobileMenu(false)}>
+                Planos
+              </a>
               <a
                 href="/login"
                 className="text-sm text-white/60"
@@ -203,13 +210,13 @@ export default function LandingPage() {
               >
                 Entrar
               </a>
-              <a
-                href="#cta"
+              <Link
+                href="/contacto"
                 className="rounded-lg bg-emerald-500 px-5 py-2.5 text-center text-sm font-semibold text-white"
                 onClick={() => setMobileMenu(false)}
               >
-                Comecar
-              </a>
+                Começar
+              </Link>
             </div>
           </div>
         )}
@@ -228,7 +235,7 @@ export default function LandingPage() {
             {/* Badge */}
             <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-4 py-1.5 text-sm text-emerald-400">
               <Zap className="h-3.5 w-3.5" />
-              <span>Beta aberta para clubes de formacao</span>
+              <span>Beta aberta para clubes de formação</span>
             </div>
 
             {/* Headline */}
@@ -242,8 +249,8 @@ export default function LandingPage() {
 
             {/* Subhead */}
             <p className="mx-auto mb-10 max-w-xl text-lg leading-relaxed text-white/50 md:text-xl">
-              Plataforma de gestao desportiva para futebol de formacao.
-              Regista no campo com o telemovel. Consulta tudo no dashboard
+              Plataforma de gestão desportiva para futebol de formação.
+              Regista no campo com o telemóvel. Consulta tudo no dashboard
               sem inserir dados duas vezes.
             </p>
 
@@ -278,7 +285,7 @@ export default function LandingPage() {
                 <div className="text-2xl font-bold text-emerald-400 md:text-3xl">
                   &lt;{stats.seconds}s
                 </div>
-                <div className="mt-1 text-xs text-white/40">para marcar presencas</div>
+                <div className="mt-1 text-xs text-white/40">para marcar presenças</div>
               </div>
               <div>
                 <div className="text-2xl font-bold text-white md:text-3xl">{stats.touches}</div>
@@ -286,7 +293,7 @@ export default function LandingPage() {
               </div>
               <div>
                 <div className="text-2xl font-bold text-white md:text-3xl">0€</div>
-                <div className="mt-1 text-xs text-white/40">para comecar</div>
+                <div className="mt-1 text-xs text-white/40">para começar</div>
               </div>
             </div>
           </div>
@@ -301,8 +308,8 @@ export default function LandingPage() {
               O problema que todos os treinadores conhecem
             </h2>
             <p className="text-white/50">
-              131 treinos agendados. Apenas 1 com presencas registadas.
-              Nao porque o treinador nao quer — porque a ferramenta nao deixa.
+              131 treinos agendados. Apenas 1 com presenças registadas.
+              Não porque o treinador não quer — porque a ferramenta não deixa.
             </p>
           </div>
 
@@ -310,22 +317,22 @@ export default function LandingPage() {
             <div className="rounded-xl border border-red-500/10 bg-red-500/5 p-6">
               <div className="mb-3 text-2xl font-bold text-red-400/80">Desktop</div>
               <p className="text-sm text-white/40">
-                Plataformas pensadas para o escritorio. No campo, com frio e luvas,
-                ninguem abre um laptop para marcar presencas.
+                Plataformas pensadas para o escritório. No campo, com frio e luvas,
+                ninguém abre um laptop para marcar presenças.
               </p>
             </div>
             <div className="rounded-xl border border-red-500/10 bg-red-500/5 p-6">
               <div className="mb-3 text-2xl font-bold text-red-400/80">Manual</div>
               <p className="text-sm text-white/40">
                 Dados inseridos duas vezes. O treinador regista e depois
-                o admin volta a preencher. Duplicacao constante.
+                o admin volta a preencher. Duplicação constante.
               </p>
             </div>
             <div className="rounded-xl border border-red-500/10 bg-red-500/5 p-6">
               <div className="mb-3 text-2xl font-bold text-red-400/80">120×</div>
               <p className="text-sm text-white/40">
-                120 treinos por epoca criados um a um. Sem duplicacao semanal.
-                Sem auto-incremento. Trabalho repetitivo que ninguem quer fazer.
+                120 treinos por época criados um a um. Sem duplicação semanal.
+                Sem auto-incremento. Trabalho repetitivo que ninguém quer fazer.
               </p>
             </div>
           </div>
@@ -337,7 +344,7 @@ export default function LandingPage() {
         <div className="mx-auto max-w-6xl px-6">
           <div className="mx-auto mb-16 max-w-2xl text-center">
             <h2 className="mb-4 text-2xl font-bold md:text-3xl">
-              Tudo o que precisas. Nada do que nao precisas.
+              Tudo o que precisas. Nada do que não precisas.
             </h2>
             <p className="text-white/50">
               Desenhado por treinadores, para treinadores. Cada funcionalidade
@@ -348,51 +355,51 @@ export default function LandingPage() {
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             <FeatureCard
               icon={ClipboardCheck}
-              title="Presencas em 20 segundos"
+              title="Presenças em 20 segundos"
               description="Lista de jogadores com foto e toggle grande. Guardar fixo no fundo. Feito antes do apito."
               accent
             />
             <FeatureCard
               icon={Timer}
               title="Eventos live em jogo"
-              description="Golos, cartoes, substituicoes — 2 toques com minuto auto-preenchido. Regista durante o jogo, nao depois."
+              description="Golos, cartões, substituições — 2 toques com minuto auto-preenchido. Regista durante o jogo, não depois."
               accent
             />
             <FeatureCard
               icon={Copy}
               title="Duplicar semana de treinos"
-              description="Cria a semana 1 (UT01-UT03). Duplica para o resto da epoca. 120 sessoes em segundos, nao em horas."
+              description="Cria a semana 1 (UT01-UT03). Duplica para o resto da época. 120 sessões em segundos, não em horas."
               accent
             />
             <FeatureCard
               icon={BarChart3}
-              title="Insights no telemovel"
-              description="Minutos jogados, golos, presencas, alertas de suspensao. Consulta rapida no banco antes de decidir uma substituicao."
+              title="Insights no telemóvel"
+              description="Minutos jogados, golos, presenças, alertas de suspensão. Consulta rápida no banco antes de decidir uma substituição."
             />
             <FeatureCard
               icon={Bell}
-              title="Notificacoes push"
-              description="Convocatorias, treinos, alteracoes — tudo chega ao atleta e ao pai sem depender do WhatsApp."
+              title="Notificações push"
+              description="Convocatórias, treinos, alterações — tudo chega ao atleta e ao pai sem depender do WhatsApp."
             />
             <FeatureCard
               icon={FileText}
-              title="PDF automatico"
-              description="Relatorio de jogo e planeamento de treino gerados automaticamente com logo do clube. Partilha com 1 toque."
+              title="PDF automático"
+              description="Relatório de jogo e planeamento de treino gerados automaticamente com logo do clube. Partilha com 1 toque."
             />
             <FeatureCard
               icon={Shield}
               title="Dossier de treino FPF"
-              description="UTs estruturadas, biblioteca de exercicios, avaliacoes, objectivos — tudo o que a certificacao pede, pronto para a visita tecnica."
+              description="UTs estruturadas, biblioteca de exercícios, avaliações, objectivos — tudo o que a certificação pede, pronto para a visita técnica."
             />
             <FeatureCard
               icon={Users}
-              title="Multi-equipa, multi-escalao"
-              description="Coordenador ve tudo. Treinador ve a sua equipa. Adjunto marca presencas. Cada um ve o que precisa."
+              title="Multi-equipa, multi-escalão"
+              description="Coordenador vê tudo. Treinador vê a sua equipa. Adjunto marca presenças. Cada um vê o que precisa."
             />
             <FeatureCard
               icon={Smartphone}
-              title="PWA instalavel"
-              description="Instala no telemovel como uma app nativa. Sem App Store, sem Play Store. Abre e usa."
+              title="PWA instalável"
+              description="Instala no telemóvel como uma app nativa. Sem App Store, sem Play Store. Abre e usa."
             />
           </div>
         </div>
@@ -407,7 +414,7 @@ export default function LandingPage() {
             </h2>
             <p className="text-white/50">
               Os dados nascem no campo e fluem automaticamente.
-              Ninguem insere nada duas vezes.
+              Ninguém insere nada duas vezes.
             </p>
           </div>
 
@@ -419,8 +426,8 @@ export default function LandingPage() {
               </div>
               <h3 className="mb-2 text-lg font-semibold">O treinador regista no campo</h3>
               <p className="text-sm text-white/50">
-                Presencas, eventos de jogo, avaliacoes pos-jogo, notas de treino.
-                Tudo no telemovel, rapido, com uma mao.
+                Presenças, eventos de jogo, avaliações pós-jogo, notas de treino.
+                Tudo no telemóvel, rápido, com uma mão.
               </p>
               <div className="mt-4 flex flex-wrap gap-2">
                 <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-xs text-emerald-400">
@@ -443,13 +450,13 @@ export default function LandingPage() {
               </div>
               <h3 className="mb-2 text-lg font-semibold">O sistema processa</h3>
               <p className="text-sm text-white/50">
-                Agrega estatisticas, calcula minutos, gera rankings,
+                Agrega estatísticas, calcula minutos, gera rankings,
                 detecta alertas (3 amarelos, faltas consecutivas),
-                prepara relatorios.
+                prepara relatórios.
               </p>
               <div className="mt-4 flex flex-wrap gap-2">
                 <span className="rounded-full bg-white/5 px-3 py-1 text-xs text-white/40">
-                  Automatico
+                  Automático
                 </span>
                 <span className="rounded-full bg-white/5 px-3 py-1 text-xs text-white/40">
                   Tempo real
@@ -468,7 +475,7 @@ export default function LandingPage() {
               <h3 className="mb-2 text-lg font-semibold">O coordenador consulta</h3>
               <p className="text-sm text-white/50">
                 Dashboard com insights, dossier de treino pronto,
-                relatorios exportaveis. Sem inserir um unico dado manualmente.
+                relatórios exportáveis. Sem inserir um único dado manualmente.
               </p>
               <div className="mt-4 flex flex-wrap gap-2">
                 <span className="rounded-full bg-white/5 px-3 py-1 text-xs text-white/40">
@@ -488,10 +495,10 @@ export default function LandingPage() {
         <div className="mx-auto max-w-3xl px-6">
           <div className="mb-12 text-center">
             <h2 className="mb-4 text-2xl font-bold md:text-3xl">
-              A diferenca no dia-a-dia
+              A diferença no dia a dia
             </h2>
             <p className="text-white/50">
-              Nao se trata de mais funcionalidades. Trata-se de melhor execucao
+              Não se trata de mais funcionalidades. Trata-se de melhor execução
               nos momentos que importam.
             </p>
           </div>
@@ -505,18 +512,18 @@ export default function LandingPage() {
             </div>
 
             <ComparisonRow
-              feature="Marcar presencas"
+              feature="Marcar presenças"
               old="5+ minutos, laptop"
-              better="< 20 segundos, telemovel"
+              better="< 20 segundos, telemóvel"
             />
             <ComparisonRow
               feature="Evento em jogo"
-              old="Anotar papel, passar depois"
+              old="Anotar em papel, passar depois"
               better="2 toques, tempo real"
             />
             <ComparisonRow
               feature="Criar 120 treinos"
-              old="120 operacoes manuais"
+              old="120 operações manuais"
               better="4 cliques (duplicar semana)"
             />
             <ComparisonRow
@@ -525,19 +532,19 @@ export default function LandingPage() {
               better="2 toques no banco"
             />
             <ComparisonRow
-              feature="Enviar convocatoria"
+              feature="Enviar convocatória"
               old="WhatsApp manual"
-              better="Push notification automatica"
+              better="Push notification automática"
             />
             <ComparisonRow
-              feature="Relatorio de jogo"
-              old="Preencher formulario"
+              feature="Relatório de jogo"
+              old="Preencher formulário"
               better="PDF gerado automaticamente"
             />
             <ComparisonRow
               feature="Dossier para FPF"
-              old="Compilar no final da epoca"
-              better="Sempre actualizado, exportavel"
+              old="Compilar no final da época"
+              better="Sempre actualizado, exportável"
             />
           </div>
         </div>
@@ -547,7 +554,7 @@ export default function LandingPage() {
       <section className="border-t border-white/5 bg-slate-900/30 py-20">
         <div className="mx-auto max-w-6xl px-6">
           <div className="mx-auto mb-12 max-w-2xl text-center">
-            <h2 className="mb-4 text-2xl font-bold md:text-3xl">Para quem e o Coach11?</h2>
+            <h2 className="mb-4 text-2xl font-bold md:text-3xl">Para quem é o Coach11?</h2>
           </div>
 
           <div className="grid gap-6 md:grid-cols-2">
@@ -557,18 +564,18 @@ export default function LandingPage() {
               </div>
               <h3 className="mb-2 text-xl font-semibold">Clubes certificados FPF</h3>
               <p className="mb-4 text-sm text-white/50">
-                Dossier de treino completo, UTs estruturadas, biblioteca de exercicios,
-                avaliacoes — tudo o que a certificacao exige, gerado automaticamente
+                Dossier de treino completo, UTs estruturadas, biblioteca de exercícios,
+                avaliações — tudo o que a certificação exige, gerado automaticamente
                 a partir do trabalho no campo.
               </p>
               <ul className="space-y-2">
                 <li className="flex items-center gap-2 text-sm text-white/60">
                   <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
-                  Criterio 4 da FPF coberto
+                  Critério 4 da FPF coberto
                 </li>
                 <li className="flex items-center gap-2 text-sm text-white/60">
                   <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
-                  Pronto para visita tecnica
+                  Pronto para visita técnica
                 </li>
                 <li className="flex items-center gap-2 text-sm text-white/60">
                   <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
@@ -583,13 +590,13 @@ export default function LandingPage() {
               </div>
               <h3 className="mb-2 text-xl font-semibold">Escolas de futebol e clubes pequenos</h3>
               <p className="mb-4 text-sm text-white/50">
-                Comecar a usar em minutos. Sem configuracao complexa, sem obrigacoes
+                Começar a usar em minutos. Sem configuração complexa, sem obrigações
                 administrativas. Foco no que importa: treinar e gerir a equipa.
               </p>
               <ul className="space-y-2">
                 <li className="flex items-center gap-2 text-sm text-white/60">
                   <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
-                  Gratis para comecar
+                  Grátis para começar
                 </li>
                 <li className="flex items-center gap-2 text-sm text-white/60">
                   <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
@@ -597,11 +604,40 @@ export default function LandingPage() {
                 </li>
                 <li className="flex items-center gap-2 text-sm text-white/60">
                   <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
-                  Presencas, jogos e convocatorias
+                  Presenças, jogos e convocatórias
                 </li>
               </ul>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* ═══ PLANOS ═══ */}
+      <section id="planos" className="border-t border-white/5 py-20 md:py-28">
+        <div className="mx-auto max-w-6xl px-6">
+          <div className="mx-auto mb-12 max-w-2xl text-center">
+            <h2 className="mb-4 text-2xl font-bold md:text-3xl">
+              Planos para cada fase do clube
+            </h2>
+            <p className="text-white/50">
+              Treinador individual em auto-serviço. Clube com onboarding
+              dedicado. Sempre com o mesmo produto por baixo.
+            </p>
+          </div>
+
+          <div className="grid gap-6 md:grid-cols-3">
+            {PLANS.map((plan) => (
+              <PlanCard key={plan.name} {...plan} />
+            ))}
+          </div>
+
+          <p className="mt-10 text-center text-sm text-white/40">
+            Detalhes completos em{" "}
+            <Link href="/precos" className="text-emerald-400 underline-offset-2 hover:underline">
+              /precos
+            </Link>
+            .
+          </p>
         </div>
       </section>
 
@@ -674,15 +710,21 @@ export default function LandingPage() {
             </span>
           </Link>
           <div className="flex items-center gap-4 text-xs text-white/40">
-            <Link href="/privacidade" className="transition hover:text-white/70">
-              Privacidade
+            <Link href="/precos" className="transition hover:text-white/70">
+              Preços
+            </Link>
+            <Link href="/contacto" className="transition hover:text-white/70">
+              Contacto
             </Link>
             <Link href="/faqs" className="transition hover:text-white/70">
               FAQs
             </Link>
+            <Link href="/privacidade" className="transition hover:text-white/70">
+              Privacidade
+            </Link>
           </div>
           <p className="text-xs text-white/30">
-            &copy; 2026 Coach11. Feito em Lisboa para treinadores de formacao.
+            &copy; 2026 Coach11. Feito em Lisboa para treinadores de formação.
           </p>
         </div>
       </footer>
