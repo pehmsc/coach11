@@ -210,7 +210,7 @@ export function ClubsAdminPanel() {
                     {format(parseISO(club.created_at), "d MMM yyyy", {
                       locale: pt,
                     })}{" "}
-                    · slug <span className="font-mono">{club.slug}</span>
+                    · sigla <span className="font-mono">{club.slug}</span>
                   </p>
                 </div>
                 <div className="hidden sm:flex flex-shrink-0 gap-4 text-right">

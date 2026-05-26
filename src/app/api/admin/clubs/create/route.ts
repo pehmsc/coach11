@@ -17,9 +17,9 @@ const CreateClubSchema = z
     slug: z
       .string()
       .trim()
-      .min(2, "Slug demasiado curto.")
-      .max(80)
-      .regex(/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/u, "Slug invalido. Usar minusculas, digitos e hifens."),
+      .min(2, "Sigla demasiado curta.")
+      .max(20)
+      .regex(/^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/u, "Sigla invalida. Usar letras, digitos e hifens."),
     legal_name: z.string().trim().min(2).max(200).nullable().optional(),
     nif: z.string().trim().min(3).max(30),
     billing_address: z.string().trim().min(3).max(500),
