@@ -673,6 +673,14 @@ export default function LandingPage() {
               Coach<span className="text-emerald-400">11</span>
             </span>
           </Link>
+          <div className="flex items-center gap-4 text-xs text-white/40">
+            <Link href="/privacidade" className="transition hover:text-white/70">
+              Privacidade
+            </Link>
+            <Link href="/faqs" className="transition hover:text-white/70">
+              FAQs
+            </Link>
+          </div>
           <p className="text-xs text-white/30">
             &copy; 2026 Coach11. Feito em Lisboa para treinadores de formacao.
           </p>
