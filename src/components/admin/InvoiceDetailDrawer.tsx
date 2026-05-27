@@ -40,35 +40,30 @@ export function InvoiceDetailDrawer({
   refreshKey,
 }: Props) {
   const [invoice, setInvoice] = useState<Invoice | null>(null);
-  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [resending, setResending] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+
+  // Iframe usa endpoint same-origin com ?stream=1 (proxia o PDF) porque a CDN
+  // do Supabase serve com X-Frame-Options: DENY e o iframe ficaria bloqueado.
+  const pdfStreamUrl = `/api/admin/clubs/${clubId}/invoices/${invoiceId}/pdf?stream=1`;
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [invRes, pdfRes] = await Promise.all([
-        fetch(`/api/admin/clubs/${clubId}/invoices/${invoiceId}`, {
-          cache: "no-store",
-        }),
-        fetch(`/api/admin/clubs/${clubId}/invoices/${invoiceId}/pdf`, {
-          cache: "no-store",
-        }),
-      ]);
-      const invJson = (await invRes.json()) as
+      const res = await fetch(
+        `/api/admin/clubs/${clubId}/invoices/${invoiceId}`,
+        { cache: "no-store" },
+      );
+      const json = (await res.json()) as
         | { invoice: Invoice }
         | { error: string };
-      const pdfJson = (await pdfRes.json()) as
-        | { url: string }
-        | { error: string };
-      if (!invRes.ok || !("invoice" in invJson)) {
-        throw new Error("error" in invJson ? invJson.error : "Erro a carregar.");
+      if (!res.ok || !("invoice" in json)) {
+        throw new Error("error" in json ? json.error : "Erro a carregar.");
       }
-      setInvoice(invJson.invoice);
-      if (pdfRes.ok && "url" in pdfJson) setPdfUrl(pdfJson.url);
-      else setPdfUrl(null);
+      setInvoice(json.invoice);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro a carregar factura.");
     } finally {
@@ -106,12 +101,23 @@ export function InvoiceDetailDrawer({
     }
   }
 
-  function downloadPdf() {
-    if (!pdfUrl) {
-      toast.error("Sem PDF disponivel.");
-      return;
+  async function downloadPdf() {
+    if (downloading) return;
+    setDownloading(true);
+    try {
+      const res = await fetch(
+        `/api/admin/clubs/${clubId}/invoices/${invoiceId}/pdf`,
+      );
+      const json = (await res.json()) as { url?: string; error?: string };
+      if (!res.ok || !json.url) {
+        throw new Error(json.error || "Erro a gerar link.");
+      }
+      window.open(json.url, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro a descarregar.");
+    } finally {
+      setDownloading(false);
     }
-    window.open(pdfUrl, "_blank", "noopener,noreferrer");
   }
 
   return (
@@ -182,24 +188,18 @@ export function InvoiceDetailDrawer({
                 ) : null}
               </div>
 
-              {/* PDF preview */}
+              {/* PDF preview (same-origin proxy para contornar X-Frame-Options da CDN) */}
               <section>
                 <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
                   PDF
                 </h3>
-                {pdfUrl ? (
-                  <div className="overflow-hidden rounded-lg border border-slate-200">
-                    <iframe
-                      src={pdfUrl}
-                      className="block h-96 w-full"
-                      title={`PDF factura ${invoice.invoice_number}`}
-                    />
-                  </div>
-                ) : (
-                  <p className="rounded-lg border border-dashed border-slate-300 px-3 py-4 text-center text-xs text-slate-400">
-                    Não foi possível carregar o PDF.
-                  </p>
-                )}
+                <div className="overflow-hidden rounded-lg border border-slate-200">
+                  <iframe
+                    src={pdfStreamUrl}
+                    className="block h-96 w-full"
+                    title={`PDF factura ${invoice.invoice_number}`}
+                  />
+                </div>
               </section>
 
               {/* Notas internas */}
@@ -227,7 +227,7 @@ export function InvoiceDetailDrawer({
               variant="outline"
               size="sm"
               onClick={downloadPdf}
-              disabled={!pdfUrl}
+              disabled={downloading}
             >
               <Download size={14} className="mr-1.5" />
               Descarregar PDF
