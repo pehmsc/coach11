@@ -19,7 +19,7 @@ export async function POST(
     const { data: invoice, error: invErr } = await access.admin
       .from("invoices")
       .select(
-        "id, invoice_number, amount_cents, currency, issued_at, due_date, status",
+        "id, invoice_number, amount_cents, currency, issued_at, due_date, status, pdf_path",
       )
       .eq("id", invoiceId)
       .eq("club_id", clubId)
@@ -61,6 +61,19 @@ export async function POST(
       );
     }
 
+    // Descarrega PDF do storage para anexar (soft-fail: se falhar, envia sem anexo)
+    let pdfBuffer: Buffer | undefined;
+    try {
+      const { data: pdfBlob, error: dlErr } = await access.admin.storage
+        .from("invoices")
+        .download(invoice.pdf_path);
+      if (!dlErr && pdfBlob) {
+        pdfBuffer = Buffer.from(await pdfBlob.arrayBuffer());
+      }
+    } catch {
+      // soft-fail — envia email sem anexo
+    }
+
     const result = await sendInvoiceIssuedEmail({
       to: recipient,
       clubName: club.name,
@@ -70,6 +83,7 @@ export async function POST(
       currency: invoice.currency,
       issuedAt: invoice.issued_at,
       dueDate: invoice.due_date,
+      pdfBuffer,
     });
 
     if (!result.sent) {
