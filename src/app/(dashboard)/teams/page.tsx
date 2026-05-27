@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { toPortugalWallClock } from "@/lib/events/time";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -262,7 +263,7 @@ export default function TeamsPage() {
         .select("age_group_id")
         .in("age_group_id", ids)
         .not("status", "in", '("completed","cancelled")')
-        .lt("game_datetime", new Date().toISOString()),
+        .lt("game_datetime", toPortugalWallClock(new Date())),
     ]);
 
     function countById(rows: Array<{ age_group_id: string }> | null, id: string) {

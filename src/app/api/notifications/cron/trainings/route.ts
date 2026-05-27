@@ -1,5 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createNotificationForTeamOnce } from "@/lib/notifications/service";
+import { portugalDateTimeToUtc } from "@/lib/events/presence-window";
+import { toPortugalDateKey } from "@/lib/events/time";
 import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -25,21 +27,27 @@ export async function GET(request: NextRequest) {
   let t1Count = 0;
   let t2Count = 0;
 
-  // T1: Treinos que começaram nos últimos 15 minutos
+  // T1: Treinos que começaram nos últimos 15 minutos. session_date e date
+  // (sem fuso); usar a data calendario PT em vez de UTC para nao saltar dias
+  // perto da meia-noite.
   const { data: startingSessions } = await admin
     .from("training_sessions")
     .select("id, team_id, age_group_id, session_date, start_time, title")
     .eq("status", "scheduled")
-    .gte("session_date", windowStart.toISOString().split("T")[0])
-    .lte("session_date", now.toISOString().split("T")[0]);
+    .gte("session_date", toPortugalDateKey(windowStart))
+    .lte("session_date", toPortugalDateKey(now));
 
   if (startingSessions) {
     for (const session of startingSessions) {
       if (!session.team_id || !session.start_time) continue;
 
-      // Verificar se a hora de início está na janela [now-15min, now]
-      const startDateTime = new Date(`${session.session_date}T${session.start_time}`);
-      if (startDateTime < windowStart || startDateTime > now) continue;
+      // Verificar se a hora de início (PT) está na janela [now-15min, now].
+      const startDateTime = portugalDateTimeToUtc(
+        session.session_date,
+        session.start_time,
+      );
+      if (!startDateTime || startDateTime < windowStart || startDateTime > now)
+        continue;
 
       const { data: coordinator } = await admin
         .from("age_groups")
@@ -73,15 +81,18 @@ export async function GET(request: NextRequest) {
     .from("training_sessions")
     .select("id, team_id, age_group_id, session_date, start_time, duration_minutes, title")
     .eq("status", "scheduled")
-    .eq("session_date", now.toISOString().split("T")[0]);
+    .eq("session_date", toPortugalDateKey(now));
 
   if (endedSessions) {
     for (const session of endedSessions) {
       if (!session.team_id || !session.start_time) continue;
       const duration = session.duration_minutes ?? 90;
-      const endDateTime = new Date(
-        new Date(`${session.session_date}T${session.start_time}`).getTime() + duration * 60 * 1000,
+      const startInstant = portugalDateTimeToUtc(
+        session.session_date,
+        session.start_time,
       );
+      if (!startInstant) continue;
+      const endDateTime = new Date(startInstant.getTime() + duration * 60 * 1000);
 
       // Janela: terminou entre 10-25 min atrás (alargada para cron de 15 min)
       if (endDateTime < t2WindowEnd || endDateTime > tenMinAgo) continue;

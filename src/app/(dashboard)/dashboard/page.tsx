@@ -7,6 +7,7 @@ import Image from "next/image";
 import { DashboardEmptyState } from "@/components/dashboard/DashboardEmptyState";
 import { format, addDays, parseISO, isToday, isTomorrow } from "date-fns";
 import { pt } from "date-fns/locale";
+import { parseGameDateTime } from "@/lib/events/time";
 import {
   Calendar,
   Play,
@@ -51,9 +52,9 @@ function toTimestampFromDateAndTime(
 }
 
 function toTimestampFromDateTime(dateTimeValue: string | null | undefined) {
-  if (!dateTimeValue) return Number.MAX_SAFE_INTEGER;
-  const parsed = Date.parse(dateTimeValue);
-  return Number.isNaN(parsed) ? Number.MAX_SAFE_INTEGER : parsed;
+  // game_datetime e wall-clock PT — converter para instante UTC correcto.
+  const parsed = parseGameDateTime(dateTimeValue)?.getTime();
+  return parsed ?? Number.MAX_SAFE_INTEGER;
 }
 
 export default async function DashboardPage({

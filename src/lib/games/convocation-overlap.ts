@@ -8,18 +8,19 @@
 // deixar de se manter, alargar a janela de busca em route.ts para
 // [dayStart - 1, dayEnd + 1] e revisitar a lógica de overlap.
 
-import {
-  getPortugalDateKey,
-  portugalDateTimeToUtc,
-} from "../events/presence-window";
+import { portugalDateTimeToUtc } from "../events/presence-window";
+import { parseGameDateTime } from "../events/time";
 
 export interface GameTimeSource {
-  /** Timestamp ISO do kickoff (timestamp with time zone na DB). */
+  /**
+   * Wall-clock PT do kickoff. game_datetime e timestamp WITHOUT time zone
+   * na DB; PostgREST devolve "YYYY-MM-DDTHH:MM:SS" sem indicador de fuso.
+   */
   game_datetime: string;
   /**
-   * Concentração — coluna `text` na DB; quando preenchida deve conter um
-   * timestamp ISO parseável por `new Date()`. Se for inválido, é ignorado
-   * e o `start` cai para o `game_datetime`.
+   * Concentração — coluna `text` na DB. Aceita HH:MM (formato actual da UI)
+   * ou ISO wall-clock PT "YYYY-MM-DDTHH:MM:SS". Se invalido, ignorado e o
+   * `start` cai para o `game_datetime`.
    */
   concentration_time: string | null;
   /** `time without time zone` (HH:MM ou HH:MM:SS) na DB. */
@@ -35,33 +36,56 @@ export interface GameInterval {
 
 const FALLBACK_DURATION_MS = 150 * 60_000; // 2h30
 
-function parseDateOrNull(value: string | null | undefined): Date | null {
+const ISO_PREFIX_RE = /^(\d{4}-\d{2}-\d{2})/;
+const HHMM_RE = /^(\d{2}):(\d{2})(?::(\d{2}))?$/;
+
+function parseConcentrationOrNull(
+  value: string | null | undefined,
+  fallbackDateKey: string | null,
+): Date | null {
   if (!value) return null;
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
+  const trimmed = value.trim();
+  // Caso 1: ISO wall-clock PT "YYYY-MM-DDTHH:MM:SS".
+  if (ISO_PREFIX_RE.test(trimmed)) {
+    return parseGameDateTime(trimmed);
+  }
+  // Caso 2: HH:MM ou HH:MM:SS — combinar com a data do jogo.
+  if (HHMM_RE.test(trimmed) && fallbackDateKey) {
+    return portugalDateTimeToUtc(fallbackDateKey, trimmed);
+  }
+  return null;
 }
 
 export function gameInterval(g: GameTimeSource): GameInterval {
-  const kickoff = new Date(g.game_datetime);
+  const kickoff = parseGameDateTime(g.game_datetime);
+  if (!kickoff) {
+    // game_datetime invalido — devolvemos intervalo vazio assumindo agora.
+    // Defensivo: a UI ja valida antes de chamar.
+    const now = new Date();
+    return {
+      start: now,
+      end: new Date(now.getTime() + FALLBACK_DURATION_MS),
+      endIsEstimated: true,
+    };
+  }
+  const dateKey = ISO_PREFIX_RE.exec(g.game_datetime.trim())?.[1] ?? null;
 
-  // Start = COALESCE(concentration_time, kickoff). Concentration_time é text
-  // na DB; se não for um timestamp parseável, ignoramos e usamos kickoff.
-  const concentration = parseDateOrNull(g.concentration_time);
+  // Start = COALESCE(concentration_time, kickoff). Concentration_time aceita
+  // HH:MM ou ISO; se invalido, fallback para kickoff.
+  const concentration = parseConcentrationOrNull(g.concentration_time, dateKey);
   const start = concentration ?? kickoff;
 
-  // End = COALESCE(end_time, start + 2h30).
-  // end_time é HH:MM[:SS]; combinamos com a data calendário (Portugal) do
-  // kickoff para obter um Date em UTC.
+  // End = COALESCE(end_time, start + 2h30). end_time e HH:MM[:SS]; combinar
+  // com a data PT do kickoff para obter Date em UTC.
   let end: Date;
   let endIsEstimated = false;
 
   if (g.end_time) {
-    const dateKey = getPortugalDateKey(g.game_datetime);
     const combined = dateKey ? portugalDateTimeToUtc(dateKey, g.end_time) : null;
     if (combined && combined.getTime() > start.getTime()) {
       end = combined;
     } else {
-      // end_time inválido ou anterior ao start → cai para fallback
+      // end_time invalido ou anterior ao start → fallback
       end = new Date(start.getTime() + FALLBACK_DURATION_MS);
       endIsEstimated = true;
     }

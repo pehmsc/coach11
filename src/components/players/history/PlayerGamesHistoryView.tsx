@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { format, parseISO } from "date-fns";
-import { pt } from "date-fns/locale";
+import { formatGameDateTimeParts } from "@/lib/events/time";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { StickyBackLink } from "@/components/navigation/StickyBackLink";
 import { Breadcrumb, type BreadcrumbItem } from "@/components/navigation/Breadcrumb";
@@ -180,9 +179,13 @@ export function PlayerGamesHistoryView({ playerId, scope }: Props) {
             {items.map((row) => {
               const game = unwrapGame(row.games);
               const competition = unwrapCompetition(game?.competitions);
-              const dt = game?.game_datetime
-                ? parseISO(game.game_datetime)
+              const parts = formatGameDateTimeParts(game?.game_datetime);
+              const yearMatch = game?.game_datetime
+                ? /^(\d{4})/.exec(game.game_datetime)
                 : null;
+              const dateLabel = parts && yearMatch
+                ? `${parts.day} ${parts.monthShort} ${yearMatch[1]}`
+                : "—";
               const score =
                 game && game.score_home != null && game.score_away != null
                   ? `${game.score_home}–${game.score_away}`
@@ -195,9 +198,7 @@ export function PlayerGamesHistoryView({ playerId, scope }: Props) {
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <p className="text-xs text-slate-400">
-                        {dt
-                          ? format(dt, "d MMM yyyy", { locale: pt })
-                          : "—"}
+                        {dateLabel}
                         {competition?.name ? ` · ${competition.name}` : ""}
                       </p>
                       <p className="text-sm font-semibold text-slate-900">

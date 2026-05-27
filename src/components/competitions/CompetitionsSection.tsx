@@ -3,8 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { format, parseISO } from "date-fns";
-import { pt } from "date-fns/locale";
+import { formatGameDateTimeParts, parseGameDateTime } from "@/lib/events/time";
 import {
   Calendar,
   ChevronDown,
@@ -68,7 +67,9 @@ type Props = {
 const COMPETITION_GAMES_WINDOW_SIZE = 5;
 
 function compareCompetitionGames(a: GameRow, b: GameRow) {
-  return new Date(b.game_datetime).getTime() - new Date(a.game_datetime).getTime();
+  const ta = parseGameDateTime(a.game_datetime)?.getTime() ?? 0;
+  const tb = parseGameDateTime(b.game_datetime)?.getTime() ?? 0;
+  return tb - ta;
 }
 
 function getDefaultCompetitionWindowStart(games: GameRow[]) {
@@ -403,11 +404,16 @@ export function CompetitionsSection({ ageGroupId }: Props) {
                                 </p>
                               </div>
                               <p className="text-xs text-slate-400">
-                                {format(
-                                  parseISO(game.game_datetime),
-                                  isClosed ? "d MMM" : "d MMM · HH:mm",
-                                  { locale: pt },
-                                )}
+                                {(() => {
+                                  const parts = formatGameDateTimeParts(
+                                    game.game_datetime,
+                                  );
+                                  if (!parts) return "";
+                                  const datePart = `${parts.day} ${parts.monthShort}`;
+                                  return isClosed
+                                    ? datePart
+                                    : `${datePart} · ${parts.time}`;
+                                })()}
                                 {!isClosed && gameLocationLabel
                                   ? ` · ${gameLocationLabel}`
                                   : ""}

@@ -7,6 +7,7 @@ import {
   getOpponentScore,
   getOurScore,
 } from "@/lib/games/score-helpers";
+import { toPortugalDateKey, toPortugalWallClock } from "@/lib/events/time";
 
 type RouteContext = {
   params: Promise<{ ageGroupId: string }>;
@@ -162,14 +163,17 @@ export async function GET(request: Request, { params }: RouteContext) {
       if (opp !== null) goalsConceded += opp;
     }
 
-    // Próximo evento (jogo ou treino mais cedo no futuro)
-    const nowIso = new Date().toISOString();
+    // Próximo evento (jogo ou treino mais cedo no futuro). game_datetime e
+    // timestamp WITHOUT time zone (hora local PT) — comparar contra wall-clock
+    // PT em vez de ISO UTC.
+    const nowDate = new Date();
+    const nowWallClockPt = toPortugalWallClock(nowDate);
+    const todayDate = toPortugalDateKey(nowDate);
     const nextGame = scheduledGames
-      .filter((g) => g.game_datetime && g.game_datetime >= nowIso)
+      .filter((g) => g.game_datetime && g.game_datetime >= nowWallClockPt)
       .sort((a, b) =>
         (a.game_datetime ?? "").localeCompare(b.game_datetime ?? ""),
       )[0];
-    const todayDate = nowIso.split("T")[0];
     const nextTraining = scheduledTrainings
       .filter((t) => t.session_date && t.session_date >= todayDate)
       .sort((a, b) => {
@@ -222,7 +226,7 @@ export async function GET(request: Request, { params }: RouteContext) {
 
     // Calendário: próximos 3 eventos
     const futureGames = scheduledGames
-      .filter((g) => g.game_datetime && g.game_datetime >= nowIso)
+      .filter((g) => g.game_datetime && g.game_datetime >= nowWallClockPt)
       .map((g) => ({
         type: "game" as const,
         id: g.id,

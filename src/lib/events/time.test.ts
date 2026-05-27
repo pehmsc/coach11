@@ -1,206 +1,172 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   extractTimeFromDateTime,
   formatGameDateTime,
   formatGameDateTimeParts,
+  parseGameDateTime,
+  toPortugalDateKey,
+  toPortugalWallClock,
 } from "./time";
 
-describe("extractTimeFromDateTime", () => {
-  describe("ISO com timezone — converte para Europe/Lisbon (default)", () => {
-    it("converte UTC para Lisbon DST (Mai = UTC+1)", () => {
-      expect(extractTimeFromDateTime("2026-05-23T08:00:00+00:00")).toBe(
-        "09:00",
-      );
-    });
+// game_datetime e wall-clock PT — todas as funcoes devem produzir o mesmo
+// resultado em qualquer TZ de runtime. Forcamos TZ=UTC para simular Vercel
+// (onde o bug invertido apareceria) e garantir que nada depende do fuso do
+// processo.
+const originalTZ = process.env.TZ;
+beforeAll(() => {
+  process.env.TZ = "UTC";
+});
+afterAll(() => {
+  process.env.TZ = originalTZ;
+});
 
-    it("converte UTC para Lisbon winter (Jan = UTC+0)", () => {
-      expect(extractTimeFromDateTime("2026-01-15T08:00:00+00:00")).toBe(
-        "08:00",
-      );
-    });
-
-    it("aceita sufixo Z", () => {
-      expect(extractTimeFromDateTime("2026-05-23T08:00:00.000Z")).toBe("09:00");
-    });
-
-    it("aceita +HHMM (sem dois pontos)", () => {
-      expect(extractTimeFromDateTime("2026-05-23T08:00:00+0000")).toBe("09:00");
-    });
-
-    it("aceita offset positivo (já em Lisbon)", () => {
-      expect(extractTimeFromDateTime("2026-05-23T09:00:00+01:00")).toBe(
-        "09:00",
-      );
-    });
-
-    it("aceita offset negativo", () => {
-      expect(extractTimeFromDateTime("2026-05-23T03:00:00-05:00")).toBe(
-        "09:00",
-      );
-    });
-
-    it("respeita timezone explícito passado como parâmetro", () => {
-      expect(
-        extractTimeFromDateTime("2026-05-23T08:00:00+00:00", "UTC"),
-      ).toBe("08:00");
-      expect(
-        extractTimeFromDateTime("2026-05-23T08:00:00+00:00", "America/New_York"),
-      ).toBe("04:00");
-    });
+describe("extractTimeFromDateTime — wall-clock literal", () => {
+  it("extrai HH:MM com separador T", () => {
+    expect(extractTimeFromDateTime("2026-05-30T12:00:00")).toBe("12:00");
+    expect(extractTimeFromDateTime("2026-05-30T09:30:00")).toBe("09:30");
   });
 
-  describe("Sem timezone — fallback legacy (extracção literal)", () => {
-    it("extrai HH:MM de ISO naive", () => {
-      expect(extractTimeFromDateTime("2026-05-23T08:00:00")).toBe("08:00");
-    });
-
-    it("normaliza string HH:MM", () => {
-      expect(extractTimeFromDateTime("08:00")).toBe("08:00");
-    });
-
-    it("normaliza string HH:MM:SS", () => {
-      expect(extractTimeFromDateTime("08:00:00")).toBe("08:00");
-    });
+  it("aceita formato com espaco em vez de T (legacy PostgREST)", () => {
+    expect(extractTimeFromDateTime("2026-05-30 12:00:00")).toBe("12:00");
   });
 
-  describe("Edge cases", () => {
-    it("devolve null para input null", () => {
-      expect(extractTimeFromDateTime(null)).toBeNull();
-    });
+  it("aceita HH:MM/HH:MM:SS isolado", () => {
+    expect(extractTimeFromDateTime("08:00")).toBe("08:00");
+    expect(extractTimeFromDateTime("08:00:00")).toBe("08:00");
+  });
 
-    it("devolve null para input undefined", () => {
-      expect(extractTimeFromDateTime(undefined)).toBeNull();
-    });
-
-    it("devolve null para input não-string", () => {
-      // @ts-expect-error testando defensivamente
-      expect(extractTimeFromDateTime(123)).toBeNull();
-    });
+  it("devolve null para input null/undefined/nao-string", () => {
+    expect(extractTimeFromDateTime(null)).toBeNull();
+    expect(extractTimeFromDateTime(undefined)).toBeNull();
+    // @ts-expect-error defensivo
+    expect(extractTimeFromDateTime(123)).toBeNull();
   });
 });
 
-describe("formatGameDateTime", () => {
-  // 2026-05-24T17:20:00Z = 2026-05-24 18:20 Lisboa (DST WEST +1)
-  const DST_INPUT = "2026-05-24T17:20:00+00:00";
-  // 2026-01-15T08:00:00Z = 2026-01-15 08:00 Lisboa (WET +0)
-  const WINTER_INPUT = "2026-01-15T08:00:00+00:00";
+describe("formatGameDateTime — runtime UTC nao altera hora local", () => {
+  const SUMMER_INPUT = "2026-05-30T12:00:00"; // PT verao (DST)
+  const WINTER_INPUT = "2026-01-15T08:00:00"; // PT inverno
 
-  describe("variantes — DST (Mai = UTC+1)", () => {
-    it("longWithoutYear", () => {
-      expect(formatGameDateTime(DST_INPUT, "longWithoutYear")).toBe(
-        "domingo, 24 de maio · 18:20",
-      );
-    });
-
-    it("longWithYear", () => {
-      expect(formatGameDateTime(DST_INPUT, "longWithYear")).toBe(
-        "domingo, 24 de maio de 2026 · 18:20",
-      );
-    });
-
-    it("shortWithYear", () => {
-      // Intl pt-PT (Node ICU) produz formato dd/mm/yyyy para month: "short".
-      // Aceitamos este desvio vs antigo date-fns "d MMM yyyy" para ganhar
-      // consistencia de timezone — diferenca minima em PT.
-      expect(formatGameDateTime(DST_INPUT, "shortWithYear")).toBe(
-        "24/05/2026 · 18:20",
-      );
-    });
-
-    it("shortWithoutYear", () => {
-      expect(formatGameDateTime(DST_INPUT, "shortWithoutYear")).toBe(
-        "24/05 · 18:20",
-      );
-    });
-
-    it("monthYear", () => {
-      expect(formatGameDateTime(DST_INPUT, "monthYear")).toBe("maio de 2026");
-    });
+  it("longWithoutYear", () => {
+    expect(formatGameDateTime(SUMMER_INPUT, "longWithoutYear")).toBe(
+      "sábado, 30 de maio · 12:00",
+    );
   });
 
-  describe("variantes — Winter (Jan = UTC+0)", () => {
-    it("longWithoutYear sem shift quando WET", () => {
-      expect(formatGameDateTime(WINTER_INPUT, "longWithoutYear")).toBe(
-        "quinta-feira, 15 de janeiro · 08:00",
-      );
-    });
+  it("longWithYear", () => {
+    expect(formatGameDateTime(SUMMER_INPUT, "longWithYear")).toBe(
+      "sábado, 30 de maio de 2026 · 12:00",
+    );
   });
 
-  describe("Edge case — meia-noite UTC em Lisboa DST cai no dia seguinte", () => {
-    // 2026-05-24T23:30:00Z = 2026-05-25 00:30 Lisboa
-    it("agrupa correctamente no dia local, nao no dia UTC", () => {
-      expect(
-        formatGameDateTime("2026-05-24T23:30:00+00:00", "shortWithoutYear"),
-      ).toBe("25/05 · 00:30");
-    });
+  it("shortWithYear", () => {
+    expect(formatGameDateTime(SUMMER_INPUT, "shortWithYear")).toBe(
+      "30/05/2026 · 12:00",
+    );
   });
 
-  describe("Edge cases — null/undefined/invalid", () => {
-    it("devolve fallback para input null", () => {
-      expect(formatGameDateTime(null, "longWithoutYear")).toBe("Data por definir");
-    });
-
-    it("devolve fallback para input undefined", () => {
-      expect(formatGameDateTime(undefined, "longWithoutYear")).toBe(
-        "Data por definir",
-      );
-    });
-
-    it("devolve fallback para string vazia", () => {
-      expect(formatGameDateTime("   ", "longWithoutYear")).toBe(
-        "Data por definir",
-      );
-    });
-
-    it("devolve o input original quando parse falha", () => {
-      expect(formatGameDateTime("not-a-date", "longWithoutYear")).toBe(
-        "not-a-date",
-      );
-    });
+  it("shortWithoutYear", () => {
+    expect(formatGameDateTime(SUMMER_INPUT, "shortWithoutYear")).toBe(
+      "30/05 · 12:00",
+    );
   });
 
-  describe("timeZone parametrizado", () => {
-    it("respeita timezone explicito", () => {
-      expect(
-        formatGameDateTime(DST_INPUT, "shortWithoutYear", "UTC"),
-      ).toBe("24/05 · 17:20");
-    });
+  it("monthYear", () => {
+    expect(formatGameDateTime(SUMMER_INPUT, "monthYear")).toBe("maio de 2026");
+  });
+
+  it("preserva hora inverno (sem deslocacao por DST)", () => {
+    expect(formatGameDateTime(WINTER_INPUT, "shortWithoutYear")).toBe(
+      "15/01 · 08:00",
+    );
+  });
+
+  it("NAO desloca 1h em TZ=UTC (bug invertido teria '11:00' ou '13:00')", () => {
+    const result = formatGameDateTime(SUMMER_INPUT, "shortWithoutYear");
+    expect(result).toContain("12:00");
+    expect(result).not.toContain("11:00");
+    expect(result).not.toContain("13:00");
+  });
+});
+
+describe("formatGameDateTime — edge cases", () => {
+  it("devolve fallback para null/undefined/vazio", () => {
+    expect(formatGameDateTime(null, "longWithoutYear")).toBe("Data por definir");
+    expect(formatGameDateTime(undefined, "longWithoutYear")).toBe(
+      "Data por definir",
+    );
+    expect(formatGameDateTime("   ", "longWithoutYear")).toBe(
+      "Data por definir",
+    );
+  });
+
+  it("devolve input original se parse falha", () => {
+    expect(formatGameDateTime("not-a-date", "longWithoutYear")).toBe(
+      "not-a-date",
+    );
   });
 });
 
 describe("formatGameDateTimeParts", () => {
-  // 2026-05-24T17:20:00Z = 2026-05-24 18:20 Lisboa (DST)
-  const DST_INPUT = "2026-05-24T17:20:00+00:00";
-
-  it("decompoe em day/monthShort/time com TZ Lisbon (DST)", () => {
-    expect(formatGameDateTimeParts(DST_INPUT)).toEqual({
-      day: "24",
+  it("decompoe em day/monthShort/time", () => {
+    expect(formatGameDateTimeParts("2026-05-30T12:00:00")).toEqual({
+      day: "30",
       monthShort: "mai",
-      time: "18:20",
+      time: "12:00",
     });
   });
 
-  it("aplica shift de dia quando UTC cai no dia seguinte em Lisbon DST", () => {
-    // 2026-05-24T23:30Z = 2026-05-25 00:30 Lisboa
-    expect(formatGameDateTimeParts("2026-05-24T23:30:00+00:00")).toEqual({
-      day: "25",
+  it("aceita formato com espaco", () => {
+    expect(formatGameDateTimeParts("2026-05-30 12:00:00")).toEqual({
+      day: "30",
       monthShort: "mai",
-      time: "00:30",
+      time: "12:00",
     });
   });
 
-  it("respeita timezone explicito (UTC mantem o numero raw)", () => {
-    expect(formatGameDateTimeParts(DST_INPUT, "UTC")).toEqual({
-      day: "24",
-      monthShort: "mai",
-      time: "17:20",
-    });
-  });
-
-  it("devolve null para input null/undefined/invalid", () => {
+  it("devolve null para input invalido", () => {
     expect(formatGameDateTimeParts(null)).toBeNull();
     expect(formatGameDateTimeParts(undefined)).toBeNull();
     expect(formatGameDateTimeParts("  ")).toBeNull();
     expect(formatGameDateTimeParts("not-a-date")).toBeNull();
+  });
+});
+
+describe("parseGameDateTime — wall-clock PT -> instante UTC correcto", () => {
+  it("Maio em PT (DST UTC+1): 12:00 wall-clock = 11:00 UTC", () => {
+    const d = parseGameDateTime("2026-05-30T12:00:00");
+    expect(d).not.toBeNull();
+    expect(d!.toISOString()).toBe("2026-05-30T11:00:00.000Z");
+  });
+
+  it("Janeiro em PT (WET UTC+0): 08:00 wall-clock = 08:00 UTC", () => {
+    const d = parseGameDateTime("2026-01-15T08:00:00");
+    expect(d).not.toBeNull();
+    expect(d!.toISOString()).toBe("2026-01-15T08:00:00.000Z");
+  });
+
+  it("devolve null para input invalido", () => {
+    expect(parseGameDateTime(null)).toBeNull();
+    expect(parseGameDateTime("garbage")).toBeNull();
+  });
+});
+
+describe("toPortugalWallClock — Date -> string PT", () => {
+  it("12:00 UTC em maio = 13:00 PT", () => {
+    const date = new Date("2026-05-30T12:00:00.000Z");
+    expect(toPortugalWallClock(date)).toBe("2026-05-30T13:00:00");
+  });
+
+  it("08:00 UTC em janeiro = 08:00 PT (sem DST)", () => {
+    const date = new Date("2026-01-15T08:00:00.000Z");
+    expect(toPortugalWallClock(date)).toBe("2026-01-15T08:00:00");
+  });
+});
+
+describe("toPortugalDateKey", () => {
+  it("23:30 UTC em maio = dia seguinte em PT", () => {
+    // 2026-05-30T23:30:00Z = 2026-05-31T00:30 PT (DST +1)
+    const date = new Date("2026-05-30T23:30:00.000Z");
+    expect(toPortugalDateKey(date)).toBe("2026-05-31");
   });
 });

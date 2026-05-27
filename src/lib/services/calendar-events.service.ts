@@ -592,14 +592,9 @@ export async function handleCalendarEventsPost(request: Request) {
       });
     }
 
-    // CRITICO: interpretar `${date}T${time}` como hora local (Europe/Lisbon no
-    // browser do utilizador) e converter para UTC antes de gravar. A
-    // concatenacao naive ("2026-05-24T18:20:00") era gravada pelo Postgres
-    // como UTC literal, deslocando a hora em +1h durante o horario de verao.
-    // Alinhado com useGameEditor.ts:172 que ja seguia este padrao.
-    const gameDatetime = new Date(
-      `${payload.date}T${payload.start_time || "00:00"}:00`,
-    ).toISOString();
+    // game_datetime e timestamp WITHOUT time zone (hora local PT) — gravar a
+    // wall-clock literal sem converter para UTC. Ver src/lib/events/time.ts.
+    const gameDatetime = `${payload.date}T${payload.start_time || "00:00"}:00`;
     const { data, error } = await insertGame(db, {
       age_group_id: targetAgeGroupId,
       team_id: targetTeamId,
@@ -786,14 +781,9 @@ export async function handleCalendarEventsPatch(request: Request) {
       }
     }
 
-    // CRITICO: interpretar `${date}T${time}` como hora local (Europe/Lisbon no
-    // browser do utilizador) e converter para UTC antes de gravar. A
-    // concatenacao naive ("2026-05-24T18:20:00") era gravada pelo Postgres
-    // como UTC literal, deslocando a hora em +1h durante o horario de verao.
-    // Alinhado com useGameEditor.ts:172 que ja seguia este padrao.
-    const gameDatetime = new Date(
-      `${payload.date}T${payload.start_time || "00:00"}:00`,
-    ).toISOString();
+    // game_datetime e timestamp WITHOUT time zone (hora local PT) — gravar a
+    // wall-clock literal sem converter para UTC. Ver src/lib/events/time.ts.
+    const gameDatetime = `${payload.date}T${payload.start_time || "00:00"}:00`;
     const { data, error } = await updateGame(db, id, {
       age_group_id: targetAgeGroupId,
       team_id: targetTeamId,

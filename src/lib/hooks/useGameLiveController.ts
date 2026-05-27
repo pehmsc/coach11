@@ -1,5 +1,4 @@
-import { parseISO } from "date-fns";
-import { formatGameDateTime } from "@/lib/events/time";
+import { formatGameDateTime, parseGameDateTime } from "@/lib/events/time";
 import { resolveFixtureScoreboardShortNames } from "@/lib/games/display";
 import type { Game } from "@/types/database";
 
@@ -16,7 +15,8 @@ export function useGameLiveController({
   homeClubName,
   homeClubShortName,
 }: UseGameLiveControllerParams) {
-  const gameStartAt = game?.game_datetime ? parseISO(game.game_datetime) : null;
+  // game_datetime e wall-clock PT — converter para instante UTC correcto.
+  const gameStartAt = game?.game_datetime ? parseGameDateTime(game.game_datetime) : null;
   const liveUnlocked = gameStartAt
     ? now >= new Date(gameStartAt.getTime() - 10 * 60 * 1000)
     : true;

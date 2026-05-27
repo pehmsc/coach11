@@ -3,6 +3,8 @@
  * Usa jsPDF + jspdf-autotable (instalados separadamente).
  */
 
+import { parseGameDateTime } from "@/lib/events/time";
+
 type MatchPdfBaseData = {
   gameDatetime: string;
   opponentName: string;
@@ -70,18 +72,27 @@ const EVENT_PT: Record<string, string> = {
 };
 
 function getMatchDateLabel(gameDatetime: string) {
-  return new Date(gameDatetime).toLocaleDateString("pt-PT", {
+  // game_datetime e wall-clock PT — formatar via Intl com timeZone Lisbon
+  // depois de converter o instante UTC correcto.
+  const instant = parseGameDateTime(gameDatetime);
+  if (!instant) return "—";
+  return new Intl.DateTimeFormat("pt-PT", {
+    timeZone: "Europe/Lisbon",
     weekday: "long",
     day: "2-digit",
     month: "long",
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-  });
+    hour12: false,
+  }).format(instant);
 }
 
 function getSafeFileDate(gameDatetime: string) {
-  return new Date(gameDatetime).toISOString().split("T")[0];
+  // game_datetime e wall-clock PT — extrair YYYY-MM-DD por slice (a data
+  // calendario PT esta no prefixo da string).
+  const match = /^(\d{4}-\d{2}-\d{2})/.exec(gameDatetime.trim());
+  return match ? match[1] : "data";
 }
 
 function getSafeFileOpponentName(opponentName: string) {

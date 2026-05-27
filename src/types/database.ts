@@ -159,6 +159,11 @@ export interface Game {
   team_id?: string;
   competition_id?: string;
   title?: string;
+  /**
+   * Wall-clock PT em formato "YYYY-MM-DDTHH:MM:SS". Coluna `timestamp without
+   * time zone` em Postgres — nunca instanciar Date directamente (Vercel corre
+   * em UTC). Ver src/lib/events/time.ts (parseGameDateTime/formatGameDateTime).
+   */
   game_datetime: string;
   end_time?: string | null;
   opponent_name?: string;
