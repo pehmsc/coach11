@@ -3,6 +3,7 @@ import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { fetchGameAccessContext } from "@/lib/games/access";
 import { deleteGameCascade } from "@/lib/events/delete-cascade";
 import { gameUpdateSchema } from "@/lib/schemas/games";
+import { getCompetitionForAgeGroup } from "@/lib/repositories/calendar-events.repository";
 import { NextResponse } from "next/server";
 
 type RouteContext = {
@@ -58,6 +59,35 @@ export async function PATCH(request: Request, { params }: RouteContext) {
         { error: "Só o coordenador pode editar jogos terminados." },
         { status: 403 },
       );
+    }
+
+    // Validar competition_id por ESCALAO antes do update. So valida quando
+    // foi explicitamente enviada uma competicao nao-nula — null/undefined
+    // sao legitimos (amigaveis). Sem isto, o useGameEditor podia gravar
+    // uma competicao de outro escalao em silencio (modelo: A/B/C sao
+    // labels; validacao real e por age_group, ver getCompetitionForAgeGroup).
+    if (
+      typeof parsed.data.competition_id === "string" &&
+      parsed.data.competition_id.length > 0
+    ) {
+      if (!access.ageGroupId) {
+        return NextResponse.json(
+          { error: "Escalão do jogo indeterminado." },
+          { status: 422 },
+        );
+      }
+      const { data: competition, error: competitionError } =
+        await getCompetitionForAgeGroup(
+          supabase,
+          parsed.data.competition_id,
+          access.ageGroupId,
+        );
+      if (competitionError || !competition?.id) {
+        return NextResponse.json(
+          { error: "A competição selecionada não pertence a este escalão." },
+          { status: 400 },
+        );
+      }
     }
 
     const { data: updated, error: updateError } = await supabase

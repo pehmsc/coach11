@@ -132,16 +132,27 @@ export async function getAgeGroupFromTeamId(
     .maybeSingle();
 }
 
-export async function getCompetitionForTeam(
+/**
+ * Valida que a competição pertence ao mesmo escalao do alvo. A tabela
+ * `competitions` nao tem `age_group_id` directo — chega-se ao escalao por
+ * `competitions.team_id -> teams.age_group_id`. O `team_label` (A/B/C) e
+ * apenas apresentacao; um jogo de qualquer "equipa" do escalao pode
+ * pertencer a qualquer competicao do MESMO escalao.
+ *
+ * Devolve `{ data: { id } }` quando valida; `{ data: null }` quando nao
+ * pertence ao escalao (caller deve devolver 400 — nunca gravar NULL
+ * silenciosamente quando foi pedida competicao).
+ */
+export async function getCompetitionForAgeGroup(
   db: CalendarDbClient,
   competitionId: string,
-  teamId: string,
+  ageGroupId: string,
 ) {
   return db
     .from("competitions")
-    .select("id")
+    .select("id, teams!inner(age_group_id)")
     .eq("id", competitionId)
-    .eq("team_id", teamId)
+    .eq("teams.age_group_id", ageGroupId)
     .maybeSingle();
 }
 
