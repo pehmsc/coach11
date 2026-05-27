@@ -113,6 +113,17 @@ const SRC_ALLOWED_EXCEPTIONS = new Map([
   // os escalões do clube escolhido (gate ado por RLS). Boundary legítima para um dashboard
   // de agregação cross-age-group dentro de um club_id.
   ["src/app/(dashboard)/insights/page.tsx", new Set(["src-club-id-filter"])],
+  // STRIPE: checkout/portal precisam de admin para resolver clube via membership; webhook sincroniza clubs por stripe_*_id
+  ["src/app/api/billing/checkout/route.ts", new Set(["src-admin-client"])],
+  ["src/app/api/billing/portal/route.ts", new Set(["src-admin-client"])],
+  ["src/app/api/billing/me/route.ts", new Set(["src-admin-client"])],
+  ["src/app/api/webhooks/stripe/route.ts", new Set(["src-admin-client"])],
+  ["src/app/billing/start/page.tsx", new Set(["src-admin-client"])],
+  ["src/app/billing/blocked/page.tsx", new Set(["src-admin-client"])],
+  // SUBSCRIPTION_GUARD: dashboard layout precisa de admin para consultar clubs.subscription_status do utilizador autenticado
+  ["src/app/(dashboard)/layout.tsx", new Set(["src-admin-client"])],
+  // TRIAL_REMINDER_CRON: envia email no dia 5 antes do fim do trial — admin client por cron sem sessao de utilizador
+  ["src/app/api/notifications/cron/trial-reminder/route.ts", new Set(["src-admin-client"])],
 ]);
 
 const MIGRATION_ALLOWED_EXCEPTIONS = new Map([

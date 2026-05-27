@@ -88,8 +88,8 @@ export const PLANS: PlanCardProps[] = [
   {
     name: "Individual",
     tagline: "Treinador, 1 equipa",
-    price: "Em breve",
-    priceNote: "Subscrição mensal · auto-serviço",
+    price: "€7,99",
+    priceNote: "/ mês · IVA incluído · 7 dias trial",
     features: [
       "1 equipa, sem hierarquia",
       "Convocatórias, treinos, jogos",
@@ -97,8 +97,8 @@ export const PLANS: PlanCardProps[] = [
       "PDF e partilha com encarregados",
       "Suporte por email (48h úteis)",
     ],
-    ctaLabel: "Entrar na lista de espera",
-    ctaHref: "/contacto?persona=individual",
+    ctaLabel: "Começar trial · 7 dias",
+    ctaHref: "/register?plan=individual",
   },
   {
     name: "Clube · Standard",

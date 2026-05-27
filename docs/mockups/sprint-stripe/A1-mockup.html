@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8" />
+  <title>Mockup A1 — Stripe Individual Coach11</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>body{font-family:'Inter',system-ui,sans-serif}</style>
+</head>
+<body class="bg-slate-100 text-slate-900">
+
+<header class="border-b border-slate-300 bg-white">
+  <div class="mx-auto max-w-7xl px-6 py-5">
+    <p class="text-xs font-semibold uppercase tracking-wider text-emerald-600">Sprint A · Self-service Stripe</p>
+    <h1 class="mt-1 text-2xl font-bold">Onboarding Individual com Stripe Checkout</h1>
+    <p class="mt-2 text-sm text-slate-600">
+      Treinador individual subscreve em ~30s via Stripe Checkout (hosted), 7 dias trial com cartão, €7.99/mês IVA incluído. Stripe Tax + Invoicing tratam recibos automaticamente.
+    </p>
+    <div class="mt-5 flex flex-wrap gap-3 text-sm">
+      <a href="#flow" class="rounded-lg border border-slate-300 px-4 py-2 hover:bg-slate-50">1. Fluxo end-to-end</a>
+      <a href="#precos-cta" class="rounded-lg border border-slate-300 px-4 py-2 hover:bg-slate-50">2. /precos · CTA</a>
+      <a href="#checkout" class="rounded-lg border border-slate-300 px-4 py-2 hover:bg-slate-50">3. Stripe Checkout</a>
+      <a href="#success" class="rounded-lg border border-slate-300 px-4 py-2 hover:bg-slate-50">4. Sucesso + onboarding</a>
+      <a href="#subscription" class="rounded-lg border border-slate-300 px-4 py-2 hover:bg-slate-50">5. Tab Subscrição</a>
+      <a href="#states" class="rounded-lg border border-slate-300 px-4 py-2 hover:bg-slate-50">6. Estados subscrição</a>
+      <a href="#data" class="rounded-lg border border-slate-300 px-4 py-2 hover:bg-slate-50">7. Modelo dados</a>
+      <a href="#webhooks" class="rounded-lg border border-slate-300 px-4 py-2 hover:bg-slate-50">8. Webhooks map</a>
+      <a href="#decisions" class="rounded-lg border border-slate-300 px-4 py-2 hover:bg-slate-50">9. Decisões pendentes</a>
+    </div>
+  </div>
+</header>
+
+<main class="mx-auto max-w-7xl px-6 py-12 space-y-20">
+
+<!-- =================== 1. FLUXO =================== -->
+<section id="flow">
+  <h2 class="mb-4 text-lg font-bold">1. Fluxo end-to-end (treinador novo)</h2>
+  <div class="rounded-2xl border border-slate-200 bg-white p-6">
+    <div class="grid gap-3 text-sm md:grid-cols-6">
+      <div class="rounded-xl border border-slate-200 p-4">
+        <p class="font-mono text-xs text-slate-500">1</p>
+        <p class="font-semibold">/precos</p>
+        <p class="mt-1 text-xs text-slate-500">Vê plano Individual €7.99/mês · "Começar trial 7 dias"</p>
+      </div>
+      <div class="rounded-xl border border-slate-200 p-4">
+        <p class="font-mono text-xs text-slate-500">2</p>
+        <p class="font-semibold">/register</p>
+        <p class="mt-1 text-xs text-slate-500">Email + password. Plano=Individual guardado em session.</p>
+      </div>
+      <div class="rounded-xl border border-slate-200 p-4">
+        <p class="font-mono text-xs text-slate-500">3</p>
+        <p class="font-semibold">/onboarding</p>
+        <p class="mt-1 text-xs text-slate-500">Cria escalão. Clube auto-criado plan_type='individual'.</p>
+      </div>
+      <div class="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4">
+        <p class="font-mono text-xs text-emerald-700">4</p>
+        <p class="font-semibold">Stripe Checkout</p>
+        <p class="mt-1 text-xs text-slate-600">7d trial, cartão obrigatório. Redirect.</p>
+      </div>
+      <div class="rounded-xl border border-slate-200 p-4">
+        <p class="font-mono text-xs text-slate-500">5</p>
+        <p class="font-semibold">/billing/success</p>
+        <p class="mt-1 text-xs text-slate-500">Webhook actualizou DB. Mostra mensagem + CTA dashboard.</p>
+      </div>
+      <div class="rounded-xl border border-slate-200 p-4">
+        <p class="font-mono text-xs text-slate-500">6</p>
+        <p class="font-semibold">/dashboard</p>
+        <p class="mt-1 text-xs text-slate-500">Uso normal. Trial banner topo até dia 7.</p>
+      </div>
+    </div>
+
+    <p class="mt-4 text-xs text-slate-500">
+      <strong>Alternativa para utilizador já registado</strong>: passos 1 → 4 → 5 → 6.
+      <strong>Alternativa sem trial / pagou já</strong>: igual mas sem banner trial.
+    </p>
+  </div>
+</section>
+
+<!-- =================== 2. /PRECOS CTA =================== -->
+<section id="precos-cta">
+  <h2 class="mb-4 text-lg font-bold">2. /precos · CTA Individual evolui</h2>
+  <div class="grid gap-4 md:grid-cols-2">
+    <div class="rounded-2xl border border-slate-200 bg-white p-6">
+      <p class="mb-3 text-xs font-semibold uppercase text-slate-500">Antes (waitlist)</p>
+      <div class="rounded-xl border border-slate-200 p-5 text-sm">
+        <h3 class="text-base font-bold">Individual</h3>
+        <p class="mt-1 text-xs text-slate-500">Treinador, 1 equipa</p>
+        <p class="mt-4 text-xl font-extrabold">Em breve</p>
+        <p class="mt-1 text-xs text-slate-400">Subscrição mensal · auto-serviço</p>
+        <button class="mt-5 w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold">Entrar na lista de espera</button>
+      </div>
+    </div>
+
+    <div class="rounded-2xl border border-emerald-200 bg-emerald-50/30 p-6">
+      <p class="mb-3 text-xs font-semibold uppercase text-emerald-700">Agora (live)</p>
+      <div class="rounded-xl border border-emerald-500/40 bg-white p-5 text-sm shadow-sm">
+        <h3 class="text-base font-bold">Individual</h3>
+        <p class="mt-1 text-xs text-slate-500">Treinador, 1 equipa</p>
+        <p class="mt-4 text-3xl font-extrabold">€7,99<span class="text-sm font-normal text-slate-400">/mês</span></p>
+        <p class="mt-1 text-xs text-slate-500">IVA incluído · cancela a qualquer altura</p>
+        <p class="mt-3 inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">7 dias trial</p>
+        <button class="mt-5 w-full rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-400">Começar trial · 7 dias</button>
+        <p class="mt-2 text-center text-[10px] text-slate-400">Cartão pedido no checkout · não é cobrado durante o trial</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- =================== 3. STRIPE CHECKOUT =================== -->
+<section id="checkout">
+  <h2 class="mb-4 text-lg font-bold">3. Stripe Checkout (hosted, não desenhamos nós)</h2>
+  <div class="rounded-2xl border border-slate-200 bg-white p-6">
+    <div class="grid gap-4 md:grid-cols-2">
+      <div>
+        <p class="text-sm text-slate-600">Não desenhamos a página de checkout — usamos a página hospedada da Stripe. Configurações que enviamos via API:</p>
+        <ul class="mt-4 space-y-2 text-sm">
+          <li class="flex gap-2"><span class="text-emerald-500">✓</span><code>mode: "subscription"</code></li>
+          <li class="flex gap-2"><span class="text-emerald-500">✓</span><code>line_items: [{ price: STRIPE_PRICE_ID_INDIVIDUAL, quantity: 1 }]</code></li>
+          <li class="flex gap-2"><span class="text-emerald-500">✓</span><code>subscription_data.trial_period_days: 7</code></li>
+          <li class="flex gap-2"><span class="text-emerald-500">✓</span><code>payment_method_collection: "always"</code> (cartão exigido durante o trial)</li>
+          <li class="flex gap-2"><span class="text-emerald-500">✓</span><code>automatic_tax: { enabled: true }</code> (Stripe Tax IVA 23%)</li>
+          <li class="flex gap-2"><span class="text-emerald-500">✓</span><code>tax_id_collection.enabled: true</code> (B2B: pede NIF; particular pode ignorar)</li>
+          <li class="flex gap-2"><span class="text-emerald-500">✓</span><code>invoice_creation.enabled: true</code> + envio automatico</li>
+          <li class="flex gap-2"><span class="text-emerald-500">✓</span><code>locale: "pt"</code></li>
+          <li class="flex gap-2"><span class="text-emerald-500">✓</span><code>success_url, cancel_url</code> apontam para nós</li>
+          <li class="flex gap-2"><span class="text-emerald-500">✓</span><code>customer_email: user.email</code> (pré-preenchido)</li>
+        </ul>
+      </div>
+      <div class="rounded-xl border border-slate-300 bg-slate-50 p-5">
+        <p class="text-xs font-mono text-slate-500">checkout.stripe.com</p>
+        <hr class="my-3 border-slate-300" />
+        <p class="text-sm font-bold">Coach11 — Plano Individual</p>
+        <div class="mt-2 flex items-baseline justify-between text-sm">
+          <span>Trial 7 dias, depois</span>
+          <span class="font-bold">€7,99/mês</span>
+        </div>
+        <p class="text-xs text-slate-500">IVA incluído (23%)</p>
+        <hr class="my-3 border-slate-300" />
+        <p class="text-xs uppercase text-slate-500">Pagar com</p>
+        <div class="mt-2 grid grid-cols-3 gap-2 text-center text-xs">
+          <div class="rounded border bg-white py-2">Cartão</div>
+          <div class="rounded border bg-white py-2">Apple Pay</div>
+          <div class="rounded border bg-white py-2">Google Pay</div>
+        </div>
+        <p class="mt-3 text-[10px] text-slate-400">Não és cobrado hoje. Cobrança começa em 7 dias, podes cancelar a qualquer momento até lá.</p>
+        <button class="mt-3 w-full rounded-md bg-indigo-600 py-2 text-sm font-semibold text-white">Começar trial</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- =================== 4. SUCCESS =================== -->
+<section id="success">
+  <h2 class="mb-4 text-lg font-bold">4. /billing/success (pós-checkout)</h2>
+  <div class="rounded-2xl border border-slate-200 bg-white p-8 text-center">
+    <div class="mx-auto mb-4 inline-flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-3xl text-emerald-600">✓</div>
+    <h3 class="text-xl font-bold">Trial activado!</h3>
+    <p class="mt-2 text-sm text-slate-600">Tens 7 dias para experimentar tudo. Depois pagas €7,99/mês — podes cancelar quando quiseres.</p>
+    <p class="mt-2 text-xs text-slate-400">Próxima cobrança: <strong>3 Junho 2026</strong></p>
+    <div class="mt-6 flex justify-center gap-2">
+      <a href="#" class="rounded-xl bg-emerald-500 px-6 py-2.5 text-sm font-semibold text-white">Ir para o dashboard</a>
+      <a href="#" class="rounded-xl border border-slate-300 px-4 py-2.5 text-sm">Ver subscrição</a>
+    </div>
+    <p class="mt-4 text-xs text-slate-400">Recibo enviado por email pelo Stripe.</p>
+  </div>
+</section>
+
+<!-- =================== 5. TAB SUBSCRIÇÃO =================== -->
+<section id="subscription">
+  <h2 class="mb-4 text-lg font-bold">5. /club tab "Subscrição"</h2>
+  <p class="mb-3 text-sm text-slate-600">Nova tab dentro da página do clube, igual ao padrão da B1 ("Facturação"). Visivel a coordenador (= treinador no plano Individual). Mostra estado + acção principal "Gerir no Stripe" (abre Customer Portal do Stripe num popup).</p>
+
+  <!-- Estado: TRIAL -->
+  <div class="rounded-2xl border border-slate-200 bg-white p-6">
+    <p class="mb-3 text-xs font-semibold uppercase text-slate-500">Estado: TRIAL</p>
+    <div class="flex items-start justify-between">
+      <div>
+        <p class="text-base font-bold">Plano Individual <span class="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">Trial</span></p>
+        <p class="mt-1 text-sm text-slate-600">€7,99/mês IVA incluído · 1 equipa</p>
+      </div>
+      <p class="text-right">
+        <span class="text-xs text-slate-500">Trial termina em</span><br>
+        <span class="text-xl font-bold text-emerald-600">5 dias</span><br>
+        <span class="text-xs text-slate-400">3 Junho 2026</span>
+      </p>
+    </div>
+
+    <div class="mt-5 grid grid-cols-2 gap-3 text-sm">
+      <div class="rounded-lg bg-slate-50 p-3">
+        <p class="text-xs uppercase text-slate-500">Próxima cobrança</p>
+        <p class="font-semibold">3 Jun 2026 · €7,99</p>
+      </div>
+      <div class="rounded-lg bg-slate-50 p-3">
+        <p class="text-xs uppercase text-slate-500">Método</p>
+        <p class="font-semibold">Visa ····4242</p>
+      </div>
+    </div>
+
+    <div class="mt-5 flex gap-2">
+      <button class="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700">Gerir no Stripe →</button>
+      <button class="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-50">Ver recibos</button>
+    </div>
+  </div>
+
+  <!-- Estado: ACTIVE -->
+  <div class="mt-4 rounded-2xl border border-slate-200 bg-white p-6">
+    <p class="mb-3 text-xs font-semibold uppercase text-slate-500">Estado: ACTIVE</p>
+    <div class="flex items-start justify-between">
+      <div>
+        <p class="text-base font-bold">Plano Individual <span class="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">Activo</span></p>
+        <p class="mt-1 text-sm text-slate-600">€7,99/mês IVA incluído · subscrito desde Maio 2026</p>
+      </div>
+      <p class="text-right text-xs text-slate-500">
+        Próxima factura<br>
+        <span class="text-base font-bold text-slate-900">26 Jun 2026</span>
+      </p>
+    </div>
+    <div class="mt-5 flex gap-2">
+      <button class="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white">Gerir no Stripe →</button>
+      <button class="rounded-lg border border-slate-300 px-4 py-2 text-sm">Ver recibos</button>
+    </div>
+  </div>
+
+  <!-- Estado: PAST_DUE -->
+  <div class="mt-4 rounded-2xl border border-rose-200 bg-rose-50 p-6">
+    <p class="mb-3 text-xs font-semibold uppercase text-rose-700">Estado: PAST_DUE (pagamento falhou)</p>
+    <div class="flex items-start gap-3">
+      <span class="text-2xl">⚠️</span>
+      <div class="flex-1">
+        <p class="font-bold text-rose-900">Pagamento da última factura falhou</p>
+        <p class="mt-1 text-sm text-rose-800">Stripe vai tentar novamente nos próximos 3 dias. Actualiza o método de pagamento para evitar suspensão.</p>
+        <button class="mt-3 rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white">Actualizar pagamento no Stripe →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Estado: CANCELED -->
+  <div class="mt-4 rounded-2xl border border-slate-300 bg-slate-50 p-6">
+    <p class="mb-3 text-xs font-semibold uppercase text-slate-500">Estado: CANCELED (cancelado, ainda activo até fim do período)</p>
+    <p class="text-sm font-semibold text-slate-900">A tua subscrição foi cancelada.</p>
+    <p class="mt-1 text-sm text-slate-600">Continuas com acesso até <strong>26 Junho 2026</strong>. Depois disso o teu plano será suspenso (dados ficam guardados 30 dias).</p>
+    <div class="mt-3 flex gap-2">
+      <button class="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white">Reactivar subscrição</button>
+      <button class="rounded-lg border border-slate-300 px-4 py-2 text-sm">Exportar dados</button>
+    </div>
+  </div>
+</section>
+
+<!-- =================== 6. ESTADOS =================== -->
+<section id="states">
+  <h2 class="mb-4 text-lg font-bold">6. Mapa de estados (Stripe → DB)</h2>
+  <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+    <table class="w-full text-sm">
+      <thead class="bg-slate-50 text-xs uppercase text-slate-500">
+        <tr>
+          <th class="px-4 py-3 text-left">Stripe subscription.status</th>
+          <th class="px-4 py-3 text-left">DB clubs.subscription_status</th>
+          <th class="px-4 py-3 text-left">Acesso à app</th>
+          <th class="px-4 py-3 text-left">UI mostra</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100">
+        <tr><td class="px-4 py-3 font-mono text-xs">trialing</td><td class="px-4 py-3">trialing</td><td class="px-4 py-3 text-emerald-700">Total</td><td class="px-4 py-3">"Trial · X dias restantes"</td></tr>
+        <tr><td class="px-4 py-3 font-mono text-xs">active</td><td class="px-4 py-3">active</td><td class="px-4 py-3 text-emerald-700">Total</td><td class="px-4 py-3">"Activo · próxima factura DD MMM"</td></tr>
+        <tr><td class="px-4 py-3 font-mono text-xs">past_due</td><td class="px-4 py-3">past_due</td><td class="px-4 py-3 text-amber-700">Read-only após +3d</td><td class="px-4 py-3">Alerta vermelho + actualizar pagamento</td></tr>
+        <tr><td class="px-4 py-3 font-mono text-xs">canceled</td><td class="px-4 py-3">canceled</td><td class="px-4 py-3 text-rose-700">Bloqueado após fim do período</td><td class="px-4 py-3">"Cancelado · acesso até DD MMM"</td></tr>
+        <tr><td class="px-4 py-3 font-mono text-xs">incomplete / incomplete_expired</td><td class="px-4 py-3">incomplete</td><td class="px-4 py-3 text-rose-700">Bloqueado</td><td class="px-4 py-3">"Checkout não completado — refazer"</td></tr>
+        <tr><td class="px-4 py-3 font-mono text-xs">unpaid</td><td class="px-4 py-3">unpaid</td><td class="px-4 py-3 text-rose-700">Bloqueado</td><td class="px-4 py-3">"Pagamento não recebido"</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="mt-3 text-xs text-slate-500">"Acesso à app" implementa-se via guard no <code>(dashboard)/layout.tsx</code> que verifica <code>subscription_status</code> e redireciona para <code>/billing/blocked</code> se necessário. Clubes com <code>plan_type='club'</code> ignoram este guard (são sales-led).</p>
+</section>
+
+<!-- =================== 7. MODELO DE DADOS =================== -->
+<section id="data">
+  <h2 class="mb-4 text-lg font-bold">7. Modelo de dados (migration)</h2>
+  <div class="rounded-2xl border border-slate-200 bg-white p-6">
+    <pre class="overflow-x-auto rounded-lg bg-slate-900 p-4 text-xs leading-relaxed text-slate-100"><code>-- Migration: adiciona campos Stripe a clubs
+
+alter table public.clubs
+  add column stripe_customer_id text,
+  add column stripe_subscription_id text,
+  add column subscription_status text
+    check (subscription_status is null or subscription_status in
+      ('trialing', 'active', 'past_due', 'canceled',
+       'incomplete', 'incomplete_expired', 'unpaid', 'paused')),
+  add column subscription_current_period_end timestamptz,
+  add column trial_ends_at timestamptz,
+  add column subscription_cancel_at_period_end boolean not null default false;
+
+create unique index clubs_stripe_customer_id_idx
+  on public.clubs(stripe_customer_id) where stripe_customer_id is not null;
+create unique index clubs_stripe_subscription_id_idx
+  on public.clubs(stripe_subscription_id) where stripe_subscription_id is not null;
+
+comment on column public.clubs.subscription_status is
+  'Estado da subscricao Stripe. NULL = nunca subscreveu (clubes sales-led ou pre-Stripe).';
+
+-- Tabela de eventos Stripe processados (idempotencia)
+create table public.stripe_webhook_events (
+  id text primary key,           -- Stripe event id (evt_...)
+  type text not null,            -- ex: "customer.subscription.updated"
+  processed_at timestamptz not null default now(),
+  payload jsonb
+);</code></pre>
+
+    <h3 class="mt-5 text-sm font-semibold">Porque uma tabela de eventos?</h3>
+    <p class="mt-1 text-sm text-slate-600">Stripe pode reenviar o mesmo webhook em caso de timeout. Gravar o event.id evita re-processar — se já existe row, devolvemos 200 OK sem mexer no DB.</p>
+  </div>
+</section>
+
+<!-- =================== 8. WEBHOOKS =================== -->
+<section id="webhooks">
+  <h2 class="mb-4 text-lg font-bold">8. Eventos Stripe que tratamos</h2>
+  <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+    <table class="w-full text-sm">
+      <thead class="bg-slate-50 text-xs uppercase text-slate-500">
+        <tr>
+          <th class="px-4 py-3 text-left">Evento</th>
+          <th class="px-4 py-3 text-left">Quando dispara</th>
+          <th class="px-4 py-3 text-left">O que fazemos</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100">
+        <tr><td class="px-4 py-3 font-mono text-xs">checkout.session.completed</td><td class="px-4 py-3">Treinador completou Checkout</td><td class="px-4 py-3">Ligar customer_id + subscription_id ao club_id (via metadata)</td></tr>
+        <tr><td class="px-4 py-3 font-mono text-xs">customer.subscription.created</td><td class="px-4 py-3">Sub criada</td><td class="px-4 py-3">Update subscription_status, trial_ends_at, current_period_end</td></tr>
+        <tr><td class="px-4 py-3 font-mono text-xs">customer.subscription.updated</td><td class="px-4 py-3">Trial→active, plan change, pause, etc.</td><td class="px-4 py-3">Re-sync todos os campos sub_*</td></tr>
+        <tr><td class="px-4 py-3 font-mono text-xs">customer.subscription.deleted</td><td class="px-4 py-3">Cancelamento efectivo (fim do periodo)</td><td class="px-4 py-3">subscription_status='canceled', bloquear acesso</td></tr>
+        <tr><td class="px-4 py-3 font-mono text-xs">invoice.payment_failed</td><td class="px-4 py-3">Cartão recusado</td><td class="px-4 py-3">Stripe ja muda status para past_due — sincronizamos + Sentry alert</td></tr>
+        <tr><td class="px-4 py-3 font-mono text-xs">invoice.paid</td><td class="px-4 py-3">Pagamento mensal OK</td><td class="px-4 py-3">Confirma current_period_end (Stripe envia recibo automaticamente)</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+    <p class="font-semibold">Setup Stripe Dashboard (Pedro):</p>
+    <ol class="mt-2 list-decimal pl-5 space-y-1 text-xs">
+      <li>Products → Add: "Coach11 Individual" · Recurring €7.99 EUR mensal · Tax behavior: inclusive</li>
+      <li>Activar Stripe Tax para Portugal (Settings → Tax)</li>
+      <li>Activar Customer Portal (Settings → Customer portal) com: cancel subscription, update payment, view invoices</li>
+      <li>Webhooks → Add endpoint: <code>https://coach11.app/api/webhooks/stripe</code> com os 6 eventos da tabela</li>
+      <li>Copiar para o Vercel env: <code>STRIPE_SECRET_KEY</code>, <code>STRIPE_WEBHOOK_SECRET</code>, <code>NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY</code>, <code>STRIPE_PRICE_ID_INDIVIDUAL_MONTHLY</code></li>
+    </ol>
+  </div>
+</section>
+
+<!-- =================== 9. DECISÕES =================== -->
+<section id="decisions">
+  <h2 class="mb-4 text-lg font-bold">9. Decisões para fechar antes de codar A1</h2>
+  <div class="space-y-3">
+    <div class="rounded-xl border border-amber-300 bg-amber-50 p-4">
+      <p class="font-semibold text-amber-900">a) Onboarding-then-Stripe ou Stripe-then-onboarding?</p>
+      <p class="mt-1 text-sm text-amber-800">
+        Proposta: <strong>register → onboarding (cria clube) → Stripe Checkout</strong>. Permite ao treinador ver o produto antes de dar cartão; reduz friction.
+        Trade-off: clube fica em DB sem subscription_status (NULL) até pagar. Tratamos como "trial não iniciado" — guard redirige para Checkout se tentar usar mais que 1 dia sem subscription. Concordas?
+      </p>
+    </div>
+    <div class="rounded-xl border border-amber-300 bg-amber-50 p-4">
+      <p class="font-semibold text-amber-900">b) Acesso durante past_due</p>
+      <p class="mt-1 text-sm text-amber-800">
+        Mockup mostra "read-only após +3 dias". Alternativa: bloquear imediatamente (mais agressivo) ou nunca bloquear (Stripe trata sozinha mas perdes leverage). Recomendo read-only após 3 dias.
+      </p>
+    </div>
+    <div class="rounded-xl border border-amber-300 bg-amber-50 p-4">
+      <p class="font-semibold text-amber-900">c) Re-checkout se incomplete</p>
+      <p class="mt-1 text-sm text-amber-800">
+        Se utilizador abandona o Checkout, fica com plan_type='individual' mas sem subscription. Ao próximo login, redirigimos para /precos? Ou mostramos botão "Completar subscrição"?
+      </p>
+    </div>
+    <div class="rounded-xl border border-amber-300 bg-amber-50 p-4">
+      <p class="font-semibold text-amber-900">d) Email "trial a terminar"</p>
+      <p class="mt-1 text-sm text-amber-800">
+        Stripe envia automaticamente "trial ending soon" 7 dias antes do fim. Mas o nosso trial é só 7 dias → o aviso seria no dia 1. Posso desactivar o aviso Stripe e enviar manualmente no dia 5 via Resend, ou deixar a Stripe trear. Recomendo deixar Stripe (zero código).
+      </p>
+    </div>
+    <div class="rounded-xl border border-amber-300 bg-amber-50 p-4">
+      <p class="font-semibold text-amber-900">e) Conversão clube → individual?</p>
+      <p class="mt-1 text-sm text-amber-800">
+        Se um clube sales-led quiser migrar para self-service individual, hoje não é suportado. Vamos ignorar (raro) ou bloquear explicitamente nas validações? Recomendo bloquear: <code>tier='club'</code> não pode usar /precos checkout.
+      </p>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="border-t border-slate-300 bg-white py-6">
+  <p class="mx-auto max-w-7xl px-6 text-xs text-slate-500">
+    Mockup A1 · Coach11 · 27 Mai 2026 · <code>/docs/mockups/sprint-stripe/A1-mockup.html</code>
+  </p>
+</footer>
+
+</body>
+</html>
