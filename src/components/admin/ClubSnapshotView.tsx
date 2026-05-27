@@ -248,11 +248,18 @@ export function ClubSnapshotView({ clubId }: Props) {
                 Acesso de suporte · {accessedAtLabel}
               </p>
             </div>
-            <Link href={`/admin/clubs/${clubId}/edit`}>
-              <Button type="button" variant="outline" className="text-xs">
-                Editar cliente
-              </Button>
-            </Link>
+            <div className="flex flex-wrap gap-2">
+              <Link href={`/admin/clubs/${clubId}/billing`}>
+                <Button type="button" variant="outline" className="text-xs">
+                  Facturação
+                </Button>
+              </Link>
+              <Link href={`/admin/clubs/${clubId}/edit`}>
+                <Button type="button" variant="outline" className="text-xs">
+                  Editar cliente
+                </Button>
+              </Link>
+            </div>
           </div>
         </div>
       </div>

@@ -32,6 +32,7 @@ import type {
 import { AGE_GROUP_STAFF_ROLE_LABELS, getStaffRoleLabel } from "@/lib/team/staff-role";
 import { ALL_PERMISSION_AREAS } from "@/lib/auth/permissions-shared";
 import { PermissionsGrid, type PermissionsMap, templateToPermissions } from "@/components/staff/PermissionsGrid";
+import { CoordinatorInvoicesTab } from "@/components/billing/CoordinatorInvoicesTab";
 
 const KIT_NUMBERS: KitNumber[] = [1, 2];
 const KIT_LABELS: Record<KitNumber, string> = {
@@ -127,7 +128,7 @@ type StaffInvite = {
   age_group_name?: string | null;
 };
 
-type ClubTab = "info" | "members" | "settings";
+type ClubTab = "info" | "members" | "facturacao" | "settings";
 
 export default function ClubPage() {
   const supabase = useMemo(() => createClient(), []);
@@ -147,6 +148,7 @@ export default function ClubPage() {
   const [activeTab, setActiveTab] = useState<ClubTab>(() => {
     const t = searchParams.get("tab");
     if (t === "members" || t === "membros") return "members";
+    if (t === "facturacao" || t === "faturacao") return "facturacao";
     if (t === "settings") return "settings";
     return "info";
   });
@@ -758,10 +760,15 @@ export default function ClubPage() {
 
       {/* Tab navigation */}
       <div className="flex gap-1 bg-slate-100 rounded-xl p-1">
-        {(["info", "members", "settings"] as ClubTab[]).map((tab) => {
+        {(
+          (isClubCoordinator || isSuperCoordinator
+            ? ["info", "members", "facturacao", "settings"]
+            : ["info", "members", "settings"]) as ClubTab[]
+        ).map((tab) => {
           const labels: Record<ClubTab, string> = {
             info: "Informações",
             members: "Membros",
+            facturacao: "Facturação",
             settings: "Configurações",
           };
           return (
@@ -1371,6 +1378,11 @@ export default function ClubPage() {
             </Card>
           )}
         </>
+      )}
+
+      {/* ─── Facturação tab ─── */}
+      {activeTab === "facturacao" && (isClubCoordinator || isSuperCoordinator) && (
+        <CoordinatorInvoicesTab />
       )}
 
       {/* ─── Configurações tab ─── */}

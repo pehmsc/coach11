@@ -510,6 +510,27 @@ export interface ClubPlayerRanking {
   metric_value: number;
 }
 
+export type InvoiceStatus = "issued" | "paid" | "cancelled";
+
+export interface Invoice {
+  id: string;
+  club_id: string;
+  invoice_number: string;
+  period_start: string | null;
+  period_end: string | null;
+  issued_at: string;
+  due_date: string;
+  amount_cents: number;
+  currency: string;
+  status: InvoiceStatus;
+  paid_at: string | null;
+  pdf_path: string;
+  notes: string | null;
+  created_at: string;
+  created_by: string | null;
+  updated_at: string;
+}
+
 export interface ClubInsights {
   club_id: string;
   age_groups_count: number;
