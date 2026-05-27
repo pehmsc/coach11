@@ -156,9 +156,14 @@ export function GamesSection({
     let cancelled = false;
 
     async function init() {
+      // /api/competitions filtra por escalao quando recebe ageGroupId; sem
+      // o param mostra todas as competicoes acessiveis (multi-escalao).
+      const competitionsUrl = effectiveAgeGroupId
+        ? `/api/competitions?ageGroupId=${effectiveAgeGroupId}`
+        : "/api/competitions";
       const [gamesRes, compRes] = await Promise.all([
         fetch("/api/games").then((r) => r.json().catch(() => null)),
-        fetch("/api/competitions").then((r) => r.json().catch(() => null)),
+        fetch(competitionsUrl).then((r) => r.json().catch(() => null)),
       ]);
 
       if (cancelled) return;

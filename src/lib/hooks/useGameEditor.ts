@@ -57,9 +57,16 @@ export function useGameEditor(deps: UseGameEditorDeps) {
   const [competitionOptions, setCompetitionOptions] = useState<GameCompetitionOption[]>([]);
   const [savingGameEdit, setSavingGameEdit] = useState(false);
 
+  // Carregar competicoes do escalao do jogo (multi-escalao seguro). O
+  // useEffect depende de game?.age_group_id para refazer fetch quando o
+  // game e carregado.
+  const gameAgeGroupId = game?.age_group_id ?? null;
   useEffect(() => {
     void (async () => {
-      const res = await fetch("/api/competitions").catch(() => null);
+      const url = gameAgeGroupId
+        ? `/api/competitions?ageGroupId=${gameAgeGroupId}`
+        : "/api/competitions";
+      const res = await fetch(url).catch(() => null);
       if (!res?.ok) return;
       const payload = await res.json().catch(() => null) as {
         success?: boolean;
@@ -78,7 +85,7 @@ export function useGameEditor(deps: UseGameEditorDeps) {
           })),
       );
     })();
-  }, []);
+  }, [gameAgeGroupId]);
 
   // Delete state
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);

@@ -22,7 +22,7 @@ import { createNotificationsForTeam } from "@/lib/notifications/service";
 import {
   getAgeGroupFromTeamId,
   getAgeGroupLabelById,
-  getCompetitionForTeam,
+  getCompetitionForAgeGroup,
   getGameAccessRow,
   getTrainingSessionAccessRow,
   insertGame,
@@ -322,19 +322,30 @@ function resolveTargetTeamId(
   return ageGroupTeamIds[0] ?? null;
 }
 
+/**
+ * Valida a competicao por ESCALAO (nao por equipa). As "equipas" A/B/C sao
+ * apenas labels — jogadores sao partilhados e qualquer jogo do escalao pode
+ * pertencer a qualquer competicao do mesmo escalao. Quando uma competicao
+ * foi pedida mas nao pertence ao escalao, devolve erro (caller traduz para
+ * 400) — nunca grava competition_id NULL silenciosamente.
+ */
 async function resolveCompetitionId(
   db: SupabaseClient,
-  teamId: string,
+  ageGroupId: string,
   requestedCompetitionId: string | null | undefined,
 ) {
   if (!requestedCompetitionId) return { id: null as string | null, error: null as string | null };
 
-  const { data, error } = await getCompetitionForTeam(db, requestedCompetitionId, teamId);
+  const { data, error } = await getCompetitionForAgeGroup(
+    db,
+    requestedCompetitionId,
+    ageGroupId,
+  );
 
   if (error || !data?.id) {
     return {
       id: null as string | null,
-      error: "Competição inválida para esta equipa.",
+      error: "A competição selecionada não pertence a este escalão.",
     };
   }
 
@@ -518,7 +529,7 @@ export async function handleCalendarEventsPost(request: Request) {
 
     const competitionResult =
       eventType === "game"
-        ? await resolveCompetitionId(db, targetTeamId, payload.competition_id)
+        ? await resolveCompetitionId(db, targetAgeGroupId, payload.competition_id)
         : { id: null as string | null, error: null as string | null };
     if (competitionResult.error) {
       return NextResponse.json({ error: competitionResult.error }, { status: 400 });
@@ -686,7 +697,7 @@ export async function handleCalendarEventsPatch(request: Request) {
 
     const competitionResult =
       eventType === "game"
-        ? await resolveCompetitionId(db, targetTeamId, payload.competition_id)
+        ? await resolveCompetitionId(db, targetAgeGroupId, payload.competition_id)
         : { id: null as string | null, error: null as string | null };
     if (competitionResult.error) {
       return NextResponse.json({ error: competitionResult.error }, { status: 400 });
