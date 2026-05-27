@@ -162,9 +162,14 @@ export function useCalendarData() {
   useEffect(() => {
     async function loadTeam() {
       setLoadError(null);
+      // /api/competitions filtra por escalao quando recebe ageGroupId; sem
+      // o param mostra todas as competicoes acessiveis (multi-escalao).
+      const competitionsUrl = contextAgeGroupId
+        ? `/api/competitions?ageGroupId=${contextAgeGroupId}`
+        : "/api/competitions";
       const [contextRes, competitionsRes] = await Promise.all([
         fetch("/api/me/context"),
-        fetch("/api/competitions"),
+        fetch(competitionsUrl),
       ]);
       const payload = (await contextRes.json().catch(() => null)) as
         | {
