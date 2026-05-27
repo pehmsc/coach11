@@ -1,3 +1,17 @@
+// game_datetime e timestamp WITHOUT time zone (hora local Europe/Lisbon).
+// NUNCA usar new Date(game_datetime) ou parseISO(game_datetime) directamente:
+// o JS interpreta strings sem TZ com o fuso do runtime, e Vercel corre em UTC,
+// pelo que "2026-05-30T12:00:00" passa a ser tratado como 12:00 UTC e
+// reaparece como 13:00 quando formatado em Europe/Lisbon — o bug de fuso
+// volta invertido.
+//
+// As funcoes deste modulo tratam game_datetime como string opaca "wall-clock".
+// Para aritmetica de instantes (comparacoes com Date.now(), janelas no cron,
+// detecao de sobreposicao) usar parseGameDateTime() que converte a wall-clock
+// PT no instante UTC correcto via portugalDateTimeToUtc.
+
+import { portugalDateTimeToUtc } from "./presence-window";
+
 export function normalizeTimeValue(value: string | null | undefined) {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
@@ -14,52 +28,95 @@ export function buildDateTimeFromDateAndTime(
   return `${date.trim()}T${normalizeTimeValue(time) || "00:00"}:00`;
 }
 
+const ISO_LIKE_RE =
+  /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?/;
+
+type ParsedParts = {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+  second: number;
+};
+
+function parseLocalParts(value: string | null | undefined): ParsedParts | null {
+  if (typeof value !== "string") return null;
+  const match = ISO_LIKE_RE.exec(value.trim());
+  if (!match) return null;
+  return {
+    year: Number(match[1]),
+    month: Number(match[2]),
+    day: Number(match[3]),
+    hour: Number(match[4]),
+    minute: Number(match[5]),
+    second: Number(match[6] ?? "0"),
+  };
+}
+
 /**
- * Extrai HH:MM de um valor de data/hora.
- *
- * - Se o valor incluir indicador de timezone (Z, +XX, -XX), converte
- *   para `timeZone` (default Europe/Lisbon) via Intl.DateTimeFormat.
- *   Em PT (DST+1), "2026-05-23T08:00:00+00" -> "09:00".
- * - Se for ISO naive (sem timezone) ou string HH:MM, extrai
- *   literalmente (fallback legacy).
- *
- * `timeZone` aceita qualquer IANA TZ. Default Europe/Lisbon porque
- * Coach11 e 100% PT hoje; quando internacionalizar (PR futuro), o
- * caller passa o timezone do clube/escalao.
+ * Converte uma wall-clock PT em Date (instante UTC correcto). Use isto quando
+ * precisar comparar com `Date.now()` ou outras Date instances (crons, janelas,
+ * sobreposicao). Devolve null se input invalido.
  */
-export function extractTimeFromDateTime(
+export function parseGameDateTime(
   value: string | null | undefined,
-  timeZone: string = "Europe/Lisbon",
-) {
+): Date | null {
+  const parts = parseLocalParts(value);
+  if (!parts) return null;
+  const dateStr = `${String(parts.year).padStart(4, "0")}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
+  const timeStr = `${String(parts.hour).padStart(2, "0")}:${String(parts.minute).padStart(2, "0")}:${String(parts.second).padStart(2, "0")}`;
+  return portugalDateTimeToUtc(dateStr, timeStr);
+}
+
+/**
+ * Converte um instante (Date) na sua wall-clock PT como string
+ * "YYYY-MM-DDTHH:MM:SS" sem indicador de fuso. Usar para construir limites de
+ * janela em queries que filtram contra colunas timestamp without time zone
+ * (ex: `games.game_datetime`). Sem dependencia em date-fns-tz.
+ */
+export function toPortugalWallClock(date: Date): string {
+  const formatter = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Lisbon",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+  const lookup: Record<string, string> = {};
+  for (const part of formatter.formatToParts(date)) {
+    if (part.type !== "literal") lookup[part.type] = part.value;
+  }
+  return `${lookup.year}-${lookup.month}-${lookup.day}T${lookup.hour}:${lookup.minute}:${lookup.second}`;
+}
+
+/**
+ * Apenas a parte de data (YYYY-MM-DD) da wall-clock PT de um instante.
+ */
+export function toPortugalDateKey(date: Date): string {
+  return toPortugalWallClock(date).slice(0, 10);
+}
+
+/**
+ * Extrai HH:MM literal da string. Aceita "YYYY-MM-DDTHH:MM:SS",
+ * "YYYY-MM-DD HH:MM:SS" e HH:MM/HH:MM:SS isolados. Como o valor ja representa
+ * hora local PT, nao ha conversao de fuso — extraccao pura.
+ */
+export function extractTimeFromDateTime(value: string | null | undefined) {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
 
-  // Detecta indicador de timezone ISO 8601: Z, +HH, +HHMM, +HH:MM (idem -).
-  // Aceita ambas as formas curtas (Postgres serializa por vezes como "+00")
-  // e completas (Supabase PostgREST normalmente devolve "+00:00").
-  const hasTimezone =
-    /T\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?(?:Z|[+-]\d{2}(?::?\d{2})?)$/i.test(
-      trimmed,
-    );
-
-  if (hasTimezone) {
-    const date = new Date(trimmed);
-    if (!Number.isNaN(date.getTime())) {
-      // en-GB com hour12:false garante saida "HH:MM" 24h.
-      return new Intl.DateTimeFormat("en-GB", {
-        timeZone,
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
-      }).format(date);
-    }
-    // Fall through ao fallback se Date() falhou
+  const parts = parseLocalParts(trimmed);
+  if (parts) {
+    const hh = String(parts.hour).padStart(2, "0");
+    const mm = String(parts.minute).padStart(2, "0");
+    return `${hh}:${mm}`;
   }
 
-  // Fallback: ISO naive (sem TZ) ou string HH:MM literal.
-  const isoMatch = /T(\d{2}:\d{2})/.exec(trimmed);
-  if (isoMatch) return isoMatch[1];
-
+  // Fallback: string HH:MM ou HH:MM:SS isolada.
   return normalizeTimeValue(trimmed);
 }
 
@@ -80,68 +137,79 @@ export type GameDateTimeFormat =
   | "shortWithoutYear"
   | "monthYear";
 
+const WEEKDAYS_LONG_PT = [
+  "domingo",
+  "segunda-feira",
+  "terça-feira",
+  "quarta-feira",
+  "quinta-feira",
+  "sexta-feira",
+  "sábado",
+];
+
+const MONTHS_LONG_PT = [
+  "janeiro",
+  "fevereiro",
+  "março",
+  "abril",
+  "maio",
+  "junho",
+  "julho",
+  "agosto",
+  "setembro",
+  "outubro",
+  "novembro",
+  "dezembro",
+];
+
+function weekdayLongPt(parts: ParsedParts): string {
+  // Zeller-like via Date construido em UTC para evitar TZ do runtime.
+  const dt = new Date(
+    Date.UTC(parts.year, parts.month - 1, parts.day, 12, 0, 0),
+  );
+  return WEEKDAYS_LONG_PT[dt.getUTCDay()] ?? "";
+}
+
 /**
- * Formata um datetime para display, forcando timezone `Europe/Lisbon` por
- * defeito. Substitui usos espalhados de `format(parseISO(...), ..., { locale: pt })`
- * do date-fns que ficavam sujeitos a TZ do runtime (UTC no Vercel SSR vs
- * local no browser).
+ * Formata um datetime para display. A coluna ja esta em hora local Europe/
+ * Lisbon, pelo que o formatador extrai partes da string literal sem instanciar
+ * Date — garante o mesmo resultado em qualquer TZ de runtime (browser PT ou
+ * Vercel UTC).
  *
- * - Aceita ISO com TZ explicito (Z, +00, +00:00, -05:00).
- * - Aceita ISO naive (sem TZ) — interpreta como UTC (consistente com como
- *   o Postgres serializa `timestamptz`).
- * - Devolve "Data por definir" para input null/undefined; devolve o input
- *   original (sem alterar) se o parse falhar.
+ * - Aceita "YYYY-MM-DDTHH:MM:SS" e "YYYY-MM-DD HH:MM:SS".
+ * - Devolve "Data por definir" para input null/undefined/vazio.
+ * - Devolve o input original se o parse falhar.
  */
 export function formatGameDateTime(
   value: string | null | undefined,
   format: GameDateTimeFormat,
-  timeZone: string = "Europe/Lisbon",
 ): string {
   if (typeof value !== "string" || !value.trim()) return "Data por definir";
-  const date = new Date(value.trim());
-  if (Number.isNaN(date.getTime())) return value;
+  const parts = parseLocalParts(value);
+  if (!parts) return value;
 
-  if (format === "monthYear") {
-    return new Intl.DateTimeFormat("pt-PT", {
-      month: "long",
-      year: "numeric",
-      timeZone,
-    }).format(date);
+  const dayNum = parts.day;
+  const monthLong = MONTHS_LONG_PT[parts.month - 1] ?? "";
+  const monthShortNum = String(parts.month).padStart(2, "0");
+  const dayPadded = String(parts.day).padStart(2, "0");
+  const hh = String(parts.hour).padStart(2, "0");
+  const mm = String(parts.minute).padStart(2, "0");
+  const year = parts.year;
+  const weekday = weekdayLongPt(parts);
+  const timePart = `${hh}:${mm}`;
+
+  switch (format) {
+    case "monthYear":
+      return `${monthLong} de ${year}`;
+    case "longWithoutYear":
+      return `${weekday}, ${dayNum} de ${monthLong} · ${timePart}`;
+    case "longWithYear":
+      return `${weekday}, ${dayNum} de ${monthLong} de ${year} · ${timePart}`;
+    case "shortWithYear":
+      return `${dayPadded}/${monthShortNum}/${year} · ${timePart}`;
+    case "shortWithoutYear":
+      return `${dayPadded}/${monthShortNum} · ${timePart}`;
   }
-
-  const dateOpts: Intl.DateTimeFormatOptions = (() => {
-    switch (format) {
-      case "longWithoutYear":
-        return { weekday: "long", day: "numeric", month: "long", timeZone };
-      case "longWithYear":
-        return {
-          weekday: "long",
-          day: "numeric",
-          month: "long",
-          year: "numeric",
-          timeZone,
-        };
-      case "shortWithYear":
-        return {
-          day: "numeric",
-          month: "short",
-          year: "numeric",
-          timeZone,
-        };
-      case "shortWithoutYear":
-        return { day: "numeric", month: "short", timeZone };
-    }
-  })();
-
-  const datePart = new Intl.DateTimeFormat("pt-PT", dateOpts).format(date);
-  const timePart = new Intl.DateTimeFormat("pt-PT", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    timeZone,
-  }).format(date);
-
-  return `${datePart} · ${timePart}`;
 }
 
 export type GameDateTimeParts = {
@@ -154,47 +222,24 @@ export type GameDateTimeParts = {
 };
 
 /**
- * Decompoe um datetime em partes (dia/mes-curto/hora) para usos em
- * componentes que renderizam cada campo separadamente (ex: card de
- * jogo em GamesSection com layout vertical). Forca `Europe/Lisbon` por
- * defeito.
+ * Decompoe um datetime em partes (dia/mes-curto/hora) para usos em componentes
+ * que renderizam cada campo separadamente (ex: card de jogo em GamesSection
+ * com layout vertical). Devolve `null` para input null/undefined/invalido.
  *
- * Devolve `null` para input null/undefined/invalido — o caller decide
- * o fallback visual.
- *
- * Nota sobre `monthShort`: Intl pt-PT com `month: "short"` devolve
- * formato numerico "05" em vez de textual "mai". Para preservar o UX
- * original (abreviado textual), uso `month: "long"` ("maio") + slice
- * para 3 chars. Output: "mai", "jun", etc — o CSS `capitalize` do
- * caller transforma em "Mai", "Jun".
+ * `monthShort` e os primeiros 3 caracteres do mes longo em pt-PT, ex: "mai".
  */
 export function formatGameDateTimeParts(
   value: string | null | undefined,
-  timeZone: string = "Europe/Lisbon",
 ): GameDateTimeParts | null {
   if (typeof value !== "string" || !value.trim()) return null;
-  const date = new Date(value.trim());
-  if (Number.isNaN(date.getTime())) return null;
+  const parts = parseLocalParts(value);
+  if (!parts) return null;
 
-  const day = new Intl.DateTimeFormat("pt-PT", {
-    day: "numeric",
-    timeZone,
-  }).format(date);
-  const monthLong = new Intl.DateTimeFormat("pt-PT", {
-    month: "long",
-    timeZone,
-  }).format(date);
-  const time = new Intl.DateTimeFormat("pt-PT", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    timeZone,
-  }).format(date);
-
+  const monthLong = MONTHS_LONG_PT[parts.month - 1] ?? "";
   return {
-    day,
+    day: String(parts.day),
     monthShort: monthLong.slice(0, 3).toLowerCase(),
-    time,
+    time: `${String(parts.hour).padStart(2, "0")}:${String(parts.minute).padStart(2, "0")}`,
   };
 }
 

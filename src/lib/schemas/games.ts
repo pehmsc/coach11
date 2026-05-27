@@ -1,6 +1,9 @@
 import { z } from "zod";
 
 const TIME_RE = /^\d{2}:\d{2}(:\d{2})?$/;
+// game_datetime e timestamp WITHOUT time zone (hora local PT) — string sem
+// indicador de fuso, formato "YYYY-MM-DDTHH:MM[:SS]". Ver src/lib/events/time.ts.
+const GAME_DATETIME_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/;
 
 export const gameUpdateSchema = z
   .object({
@@ -10,7 +13,10 @@ export const gameUpdateSchema = z
     opponent_short_name: z.string().trim().max(40).nullable().optional(),
     opponent_tactical_system: z.string().trim().max(40).nullable().optional(),
     title: z.string().trim().max(200).nullable().optional(),
-    game_datetime: z.string().datetime({ offset: true }).optional(),
+    game_datetime: z
+      .string()
+      .regex(GAME_DATETIME_RE, "game_datetime inválido (esperado YYYY-MM-DDTHH:MM[:SS])")
+      .optional(),
     end_time: z
       .string()
       .regex(TIME_RE, "hora inválida")

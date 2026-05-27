@@ -3,8 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { format, parseISO } from "date-fns";
-import { pt } from "date-fns/locale";
+import { formatGameDateTimeParts, parseGameDateTime } from "@/lib/events/time";
 import {
   Plus,
   Trophy,
@@ -54,7 +53,9 @@ type CompetitionsPayload = {
 const COMPETITION_GAMES_WINDOW_SIZE = 5;
 
 function compareCompetitionGames(a: Game, b: Game) {
-  return new Date(b.game_datetime).getTime() - new Date(a.game_datetime).getTime();
+  const ta = parseGameDateTime(a.game_datetime)?.getTime() ?? 0;
+  const tb = parseGameDateTime(b.game_datetime)?.getTime() ?? 0;
+  return tb - ta;
 }
 
 function getDefaultCompetitionWindowStart(games: Game[]) {
@@ -487,11 +488,16 @@ export default function CompetitionsPage() {
                                 </p>
                               </div>
                               <p className="text-xs text-slate-400">
-                                {format(
-                                  parseISO(game.game_datetime),
-                                  isClosed ? "d MMM" : "d MMM · HH:mm",
-                                  { locale: pt },
-                                )}
+                                {(() => {
+                                  const parts = formatGameDateTimeParts(
+                                    game.game_datetime,
+                                  );
+                                  if (!parts) return "";
+                                  const datePart = `${parts.day} ${parts.monthShort}`;
+                                  return isClosed
+                                    ? datePart
+                                    : `${datePart} · ${parts.time}`;
+                                })()}
                                 {!isClosed && gameLocationLabel
                                   ? ` · ${gameLocationLabel}`
                                   : ""}

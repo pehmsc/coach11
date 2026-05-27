@@ -1,10 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
-import {
-  formatPortugalTime,
-  getPortugalDateKey,
-  portugalDateTimeToUtc,
-} from "@/lib/events/presence-window";
+import { formatPortugalTime } from "@/lib/events/presence-window";
 import { fetchGameAccessContext } from "@/lib/games/access";
 import {
   buildConflictLabel,
@@ -323,23 +319,29 @@ export async function GET(_request: Request, { params }: RouteContext) {
     };
     const sameDayEntriesByPlayerId = new Map<string, SameDayEntry[]>();
 
-    const gameDateKey = getPortugalDateKey(
-      typeof game.game_datetime === "string" ? game.game_datetime : null,
-    );
-    const dayStartUtc = portugalDateTimeToUtc(gameDateKey, "00:00:00");
-    const dayEndUtc = portugalDateTimeToUtc(gameDateKey, "23:59:59");
+    // game_datetime e timestamp WITHOUT time zone (hora local PT). Extrair
+    // a data do jogo (YYYY-MM-DD) directamente do prefixo da wall-clock e
+    // filtrar com wall-clock PT dos limites do dia.
+    const gameDatetimeStr =
+      typeof game.game_datetime === "string" ? game.game_datetime : null;
+    const gameDateKey =
+      gameDatetimeStr && /^(\d{4}-\d{2}-\d{2})/.exec(gameDatetimeStr.trim())
+        ? gameDatetimeStr.trim().slice(0, 10)
+        : null;
 
-    if (gameDateKey && dayStartUtc && dayEndUtc) {
+    if (gameDateKey) {
       // Filtramos pela data calendário (Portugal) para limitar a query.
       // O overlap real é aplicado em memória depois.
+      const dayStartWallClock = `${gameDateKey}T00:00:00`;
+      const dayEndWallClock = `${gameDateKey}T23:59:59`;
       const sameDayGamesQuery = supabase
         .from("games")
         .select(
           "id, game_datetime, end_time, concentration_time, opponent_name, is_home, competition_id",
         )
         .neq("id", gameId)
-        .gte("game_datetime", dayStartUtc.toISOString())
-        .lte("game_datetime", dayEndUtc.toISOString())
+        .gte("game_datetime", dayStartWallClock)
+        .lte("game_datetime", dayEndWallClock)
         .order("game_datetime", { ascending: true });
 
       if (typeof game.age_group_id === "string" && game.age_group_id.length > 0) {

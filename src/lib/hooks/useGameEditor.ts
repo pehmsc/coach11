@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { format, parseISO } from "date-fns";
+import { extractTimeFromDateTime } from "@/lib/events/time";
 import { toast } from "sonner";
 import type { Game } from "@/types/database";
 import type { GameCompetitionOption } from "@/components/games/game-form-fields";
@@ -106,7 +106,11 @@ export function useGameEditor(deps: UseGameEditorDeps) {
 
   function openEditGame() {
     if (!game) return;
-    const parsedGameDate = game.game_datetime ? parseISO(game.game_datetime) : null;
+    // game.game_datetime e wall-clock literal "YYYY-MM-DDTHH:MM:SS" — extrair
+    // partes por slice em vez de parseISO (que aplicaria fuso do runtime).
+    const dt = game.game_datetime?.trim() ?? "";
+    const datePart = /^(\d{4}-\d{2}-\d{2})/.exec(dt)?.[1] ?? "";
+    const timePart = extractTimeFromDateTime(dt) ?? "00:00";
     setEditTitle(game.title ?? "");
     setEditOpponent(game.opponent_name ?? "");
     setEditOpponentShortName(
@@ -123,8 +127,8 @@ export function useGameEditor(deps: UseGameEditorDeps) {
     } else {
       setEditOpponentSelection(null);
     }
-    setEditDate(parsedGameDate ? format(parsedGameDate, "yyyy-MM-dd") : "");
-    setEditStartTime(parsedGameDate ? format(parsedGameDate, "HH:mm") : "00:00");
+    setEditDate(datePart);
+    setEditStartTime(timePart);
     setEditEndTime(game.end_time?.slice(0, 5) ?? "");
     setEditConcentrationTime(game.concentration_time?.slice(0, 5) ?? "");
     setEditLocation(game.location ?? "");
@@ -165,11 +169,9 @@ export function useGameEditor(deps: UseGameEditorDeps) {
       5,
     );
 
-    // Build ISO datetime string from date + time inputs.
-    // new Date("YYYY-MM-DDTHH:mm") parses as local time, then
-    // .toISOString() produces UTC with Z suffix — exactly what
-    // the DB column (timestamp with time zone) expects.
-    const gameDatetime = new Date(`${editDate}T${editStartTime}`).toISOString();
+    // game_datetime e timestamp WITHOUT time zone (hora local PT) — gravar
+    // a wall-clock literal sem converter para UTC. Ver src/lib/events/time.ts.
+    const gameDatetime = `${editDate}T${editStartTime}:00`;
 
     const res = await fetch(`/api/games/${id}`, {
       method: "PATCH",

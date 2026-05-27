@@ -2,8 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { differenceInMinutes, parseISO, subMinutes } from "date-fns";
-import { formatGameDateTime } from "@/lib/events/time";
+import { differenceInMinutes, subMinutes } from "date-fns";
+import { formatGameDateTime, parseGameDateTime } from "@/lib/events/time";
 import { AlertCircle } from "lucide-react";
 import { StickyBackLink } from "@/components/navigation/StickyBackLink";
 import { Breadcrumb, type BreadcrumbItem } from "@/components/navigation/Breadcrumb";
@@ -152,7 +152,9 @@ export function GameDetailView({ gameId, scope }: Props) {
     ? formatGameDateTime(game.game_datetime, "longWithoutYear")
     : "—";
   const isCompetition = !!game.competition_id;
-  const gameDateTime = game.game_datetime ? parseISO(game.game_datetime) : null;
+  // game_datetime e wall-clock PT — converter para instante UTC correcto
+  // antes de calcular relativos a "agora".
+  const gameDateTime = game.game_datetime ? parseGameDateTime(game.game_datetime) : null;
   const liveUnlockAt = gameDateTime ? subMinutes(gameDateTime, 10) : null;
   const canStartLive = !liveUnlockAt || now >= liveUnlockAt;
   const isLiveInProgress = livePhase === "first_half" || livePhase === "second_half";

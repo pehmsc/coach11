@@ -3,8 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { format, parseISO } from "date-fns";
-import { pt } from "date-fns/locale";
+import { formatGameDateTimeParts } from "@/lib/events/time";
 import { AlertCircle, Loader2, Pencil, Plus, Trash2, Trophy } from "lucide-react";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
@@ -261,7 +260,7 @@ export function CompetitionDetailView({ competitionId, ageGroupId }: Props) {
             {games.map((game) => {
               const closed = isClosedGameStatus(game.status);
               const href = `/teams/${ageGroupId}/games/${game.id}`;
-              const dt = game.game_datetime ? parseISO(game.game_datetime) : null;
+              const parts = formatGameDateTimeParts(game.game_datetime);
               const hasResult =
                 closed && game.score_home != null && game.score_away != null;
               return (
@@ -269,13 +268,13 @@ export function CompetitionDetailView({ competitionId, ageGroupId }: Props) {
                   <Card className="hover:shadow-sm transition-shadow">
                     <CardContent className="py-3 px-4 flex items-center gap-3">
                       <div className="w-12 text-center flex-shrink-0">
-                        {dt ? (
+                        {parts ? (
                           <>
                             <p className="text-lg font-bold text-slate-900 leading-none">
-                              {format(dt, "d")}
+                              {parts.day}
                             </p>
                             <p className="text-xs text-slate-400 capitalize">
-                              {format(dt, "MMM", { locale: pt })}
+                              {parts.monthShort}
                             </p>
                           </>
                         ) : (

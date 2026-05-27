@@ -2,41 +2,45 @@ import { describe, expect, it } from "vitest";
 import { gameUpdateSchema } from "./games";
 
 describe("gameUpdateSchema", () => {
-  describe("game_datetime", () => {
-    it("accepts ISO datetime with Z suffix", () => {
+  describe("game_datetime (wall-clock PT, sem indicador de fuso)", () => {
+    it("aceita YYYY-MM-DDTHH:MM:SS", () => {
+      const result = gameUpdateSchema.safeParse({
+        game_datetime: "2026-05-30T12:00:00",
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it("aceita YYYY-MM-DDTHH:MM (sem segundos)", () => {
+      const result = gameUpdateSchema.safeParse({
+        game_datetime: "2026-05-30T12:00",
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it("rejeita ISO com Z (UTC) — coluna ja nao e timestamptz", () => {
       const result = gameUpdateSchema.safeParse({
         game_datetime: "2024-06-15T14:45:00.000Z",
-      });
-      expect(result.success).toBe(true);
-    });
-
-    it("accepts ISO datetime with timezone offset", () => {
-      const result = gameUpdateSchema.safeParse({
-        game_datetime: "2024-06-15T15:45:00+01:00",
-      });
-      expect(result.success).toBe(true);
-    });
-
-    it("rejects datetime WITHOUT timezone (the old bug)", () => {
-      const result = gameUpdateSchema.safeParse({
-        game_datetime: "2024-06-15T15:45:00",
       });
       expect(result.success).toBe(false);
     });
 
-    it("rejects the 'nullT...' concatenation bug", () => {
+    it("rejeita ISO com offset", () => {
+      const result = gameUpdateSchema.safeParse({
+        game_datetime: "2024-06-15T15:45:00+01:00",
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it("rejeita string vazia", () => {
+      const result = gameUpdateSchema.safeParse({ game_datetime: "" });
+      expect(result.success).toBe(false);
+    });
+
+    it("rejeita o bug 'nullT...'", () => {
       const result = gameUpdateSchema.safeParse({
         game_datetime: "nullT15:00:00",
       });
       expect(result.success).toBe(false);
-    });
-
-    it("accepts Date.toISOString() output", () => {
-      const iso = new Date("2024-06-15T15:45").toISOString();
-      const result = gameUpdateSchema.safeParse({
-        game_datetime: iso,
-      });
-      expect(result.success).toBe(true);
     });
   });
 
@@ -67,7 +71,7 @@ describe("gameUpdateSchema", () => {
   describe("strict mode", () => {
     it("rejects unknown fields (game_date_time typo)", () => {
       const result = gameUpdateSchema.safeParse({
-        game_date_time: "2024-06-15T15:00:00.000Z",
+        game_date_time: "2026-05-30T15:00:00",
       });
       expect(result.success).toBe(false);
     });
@@ -81,7 +85,7 @@ describe("gameUpdateSchema", () => {
 
     it("rejects unknown fields (date — belongs to calendar service)", () => {
       const result = gameUpdateSchema.safeParse({
-        date: "2024-06-15",
+        date: "2026-05-30",
       });
       expect(result.success).toBe(false);
     });
@@ -91,7 +95,7 @@ describe("gameUpdateSchema", () => {
     it("accepts a complete edit payload", () => {
       const result = gameUpdateSchema.safeParse({
         title: "Jornada 5",
-        game_datetime: new Date("2024-06-15T15:45").toISOString(),
+        game_datetime: "2026-05-30T15:45:00",
         end_time: "17:30",
         opponent_name: "SL Benfica",
         opponent_short_name: "SLB",
@@ -104,7 +108,7 @@ describe("gameUpdateSchema", () => {
       });
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.data.game_datetime).toContain("T");
+        expect(result.data.game_datetime).toBe("2026-05-30T15:45:00");
         expect(result.data.end_time).toBe("17:30");
       }
     });

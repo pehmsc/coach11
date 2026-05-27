@@ -2,12 +2,11 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { format, parseISO } from "date-fns";
-import { pt } from "date-fns/locale";
-import { formatGameDateTime } from "@/lib/events/time";
 import {
   extractTimeFromDateTime,
+  formatGameDateTime,
   formatGameDateTimeParts,
+  parseGameDateTime,
 } from "@/lib/events/time";
 import {
   Loader2,
@@ -310,21 +309,23 @@ export function GamesSection({
     void loadGames();
   }
 
+  // game_datetime e wall-clock PT — parseGameDateTime converte para instante
+  // UTC correcto para ordenacao consistente.
   const upcoming = games
     .filter((g) => !isClosedGameStatus(g.status))
     .slice()
     .sort(
       (a, b) =>
-        new Date(a.game_datetime).getTime() -
-        new Date(b.game_datetime).getTime(),
+        (parseGameDateTime(a.game_datetime)?.getTime() ?? 0) -
+        (parseGameDateTime(b.game_datetime)?.getTime() ?? 0),
     );
   const past = games
     .filter((g) => isClosedGameStatus(g.status))
     .slice()
     .sort(
       (a, b) =>
-        new Date(b.game_datetime).getTime() -
-        new Date(a.game_datetime).getTime(),
+        (parseGameDateTime(b.game_datetime)?.getTime() ?? 0) -
+        (parseGameDateTime(a.game_datetime)?.getTime() ?? 0),
     );
   const groupedUpcomingGames = groupByMonth(upcoming);
   const groupedPastGames = groupByMonth(past);

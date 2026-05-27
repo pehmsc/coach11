@@ -1,5 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createNotificationForTeamOnce } from "@/lib/notifications/service";
+import { parseGameDateTime, toPortugalDateKey, toPortugalWallClock } from "@/lib/events/time";
+import { portugalDateTimeToUtc } from "@/lib/events/presence-window";
 import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -27,14 +29,15 @@ export async function GET(request: NextRequest) {
   let j2Count = 0;
   let j3Count = 0;
 
-  // Buscar jogos nos próximos 48h + jogos de hoje
+  // Buscar jogos nos próximos 48h + jogos de hoje. game_datetime e timestamp
+  // WITHOUT time zone (hora local PT) — filtrar com wall-clock PT.
   const twoDaysFromNow = new Date(now.getTime() + 48 * 60 * 60 * 1000 + 10 * 60 * 1000);
   const { data: upcomingGames } = await admin
     .from("games")
     .select("id, team_id, age_group_id, game_datetime, concentration_time, title, opponent_name, location, status")
     .in("status", ["scheduled", "live"])
-    .gte("game_datetime", windowStart.toISOString())
-    .lte("game_datetime", twoDaysFromNow.toISOString());
+    .gte("game_datetime", toPortugalWallClock(windowStart))
+    .lte("game_datetime", toPortugalWallClock(twoDaysFromNow));
 
   if (!upcomingGames) {
     return NextResponse.json({ ok: true, j1: 0, j2: 0, j3: 0, timestamp: now.toISOString() });
@@ -42,7 +45,9 @@ export async function GET(request: NextRequest) {
 
   for (const game of upcomingGames) {
     if (!game.team_id) continue;
-    const gameDateTime = new Date(game.game_datetime);
+    // Wall-clock PT -> instante UTC correcto.
+    const gameDateTime = parseGameDateTime(game.game_datetime);
+    if (!gameDateTime) continue;
 
     const { data: coordinator } = await admin
       .from("age_groups")
@@ -63,14 +68,17 @@ export async function GET(request: NextRequest) {
         .eq("game_id", game.id);
 
       if (!convCount || convCount === 0) {
-        const gameDate = gameDateTime.toLocaleDateString("pt-PT", {
+        const gameDate = new Intl.DateTimeFormat("pt-PT", {
+          timeZone: "Europe/Lisbon",
           day: "numeric",
           month: "short",
-        });
-        const gameTime = gameDateTime.toLocaleTimeString("pt-PT", {
+        }).format(gameDateTime);
+        const gameTime = new Intl.DateTimeFormat("pt-PT", {
+          timeZone: "Europe/Lisbon",
           hour: "2-digit",
           minute: "2-digit",
-        });
+          hour12: false,
+        }).format(gameDateTime);
 
         await createNotificationForTeamOnce(admin, {
           teamId: game.team_id,
@@ -86,12 +94,15 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // J2: Hora de concentração
-    const concentrationTime = game.concentration_time
-      ? new Date(game.concentration_time)
-      : new Date(gameDateTime.getTime() - 30 * 60 * 1000);
+    // J2: Hora de concentração. concentration_time e HH:MM (text na DB);
+    // combinar com a data calendario (PT) do jogo e converter para UTC.
+    const gameDateKey = toPortugalDateKey(gameDateTime);
+    const concentrationTime =
+      game.concentration_time
+        ? portugalDateTimeToUtc(gameDateKey, game.concentration_time)
+        : new Date(gameDateTime.getTime() - 30 * 60 * 1000);
 
-    if (concentrationTime >= windowStart && concentrationTime <= now) {
+    if (concentrationTime && concentrationTime >= windowStart && concentrationTime <= now) {
       await createNotificationForTeamOnce(admin, {
         teamId: game.team_id,
         actorId,

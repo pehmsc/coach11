@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSuperUserAccess } from "@/lib/auth/super-user.server";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
+import { toPortugalWallClock } from "@/lib/events/time";
 
 export const runtime = "nodejs";
 
@@ -112,10 +113,14 @@ export async function GET(
       club.plan_type === "individual" ? "individual" : "club";
 
     const now = Date.now();
-    const nowIso = new Date(now).toISOString();
-    const todayDateOnly = toIsoDateOnly(new Date(now));
-    const since7dIso = new Date(now - SEVEN_DAYS_MS).toISOString();
-    const since7dDate = toIsoDateOnly(new Date(now - SEVEN_DAYS_MS));
+    const nowDate = new Date(now);
+    const since7dDate = new Date(now - SEVEN_DAYS_MS);
+    // game_datetime e timestamp WITHOUT time zone (hora local PT) — filtrar
+    // com wall-clock PT em vez de ISO UTC.
+    const nowWallClock = toPortugalWallClock(nowDate);
+    const since7dWallClock = toPortugalWallClock(since7dDate);
+    const todayDateOnly = toIsoDateOnly(nowDate);
+    const since7dDateKey = toIsoDateOnly(since7dDate);
 
     // --- Totals + age groups list em paralelo ---
     const [ageGroupsRes, totalPlayersRes, totalStaffRes, totalTrainingsRes, totalGamesRes] =
@@ -140,14 +145,14 @@ export async function GET(
           .from("training_sessions")
           .select("id", { count: "exact", head: true })
           .eq("club_id", clubId)
-          .gte("session_date", since7dDate)
+          .gte("session_date", since7dDateKey)
           .lte("session_date", todayDateOnly),
         access.admin
           .from("games")
           .select("id", { count: "exact", head: true })
           .eq("club_id", clubId)
-          .gte("game_datetime", since7dIso)
-          .lte("game_datetime", nowIso),
+          .gte("game_datetime", since7dWallClock)
+          .lte("game_datetime", nowWallClock),
       ]);
 
     const ageGroups = (ageGroupsRes.data || []) as AgeGroupRow[];
@@ -175,14 +180,14 @@ export async function GET(
             .from("training_sessions")
             .select("id", { count: "exact", head: true })
             .eq("age_group_id", ag.id)
-            .gte("session_date", since7dDate)
+            .gte("session_date", since7dDateKey)
             .lte("session_date", todayDateOnly),
           access.admin
             .from("games")
             .select("id", { count: "exact", head: true })
             .eq("age_group_id", ag.id)
-            .gte("game_datetime", since7dIso)
-            .lte("game_datetime", nowIso),
+            .gte("game_datetime", since7dWallClock)
+            .lte("game_datetime", nowWallClock),
           // "Ultima actividade" = ultimo evento que JA ACONTECEU. Filtrar por
           // <= now para excluir treinos/jogos agendados no futuro — caso
           // contrario o snapshot mostrava "daqui a 2 meses" como ultima
@@ -199,7 +204,7 @@ export async function GET(
             .from("games")
             .select("game_datetime")
             .eq("age_group_id", ag.id)
-            .lte("game_datetime", nowIso)
+            .lte("game_datetime", nowWallClock)
             .order("game_datetime", { ascending: false })
             .limit(1)
             .maybeSingle(),

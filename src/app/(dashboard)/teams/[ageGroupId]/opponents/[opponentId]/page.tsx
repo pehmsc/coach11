@@ -2,8 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, use } from "react";
 import { useRouter } from "next/navigation";
-import { format, parseISO } from "date-fns";
-import { pt } from "date-fns/locale";
+import { formatGameDateTimeParts } from "@/lib/events/time";
 import {
   AlertTriangle,
   Check,
@@ -917,7 +916,13 @@ function HistoricoTab({
       ) : (
         <ul className="space-y-2">
           {games.map((g) => {
-            const dt = g.game_datetime ? parseISO(g.game_datetime) : null;
+            const parts = formatGameDateTimeParts(g.game_datetime);
+            const yearMatch = g.game_datetime
+              ? /^(\d{4})/.exec(g.game_datetime)
+              : null;
+            const dateLabel = parts && yearMatch
+              ? `${parts.day} ${parts.monthShort} ${yearMatch[1]}`
+              : "—";
             const our = getOurScore(g);
             const opp = getOpponentScore(g);
             const score = our != null && opp != null ? `${our}–${opp}` : "—";
@@ -940,7 +945,7 @@ function HistoricoTab({
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-xs text-slate-400">
-                      {dt ? format(dt, "d MMM yyyy", { locale: pt }) : "—"}
+                      {dateLabel}
                       {competitionName ? ` · ${competitionName}` : ""}
                       {g.title ? ` · ${g.title}` : ""}
                     </p>
