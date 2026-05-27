@@ -30,7 +30,8 @@ export type BetaAccessReason =
   | "staff_invite"
   | "no_invite"
   | "no_email"
-  | "lookup_error";
+  | "lookup_error"
+  | "open_registration";
 
 export type BetaAccessResult = {
   allowed: boolean;
