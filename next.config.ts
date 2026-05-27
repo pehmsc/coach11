@@ -164,6 +164,34 @@ const securityHeaders = [
   { key: "Content-Security-Policy-Report-Only", value: cspReportOnly },
 ];
 
+// Versao para resources embebiveis em iframe same-origin (ex: preview de PDF
+// da factura no drawer admin). Substitui X-Frame-Options: DENY -> SAMEORIGIN
+// e CSP frame-ancestors 'none' -> 'self'.
+const sameOriginEmbeddableSecurityHeaders = securityHeaders.map((header) => {
+  if (header.key === "X-Frame-Options") {
+    return { key: header.key, value: "SAMEORIGIN" };
+  }
+  if (header.key === "Content-Security-Policy") {
+    return {
+      key: header.key,
+      value: header.value.replace(
+        "frame-ancestors 'none'",
+        "frame-ancestors 'self'",
+      ),
+    };
+  }
+  if (header.key === "Content-Security-Policy-Report-Only") {
+    return {
+      key: header.key,
+      value: header.value.replace(
+        "frame-ancestors 'none'",
+        "frame-ancestors 'self'",
+      ),
+    };
+  }
+  return header;
+});
+
 const nextConfig: NextConfig = {
   async headers() {
     return [
@@ -236,6 +264,17 @@ const nextConfig: NextConfig = {
       {
         source: "/(.*)",
         headers: securityHeaders,
+      },
+      // Override: PDF stream endpoints precisam de embedding same-origin no
+      // iframe do drawer admin / preview de factura. Entrada DEPOIS do catch-all
+      // (DENY) para sobrepor X-Frame-Options + CSP frame-ancestors.
+      {
+        source: "/api/admin/clubs/:clubId/invoices/:invoiceId/pdf",
+        headers: sameOriginEmbeddableSecurityHeaders,
+      },
+      {
+        source: "/api/club/invoices/:invoiceId/pdf",
+        headers: sameOriginEmbeddableSecurityHeaders,
       },
     ];
   },
