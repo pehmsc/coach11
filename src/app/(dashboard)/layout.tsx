@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { AuthRecoveryGate } from "@/components/auth/AuthRecoveryGate";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { hasSupabaseAuthCookies } from "@/lib/supabase/auth-cookie";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { Sidebar } from "@/components/layout/Sidebar";
@@ -10,6 +11,11 @@ import { AuthenticatedAnalyticsProvider } from "@/components/observability/Authe
 import { getCachedUserTeamContext, type UserTeamContext } from "@/lib/auth/team-context";
 import { AgeGroupProvider } from "@/contexts/AgeGroupContext";
 import { PlanTypeCookieWriter } from "@/components/auth/PlanTypeCookieWriter";
+import {
+  blockedRedirectPath,
+  hasActiveAccess,
+  type SubscriptionStatus,
+} from "@/lib/stripe/subscription-status";
 
 export default async function DashboardLayout({
   children,
@@ -35,6 +41,50 @@ export default async function DashboardLayout({
     .select("id, full_name, role, email, avatar_url, is_super_coordinator, created_at")
     .eq("id", user.id)
     .single();
+
+  // Subscription guard: bloqueia acesso ao dashboard se Individual sem subscricao
+  // activa. Clubes sales-led (plan_type='club') ignoram. Super-coordinator
+  // bypass (admin platforma).
+  if (!profile?.is_super_coordinator) {
+    const subAdmin = createAdminClient();
+    const { data: subMembership } = await subAdmin
+      .from("club_memberships")
+      .select("club_id")
+      .eq("profile_id", user.id)
+      .limit(1)
+      .maybeSingle();
+
+    if (subMembership?.club_id) {
+      const { data: subClub } = await subAdmin
+        .from("clubs")
+        .select(
+          "plan_type, subscription_status, trial_ends_at, subscription_current_period_end, subscription_cancel_at_period_end",
+        )
+        .eq("id", subMembership.club_id)
+        .maybeSingle();
+
+      if (subClub) {
+        const subContext = {
+          plan_type:
+            (subClub.plan_type === "individual" ? "individual" : "club") as
+              | "individual"
+              | "club",
+          subscription_status:
+            (subClub.subscription_status as SubscriptionStatus | null) ?? null,
+          trial_ends_at: subClub.trial_ends_at,
+          subscription_current_period_end:
+            subClub.subscription_current_period_end,
+          subscription_cancel_at_period_end:
+            subClub.subscription_cancel_at_period_end ?? false,
+        };
+        if (!hasActiveAccess(subContext)) {
+          // (dashboard) layout nao aplica a /billing/*, /precos, /login —
+          // seguro fazer redirect sem risco de loop
+          redirect(blockedRedirectPath(subContext));
+        }
+      }
+    }
+  }
 
   const metadata = (user.user_metadata ?? {}) as Record<string, unknown>;
   const metadataAvatar =

@@ -15,6 +15,10 @@
     {
       "path": "/api/notifications/cron/games",
       "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/notifications/cron/trial-reminder",
+      "schedule": "0 9 * * *"
     }
   ],
   "headers": [
