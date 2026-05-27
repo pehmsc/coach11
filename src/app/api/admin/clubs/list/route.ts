@@ -23,6 +23,8 @@ export type AdminClubsListItem = {
   n_age_groups: number;
   n_players: number;
   n_staff: number;
+  /** Numero de facturas em atraso (status='issued' e due_date < hoje) */
+  overdue_invoices: number;
 };
 
 export async function GET() {
@@ -44,9 +46,11 @@ export async function GET() {
       );
     }
 
+    const today = new Date().toISOString().slice(0, 10);
+
     const enriched: AdminClubsListItem[] = await Promise.all(
       ((clubs || []) as ClubRow[]).map(async (club) => {
-        const [ageGroupsRes, playersRes, staffRes] = await Promise.all([
+        const [ageGroupsRes, playersRes, staffRes, overdueRes] = await Promise.all([
           access.admin
             .from("age_groups")
             .select("id", { count: "exact", head: true })
@@ -59,6 +63,12 @@ export async function GET() {
             .from("age_group_staff")
             .select("id", { count: "exact", head: true })
             .eq("club_id", club.id),
+          access.admin
+            .from("invoices")
+            .select("id", { count: "exact", head: true })
+            .eq("club_id", club.id)
+            .eq("status", "issued")
+            .lt("due_date", today),
         ]);
 
         return {
@@ -71,6 +81,7 @@ export async function GET() {
           n_age_groups: ageGroupsRes.count ?? 0,
           n_players: playersRes.count ?? 0,
           n_staff: staffRes.count ?? 0,
+          overdue_invoices: overdueRes.count ?? 0,
         };
       }),
     );

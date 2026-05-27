@@ -13,6 +13,17 @@ export interface InvoiceEmailPayload {
   currency: string;
   issuedAt: string;
   dueDate: string;
+  /**
+   * Opcional: PDF da factura como Buffer. Quando presente, e anexado ao email
+   * com filename derivado do invoice_number (sanitizado).
+   */
+  pdfBuffer?: Buffer;
+}
+
+/** Sanitiza um numero de factura para usar como filename do anexo. */
+function pdfFilenameFor(invoiceNumber: string): string {
+  const safe = invoiceNumber.replace(/[^A-Za-z0-9._-]+/g, "_");
+  return `${safe || "factura"}.pdf`;
 }
 
 export interface InvoiceEmailResult {
@@ -49,10 +60,20 @@ export async function sendInvoiceIssuedEmail(
   const issuedAtLabel = formatShortDate(payload.issuedAt);
   const dueLabel = formatShortDate(payload.dueDate);
 
+  const attachments = payload.pdfBuffer
+    ? [
+        {
+          filename: pdfFilenameFor(payload.invoiceNumber),
+          content: payload.pdfBuffer,
+        },
+      ]
+    : undefined;
+
   const { error } = await resend.emails.send({
     from: fromEmail,
     to: [payload.to],
     subject: `Nova factura Coach11 · ${payload.invoiceNumber} · ${payload.clubName}`,
+    attachments,
     html: `
       <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f8fafc;padding:20px;">
         <div style="max-width:520px;margin:auto;background:#ffffff;border-radius:16px;overflow:hidden;">
@@ -91,7 +112,8 @@ export async function sendInvoiceIssuedEmail(
             </a>
 
             <p style="color:#64748b;font-size:12px;margin-top:24px;">
-              Podes consultar e descarregar o PDF na secção "Facturação" da página do clube.
+              ${payload.pdfBuffer ? "O PDF segue em anexo." : ""}
+              Podes consultar o histórico completo na secção "Facturação" da página do clube.
               Para questões: <a href="mailto:billing@coach11.app" style="color:#059669;">billing@coach11.app</a>.
             </p>
           </div>

@@ -231,6 +231,7 @@ export async function POST(
         currency: metadata.currency,
         issuedAt: metadata.issued_at,
         dueDate: metadata.due_date,
+        pdfBuffer,
       });
       if (!emailRes.sent) emailWarning = emailRes.warning;
     } else {

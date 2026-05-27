@@ -105,15 +105,36 @@ export function ClubsAdminPanel() {
     return { club, individual, total: clubs.length };
   }, [clubs]);
 
+  const totalOverdue = useMemo(
+    () => clubs.reduce((sum, c) => sum + (c.overdue_invoices || 0), 0),
+    [clubs],
+  );
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-lg">Clientes</CardTitle>
-        <CardDescription>
-          {counts.total} clube{counts.total === 1 ? "" : "s"} —{" "}
-          {counts.club} clube{counts.club === 1 ? "" : "s"} sales-led,{" "}
-          {counts.individual} individu{counts.individual === 1 ? "al" : "ais"}.
-        </CardDescription>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="text-lg">Clientes</CardTitle>
+            <CardDescription>
+              {counts.total} clube{counts.total === 1 ? "" : "s"} —{" "}
+              {counts.club} clube{counts.club === 1 ? "" : "s"} sales-led,{" "}
+              {counts.individual} individu{counts.individual === 1 ? "al" : "ais"}.
+            </CardDescription>
+          </div>
+          <Link
+            href="/admin/atrasos"
+            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+              totalOverdue > 0
+                ? "bg-rose-50 text-rose-700 ring-1 ring-rose-200 hover:bg-rose-100"
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+            }`}
+          >
+            {totalOverdue > 0
+              ? `⚠ ${totalOverdue} em atraso`
+              : "Atrasos"}
+          </Link>
+        </div>
       </CardHeader>
       <CardContent>
         <div className="mb-4 flex flex-wrap items-end gap-3">
@@ -204,6 +225,14 @@ export function ClubsAdminPanel() {
                       {club.name}
                     </p>
                     <PlanTypeBadge planType={club.plan_type} />
+                    {club.overdue_invoices > 0 ? (
+                      <span
+                        className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-700 ring-1 ring-rose-200"
+                        title={`${club.overdue_invoices} factura(s) em atraso`}
+                      >
+                        ⚠ {club.overdue_invoices} em atraso
+                      </span>
+                    ) : null}
                   </div>
                   <p className="mt-0.5 text-xs text-slate-500">
                     Criado{" "}
