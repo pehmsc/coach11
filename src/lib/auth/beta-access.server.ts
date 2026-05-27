@@ -146,6 +146,17 @@ export async function isBetaAllowed(
     };
   }
 
+  // Feature flag: OPEN_REGISTRATION=true desliga o gate beta. Qualquer email
+  // valido pode registar-se. Usado quando o produto sai de beta restrito para
+  // auto-servico (Stripe Individual).
+  if (process.env.OPEN_REGISTRATION === "true") {
+    return {
+      allowed: true,
+      reason: "open_registration",
+      invite: null,
+    };
+  }
+
   try {
     const normalizedProfileId =
       typeof params.profileId === "string" ? params.profileId.trim() : "";
