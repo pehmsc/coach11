@@ -3,8 +3,51 @@ import { z } from "zod";
 import { getSuperUserAccess } from "@/lib/auth/super-user.server";
 import { parseBody } from "@/lib/http/validate";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
+import type { Invoice } from "@/types/database";
 
 export const runtime = "nodejs";
+
+export async function GET(
+  _request: Request,
+  context: { params: Promise<{ id: string; invoiceId: string }> },
+) {
+  try {
+    const access = await getSuperUserAccess();
+    if (!access.ok) {
+      return NextResponse.json({ error: access.error }, { status: access.status });
+    }
+    const { id: clubId, invoiceId } = await context.params;
+
+    const { data, error } = await access.admin
+      .from("invoices")
+      .select(
+        "id, club_id, invoice_number, period_start, period_end, issued_at, due_date, amount_cents, currency, status, paid_at, pdf_path, notes, created_at, created_by, updated_at",
+      )
+      .eq("id", invoiceId)
+      .eq("club_id", clubId)
+      .maybeSingle();
+
+    if (error) {
+      return NextResponse.json(
+        { error: `Erro ao carregar factura: ${error.message}` },
+        { status: 500 },
+      );
+    }
+    if (!data) {
+      return NextResponse.json(
+        { error: "Factura nao encontrada." },
+        { status: 404 },
+      );
+    }
+
+    return NextResponse.json({ success: true, invoice: data as Invoice });
+  } catch (error) {
+    return respondInternalError(
+      "api.admin.clubs.invoices.[invoiceId].get",
+      error,
+    );
+  }
+}
 
 const ActionSchema = z.discriminatedUnion("action", [
   z

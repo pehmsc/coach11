@@ -53,6 +53,10 @@ const SRC_ALLOWED_EXCEPTIONS = new Map([
     "src/app/api/admin/clubs/[id]/invoices/[invoiceId]/pdf/route.ts",
     new Set(["src-club-id-filter"]), // backoffice gera signed URL do PDF (super-user gate)
   ],
+  [
+    "src/app/api/admin/clubs/[id]/invoices/[invoiceId]/resend/route.ts",
+    new Set(["src-club-id-filter"]), // backoffice reenvia email da factura (super-user gate)
+  ],
   // createAdminClient — ficheiros legítimos que precisam de service_role.
   // AUTH_MGMT: auth.admin.createUser/deleteUser/updateUser
   ["src/app/api/auth/ensure-profile/route.ts", new Set(["src-admin-client"])],

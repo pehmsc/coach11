@@ -15,6 +15,7 @@ import {
 } from "@/lib/billing/invoice-helpers";
 import type { Invoice } from "@/types/database";
 import { InvoiceCreateModal } from "./InvoiceCreateModal";
+import { InvoiceDetailDrawer } from "./InvoiceDetailDrawer";
 
 interface Props {
   clubId: string;
@@ -29,6 +30,8 @@ export function ClubBillingView({ clubId }: Props) {
   const [filter, setFilter] = useState<Filter>("all");
   const [showCreate, setShowCreate] = useState(false);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
+  const [openInvoiceId, setOpenInvoiceId] = useState<string | null>(null);
+  const [drawerRefreshKey, setDrawerRefreshKey] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -296,6 +299,7 @@ export function ClubBillingView({ clubId }: Props) {
                   <InvoiceRow
                     key={inv.id}
                     invoice={inv}
+                    onOpen={() => setOpenInvoiceId(inv.id)}
                     onDownload={() => downloadPdf(inv)}
                     onMarkPaid={() => markPaid(inv)}
                     onCancel={() => cancelInvoice(inv)}
@@ -317,6 +321,27 @@ export function ClubBillingView({ clubId }: Props) {
             void load();
             if (warning) toast.warning(warning);
             else toast.success("Factura criada e email enviado.");
+          }}
+        />
+      ) : null}
+
+      {openInvoiceId ? (
+        <InvoiceDetailDrawer
+          clubId={clubId}
+          invoiceId={openInvoiceId}
+          refreshKey={drawerRefreshKey}
+          onClose={() => setOpenInvoiceId(null)}
+          onMarkPaid={(inv) => {
+            void (async () => {
+              await markPaid(inv);
+              setDrawerRefreshKey((k) => k + 1);
+            })();
+          }}
+          onCancel={(inv) => {
+            void (async () => {
+              await cancelInvoice(inv);
+              setDrawerRefreshKey((k) => k + 1);
+            })();
           }}
         />
       ) : null}
@@ -385,12 +410,14 @@ function FilterChip({
 
 function InvoiceRow({
   invoice,
+  onOpen,
   onDownload,
   onMarkPaid,
   onCancel,
   pending,
 }: {
   invoice: Invoice;
+  onOpen: () => void;
   onDownload: () => void;
   onMarkPaid: () => void;
   onCancel: () => void;
@@ -408,8 +435,18 @@ function InvoiceRow({
         : overdue
           ? "bg-rose-100 text-rose-700"
           : "bg-amber-100 text-amber-700";
+  // Stop propagation nos botões para o click na linha não competir
+  const stopAndRun = (fn: () => void) => (e: React.MouseEvent) => {
+    e.stopPropagation();
+    fn();
+  };
   return (
-    <tr className={overdue ? "bg-rose-50/40" : ""}>
+    <tr
+      className={`cursor-pointer transition hover:bg-slate-50 ${
+        overdue ? "bg-rose-50/40 hover:bg-rose-50/70" : ""
+      }`}
+      onClick={onOpen}
+    >
       <td className="px-4 py-3 font-mono text-xs">{invoice.invoice_number}</td>
       <td className="px-4 py-3 text-slate-700">{period ?? "—"}</td>
       <td
@@ -436,7 +473,8 @@ function InvoiceRow({
         ) : (
           <div className="flex justify-end gap-3 text-xs">
             <button
-              onClick={onDownload}
+              type="button"
+              onClick={stopAndRun(onDownload)}
               className="text-slate-600 hover:underline"
             >
               PDF
@@ -444,13 +482,15 @@ function InvoiceRow({
             {invoice.status === "issued" ? (
               <>
                 <button
-                  onClick={onMarkPaid}
+                  type="button"
+                  onClick={stopAndRun(onMarkPaid)}
                   className="font-semibold text-emerald-600 hover:underline"
                 >
                   Marcar paga
                 </button>
                 <button
-                  onClick={onCancel}
+                  type="button"
+                  onClick={stopAndRun(onCancel)}
                   className="text-rose-600 hover:underline"
                 >
                   Cancelar
