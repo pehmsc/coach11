@@ -41,6 +41,18 @@ const SRC_ALLOWED_EXCEPTIONS = new Map([
     "src/app/api/admin/clubs/[id]/route.ts",
     new Set(["src-club-id-filter"]), // backoffice GET/PATCH clube por id (super-user gate)
   ],
+  [
+    "src/app/api/admin/clubs/[id]/invoices/route.ts",
+    new Set(["src-club-id-filter"]), // backoffice lista/cria facturas do clube (super-user gate)
+  ],
+  [
+    "src/app/api/admin/clubs/[id]/invoices/[invoiceId]/route.ts",
+    new Set(["src-club-id-filter"]), // backoffice marca paga/cancela factura (super-user gate)
+  ],
+  [
+    "src/app/api/admin/clubs/[id]/invoices/[invoiceId]/pdf/route.ts",
+    new Set(["src-club-id-filter"]), // backoffice gera signed URL do PDF (super-user gate)
+  ],
   // createAdminClient — ficheiros legítimos que precisam de service_role.
   // AUTH_MGMT: auth.admin.createUser/deleteUser/updateUser
   ["src/app/api/auth/ensure-profile/route.ts", new Set(["src-admin-client"])],
@@ -56,6 +68,9 @@ const SRC_ALLOWED_EXCEPTIONS = new Map([
   // do invite (metadata.club_id) — boundary legitima de gestao de membership.
   ["src/lib/auth/beta-access.server.ts", new Set(["src-admin-client", "src-club-id-filter"])],
   ["src/lib/auth/super-user.server.ts", new Set(["src-admin-client"])],
+  // Coordenador descarrega PDF da sua factura: storage signed URL precisa service role
+  // (RLS storage valida bucket+path; client server normal nao consegue assinar)
+  ["src/app/api/club/invoices/[invoiceId]/pdf/route.ts", new Set(["src-admin-client"])],
   // PUBLIC_SSR: SSR sem sessão auth
   ["src/app/public/[token]/page.tsx", new Set(["src-admin-client"])],
   ["src/app/public/[token]/games/[gameId]/page.tsx", new Set(["src-admin-client"])],

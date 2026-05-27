@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8" />
+  <title>Mockup B1 — Facturacao Coach11</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    body { font-family: 'Inter', system-ui, sans-serif; }
+    .badge { @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold; }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-900">
+
+<!-- ═══ HEADER + INDEX ═══ -->
+<header class="border-b border-slate-300 bg-white">
+  <div class="mx-auto max-w-7xl px-6 py-5">
+    <p class="text-xs font-semibold uppercase tracking-wider text-emerald-600">Sprint Billing · B1</p>
+    <h1 class="mt-1 text-2xl font-bold">Facturacao manual — 2 vistas</h1>
+    <p class="mt-2 text-sm text-slate-600">
+      <strong>Super-admin</strong> gere todas as facturas no detalhe do clube.
+      <strong>Coordenador</strong> ve e descarrega as suas no dashboard.
+      Sem Stripe — Pedro emite factura fora da plataforma e regista aqui o tracking.
+    </p>
+
+    <div class="mt-5 flex flex-wrap gap-3 text-sm">
+      <a href="#admin-list" class="rounded-lg border border-slate-300 px-4 py-2 hover:bg-slate-50">1. Admin · lista clube</a>
+      <a href="#admin-new" class="rounded-lg border border-slate-300 px-4 py-2 hover:bg-slate-50">2. Admin · nova factura</a>
+      <a href="#admin-detail" class="rounded-lg border border-slate-300 px-4 py-2 hover:bg-slate-50">3. Admin · detalhe factura</a>
+      <a href="#coord" class="rounded-lg border border-slate-300 px-4 py-2 hover:bg-slate-50">4. Coordenador · view</a>
+      <a href="#data-model" class="rounded-lg border border-slate-300 px-4 py-2 hover:bg-slate-50">5. Modelo de dados</a>
+      <a href="#decisions" class="rounded-lg border border-slate-300 px-4 py-2 hover:bg-slate-50">6. Decisoes pendentes</a>
+    </div>
+  </div>
+</header>
+
+<main class="mx-auto max-w-7xl px-6 py-12 space-y-16">
+
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<!-- 1. ADMIN — LISTA NO DETALHE DO CLUBE                                  -->
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<section id="admin-list">
+  <div class="mb-4 flex items-baseline justify-between">
+    <h2 class="text-lg font-bold">1. Admin · tab "Facturacao" no detalhe do clube</h2>
+    <span class="text-xs text-slate-500">/admin/clubs/[id] · nova tab ao lado de "Resumo" e "Editar"</span>
+  </div>
+
+  <!-- Faux admin layout -->
+  <div class="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 text-slate-100">
+    <!-- Header bar -->
+    <div class="flex items-center justify-between border-b border-slate-800 px-6 py-4">
+      <div class="flex items-center gap-3 text-sm">
+        <span class="text-emerald-400">Backoffice · Coach<span class="text-emerald-400">11</span></span>
+      </div>
+      <span class="text-xs text-slate-400">pedro@coach11.app</span>
+    </div>
+
+    <!-- Club header -->
+    <div class="px-6 py-6">
+      <div class="flex items-center gap-4">
+        <div class="size-14 rounded-xl bg-emerald-500/15 grid place-items-center text-xl font-bold text-emerald-400">EFB</div>
+        <div>
+          <h3 class="text-xl font-bold">EF Benfica</h3>
+          <p class="text-sm text-slate-400">
+            <span class="rounded bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-400">Standard</span>
+            <span class="ml-2">NIF 501234567 · Lisboa, PT</span>
+          </p>
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <div class="mt-6 flex gap-1 border-b border-slate-800">
+        <button class="border-b-2 border-transparent px-4 py-2 text-sm text-slate-400 hover:text-slate-200">Resumo</button>
+        <button class="border-b-2 border-transparent px-4 py-2 text-sm text-slate-400 hover:text-slate-200">Editar</button>
+        <button class="border-b-2 border-emerald-400 px-4 py-2 text-sm font-semibold text-emerald-400">Facturacao</button>
+      </div>
+
+      <!-- Filters + CTA -->
+      <div class="mt-6 flex flex-wrap items-center justify-between gap-3">
+        <div class="flex flex-wrap gap-2 text-xs">
+          <button class="rounded-full bg-emerald-500/15 px-3 py-1.5 font-semibold text-emerald-400">Todas (12)</button>
+          <button class="rounded-full bg-slate-800 px-3 py-1.5 text-slate-300 hover:bg-slate-700">Em aberto (3)</button>
+          <button class="rounded-full bg-slate-800 px-3 py-1.5 text-rose-300 hover:bg-slate-700">Em atraso (1)</button>
+          <button class="rounded-full bg-slate-800 px-3 py-1.5 text-slate-300 hover:bg-slate-700">Pagas (8)</button>
+          <button class="rounded-full bg-slate-800 px-3 py-1.5 text-slate-400 hover:bg-slate-700">Canceladas (0)</button>
+        </div>
+        <a href="#admin-new" class="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-400">+ Nova factura</a>
+      </div>
+
+      <!-- Summary cards -->
+      <div class="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+          <p class="text-xs text-slate-400">Em aberto</p>
+          <p class="mt-1 text-xl font-bold text-amber-300">450,00 €</p>
+          <p class="mt-1 text-xs text-slate-500">3 facturas</p>
+        </div>
+        <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+          <p class="text-xs text-slate-400">Em atraso</p>
+          <p class="mt-1 text-xl font-bold text-rose-300">150,00 €</p>
+          <p class="mt-1 text-xs text-slate-500">1 factura · +8 dias</p>
+        </div>
+        <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+          <p class="text-xs text-slate-400">Pago este ano</p>
+          <p class="mt-1 text-xl font-bold text-emerald-400">1.200,00 €</p>
+          <p class="mt-1 text-xs text-slate-500">8 facturas · 2026</p>
+        </div>
+        <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+          <p class="text-xs text-slate-400">Mensal medio</p>
+          <p class="mt-1 text-xl font-bold">150,00 €</p>
+          <p class="mt-1 text-xs text-slate-500">8 meses</p>
+        </div>
+      </div>
+
+      <!-- Table -->
+      <div class="mt-6 overflow-hidden rounded-xl border border-slate-800">
+        <table class="w-full text-sm">
+          <thead class="bg-slate-800/50 text-xs uppercase tracking-wider text-slate-400">
+            <tr>
+              <th class="px-4 py-3 text-left">N.º</th>
+              <th class="px-4 py-3 text-left">Periodo</th>
+              <th class="px-4 py-3 text-left">Vencimento</th>
+              <th class="px-4 py-3 text-right">Valor</th>
+              <th class="px-4 py-3 text-left">Status</th>
+              <th class="px-4 py-3"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-800">
+            <!-- Em atraso -->
+            <tr class="bg-rose-500/5 hover:bg-rose-500/10">
+              <td class="px-4 py-3 font-mono text-xs">FT-2026/004</td>
+              <td class="px-4 py-3 text-slate-300">Abr 2026</td>
+              <td class="px-4 py-3 text-rose-300">18 Mai 2026 <span class="ml-1 text-xs">(+8d)</span></td>
+              <td class="px-4 py-3 text-right font-semibold">150,00 €</td>
+              <td class="px-4 py-3"><span class="badge bg-rose-500/15 text-rose-300">Em atraso</span></td>
+              <td class="px-4 py-3 text-right">
+                <button class="text-xs text-emerald-400 hover:underline">Marcar paga</button>
+                <span class="mx-2 text-slate-700">·</span>
+                <button class="text-xs text-slate-400 hover:underline">PDF</button>
+              </td>
+            </tr>
+            <!-- Em aberto -->
+            <tr class="hover:bg-slate-800/30">
+              <td class="px-4 py-3 font-mono text-xs">FT-2026/005</td>
+              <td class="px-4 py-3 text-slate-300">Mai 2026</td>
+              <td class="px-4 py-3 text-slate-300">18 Jun 2026</td>
+              <td class="px-4 py-3 text-right font-semibold">150,00 €</td>
+              <td class="px-4 py-3"><span class="badge bg-amber-500/15 text-amber-300">Em aberto</span></td>
+              <td class="px-4 py-3 text-right">
+                <button class="text-xs text-emerald-400 hover:underline">Marcar paga</button>
+                <span class="mx-2 text-slate-700">·</span>
+                <button class="text-xs text-slate-400 hover:underline">PDF</button>
+              </td>
+            </tr>
+            <!-- Em aberto -->
+            <tr class="hover:bg-slate-800/30">
+              <td class="px-4 py-3 font-mono text-xs">FT-2026/006</td>
+              <td class="px-4 py-3 text-slate-300">Jun 2026</td>
+              <td class="px-4 py-3 text-slate-300">18 Jul 2026</td>
+              <td class="px-4 py-3 text-right font-semibold">150,00 €</td>
+              <td class="px-4 py-3"><span class="badge bg-amber-500/15 text-amber-300">Em aberto</span></td>
+              <td class="px-4 py-3 text-right">
+                <button class="text-xs text-emerald-400 hover:underline">Marcar paga</button>
+                <span class="mx-2 text-slate-700">·</span>
+                <button class="text-xs text-slate-400 hover:underline">PDF</button>
+              </td>
+            </tr>
+            <!-- Paga -->
+            <tr class="hover:bg-slate-800/30">
+              <td class="px-4 py-3 font-mono text-xs">FT-2026/003</td>
+              <td class="px-4 py-3 text-slate-300">Mar 2026</td>
+              <td class="px-4 py-3 text-slate-400">18 Abr 2026</td>
+              <td class="px-4 py-3 text-right font-semibold text-slate-400">150,00 €</td>
+              <td class="px-4 py-3"><span class="badge bg-emerald-500/15 text-emerald-400">Paga · 14 Abr</span></td>
+              <td class="px-4 py-3 text-right">
+                <button class="text-xs text-slate-400 hover:underline">PDF</button>
+                <span class="mx-2 text-slate-700">·</span>
+                <button class="text-xs text-slate-500 hover:underline">Estornar</button>
+              </td>
+            </tr>
+            <!-- Paga -->
+            <tr class="hover:bg-slate-800/30">
+              <td class="px-4 py-3 font-mono text-xs">FT-2026/002</td>
+              <td class="px-4 py-3 text-slate-300">Fev 2026</td>
+              <td class="px-4 py-3 text-slate-400">18 Mar 2026</td>
+              <td class="px-4 py-3 text-right font-semibold text-slate-400">150,00 €</td>
+              <td class="px-4 py-3"><span class="badge bg-emerald-500/15 text-emerald-400">Paga · 15 Mar</span></td>
+              <td class="px-4 py-3 text-right">
+                <button class="text-xs text-slate-400 hover:underline">PDF</button>
+                <span class="mx-2 text-slate-700">·</span>
+                <button class="text-xs text-slate-500 hover:underline">Estornar</button>
+              </td>
+            </tr>
+            <tr class="hover:bg-slate-800/30">
+              <td class="px-4 py-3 font-mono text-xs">FT-2026/001</td>
+              <td class="px-4 py-3 text-slate-300">Jan 2026</td>
+              <td class="px-4 py-3 text-slate-400">18 Fev 2026</td>
+              <td class="px-4 py-3 text-right font-semibold text-slate-400">150,00 €</td>
+              <td class="px-4 py-3"><span class="badge bg-emerald-500/15 text-emerald-400">Paga · 17 Fev</span></td>
+              <td class="px-4 py-3 text-right">
+                <button class="text-xs text-slate-400 hover:underline">PDF</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<!-- 2. ADMIN — MODAL NOVA FACTURA                                         -->
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<section id="admin-new">
+  <div class="mb-4 flex items-baseline justify-between">
+    <h2 class="text-lg font-bold">2. Admin · modal "Nova factura"</h2>
+    <span class="text-xs text-slate-500">Inline na mesma pagina, sobre dimmed background</span>
+  </div>
+
+  <div class="relative overflow-hidden rounded-2xl bg-slate-900/95 p-8">
+    <!-- Dim background hint -->
+    <div class="pointer-events-none absolute inset-0 bg-slate-950/40 backdrop-blur-sm"></div>
+
+    <div class="relative mx-auto max-w-xl rounded-2xl border border-slate-700 bg-slate-900 p-6 text-slate-100 shadow-2xl">
+      <div class="mb-6 flex items-start justify-between">
+        <div>
+          <h3 class="text-lg font-bold">Nova factura · EF Benfica</h3>
+          <p class="mt-1 text-xs text-slate-400">Regista uma factura ja emitida fora da plataforma</p>
+        </div>
+        <button class="text-slate-500 hover:text-slate-300">×</button>
+      </div>
+
+      <div class="space-y-4">
+        <!-- Row 1 -->
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">N.º factura <span class="text-emerald-400">*</span></label>
+            <input type="text" value="FT-2026/007" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" />
+            <p class="mt-1 text-xs text-slate-500">Referencia do software de facturacao fiscal</p>
+          </div>
+          <div>
+            <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">Valor (€) <span class="text-emerald-400">*</span></label>
+            <input type="number" value="150.00" step="0.01" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" />
+          </div>
+        </div>
+
+        <!-- Row 2 -->
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">Periodo · inicio</label>
+            <input type="date" value="2026-07-01" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" />
+          </div>
+          <div>
+            <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">Periodo · fim</label>
+            <input type="date" value="2026-07-31" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" />
+          </div>
+        </div>
+
+        <!-- Row 3 -->
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">Data de emissao</label>
+            <input type="date" value="2026-07-01" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" />
+          </div>
+          <div>
+            <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">Vencimento <span class="text-emerald-400">*</span></label>
+            <input type="date" value="2026-08-18" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" />
+          </div>
+        </div>
+
+        <!-- PDF upload -->
+        <div>
+          <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">PDF da factura <span class="text-slate-500">(opcional, pode ser adicionado depois)</span></label>
+          <div class="flex items-center gap-3 rounded-lg border border-dashed border-slate-700 bg-slate-950 px-3 py-3 text-sm text-slate-400">
+            <span>📄</span>
+            <span class="flex-1">Arrasta PDF para aqui ou clica para procurar</span>
+            <button class="rounded-lg border border-slate-700 px-3 py-1.5 text-xs hover:bg-slate-800">Procurar</button>
+          </div>
+        </div>
+
+        <!-- Notes -->
+        <div>
+          <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">Notas internas <span class="text-slate-500">(nao visivel ao clube)</span></label>
+          <textarea rows="2" class="w-full resize-none rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" placeholder="Ex: enviada por email a 01 Jul, contacto via Joao"></textarea>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="mt-6 flex items-center justify-end gap-3 border-t border-slate-800 pt-4">
+        <button class="rounded-lg px-4 py-2 text-sm text-slate-400 hover:text-slate-200">Cancelar</button>
+        <button class="rounded-lg bg-emerald-500 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-400">Criar factura</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<!-- 3. ADMIN — DETALHE FACTURA (drawer / pagina)                         -->
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<section id="admin-detail">
+  <div class="mb-4 flex items-baseline justify-between">
+    <h2 class="text-lg font-bold">3. Admin · detalhe de uma factura</h2>
+    <span class="text-xs text-slate-500">Click numa linha abre drawer lateral OU pagina dedicada</span>
+  </div>
+
+  <div class="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 text-slate-100">
+    <div class="grid md:grid-cols-3">
+      <!-- Left: meta -->
+      <div class="border-b border-slate-800 p-6 md:border-b-0 md:border-r">
+        <span class="text-xs text-slate-400">N.º factura</span>
+        <p class="mt-1 font-mono text-lg font-bold">FT-2026/004</p>
+
+        <span class="badge mt-3 bg-rose-500/15 text-rose-300">Em atraso · +8 dias</span>
+
+        <div class="mt-6 space-y-3 text-sm">
+          <div>
+            <span class="text-xs text-slate-400">Cliente</span>
+            <p>EF Benfica · NIF 501234567</p>
+          </div>
+          <div>
+            <span class="text-xs text-slate-400">Periodo</span>
+            <p>1 — 30 Abr 2026</p>
+          </div>
+          <div>
+            <span class="text-xs text-slate-400">Emissao</span>
+            <p>18 Abr 2026</p>
+          </div>
+          <div>
+            <span class="text-xs text-slate-400">Vencimento</span>
+            <p class="text-rose-300">18 Mai 2026</p>
+          </div>
+          <div>
+            <span class="text-xs text-slate-400">Valor</span>
+            <p class="text-xl font-bold">150,00 €</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Middle: PDF preview placeholder -->
+      <div class="border-b border-slate-800 p-6 md:border-b-0 md:border-r">
+        <span class="text-xs text-slate-400">PDF</span>
+        <div class="mt-2 flex h-48 items-center justify-center rounded-lg border border-dashed border-slate-700 bg-slate-950 text-slate-500">
+          <div class="text-center">
+            <div class="text-3xl">📄</div>
+            <p class="mt-2 text-xs">FT-2026-004.pdf</p>
+            <button class="mt-3 rounded-lg bg-emerald-500/15 px-3 py-1.5 text-xs font-semibold text-emerald-400 hover:bg-emerald-500/25">Descarregar</button>
+          </div>
+        </div>
+        <div class="mt-4 space-y-2 text-xs text-slate-400">
+          <p><strong class="text-slate-300">Notas internas:</strong></p>
+          <p class="rounded bg-slate-950 p-2">Enviada por email a 18 Abr. Joao confirmou recebimento.</p>
+        </div>
+      </div>
+
+      <!-- Right: actions + audit -->
+      <div class="p-6">
+        <span class="text-xs text-slate-400">Accoes</span>
+        <div class="mt-2 space-y-2">
+          <button class="w-full rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-400">✓ Marcar como paga</button>
+          <button class="w-full rounded-lg border border-slate-700 px-4 py-2 text-sm hover:bg-slate-800">📨 Reenviar por email</button>
+          <button class="w-full rounded-lg border border-slate-700 px-4 py-2 text-sm hover:bg-slate-800">📄 Substituir PDF</button>
+          <button class="w-full rounded-lg border border-rose-700/40 px-4 py-2 text-sm text-rose-300 hover:bg-rose-500/10">Cancelar factura</button>
+        </div>
+
+        <hr class="my-4 border-slate-800" />
+
+        <span class="text-xs text-slate-400">Historico</span>
+        <ul class="mt-2 space-y-2 text-xs text-slate-400">
+          <li>18 Abr 14:23 · <span class="text-slate-300">Pedro Campos</span> criou factura</li>
+          <li>18 Abr 14:25 · PDF anexado</li>
+          <li>20 Mai 09:10 · Aviso automatico enviado (+2d)</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<!-- 4. COORDENADOR — VISTA NO DASHBOARD                                  -->
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<section id="coord">
+  <div class="mb-4 flex items-baseline justify-between">
+    <h2 class="text-lg font-bold">4. Coordenador · pagina "Facturacao" no dashboard</h2>
+    <span class="text-xs text-slate-500">/billing — entrada no menu de Configuracoes, badge se ha em aberto</span>
+  </div>
+
+  <!-- Faux app shell (light mode dashboard style) -->
+  <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+    <!-- App nav (simplified) -->
+    <div class="flex items-center justify-between border-b border-slate-200 px-6 py-3">
+      <div class="flex items-center gap-2 text-sm font-semibold">
+        <span>Coach<span class="text-emerald-500">11</span></span>
+      </div>
+      <div class="flex items-center gap-4 text-xs text-slate-500">
+        <span>EF Benfica · Coordenador</span>
+        <span class="relative">
+          <span class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-slate-100">PJ</span>
+        </span>
+      </div>
+    </div>
+
+    <!-- Page -->
+    <div class="px-6 py-8">
+      <div class="flex items-center justify-between">
+        <div>
+          <h3 class="text-2xl font-bold">Facturacao</h3>
+          <p class="mt-1 text-sm text-slate-500">Historico das tuas facturas Coach11</p>
+        </div>
+        <div class="text-right">
+          <p class="text-xs text-slate-500">Em aberto</p>
+          <p class="text-xl font-bold text-amber-600">450,00 €</p>
+        </div>
+      </div>
+
+      <!-- Alert: overdue -->
+      <div class="mt-6 rounded-xl border border-rose-200 bg-rose-50 p-4">
+        <div class="flex items-start gap-3">
+          <span class="text-lg">⚠️</span>
+          <div class="flex-1">
+            <p class="font-semibold text-rose-900">Tens 1 factura em atraso</p>
+            <p class="mt-1 text-sm text-rose-800">FT-2026/004 (Abr 2026) venceu a 18 Mai · ja vai com 8 dias de atraso. Regulariza para evitar restricoes.</p>
+            <div class="mt-3 flex gap-2">
+              <button class="rounded-lg bg-rose-600 px-4 py-2 text-xs font-semibold text-white hover:bg-rose-500">Ver factura</button>
+              <button class="rounded-lg border border-rose-300 px-4 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100">Contactar Coach11</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Filters -->
+      <div class="mt-6 flex flex-wrap gap-2 text-xs">
+        <button class="rounded-full bg-emerald-100 px-3 py-1.5 font-semibold text-emerald-700">Todas (12)</button>
+        <button class="rounded-full bg-slate-100 px-3 py-1.5 text-slate-600 hover:bg-slate-200">Em aberto (3)</button>
+        <button class="rounded-full bg-slate-100 px-3 py-1.5 text-slate-600 hover:bg-slate-200">Pagas (8)</button>
+      </div>
+
+      <!-- Table -->
+      <div class="mt-4 overflow-hidden rounded-xl border border-slate-200">
+        <table class="w-full text-sm">
+          <thead class="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
+            <tr>
+              <th class="px-4 py-3 text-left">N.º</th>
+              <th class="px-4 py-3 text-left">Periodo</th>
+              <th class="px-4 py-3 text-left">Vencimento</th>
+              <th class="px-4 py-3 text-right">Valor</th>
+              <th class="px-4 py-3 text-left">Status</th>
+              <th class="px-4 py-3 text-right">PDF</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            <tr class="bg-rose-50/50">
+              <td class="px-4 py-3 font-mono text-xs">FT-2026/004</td>
+              <td class="px-4 py-3 text-slate-700">Abr 2026</td>
+              <td class="px-4 py-3 text-rose-600">18 Mai 2026 <span class="ml-1 text-xs">(+8d)</span></td>
+              <td class="px-4 py-3 text-right font-semibold">150,00 €</td>
+              <td class="px-4 py-3"><span class="badge bg-rose-100 text-rose-700">Em atraso</span></td>
+              <td class="px-4 py-3 text-right">
+                <button class="rounded-md bg-emerald-500 px-3 py-1 text-xs font-semibold text-white">⬇ Download</button>
+              </td>
+            </tr>
+            <tr>
+              <td class="px-4 py-3 font-mono text-xs">FT-2026/005</td>
+              <td class="px-4 py-3 text-slate-700">Mai 2026</td>
+              <td class="px-4 py-3 text-slate-600">18 Jun 2026</td>
+              <td class="px-4 py-3 text-right font-semibold">150,00 €</td>
+              <td class="px-4 py-3"><span class="badge bg-amber-100 text-amber-700">Em aberto</span></td>
+              <td class="px-4 py-3 text-right">
+                <button class="rounded-md border border-slate-300 px-3 py-1 text-xs hover:bg-slate-50">⬇ Download</button>
+              </td>
+            </tr>
+            <tr>
+              <td class="px-4 py-3 font-mono text-xs">FT-2026/003</td>
+              <td class="px-4 py-3 text-slate-700">Mar 2026</td>
+              <td class="px-4 py-3 text-slate-500">18 Abr 2026</td>
+              <td class="px-4 py-3 text-right font-semibold text-slate-500">150,00 €</td>
+              <td class="px-4 py-3"><span class="badge bg-emerald-100 text-emerald-700">Paga · 14 Abr</span></td>
+              <td class="px-4 py-3 text-right">
+                <button class="rounded-md border border-slate-300 px-3 py-1 text-xs hover:bg-slate-50">⬇ Download</button>
+              </td>
+            </tr>
+            <tr>
+              <td class="px-4 py-3 font-mono text-xs">FT-2026/002</td>
+              <td class="px-4 py-3 text-slate-700">Fev 2026</td>
+              <td class="px-4 py-3 text-slate-500">18 Mar 2026</td>
+              <td class="px-4 py-3 text-right font-semibold text-slate-500">150,00 €</td>
+              <td class="px-4 py-3"><span class="badge bg-emerald-100 text-emerald-700">Paga · 15 Mar</span></td>
+              <td class="px-4 py-3 text-right">
+                <button class="rounded-md border border-slate-300 px-3 py-1 text-xs hover:bg-slate-50">⬇ Download</button>
+              </td>
+            </tr>
+            <tr>
+              <td class="px-4 py-3 font-mono text-xs">FT-2026/001</td>
+              <td class="px-4 py-3 text-slate-700">Jan 2026</td>
+              <td class="px-4 py-3 text-slate-500">18 Fev 2026</td>
+              <td class="px-4 py-3 text-right font-semibold text-slate-500">150,00 €</td>
+              <td class="px-4 py-3"><span class="badge bg-emerald-100 text-emerald-700">Paga · 17 Fev</span></td>
+              <td class="px-4 py-3 text-right">
+                <button class="rounded-md border border-slate-300 px-3 py-1 text-xs hover:bg-slate-50">⬇ Download</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p class="mt-4 text-xs text-slate-500">
+        Para questoes sobre facturacao: <a href="mailto:billing@coach11.app" class="text-emerald-600 hover:underline">billing@coach11.app</a>
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<!-- 5. MODELO DE DADOS                                                    -->
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<section id="data-model">
+  <div class="mb-4">
+    <h2 class="text-lg font-bold">5. Modelo de dados</h2>
+    <p class="mt-1 text-sm text-slate-600">Migration unica criando tabela <code class="rounded bg-slate-200 px-1 text-xs">invoices</code></p>
+  </div>
+
+  <div class="rounded-2xl border border-slate-300 bg-white p-6">
+    <pre class="overflow-x-auto rounded-lg bg-slate-900 p-4 text-xs leading-relaxed text-slate-100"><code>create table public.invoices (
+  id              uuid primary key default gen_random_uuid(),
+  club_id         uuid not null references public.clubs(id) on delete restrict,
+
+  -- Identificacao
+  invoice_number  text not null,        -- N.º do software fiscal (ex: FT-2026/007)
+  period_start    date,                 -- Inicio do periodo de cobranca (opcional)
+  period_end      date,                 -- Fim do periodo de cobranca (opcional)
+
+  -- Datas
+  issued_at       date not null,        -- Data de emissao
+  due_date        date not null,        -- Vencimento
+
+  -- Valores
+  amount_cents    integer not null check (amount_cents >= 0),  -- valor em centimos
+  currency        text not null default 'EUR' check (length(currency) = 3),
+
+  -- Status
+  status          text not null default 'issued'
+                  check (status in ('issued', 'paid', 'cancelled')),
+  paid_at         date,                 -- Data efectiva do pagamento
+
+  -- Anexos / notas
+  pdf_path        text,                 -- Path no Supabase Storage (bucket privado)
+  notes           text,                 -- Notas internas (NAO visiveis ao cliente)
+
+  -- Audit
+  created_at      timestamptz not null default now(),
+  created_by      uuid references auth.users(id),
+  updated_at      timestamptz not null default now(),
+
+  -- Constraints adicionais
+  unique (club_id, invoice_number),
+  check (period_end is null or period_start is null or period_end >= period_start),
+  check (status != 'paid' or paid_at is not null)
+);
+
+create index invoices_club_id_idx on public.invoices (club_id);
+create index invoices_status_due_idx on public.invoices (status, due_date);
+
+-- View derivada: overdue = status='issued' AND due_date &lt; today
+-- (Calculado dinamicamente, nao precisa de coluna nem trigger)
+
+alter table public.invoices enable row level security;
+
+-- Super-admin (gate via get_super_user_access): tudo
+create policy "invoices_admin_all" on public.invoices
+  for all using (get_super_user_access());
+
+-- Coordenador do clube: SELECT (read-only) das proprias facturas
+create policy "invoices_club_coordinator_select" on public.invoices
+  for select using (
+    exists (
+      select 1 from public.team_staff ts
+      join public.teams t on t.id = ts.team_id
+      where t.club_id = invoices.club_id
+        and ts.user_id = auth.uid()
+        and ts.role = 'coordinator'
+    )
+  );
+
+-- Audit trigger (reusar padrao existente do schema)
+create trigger invoices_updated_at before update on public.invoices
+  for each row execute function set_updated_at();</code></pre>
+
+    <h3 class="mt-6 font-semibold">Storage bucket</h3>
+    <ul class="mt-2 list-disc pl-6 text-sm text-slate-700">
+      <li>Bucket <code class="rounded bg-slate-200 px-1 text-xs">invoices</code>, privado</li>
+      <li>Path: <code class="rounded bg-slate-200 px-1 text-xs">{club_id}/{invoice_id}.pdf</code></li>
+      <li>RLS no storage: super-admin escreve, coordenador do clube le apenas os seus</li>
+    </ul>
+
+    <h3 class="mt-6 font-semibold">Helpers TypeScript</h3>
+    <ul class="mt-2 list-disc pl-6 text-sm text-slate-700">
+      <li><code class="rounded bg-slate-200 px-1 text-xs">formatCents(amount_cents, currency)</code> → "150,00 €"</li>
+      <li><code class="rounded bg-slate-200 px-1 text-xs">isOverdue(invoice)</code> → status='issued' && due_date &lt; today</li>
+      <li><code class="rounded bg-slate-200 px-1 text-xs">daysOverdue(invoice)</code> → diferenca em dias</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<!-- 6. DECISOES PENDENTES                                                 -->
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<section id="decisions">
+  <div class="mb-4">
+    <h2 class="text-lg font-bold">6. Decisoes pendentes (antes de codar B1)</h2>
+  </div>
+
+  <div class="space-y-3">
+    <div class="rounded-xl border border-amber-300 bg-amber-50 p-4">
+      <p class="font-semibold text-amber-900">a) Onde fica a entrada do coordenador?</p>
+      <p class="mt-1 text-sm text-amber-800">
+        Proposta: link "Facturacao" dentro do menu <strong>Configuracoes</strong> (com badge numerico se houver em aberto), e card na home se houver atraso. Alternativa: item dedicado no sidebar/bottom-nav.
+      </p>
+    </div>
+
+    <div class="rounded-xl border border-amber-300 bg-amber-50 p-4">
+      <p class="font-semibold text-amber-900">b) Quem ve do lado do clube?</p>
+      <p class="mt-1 text-sm text-amber-800">
+        Proposta no mockup: <strong>so coordenador</strong>. Treinadores/staff nao veem. Faz sentido ou queres tambem para staff "admin financeiro" se um dia existir?
+      </p>
+    </div>
+
+    <div class="rounded-xl border border-amber-300 bg-amber-50 p-4">
+      <p class="font-semibold text-amber-900">c) "Estornar" pagamento</p>
+      <p class="mt-1 text-sm text-amber-800">
+        No mockup admin existe um "estornar" para reverter status 'paid' &rarr; 'issued'. Util para erros de marcação, mas pode-se adiar para PR seguinte. Manter ou tirar?
+      </p>
+    </div>
+
+    <div class="rounded-xl border border-amber-300 bg-amber-50 p-4">
+      <p class="font-semibold text-amber-900">d) Valor em centimos vs decimais</p>
+      <p class="mt-1 text-sm text-amber-800">
+        Proposta: <strong>centimos (integer)</strong> para evitar floating-point. Mostrado formatado na UI ("150,00 €"). Padrao Stripe. Concordas ou preferes <code>numeric(10,2)</code>?
+      </p>
+    </div>
+
+    <div class="rounded-xl border border-amber-300 bg-amber-50 p-4">
+      <p class="font-semibold text-amber-900">e) Notificar quando uma factura e emitida?</p>
+      <p class="mt-1 text-sm text-amber-800">
+        Hoje proposta e <strong>nao enviar nada automaticamente</strong> (sales-led, Pedro envia por fora). Email automatico ao criar factura pode ficar para B3. Concordas?
+      </p>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="border-t border-slate-300 bg-white py-6">
+  <p class="mx-auto max-w-7xl px-6 text-xs text-slate-500">
+    Mockup B1 · Coach11 · 26 Mai 2026 · <code>/docs/mockups/sprint-billing/B1-mockup.html</code>
+  </p>
+</footer>
+
+</body>
+</html>
