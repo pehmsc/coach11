@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -125,7 +125,20 @@ function StepIndicator({ current, total }: { current: number; total: number }) {
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = useMemo(() => createClient(), []);
+
+  // Intencao do plano (vinda de /precos -> /register?plan=individual -> aqui).
+  // 'individual' cria clube self-service Stripe; default 'club' (sales-led).
+  const planParam = searchParams.get("plan");
+  const planType: "individual" | "club" =
+    planParam === "individual" ? "individual" : "club";
+  // Destino apos concluir onboarding (ex: /billing/start para Stripe checkout)
+  const nextParam = searchParams.get("next");
+  const safeNext =
+    nextParam && nextParam.startsWith("/") && !nextParam.startsWith("//")
+      ? nextParam
+      : null;
 
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
@@ -187,6 +200,7 @@ export default function OnboardingPage() {
           p_short_name: normalizedShortName || null,
           p_slug: baseSlug,
           p_logo_url: null,
+          p_plan_type: planType,
         },
       );
 
@@ -365,7 +379,9 @@ export default function OnboardingPage() {
     }
 
     setFinishingUp(false);
-    router.push("/dashboard");
+    // Redirecciona para o destino pretendido (ex: /billing/start para o flow
+    // Stripe do treinador individual); senao vai para o dashboard.
+    router.push(safeNext ?? "/dashboard");
   }
 
   return (
@@ -667,7 +683,7 @@ export default function OnboardingPage() {
                 <Button
                   type="button"
                   variant="outline"
-                  className="flex-1"
+                  className="flex-1 h-12"
                   onClick={() => void handleFinish(true)}
                   disabled={finishingUp}
                 >

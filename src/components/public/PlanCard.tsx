@@ -98,7 +98,7 @@ export const PLANS: PlanCardProps[] = [
       "Suporte por email (48h úteis)",
     ],
     ctaLabel: "Começar trial · 7 dias",
-    ctaHref: "/register?plan=individual",
+    ctaHref: "/billing/start",
   },
   {
     name: "Clube · Standard",

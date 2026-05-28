@@ -36,11 +36,28 @@ function RegisterForm() {
 
   const inviteCode = sp.get("code") ?? sp.get("inviteCode") ?? null;
 
+  // Intencao de plano (de /precos -> /billing/start -> /register?plan=individual&next=/billing/start)
+  const isIndividualPlan = sp.get("plan") === "individual";
+  const nextParam = sp.get("next");
+  const safeNext =
+    nextParam && nextParam.startsWith("/") && !nextParam.startsWith("//")
+      ? nextParam
+      : null;
+
   function resolvePostAuthDestination(payload: { redirectTo?: string } | null) {
     const dest = payload?.redirectTo;
     // Honrar qualquer redirect explícito (ex: /onboarding, /team/setup)
     // excepto /dashboard que é tratado abaixo com preservação do inviteCode.
     if (dest && dest !== "/dashboard") {
+      // Propagar a intencao de plano individual + destino final ao onboarding,
+      // para que o clube seja criado com plan_type='individual' e o utilizador
+      // siga para o Stripe Checkout no fim.
+      if (dest.startsWith("/onboarding") && isIndividualPlan) {
+        const params = new URLSearchParams();
+        params.set("plan", "individual");
+        params.set("next", safeNext ?? "/billing/start");
+        return `/onboarding?${params.toString()}`;
+      }
       return dest;
     }
 

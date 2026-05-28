@@ -7,6 +7,7 @@ import {
   normalizeEmail,
 } from "@/lib/auth/beta-access";
 import { upsertInviteAuthCredentials } from "@/lib/auth/invite-auth-user";
+import { sendWelcomeEmail } from "@/lib/email/send-welcome-email";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 
 export const runtime = "nodejs";
@@ -89,6 +90,9 @@ export async function POST(request: Request) {
       );
       return NextResponse.json({ error: mapped.error }, { status: mapped.status });
     }
+
+    // Email de boas-vindas (soft-fail — nao bloqueia o registo se Resend falhar)
+    await sendWelcomeEmail(email, fullName).catch(() => null);
 
     return NextResponse.json({
       success: true,
