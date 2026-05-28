@@ -33,7 +33,6 @@ import { AGE_GROUP_STAFF_ROLE_LABELS, getStaffRoleLabel } from "@/lib/team/staff
 import { ALL_PERMISSION_AREAS } from "@/lib/auth/permissions-shared";
 import { PermissionsGrid, type PermissionsMap, templateToPermissions } from "@/components/staff/PermissionsGrid";
 import { CoordinatorInvoicesTab } from "@/components/billing/CoordinatorInvoicesTab";
-import { SubscriptionTab } from "@/components/billing/SubscriptionTab";
 
 const KIT_NUMBERS: KitNumber[] = [1, 2];
 const KIT_LABELS: Record<KitNumber, string> = {
@@ -129,7 +128,7 @@ type StaffInvite = {
   age_group_name?: string | null;
 };
 
-type ClubTab = "info" | "members" | "facturacao" | "subscricao" | "settings";
+type ClubTab = "info" | "members" | "facturacao" | "settings";
 
 export default function ClubPage() {
   const supabase = useMemo(() => createClient(), []);
@@ -150,7 +149,6 @@ export default function ClubPage() {
     const t = searchParams.get("tab");
     if (t === "members" || t === "membros") return "members";
     if (t === "facturacao" || t === "faturacao") return "facturacao";
-    if (t === "subscricao" || t === "subscription") return "subscricao";
     if (t === "settings") return "settings";
     return "info";
   });
@@ -764,14 +762,13 @@ export default function ClubPage() {
       <div className="flex gap-1 bg-slate-100 rounded-xl p-1">
         {(
           (isClubCoordinator || isSuperCoordinator
-            ? ["info", "members", "facturacao", "subscricao", "settings"]
+            ? ["info", "members", "facturacao", "settings"]
             : ["info", "members", "settings"]) as ClubTab[]
         ).map((tab) => {
           const labels: Record<ClubTab, string> = {
             info: "Informações",
             members: "Membros",
             facturacao: "Facturação",
-            subscricao: "Subscrição",
             settings: "Configurações",
           };
           return (
@@ -1386,11 +1383,6 @@ export default function ClubPage() {
       {/* ─── Facturação tab ─── */}
       {activeTab === "facturacao" && (isClubCoordinator || isSuperCoordinator) && (
         <CoordinatorInvoicesTab />
-      )}
-
-      {/* ─── Subscrição tab ─── */}
-      {activeTab === "subscricao" && (isClubCoordinator || isSuperCoordinator) && (
-        <SubscriptionTab />
       )}
 
       {/* ─── Configurações tab ─── */}

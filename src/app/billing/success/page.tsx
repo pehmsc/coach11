@@ -41,7 +41,7 @@ export default async function BillingSuccessPage({
             Ir para o dashboard
           </Link>
           <Link
-            href="/club?tab=subscricao"
+            href="/settings?tab=subscription"
             className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm hover:bg-slate-50"
           >
             Ver subscrição

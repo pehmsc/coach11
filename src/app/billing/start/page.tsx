@@ -13,9 +13,9 @@ export const dynamic = "force-dynamic";
  * Decide o destino baseado no estado do utilizador:
  * - Anonimo                     -> /register?plan=individual&next=/billing/start
  * - Logged sem clube            -> /onboarding?next=/billing/start
- * - Clube tier!=individual      -> /club?tab=subscricao (sales-led, ja gerimos)
+ * - Clube sales-led             -> /dashboard (nao usa Stripe self-service)
  * - Sem sub activa              -> cria Checkout Session e redirige
- * - Sub trialing/active/past_due-> /club?tab=subscricao (ja subscrito)
+ * - Sub trialing/active/past_due-> /settings?tab=subscription (ja subscrito)
  */
 export default async function BillingStartPage() {
   const supabase = await createClient();
@@ -51,18 +51,18 @@ export default async function BillingStartPage() {
     redirect("/onboarding?next=/billing/start");
   }
 
-  // Sales-led: nada a fazer aqui, manda para a tab de subscricao do clube
+  // Sales-led: nao usa Stripe self-service — manda para o dashboard
   if (club.plan_type !== "individual") {
-    redirect("/club?tab=subscricao");
+    redirect("/dashboard");
   }
 
-  // Ja subscrito (qualquer estado activo): manda para tab subscricao
+  // Ja subscrito (qualquer estado activo): manda para a subscricao em settings
   if (
     club.subscription_status === "trialing" ||
     club.subscription_status === "active" ||
     club.subscription_status === "past_due"
   ) {
-    redirect("/club?tab=subscricao");
+    redirect("/settings?tab=subscription");
   }
 
   // Sem subscricao ou em estado incompleto: criar Checkout

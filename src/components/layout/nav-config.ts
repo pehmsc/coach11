@@ -304,8 +304,12 @@ export function getContextRoleLabel(
   source?: string | null,
   isSuperCoordinator?: boolean | null,
   teamRole?: string | null,
+  planType?: string | null,
 ): string {
   if (isSuperCoordinator) return "Super Admin";
+  // Treinador individual: e dono de 1 equipa, nao "coordenador". O role no DB
+  // continua club_coordinator (do seu proprio clube) — so o label muda.
+  if (planType === "individual") return "Treinador Principal";
   if (source === "club_coordinator") return "Coordenador do Clube";
   if (source === "coordinator") return "Coordenador de Escalão";
   if (source === "staff") return getStaffRoleLabel(teamRole) || "Staff Técnico";
