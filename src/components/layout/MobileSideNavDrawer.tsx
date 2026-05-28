@@ -191,7 +191,7 @@ export function MobileSideNavDrawer({
                   {profile?.full_name || "Utilizador"}
                 </p>
                 <p className="truncate text-xs text-slate-400">
-                  {getContextRoleLabel(profile?.role, source, profile?.is_super_coordinator, teamRole)}
+                  {getContextRoleLabel(profile?.role, source, profile?.is_super_coordinator, teamRole, planType)}
                 </p>
                 <Link
                   href="/settings"

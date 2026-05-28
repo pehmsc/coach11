@@ -101,7 +101,7 @@ export async function GET(request: NextRequest) {
               <p>${greeting}</p>
               <p>O teu trial termina em <strong>${trialEndLabel}</strong>. A partir daí cobramos <strong>€7,99/mês</strong> automaticamente — podes cancelar até essa data sem pagares nada.</p>
               <p>Se queres continuar, não precisas de fazer nada. Se preferes cancelar:</p>
-              <a href="https://coach11.app/club?tab=subscricao"
+              <a href="https://coach11.app/settings?tab=subscription"
                 style="display:block;background:#059669;color:white;text-decoration:none;text-align:center;padding:12px;border-radius:10px;margin-top:20px;font-weight:600;">
                 Gerir subscrição
               </a>

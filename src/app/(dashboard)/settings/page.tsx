@@ -11,14 +11,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PushNotificationsControl } from "@/components/pwa/PushNotificationsControl";
-import { Loader2, User, Palette, Bell, Camera, AlertTriangle } from "lucide-react";
+import { Loader2, User, Palette, Bell, Camera, AlertTriangle, CreditCard } from "lucide-react";
+import { SubscriptionTab } from "@/components/billing/SubscriptionTab";
 import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
 import { pt } from "date-fns/locale";
 import { clearClientCaches } from "@/lib/query/cache-clear";
 import type { Profile } from "@/types/database";
 
-type Tab = "account" | "theme" | "notifications";
+type Tab = "account" | "subscription" | "theme" | "notifications";
 
 type ManagedAgeGroup = {
   id: string;
@@ -43,6 +44,7 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [contextSource, setContextSource] = useState<string | null>(null);
   const [contextTeamRole, setContextTeamRole] = useState<string | null>(null);
+  const [planType, setPlanType] = useState<string | null>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [authEmail, setAuthEmail] = useState("");
   const [nextEmail, setNextEmail] = useState("");
@@ -64,6 +66,14 @@ export default function SettingsPage() {
     void loadProfile(controller.signal);
     return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Abrir tab a partir de ?tab= (ex: vindo do Stripe portal/success)
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get("tab");
+    if (t === "subscription") setActiveTab("subscription");
+    else if (t === "theme") setActiveTab("theme");
+    else if (t === "notifications") setActiveTab("notifications");
   }, []);
 
   async function loadProfile(signal?: AbortSignal) {
@@ -129,6 +139,9 @@ export default function SettingsPage() {
         }
         if (typeof contextPayload?.teamRole === "string") {
           setContextTeamRole(contextPayload.teamRole);
+        }
+        if (typeof contextPayload?.planType === "string") {
+          setPlanType(contextPayload.planType);
         }
       }
 
@@ -298,6 +311,17 @@ export default function SettingsPage() {
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: "account", label: "Conta", icon: <User size={16} /> },
+    // Subscricao so para treinador individual (self-service Stripe).
+    // Clubes sales-led gerem facturacao via backoffice.
+    ...(planType === "individual"
+      ? [
+          {
+            id: "subscription" as Tab,
+            label: "Subscrição",
+            icon: <CreditCard size={16} />,
+          },
+        ]
+      : []),
     { id: "theme", label: "Tema", icon: <Palette size={16} /> },
     { id: "notifications", label: "Notificações", icon: <Bell size={16} /> },
   ];
@@ -382,7 +406,7 @@ export default function SettingsPage() {
                     <div>
                       <p className="font-semibold text-slate-900">{profile?.full_name || "—"}</p>
                       <p className="text-sm text-slate-500">
-                        {getContextRoleLabel(profile?.role, contextSource, profile?.is_super_coordinator, contextTeamRole)}
+                        {getContextRoleLabel(profile?.role, contextSource, profile?.is_super_coordinator, contextTeamRole, planType)}
                       </p>
                     </div>
                   </div>
@@ -411,7 +435,7 @@ export default function SettingsPage() {
                     <div className="space-y-1.5">
                       <Label>Função</Label>
                       <Input
-                        value={getContextRoleLabel(profile?.role, contextSource, profile?.is_super_coordinator, contextTeamRole)}
+                        value={getContextRoleLabel(profile?.role, contextSource, profile?.is_super_coordinator, contextTeamRole, planType)}
                         disabled
                         className="bg-slate-50 text-slate-500"
                       />
@@ -544,6 +568,11 @@ export default function SettingsPage() {
             </>
           )}
         </div>
+      )}
+
+      {/* Tab: Subscrição (só treinador individual) */}
+      {activeTab === "subscription" && planType === "individual" && (
+        <SubscriptionTab />
       )}
 
       {/* Tab: Tema */}
