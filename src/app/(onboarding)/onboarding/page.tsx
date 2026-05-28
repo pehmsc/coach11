@@ -26,6 +26,7 @@ import {
   type PermissionsMap,
   templateToPermissions,
 } from "@/components/staff/PermissionsGrid";
+import { readPlanIntent, clearPlanIntent } from "@/lib/billing/plan-intent";
 
 const FOOTBALL_FORMATS = [
   { value: "5", label: "Futebol 5" },
@@ -128,11 +129,14 @@ export default function OnboardingPage() {
   const searchParams = useSearchParams();
   const supabase = useMemo(() => createClient(), []);
 
-  // Intencao do plano (vinda de /precos -> /register?plan=individual -> aqui).
-  // 'individual' cria clube self-service Stripe; default 'club' (sales-led).
-  const planParam = searchParams.get("plan");
-  const planType: "individual" | "club" =
-    planParam === "individual" ? "individual" : "club";
+  // Intencao do plano: query param OU cookie (escrito em /precos). O cookie e
+  // a fonte robusta — sobrevive a OAuth, refresh e navegacao directa. Resolvido
+  // no submit (resolvePlanType) porque o cookie so existe no client.
+  function resolvePlanType(): "individual" | "club" {
+    if (searchParams.get("plan") === "individual") return "individual";
+    if (readPlanIntent() === "individual") return "individual";
+    return "club";
+  }
   // Destino apos concluir onboarding (ex: /billing/start para Stripe checkout)
   const nextParam = searchParams.get("next");
   const safeNext =
@@ -143,6 +147,11 @@ export default function OnboardingPage() {
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
   const [clubId, setClubId] = useState<string | null>(null);
+  // Plano com que o clube foi criado (resolvido no step 1). Decide o redirect
+  // final: individual -> /billing/start (Stripe); club -> /dashboard.
+  const [createdPlanType, setCreatedPlanType] = useState<"individual" | "club">(
+    "club",
+  );
 
   // Step 1: Clube
   const [clubName, setClubName] = useState("");
@@ -193,6 +202,7 @@ export default function OnboardingPage() {
       const normalizedShortName = normalizeManualShortName(clubShortName, 5);
       const baseSlug = generateSlug(clubName.trim());
 
+      const resolvedPlanType = resolvePlanType();
       const { data: rpcResult, error: rpcError } = await supabase.rpc(
         "create_club_onboarding",
         {
@@ -200,7 +210,7 @@ export default function OnboardingPage() {
           p_short_name: normalizedShortName || null,
           p_slug: baseSlug,
           p_logo_url: null,
-          p_plan_type: planType,
+          p_plan_type: resolvedPlanType,
         },
       );
 
@@ -211,12 +221,23 @@ export default function OnboardingPage() {
         return;
       }
 
-      const result = rpcResult as { club_id?: string; already_existed?: boolean } | null;
+      const result = rpcResult as {
+        club_id?: string;
+        already_existed?: boolean;
+        plan_type?: string;
+      } | null;
       if (!result?.club_id) {
         toast.error("Erro ao criar clube. Tenta novamente.");
         setSaving(false);
         return;
       }
+
+      // Registar o plano efectivo (do RPC quando novo; senao a intencao) e
+      // limpar o cookie — ja nao e necessario.
+      const effectivePlanType: "individual" | "club" =
+        result.plan_type === "individual" ? "individual" : resolvedPlanType;
+      setCreatedPlanType(effectivePlanType);
+      clearPlanIntent();
 
       if (result.already_existed) {
         // Já tem clube — avançar para escalão
@@ -379,9 +400,11 @@ export default function OnboardingPage() {
     }
 
     setFinishingUp(false);
-    // Redirecciona para o destino pretendido (ex: /billing/start para o flow
-    // Stripe do treinador individual); senao vai para o dashboard.
-    router.push(safeNext ?? "/dashboard");
+    // Treinador individual segue para o Stripe Checkout; senao vai para o
+    // dashboard. safeNext (query ?next) tem prioridade se presente.
+    const destination =
+      safeNext ?? (createdPlanType === "individual" ? "/billing/start" : "/dashboard");
+    router.push(destination);
   }
 
   return (

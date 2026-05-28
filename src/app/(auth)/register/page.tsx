@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { waitForSessionPersistence } from "@/lib/supabase/browser-session";
+import { setPlanIntent } from "@/lib/billing/plan-intent";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -39,6 +40,13 @@ function RegisterForm() {
   // Intencao de plano (de /precos -> /billing/start -> /register?plan=individual&next=/billing/start)
   const isIndividualPlan = sp.get("plan") === "individual";
   const nextParam = sp.get("next");
+
+  // Persistir a intencao em cookie — sobrevive ao OAuth (que descarta query
+  // params) e a refreshes. O onboarding le este cookie para criar o clube
+  // como individual.
+  useEffect(() => {
+    if (isIndividualPlan) setPlanIntent("individual");
+  }, [isIndividualPlan]);
   const safeNext =
     nextParam && nextParam.startsWith("/") && !nextParam.startsWith("//")
       ? nextParam

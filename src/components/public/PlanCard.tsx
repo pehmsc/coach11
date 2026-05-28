@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { Check } from "lucide-react";
+import { PlanCtaButton } from "./PlanCtaButton";
+import type { PlanIntent } from "@/lib/billing/plan-intent";
 
 export interface PlanCardProps {
   name: string;
@@ -11,6 +13,8 @@ export interface PlanCardProps {
   ctaHref: string;
   highlighted?: boolean;
   badge?: string;
+  /** Quando presente, o CTA escreve o cookie de intencao antes de navegar. */
+  planIntent?: PlanIntent;
 }
 
 export function PlanCard({
@@ -23,7 +27,13 @@ export function PlanCard({
   ctaHref,
   highlighted = false,
   badge,
+  planIntent,
 }: PlanCardProps) {
+  const ctaClassName = `mt-auto inline-flex w-full items-center justify-center rounded-xl px-5 py-3 text-sm font-semibold transition ${
+    highlighted
+      ? "bg-emerald-500 text-white hover:bg-emerald-400"
+      : "border border-white/15 text-white hover:bg-white/5"
+  }`;
   return (
     <div
       className={`relative flex h-full flex-col rounded-2xl border p-6 transition ${
@@ -70,16 +80,18 @@ export function PlanCard({
         ))}
       </ul>
 
-      <Link
-        href={ctaHref}
-        className={`mt-auto inline-flex w-full items-center justify-center rounded-xl px-5 py-3 text-sm font-semibold transition ${
-          highlighted
-            ? "bg-emerald-500 text-white hover:bg-emerald-400"
-            : "border border-white/15 text-white hover:bg-white/5"
-        }`}
-      >
-        {ctaLabel}
-      </Link>
+      {planIntent ? (
+        <PlanCtaButton
+          href={ctaHref}
+          label={ctaLabel}
+          className={ctaClassName}
+          planIntent={planIntent}
+        />
+      ) : (
+        <Link href={ctaHref} className={ctaClassName}>
+          {ctaLabel}
+        </Link>
+      )}
     </div>
   );
 }
@@ -99,6 +111,7 @@ export const PLANS: PlanCardProps[] = [
     ],
     ctaLabel: "Começar trial · 7 dias",
     ctaHref: "/billing/start",
+    planIntent: "individual",
   },
   {
     name: "Clube · Standard",
