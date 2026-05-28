@@ -1,14 +1,17 @@
 import Link from "next/link";
+import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { syncSubscriptionFromSession } from "@/lib/stripe/sync-subscription";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * /billing/success — landing page apos Stripe Checkout completar.
+ * /billing/success — landing apos Stripe Checkout completar.
  *
- * A actualizacao da DB acontece via webhook (customer.subscription.created),
- * que pode chegar antes ou depois deste render. Mantemos a pagina simples:
- * mostra confirmacao e manda para o dashboard.
+ * Faz sync IMEDIATO da subscricao via Stripe API (fallback ao webhook, que
+ * pode atrasar ou falhar). Garante que o clube tem subscription_status antes
+ * de o utilizador chegar ao dashboard — evita o loop do guard.
  */
 export default async function BillingSuccessPage({
   searchParams,
@@ -16,6 +19,23 @@ export default async function BillingSuccessPage({
   searchParams: Promise<{ session_id?: string }>;
 }) {
   const { session_id } = await searchParams;
+
+  let synced = false;
+  if (session_id) {
+    try {
+      const supabase = await createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) {
+        const admin = createAdminClient();
+        const result = await syncSubscriptionFromSession(admin, session_id);
+        synced = result.ok && !!result.status && result.status !== "pending";
+      }
+    } catch {
+      // Soft-fail: o webhook acabara por sincronizar; nao bloqueamos a UI
+    }
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
@@ -48,9 +68,10 @@ export default async function BillingSuccessPage({
           </Link>
         </div>
 
-        {session_id ? (
-          <p className="mt-4 font-mono text-[10px] text-slate-400">
-            Sessão: {session_id.slice(0, 14)}…
+        {!synced && session_id ? (
+          <p className="mt-4 text-xs text-amber-600">
+            A subscrição está a ser confirmada. Se o dashboard não abrir,
+            aguarda alguns segundos e recarrega.
           </p>
         ) : null}
       </div>
