@@ -20,22 +20,34 @@ describe("maybeApplyPlanTypeRedirect", () => {
   describe("plan_type = 'club' (default quando cookie missing)", () => {
     it.each([
       "/games",
-      "/games/abc-123",
-      "/games/abc-123/live",
       "/players",
-      "/players/xyz/games",
       "/trainings",
-      "/trainings/uuid",
       "/competitions",
       "/team",
-      "/team/setup",
       "/staff",
-    ])("redirige rota legacy %s para /teams", (path) => {
+    ])("redirige root de LISTA legacy %s para /teams", (path) => {
       const response = maybeApplyPlanTypeRedirect(makeRequest(path, "club"));
       expect(response).not.toBeNull();
       expect(response?.status).toBe(307);
       expect(response?.headers.get("location")).toBe(`${BASE_URL}/teams`);
     });
+
+    it.each([
+      "/games/abc-123",
+      "/games/abc-123/live",
+      "/games/abc-123/summary",
+      "/players/xyz",
+      "/players/xyz/games",
+      "/trainings/uuid",
+      "/team/setup",
+    ])(
+      "deixa passar recurso profundo %s (deep-link abre directamente)",
+      (path) => {
+        expect(
+          maybeApplyPlanTypeRedirect(makeRequest(path, "club")),
+        ).toBeNull();
+      },
+    );
 
     it("usa default 'club' quando cookie missing", () => {
       const response = maybeApplyPlanTypeRedirect(
