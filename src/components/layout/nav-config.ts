@@ -91,6 +91,14 @@ const NAV_ITEMS = {
     label: "Clube",
     icon: Building2,
   },
+  // Mesma rota /club, label "Equipa" — para o treinador individual, que gere
+  // nome/logo/cores da sua unica equipa (a pagina /club mostra so a tab Detalhes).
+  teamHub: {
+    id: "teamHub",
+    href: "/club",
+    label: "Equipa",
+    icon: Shield,
+  },
   teams: {
     id: "teams",
     href: "/teams",
@@ -174,6 +182,7 @@ const INDIVIDUAL_APP_NAV_SECTIONS: AppNavSection[] = [
       NAV_ITEMS.games,
       NAV_ITEMS.trainings,
       NAV_ITEMS.players,
+      NAV_ITEMS.teamHub,
       NAV_ITEMS.exercises,
       NAV_ITEMS.insights,
       NAV_ITEMS.statistics,
@@ -211,6 +220,7 @@ const INDIVIDUAL_MOBILE_APP_NAV_SECTIONS: AppNavSection[] = [
       NAV_ITEMS.games,
       NAV_ITEMS.trainings,
       NAV_ITEMS.players,
+      NAV_ITEMS.teamHub,
       NAV_ITEMS.exercises,
       NAV_ITEMS.insights,
       NAV_ITEMS.notifications,
