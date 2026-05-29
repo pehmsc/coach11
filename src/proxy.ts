@@ -21,11 +21,16 @@ const STATIC_FILE_PATTERN =
   /\.(?:svg|png|jpg|jpeg|gif|webp|avif|ico|txt|xml|html|webmanifest|woff2?)$/i;
 
 /**
- * Rotas legacy single-team. Quando o utilizador esta no plano 'club'
- * (nav multi-team), estes paths sao acessiveis via Equipas -> Escalao -> tab,
- * pelo que entradas directas sao redirigidas para /teams.
+ * Roots de LISTA legacy single-team. Quando o utilizador esta no plano 'club'
+ * (nav multi-team), estas listas sao acessiveis via Equipas -> Escalao -> tab,
+ * pelo que so o root exacto (ex. /games) e redirigido para /teams.
+ *
+ * Recursos profundos (ex. /games/[id], /games/[id]/live, /players/[id]) NAO
+ * sao redirigidos: sao paginas validas e devem abrir directamente, para que
+ * deep-links (avisos do dashboard, notificacoes, emails) cheguem ao recurso
+ * em vez de saltarem para /teams.
  */
-const LEGACY_SINGLE_TEAM_PREFIXES = [
+const LEGACY_SINGLE_TEAM_LIST_ROOTS = [
   "/games",
   "/players",
   "/trainings",
@@ -72,7 +77,8 @@ function matchesPrefix(pathname: string, prefix: string) {
  * Aplica redirect quando a rota nao bate com a persona do utilizador.
  * Retorna NextResponse de redirect ou null se nao ha redirect a fazer.
  *
- * - `plan_type === 'club'` e rota legacy single-team -> /teams.
+ * - `plan_type === 'club'` e root de LISTA legacy single-team -> /teams.
+ *   Recursos profundos (ex. /games/[id]) passam para abrir directamente.
  * - `plan_type === 'individual'` e rota multi-team -> /dashboard.
  * - Default (cookie missing) trata como 'club' (modelo dominante actual).
  */
@@ -100,10 +106,8 @@ export function maybeApplyPlanTypeRedirect(
     return null;
   }
 
-  const hitsLegacy = LEGACY_SINGLE_TEAM_PREFIXES.some((prefix) =>
-    matchesPrefix(pathname, prefix),
-  );
-  if (hitsLegacy) {
+  const hitsLegacyListRoot = LEGACY_SINGLE_TEAM_LIST_ROOTS.includes(pathname);
+  if (hitsLegacyListRoot) {
     const url = request.nextUrl.clone();
     url.pathname = "/teams";
     url.search = "";
