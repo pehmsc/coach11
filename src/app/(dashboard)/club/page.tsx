@@ -1164,6 +1164,30 @@ export default function ClubPage() {
               </CardContent>
             </Card>
           )}
+
+          {/* Danger zone — individual apaga a equipa aqui (pre-requisito para
+              apagar a conta em /settings). Reusa o modal de eliminacao. */}
+          {isIndividual && canDangerZone && (
+            <Card className="border-red-200">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base text-red-700">Zona de Perigo</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-sm text-slate-600">
+                  Apaga permanentemente a tua equipa e todos os dados associados:
+                  jogadores, treinos, jogos, competições. Esta acção é
+                  irreversível e é necessária antes de apagares a conta.
+                </p>
+                <Button
+                  variant="outline"
+                  className="border-red-300 text-red-600 hover:bg-red-50"
+                  onClick={() => { setDeleteConfirmName(""); setShowDeleteModal(true); }}
+                >
+                  Apagar equipa
+                </Button>
+              </CardContent>
+            </Card>
+          )}
         </>
       )}
 
