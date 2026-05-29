@@ -143,6 +143,10 @@ export default function ClubPage() {
   const [canManage, setCanManage] = useState(false);
   const [isClubCoordinator, setIsClubCoordinator] = useState(false);
   const [isSuperCoordinator, setIsSuperCoordinator] = useState(false);
+  // Treinador individual: a pagina /club apresenta-se como "Equipa" e mostra
+  // so a tab Detalhes (nome/sigla/logo/kits). As tabs de clube (equipa tecnica,
+  // facturacao, danger zone) nao se aplicam.
+  const [isIndividual, setIsIndividual] = useState(false);
 
   // Tab — inicializar a partir de ?tab= na URL (ex: /club?tab=members)
   const [activeTab, setActiveTab] = useState<ClubTab>(() => {
@@ -233,6 +237,7 @@ export default function ClubPage() {
     setKitColors(colorMap);
   }, [kitPieces]);
 
+
   async function loadData(signal?: AbortSignal) {
     setLoading(true);
     const res = await fetch("/api/me/context", { signal });
@@ -321,6 +326,7 @@ export default function ClubPage() {
       const c = cp?.club;
       if (c) {
         resolvedLogoFromClub = c.logo_url || "";
+        setIsIndividual(c.plan_type === "individual");
         if (c.name && !ag) setClubName(c.name);
         if (!ag && c.slug) setClubShortName(c.slug);
         setClubMorada(c.morada || "");
@@ -753,42 +759,48 @@ export default function ClubPage() {
   }
 
   const canDangerZone = isClubCoordinator || isSuperCoordinator;
+  // Individual só vê "Detalhes" (info); as outras tabs nao se aplicam.
+  const effectiveTab: ClubTab = isIndividual ? "info" : activeTab;
 
   return (
     <div className="p-4 md:p-8 max-w-2xl mx-auto space-y-6">
-      <h1 className="text-2xl font-bold text-slate-900">Clube</h1>
+      <h1 className="text-2xl font-bold text-slate-900">
+        {isIndividual ? "Equipa" : "Clube"}
+      </h1>
 
-      {/* Tab navigation */}
-      <div className="flex gap-1 bg-slate-100 rounded-xl p-1">
-        {(
-          (isClubCoordinator || isSuperCoordinator
-            ? ["info", "members", "facturacao", "settings"]
-            : ["info", "members", "settings"]) as ClubTab[]
-        ).map((tab) => {
-          const labels: Record<ClubTab, string> = {
-            info: "Informações",
-            members: "Membros",
-            facturacao: "Facturação",
-            settings: "Configurações",
-          };
-          return (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`flex-1 py-2 text-sm font-medium rounded-lg transition-colors ${
-                activeTab === tab
-                  ? "bg-white text-slate-900 shadow-sm"
-                  : "text-slate-500 hover:text-slate-700"
-              }`}
-            >
-              {labels[tab]}
-            </button>
-          );
-        })}
-      </div>
+      {/* Tab navigation — escondida para individual (só tem "Detalhes") */}
+      {!isIndividual && (
+        <div className="flex gap-1 bg-slate-100 rounded-xl p-1">
+          {(
+            (isClubCoordinator || isSuperCoordinator
+              ? ["info", "members", "facturacao", "settings"]
+              : ["info", "members", "settings"]) as ClubTab[]
+          ).map((tab) => {
+            const labels: Record<ClubTab, string> = {
+              info: "Informações",
+              members: "Membros",
+              facturacao: "Facturação",
+              settings: "Configurações",
+            };
+            return (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`flex-1 py-2 text-sm font-medium rounded-lg transition-colors ${
+                  activeTab === tab
+                    ? "bg-white text-slate-900 shadow-sm"
+                    : "text-slate-500 hover:text-slate-700"
+                }`}
+              >
+                {labels[tab]}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* ─── Informações tab ─── */}
-      {activeTab === "info" && (
+      {effectiveTab === "info" && (
         <>
           {/* Informações do Clube */}
           <Card>
@@ -1156,7 +1168,7 @@ export default function ClubPage() {
       )}
 
       {/* ─── Membros tab ─── */}
-      {activeTab === "members" && (
+      {effectiveTab === "members" && (
         <>
           <div className="flex items-center justify-between">
             <p className="text-sm text-slate-500">
@@ -1381,12 +1393,12 @@ export default function ClubPage() {
       )}
 
       {/* ─── Facturação tab ─── */}
-      {activeTab === "facturacao" && (isClubCoordinator || isSuperCoordinator) && (
+      {effectiveTab === "facturacao" && (isClubCoordinator || isSuperCoordinator) && (
         <CoordinatorInvoicesTab />
       )}
 
       {/* ─── Configurações tab ─── */}
-      {activeTab === "settings" && (
+      {effectiveTab === "settings" && (
         <>
           {canDangerZone ? (
             <Card className="border-red-200">

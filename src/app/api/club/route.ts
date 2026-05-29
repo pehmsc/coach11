@@ -59,7 +59,7 @@ export async function GET() {
     const { data: club, error } = await admin
       .from("clubs")
       .select(
-        "id, name, logo_url, slug, morada, telefone, email_contacto, website, cor_primaria, cor_secundaria, distrito, associacao",
+        "id, name, logo_url, slug, plan_type, morada, telefone, email_contacto, website, cor_primaria, cor_secundaria, distrito, associacao",
       )
       .eq("id", clubId)
       .maybeSingle();
