@@ -352,25 +352,26 @@ export async function getPublicGameLiveSnapshot(
   }
 
   if (externalPlayerIds.size > 0) {
+    // Modelo unificado: externos vivem em game_squads (player_id IS NULL); os
+    // labels `external:<id>` referenciam game_squads.id, nao a tabela legacy
+    // external_player_convocations.
     const { data: externalPlayers, error: externalPlayersError } = await db
-      .from("external_player_convocations")
-      .select("id, name, jersey_number")
-      .in("id", Array.from(externalPlayerIds));
+      .from("game_squads")
+      .select("id, external_name, external_jersey_number")
+      .in("id", Array.from(externalPlayerIds))
+      .is("player_id", null);
 
-    if (
-      externalPlayersError &&
-      !isMissingRelationError(
-        externalPlayersError.message,
-        "external_player_convocations",
-      )
-    ) {
+    if (externalPlayersError) {
       throw new Error(
         `public_live_external_players_failed:${externalPlayersError.message}`,
       );
     }
 
     (externalPlayers || []).forEach((player) => {
-      const label = formatPlayerLabel(player.name || "Jogador", player.jersey_number);
+      const label = formatPlayerLabel(
+        player.external_name || "Jogador",
+        player.external_jersey_number,
+      );
       if (label) {
         playerLabels.set(`external:${player.id}`, label);
       }
