@@ -17,7 +17,7 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const placeId = (url.searchParams.get("placeId") || "").trim();
 
-    if (!isValidLocationPlaceId(placeId)) {
+    if (!isValidLocationPlaceId(placeId) && !isGooglePlaceId(placeId)) {
       return NextResponse.json(
         { error: "Identificador de localização inválido." },
         { status: 400 },

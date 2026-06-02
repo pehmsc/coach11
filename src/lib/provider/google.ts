@@ -9,6 +9,13 @@ import {
 const AUTOCOMPLETE_CACHE_TTL_MS = 15 * 60 * 1000;
 const RESOLVE_CACHE_TTL_MS = 30 * 60 * 1000;
 
+const LISBON_LOCATION_BIAS = {
+  circle: {
+    center: { latitude: 38.7223, longitude: -9.1393 },
+    radius: 40000,
+  },
+} as const;
+
 type CacheEntry<T> = {
   expiresAt: number;
   value: T;
@@ -271,6 +278,7 @@ export async function autocomplete(query: string, limit = 5): Promise<GoogleSugg
         languageCode: "pt-PT",
         regionCode: "PT",
         includedRegionCodes: ["PT"],
+        locationBias: LISBON_LOCATION_BIAS,
       }),
     },
   );
