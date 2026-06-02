@@ -246,53 +246,51 @@ export function useLiveDataLoader({
         starterIdsFromBackend.length > 0 ? starterIdsFromBackend : Array.from(onFieldIds),
       );
     } else {
-      // Fallback: direct queries (in case API returns error)
-      const { data: convRows } = await supabase
-        .from("convocations")
-        .select("id, created_at")
+      // Fallback: direct queries (in case API returns error).
+      // Modelo unificado: tudo vem de game_squads (keyed por game_id) — internos
+      // (player_id, join a players) e externos (player_id IS NULL). Substitui o
+      // lookup legacy convocations + convocation_players + external_player_convocations.
+      const { data: squadRows } = await supabase
+        .from("game_squads")
+        .select(
+          "id, player_id, external_name, external_jersey_number, external_position, initial_lineup_status, created_at, players(*)",
+        )
         .eq("game_id", id)
-        .order("created_at", { ascending: false })
-        .order("id", { ascending: false });
+        .order("created_at", { ascending: true });
 
       let convPlayers: LivePlayer[] = [];
-      const latestConvocationId = convRows?.[0]?.id ?? null;
-      if (latestConvocationId) {
-        const [{ data: cp }, { data: externalRows }] = await Promise.all([
-          supabase
-            .from("convocation_players")
-            .select("player_id, players(*)")
-            .eq("convocation_id", latestConvocationId),
-          supabase
-            .from("external_player_convocations")
-            .select("id, name, jersey_number, position, lineup_status, created_at")
-            .eq("game_id", id)
-            .order("created_at", { ascending: true }),
-        ]);
-
+      {
         const byPlayerId = new Map<string, LivePlayer>();
-        (cp || []).forEach((row) => {
-          const player = row.players as unknown as Player;
-          if (!player?.id) return;
-          byPlayerId.set(player.id, {
-            ...player,
-            isExternal: false,
-            externalConvocationId: null,
-            isOnField: false,
-            isInitialBench: false,
-          });
-        });
-        (externalRows || []).forEach((row) => {
+        (squadRows || []).forEach((row) => {
+          if (row.player_id) {
+            const player = row.players as unknown as Player;
+            if (!player?.id) return;
+            byPlayerId.set(player.id, {
+              ...player,
+              isExternal: false,
+              externalConvocationId: null,
+              isOnField: false,
+              isInitialBench: false,
+            });
+            return;
+          }
+          // Externo: player_id IS NULL. O id de live e external:<game_squads.id>.
           if (typeof row.id !== "string") return;
           const externalPlayerId = toExternalLivePlayerId(row.id);
+          const isStarter = row.initial_lineup_status === "starter";
           byPlayerId.set(externalPlayerId, {
             id: externalPlayerId,
             age_group_id: gameData.age_group_id ?? "",
-            first_name: row.name || "Outro",
+            first_name: row.external_name || "Outro",
             last_name: "",
             jersey_number:
-              typeof row.jersey_number === "number" ? row.jersey_number : undefined,
+              typeof row.external_jersey_number === "number"
+                ? row.external_jersey_number
+                : undefined,
             preferred_position:
-              typeof row.position === "string" ? row.position : undefined,
+              typeof row.external_position === "string"
+                ? row.external_position
+                : undefined,
             status: "active",
             created_at:
               typeof row.created_at === "string"
@@ -300,8 +298,8 @@ export function useLiveDataLoader({
                 : new Date().toISOString(),
             isExternal: true,
             externalConvocationId: row.id,
-            isOnField: row.lineup_status === "on_field",
-            isInitialBench: row.lineup_status !== "on_field",
+            isOnField: isStarter,
+            isInitialBench: !isStarter,
           });
         });
 

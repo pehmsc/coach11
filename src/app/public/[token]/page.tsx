@@ -154,18 +154,6 @@ function gameTitle(game: PublicGameRow) {
   return game.is_home ? `vs ${opponent}` : `@ ${opponent}`;
 }
 
-function isMissingRelationError(
-  message: string | null | undefined,
-  relationName: string,
-) {
-  if (!message) return false;
-
-  return (
-    message.includes(relationName) &&
-    (message.includes("does not exist") || message.includes("relation"))
-  );
-}
-
 async function getPublicConvocationAvailabilityByGameId(
   admin: ReturnType<typeof createAdminClient>,
   gameIds: string[],
@@ -183,75 +171,31 @@ async function getPublicConvocationAvailabilityByGameId(
     return availabilityByGameId;
   }
 
-  const { data: convocationRows, error: convocationError } = await admin
-    .from("convocations")
-    .select("id, game_id, created_at, notes")
-    .in("game_id", uniqueGameIds)
-    .order("created_at", { ascending: false })
-    .order("id", { ascending: false });
+  // Modelo unificado: a convocatoria publica deriva de game_squads (keyed por
+  // game_id), que cobre internos (player_id) e externos (player_id IS NULL).
+  // Substitui o lookup legacy convocations + convocation_players +
+  // external_player_convocations. (convocations.notes nao era fonte de notas
+  // publicas — sempre vazia — pelo que o indicador depende so da presenca de
+  // squad, preservando o comportamento observavel anterior.)
+  const { data: squadRows, error: squadError } = await admin
+    .from("game_squads")
+    .select("game_id")
+    .in("game_id", uniqueGameIds);
 
-  if (convocationError) {
+  if (squadError) {
     return availabilityByGameId;
   }
 
-  const latestConvocationByGameId = new Map<
-    string,
-    { id: string; notes: string | null }
-  >();
-  (convocationRows || []).forEach((row) => {
-    if (row.game_id && row.id && !latestConvocationByGameId.has(row.game_id)) {
-      latestConvocationByGameId.set(row.game_id, {
-        id: row.id,
-        notes: typeof row.notes === "string" ? row.notes : null,
-      });
-    }
-  });
-
-  const latestConvocationIds = Array.from(
-    latestConvocationByGameId.values(),
-    (row) => row.id,
-  );
-
-  const [{ data: convocationPlayers }, externalPlayersRes] = await Promise.all([
-    latestConvocationIds.length > 0
-      ? admin
-          .from("convocation_players")
-          .select("convocation_id")
-          .in("convocation_id", latestConvocationIds)
-      : Promise.resolve({ data: [], error: null }),
-    admin
-      .from("external_player_convocations")
-      .select("game_id")
-      .in("game_id", uniqueGameIds),
-  ]);
-
-  const convocationIdsWithPlayers = new Set(
-    ((convocationPlayers || []) as Array<{ convocation_id: string | null }>)
-      .map((row) => row.convocation_id)
+  const gameIdsWithSquad = new Set(
+    ((squadRows || []) as Array<{ game_id: string | null }>)
+      .map((row) => row.game_id)
       .filter((value): value is string => typeof value === "string"),
   );
-  const gameIdsWithExternalPlayers =
-    externalPlayersRes.error &&
-    !isMissingRelationError(
-      externalPlayersRes.error.message,
-      "external_player_convocations",
-    )
-      ? new Set<string>()
-      : new Set(
-          (((externalPlayersRes.data || []) as Array<{ game_id: string | null }>)
-            .map((row) => row.game_id)
-            .filter((value): value is string => typeof value === "string")),
-        );
 
-  latestConvocationByGameId.forEach((convocation, gameId) => {
+  gameIdsWithSquad.forEach((gameId) => {
     availabilityByGameId.set(
       gameId,
-      hasPublicConvocationContent({
-        playerCount:
-          (convocationIdsWithPlayers.has(convocation.id) ? 1 : 0) +
-          (gameIdsWithExternalPlayers.has(gameId) ? 1 : 0),
-        notes: convocation.notes,
-      }),
+      hasPublicConvocationContent({ playerCount: 1 }),
     );
   });
 
