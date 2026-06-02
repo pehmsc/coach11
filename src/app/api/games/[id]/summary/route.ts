@@ -164,15 +164,16 @@ export async function GET(_request: Request, { params }: RouteContext) {
     }
 
     if (externalPlayerIds.length > 0) {
+      // Modelo unificado: externos vivem em game_squads (player_id IS NULL) e os
+      // ids de live (`external:<id>`) referenciam game_squads.id. A tabela legacy
+      // external_player_convocations ja nao e a fonte de verdade dos ids actuais.
       const { data: externalPlayers, error: externalPlayersError } = await supabase
-        .from("external_player_convocations")
-        .select("id, name, jersey_number, position")
-        .in("id", externalPlayerIds);
+        .from("game_squads")
+        .select("id, external_name, external_jersey_number, external_position")
+        .in("id", externalPlayerIds)
+        .is("player_id", null);
 
-      if (
-        externalPlayersError &&
-        !externalPlayersError.message?.includes("external_player_convocations")
-      ) {
+      if (externalPlayersError) {
         return NextResponse.json(
           { error: "Erro ao carregar jogadores externos do sumário." },
           { status: 500 },
@@ -183,11 +184,13 @@ export async function GET(_request: Request, { params }: RouteContext) {
         const playerId = toExternalLivePlayerId(player.id);
         playersById[playerId] = {
           id: playerId,
-          first_name: player.name || "Outro",
+          first_name: player.external_name || "Outro",
           last_name: "",
-          jersey_number: player.jersey_number ?? null,
+          jersey_number: player.external_jersey_number ?? null,
           preferred_position:
-            typeof player.position === "string" ? player.position : null,
+            typeof player.external_position === "string"
+              ? player.external_position
+              : null,
         };
       });
     }
