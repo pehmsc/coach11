@@ -94,25 +94,10 @@ export async function GET(_request: Request, { params }: RouteContext) {
     const isCoordinator = access.isCoordinator;
     const teamId = access.teamId ?? game.team_id ?? null;
 
-    // Query mantida para obter `id` legacy (usado por callers que ainda esperam
-    // convocationId/convocationIds no payload). O campo `status` desta tabela
-    // está desalinhado com games.convocation_status após a migração para o
-    // modelo unificado — NÃO usar como truth. Ver `convocationStatus` abaixo.
-    const { data: convocations, error: convocationError } = await supabase
-      .from("convocations")
-      .select("id, created_at")
-      .eq("game_id", gameId)
-      .order("created_at", { ascending: false })
-      .order("id", { ascending: false });
-
-    if (convocationError) {
-      return NextResponse.json(
-        { error: "Erro ao carregar convocatória." },
-        { status: 500 },
-      );
-    }
-
-    const convocationIds = (convocations || []).map((c) => c.id);
+    // Modelo unificado: a convocatória deriva de game_squads + games.convocation_status.
+    // A tabela legacy `convocations` já não é lida (decommission em curso). Os campos
+    // convocationId/convocationCount do payload ficam null/0 por retrocompat de shape —
+    // não têm consumidores conhecidos.
     // Truth canónica: games.convocation_status (enum binário 'draft' | 'published').
     const convocationStatus = toConvocationStatus(
       (game as unknown as { convocation_status?: string | null })
@@ -123,9 +108,8 @@ export async function GET(_request: Request, { params }: RouteContext) {
       { responseStatus: string | null; isPresent: boolean | null }
     > = {};
 
-    // Modelo unificado: ler internos e presenças a partir de game_squads.
-    // (convocation_players e convocations ficam só como reads legacy de
-    // back-compat para jogos antigos onde o back-fill já criou as rows.)
+    // Modelo unificado: ler internos e presenças a partir de game_squads
+    // (fonte única, keyed por game_id).
     const selectedIds = new Set<string>();
     // Cross-age: atletas convocados via "Atleta do clube" (player_id real
     // de outro escalao do mesmo clube). Map de player_id → source_age_group_id
@@ -565,7 +549,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
     // Lineup statuses from game_stats_live.
     //
     // Defesa em profundidade: descartar entradas cujo player_id já não está
-    // em convocation_players (selectedIds). Estas "ghosts" surgem quando um
+    // no squad (selectedIds, derivado de game_squads). Estas "ghosts" surgem quando um
     // atleta é removido da convocatória sem o respectivo cleanup em
     // game_stats_live. Se chegassem ao cliente, o `lineupRef` continha-as
     // como `on_field` e a guarda `currentStarters >= format` em
@@ -669,8 +653,8 @@ export async function GET(_request: Request, { params }: RouteContext) {
       homeClubName,
       homeClubShortName,
       convocationStatus,
-      convocationId: convocations?.[0]?.id ?? null,
-      convocationCount: convocationIds.length,
+      convocationId: null,
+      convocationCount: 0,
       convocationSelections,
       liveCheckpoint,
       // PR #156a: kits lidos directamente de games. Forma do payload

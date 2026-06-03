@@ -300,29 +300,21 @@ export async function POST(request: Request, { params }: RouteContext) {
       );
     }
 
-    const { data: convocationRows } = await supabase
-      .from("convocations")
-      .select("id, created_at")
+    // Modelo unificado: os jogadores convocados vivem em game_squads (keyed por
+    // game_id). Substitui o lookup legacy convocations + convocation_players.
+    const { data: squadRows } = await supabase
+      .from("game_squads")
+      .select("player_id")
       .eq("game_id", gameId)
-      .order("created_at", { ascending: false })
-      .order("id", { ascending: false });
+      .not("player_id", "is", null);
 
-    const latestConvocationId = convocationRows?.[0]?.id ?? null;
-
-    let playerIds: string[] = [];
-    if (latestConvocationId) {
-      const { data: convocationPlayers } = await supabase
-        .from("convocation_players")
-        .select("player_id")
-        .eq("convocation_id", latestConvocationId);
-      playerIds = Array.from(
-        new Set(
-          (convocationPlayers || [])
-            .map((row) => row.player_id)
-            .filter((value): value is string => typeof value === "string"),
-        ),
-      );
-    }
+    let playerIds: string[] = Array.from(
+      new Set(
+        (squadRows || [])
+          .map((row) => row.player_id)
+          .filter((value): value is string => typeof value === "string"),
+      ),
+    );
 
     if (playerIds.length === 0) {
       const { data: liveRows } = await supabase
