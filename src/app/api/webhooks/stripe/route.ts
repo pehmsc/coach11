@@ -3,6 +3,11 @@ import type Stripe from "stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { constructStripeWebhookEvent } from "@/lib/stripe/client";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
+import {
+  computePurgeScheduleUpdate,
+  PURGE_CLEAR_FIELDS,
+} from "@/lib/stripe/purge-schedule";
+import { sendCancellationEmail } from "@/lib/email/send-cancellation-email";
 
 export const runtime = "nodejs";
 
@@ -138,29 +143,42 @@ async function syncSubscription(
       : subscription.customer.id;
 
   // Procura primeiro por subscription_id (mais especifico); fallback para customer_id
-  let clubId: string | null = null;
+  const CLUB_SYNC_FIELDS =
+    "id, plan_type, data_purge_scheduled_at, billing_email, pending_coordinator_email, pending_coordinator_name";
+
+  type ClubSyncRow = {
+    id: string;
+    plan_type: string;
+    data_purge_scheduled_at: string | null;
+    billing_email: string | null;
+    pending_coordinator_email: string | null;
+    pending_coordinator_name: string | null;
+  };
+
+  let club: ClubSyncRow | null = null;
   const { data: bySub } = await admin
     .from("clubs")
-    .select("id")
+    .select(CLUB_SYNC_FIELDS)
     .eq("stripe_subscription_id", subscription.id)
     .maybeSingle();
-  if (bySub) clubId = bySub.id;
+  if (bySub) club = bySub as ClubSyncRow;
 
-  if (!clubId) {
+  if (!club) {
     const { data: byCustomer } = await admin
       .from("clubs")
-      .select("id")
+      .select(CLUB_SYNC_FIELDS)
       .eq("stripe_customer_id", customerId)
       .maybeSingle();
-    if (byCustomer) clubId = byCustomer.id;
+    if (byCustomer) club = byCustomer as ClubSyncRow;
   }
 
-  if (!clubId) {
+  if (!club) {
     console.warn(
       `[stripe-webhook] subscription sync sem clube: sub=${subscription.id}`,
     );
     return;
   }
+  const clubId = club.id;
 
   const periodEndRaw =
     "current_period_end" in subscription
@@ -174,6 +192,28 @@ async function syncSubscription(
     ? new Date(subscription.trial_end * 1000).toISOString()
     : null;
 
+  // Purga RGPD: set no cancelamento explicito, clear na reactivacao.
+  // Decisao pura partilhada com o fallback de checkout (sync-subscription).
+  const purgeUpdate = computePurgeScheduleUpdate(
+    {
+      plan_type: club.plan_type === "individual" ? "individual" : "club",
+      data_purge_scheduled_at: club.data_purge_scheduled_at,
+    },
+    {
+      status: subscription.status,
+      cancel_at_period_end: subscription.cancel_at_period_end,
+      current_period_end: periodEnd,
+    },
+    new Date(),
+  );
+
+  const purgeFields =
+    purgeUpdate.kind === "set"
+      ? { data_purge_scheduled_at: purgeUpdate.data_purge_scheduled_at }
+      : purgeUpdate.kind === "clear"
+        ? PURGE_CLEAR_FIELDS
+        : {};
+
   await admin
     .from("clubs")
     .update({
@@ -183,6 +223,29 @@ async function syncSubscription(
       subscription_current_period_end: periodEnd,
       trial_ends_at: trialEnd,
       subscription_cancel_at_period_end: subscription.cancel_at_period_end,
+      ...purgeFields,
     })
     .eq("id", clubId);
+
+  // d0: confirmacao de cancelamento com nota de retencao, enviada apenas na
+  // transicao NULL -> agendado (idempotente por construcao). Soft-fail.
+  if (purgeUpdate.kind === "set") {
+    const recipient =
+      club.billing_email || club.pending_coordinator_email || null;
+    if (recipient) {
+      const { sent, warning } = await sendCancellationEmail({
+        to: recipient,
+        fullName: club.pending_coordinator_name,
+        accessUntil: periodEnd,
+        purgeScheduledAt: purgeUpdate.data_purge_scheduled_at,
+      });
+      if (!sent) {
+        console.warn(`[stripe-webhook] email d0 nao enviado: ${warning}`);
+      }
+    } else {
+      console.warn(
+        `[stripe-webhook] email d0 sem destinatario para clube ${clubId}`,
+      );
+    }
+  }
 }

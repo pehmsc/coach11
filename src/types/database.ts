@@ -536,6 +536,19 @@ export interface Invoice {
   updated_at: string;
 }
 
+export interface GdprPurgeAudit {
+  id: string;
+  club_id: string;
+  club_name: string;
+  stripe_customer_id: string | null;
+  trigger_reason: string;
+  scheduled_at: string | null;
+  executed_at: string;
+  dry_run: boolean;
+  deleted_counts: Record<string, number>;
+  created_at: string;
+}
+
 export interface ClubInsights {
   club_id: string;
   age_groups_count: number;
