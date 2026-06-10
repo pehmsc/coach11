@@ -3,6 +3,10 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { hasActiveAccess } from "@/lib/stripe/subscription-status";
+import {
+  formatPurgeDateLisbon,
+  purgeDaysLeft,
+} from "@/components/billing/PurgeCountdownBanner";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,7 +39,7 @@ export default async function BillingBlockedPage() {
     ? await admin
         .from("clubs")
         .select(
-          "id, name, plan_type, subscription_status, subscription_current_period_end, trial_ends_at, subscription_cancel_at_period_end",
+          "id, name, plan_type, subscription_status, subscription_current_period_end, trial_ends_at, subscription_cancel_at_period_end, data_purge_scheduled_at",
         )
         .eq("id", membership.club_id)
         .maybeSingle()
@@ -48,6 +52,10 @@ export default async function BillingBlockedPage() {
 
   const status = club?.subscription_status ?? null;
   const periodEnd = club?.subscription_current_period_end ?? null;
+  const purgeScheduledAt =
+    typeof club?.data_purge_scheduled_at === "string"
+      ? club.data_purge_scheduled_at
+      : null;
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
@@ -57,6 +65,27 @@ export default async function BillingBlockedPage() {
         </h1>
 
         <Description status={status} periodEnd={periodEnd} />
+
+        {purgeScheduledAt && (
+          <div
+            role="alert"
+            className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3"
+          >
+            <p className="text-sm font-semibold text-red-700">
+              Os teus dados serão eliminados a{" "}
+              {formatPurgeDateLisbon(purgeScheduledAt)}
+              {purgeDaysLeft(purgeScheduledAt, new Date()) > 0
+                ? ` — faltam ${purgeDaysLeft(purgeScheduledAt, new Date())} dias`
+                : ""}
+              .
+            </p>
+            <p className="mt-1 text-xs text-red-600">
+              Reactiva a subscrição antes dessa data para manter plantel,
+              treinos, jogos e estatísticas. Depois, a eliminação é
+              definitiva (RGPD).
+            </p>
+          </div>
+        )}
 
         <div className="mt-6 flex flex-col gap-2">
           <Link
@@ -76,7 +105,7 @@ export default async function BillingBlockedPage() {
         </div>
 
         <p className="mt-4 text-xs text-slate-400">
-          Os teus dados ficam guardados durante 30 dias após o fim da
+          Os teus dados ficam guardados durante 60 dias após o fim da
           subscrição. Para questões: <a className="text-emerald-600" href="mailto:billing@coach11.app">billing@coach11.app</a>.
         </p>
       </div>
