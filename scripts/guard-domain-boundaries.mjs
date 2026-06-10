@@ -121,8 +121,6 @@ const SRC_ALLOWED_EXCEPTIONS = new Map([
   ["src/app/billing/start/page.tsx", new Set(["src-admin-client"])],
   ["src/app/billing/blocked/page.tsx", new Set(["src-admin-client"])],
   ["src/app/billing/success/page.tsx", new Set(["src-admin-client"])],
-  // SUBSCRIPTION_GUARD: dashboard layout precisa de admin para consultar clubs.subscription_status do utilizador autenticado
-  ["src/app/(dashboard)/layout.tsx", new Set(["src-admin-client"])],
   // TRIAL_REMINDER_CRON: envia email no dia 5 antes do fim do trial — admin client por cron sem sessao de utilizador
   ["src/app/api/notifications/cron/trial-reminder/route.ts", new Set(["src-admin-client"])],
 ]);
