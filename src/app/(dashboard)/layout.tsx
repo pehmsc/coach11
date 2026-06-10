@@ -10,6 +10,7 @@ import { AuthenticatedAnalyticsProvider } from "@/components/observability/Authe
 import { getCachedUserTeamContext, type UserTeamContext } from "@/lib/auth/team-context";
 import { AgeGroupProvider } from "@/contexts/AgeGroupContext";
 import { PlanTypeCookieWriter } from "@/components/auth/PlanTypeCookieWriter";
+import { PurgeCountdownBanner } from "@/components/billing/PurgeCountdownBanner";
 import {
   blockedRedirectPath,
   hasActiveAccess,
@@ -47,6 +48,11 @@ export default async function DashboardLayout({
   // Session client: RLS cobre ambas as leituras (club_memberships_own_select
   // e club_members_can_read, TO authenticated). Sem linha (onboarding,
   // sem clube) o maybeSingle devolve null e o guard nao bloqueia o layout.
+  // Purga RGPD: aviso legal nao-dispensavel em todas as paginas do dashboard
+  // enquanto houver purga agendada (conta individual cancelada). Lido no
+  // MESMO select do guard — o layout nao ganha queries novas.
+  let purgeScheduledAt: string | null = null;
+
   if (!profile?.is_super_coordinator) {
     const { data: subMembership } = await supabase
       .from("club_memberships")
@@ -59,7 +65,7 @@ export default async function DashboardLayout({
       const { data: subClub } = await supabase
         .from("clubs")
         .select(
-          "plan_type, subscription_status, trial_ends_at, subscription_current_period_end, subscription_cancel_at_period_end",
+          "plan_type, subscription_status, trial_ends_at, subscription_current_period_end, subscription_cancel_at_period_end, data_purge_scheduled_at",
         )
         .eq("id", subMembership.club_id)
         .maybeSingle();
@@ -82,6 +88,12 @@ export default async function DashboardLayout({
           // (dashboard) layout nao aplica a /billing/*, /precos, /login —
           // seguro fazer redirect sem risco de loop
           redirect(blockedRedirectPath(subContext));
+        }
+        if (
+          subContext.plan_type === "individual" &&
+          typeof subClub.data_purge_scheduled_at === "string"
+        ) {
+          purgeScheduledAt = subClub.data_purge_scheduled_at;
         }
       }
     }
@@ -158,6 +170,9 @@ export default async function DashboardLayout({
               className="min-w-0 pb-[calc(var(--mobile-footer-height)+env(safe-area-inset-bottom)+1rem)] md:ml-64 md:pb-0"
               style={{ paddingTop: "var(--coach11-top-inset, 0px)" }}
             >
+              {purgeScheduledAt && (
+                <PurgeCountdownBanner scheduledAt={purgeScheduledAt} />
+              )}
               {children}
             </main>
 
