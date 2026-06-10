@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
-import { deleteAgeGroupCascade } from "@/lib/team/delete-age-group";
+import { deleteClubDataCascade } from "@/lib/club/delete-club-data";
 
 export const runtime = "nodejs";
 
@@ -203,24 +203,12 @@ export async function DELETE(request: Request) {
       );
     }
 
-    // Apagar todos os escalões em cascata
-    for (const group of groups) {
-      if (typeof group.id === "string") {
-        await deleteAgeGroupCascade(admin, group.id, {
-          retainClubMembershipProfileIds: [],
-        });
-      }
-    }
-
-    // Apagar as club_memberships do clube
-    await admin
-      .from("club_memberships")
-      .delete()
-      .eq("club_id", clubId);
+    // Apagar escalões em cascata + club_memberships (lib partilhada com a purga RGPD)
+    const { deletedAgeGroupCount } = await deleteClubDataCascade(admin, clubId);
 
     return NextResponse.json({
       success: true,
-      deletedAgeGroupCount: groups.length,
+      deletedAgeGroupCount,
     });
   } catch (error) {
     return respondInternalError("api.club.delete", error);
