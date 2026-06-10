@@ -239,7 +239,7 @@ export function ConvocationSection({
                   }
                   disabled={savingTactical || !canEditConvocationContent}
                 >
-                  <SelectTrigger className="h-9">
+                  <SelectTrigger className="h-11">
                     <SelectValue placeholder="Seleciona a formação" />
                   </SelectTrigger>
                   <SelectContent>

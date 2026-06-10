@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { useRouter } from "next/navigation";
 import { Loader2, Dumbbell, Copy, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useTrainingsData } from "@/lib/hooks/useTrainingsData";
 import { useTrainingForm } from "@/lib/hooks/useTrainingForm";
 import { TrainingSessionList } from "@/components/trainings/TrainingSessionList";
@@ -28,7 +28,6 @@ export function TrainingsSection({
   overrideAgeGroupId,
   returnToKey = "trainings",
 }: Props) {
-  const router = useRouter();
   const { saveReturnTo } = useReturnTo(returnToKey);
   useScrollRestoration(returnToKey);
   const data = useTrainingsData(
@@ -117,7 +116,10 @@ export function TrainingsSection({
     );
   }
 
-  const displayedSessions = activeTab === "scheduled" ? scheduled : closed;
+  const getSessionHref = (session: TrainingRow) =>
+    overrideAgeGroupId
+      ? `/teams/${overrideAgeGroupId}/trainings/${session.id}`
+      : `/trainings/${session.id}`;
 
   return (
     <>
@@ -141,39 +143,35 @@ export function TrainingsSection({
         </Button>
       </div>
 
-      {/* Tabs */}
-      <div className="mb-5 flex border-b border-slate-200">
-        <TabButton
-          active={activeTab === "scheduled"}
-          count={scheduled.length}
-          label="Agendados"
-          onClick={() => setActiveTab("scheduled")}
-        />
-        <TabButton
-          active={activeTab === "closed"}
-          count={closed.length}
-          label="Fechados"
-          onClick={() => setActiveTab("closed")}
-        />
-      </div>
+      <Tabs
+        value={activeTab}
+        onValueChange={(v) => setActiveTab(v as TabKey)}
+      >
+        <TabsList className="mb-3 w-full justify-start rounded-none border-b border-slate-200 bg-transparent p-0">
+          <TabTrigger value="scheduled" label="Agendados" count={scheduled.length} />
+          <TabTrigger value="closed" label="Fechados" count={closed.length} />
+        </TabsList>
 
-      {/* List */}
-      <TrainingSessionList
-        sessions={displayedSessions}
-        getSummary={data.getSummary}
-        onSessionClick={(session) => {
-          saveReturnTo();
-          router.push(
-            overrideAgeGroupId
-              ? `/teams/${overrideAgeGroupId}/trainings/${session.id}`
-              : `/trainings/${session.id}`,
-          );
-        }}
-        onDuplicate={
-          activeTab === "scheduled" ? openDuplicateTraining : undefined
-        }
-        variant={activeTab === "scheduled" ? "open" : "closed"}
-      />
+        <TabsContent value="scheduled">
+          <TrainingSessionList
+            sessions={scheduled}
+            getSummary={data.getSummary}
+            getSessionHref={getSessionHref}
+            onNavigate={saveReturnTo}
+            onDuplicate={openDuplicateTraining}
+            variant="open"
+          />
+        </TabsContent>
+        <TabsContent value="closed">
+          <TrainingSessionList
+            sessions={closed}
+            getSummary={data.getSummary}
+            getSessionHref={getSessionHref}
+            onNavigate={saveReturnTo}
+            variant="closed"
+          />
+        </TabsContent>
+      </Tabs>
 
       {createModalOpen && (
         <TrainingCreateModal
@@ -196,38 +194,24 @@ export function TrainingsSection({
   );
 }
 
-function TabButton({
-  active,
-  count,
+function TabTrigger({
+  value,
   label,
-  onClick,
+  count,
 }: {
-  active: boolean;
-  count: number;
+  value: TabKey;
   label: string;
-  onClick: () => void;
+  count: number;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`relative px-4 py-2.5 text-sm font-medium transition-colors ${
-        active ? "text-emerald-700" : "text-slate-500 hover:text-slate-700"
-      }`}
+    <TabsTrigger
+      value={value}
+      className="group relative rounded-none bg-transparent px-4 py-2.5 text-slate-500 shadow-none transition-colors after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:rounded-t after:bg-transparent after:content-[''] hover:text-slate-700 data-[state=active]:bg-transparent data-[state=active]:text-emerald-700 data-[state=active]:shadow-none data-[state=active]:after:bg-emerald-600"
     >
       {label}
-      <span
-        className={`ml-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-semibold ${
-          active
-            ? "bg-emerald-100 text-emerald-700"
-            : "bg-slate-100 text-slate-500"
-        }`}
-      >
+      <span className="ml-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-slate-100 px-1.5 text-[11px] font-semibold text-slate-500 group-data-[state=active]:bg-emerald-100 group-data-[state=active]:text-emerald-700">
         {count}
       </span>
-      {active && (
-        <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-600 rounded-t" />
-      )}
-    </button>
+    </TabsTrigger>
   );
 }

@@ -29,7 +29,7 @@ export function GameHeader({
         {(game.status !== "completed" || canEditCompleted) && (
           <button
             onClick={onEdit}
-            className="p-1.5 rounded-full bg-white/20 hover:bg-white/30 transition-colors"
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-white/20 hover:bg-white/30 transition-colors"
             title={
               game.status === "completed"
                 ? "Editar (jogo concluído)"
@@ -42,7 +42,7 @@ export function GameHeader({
         {canEditCompleted && (
           <button
             onClick={onDelete}
-            className="p-1.5 rounded-full bg-red-500/80 hover:bg-red-500 transition-colors"
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-red-500/80 hover:bg-red-500 transition-colors"
             title="Apagar jogo"
           >
             <Trash2 size={14} />

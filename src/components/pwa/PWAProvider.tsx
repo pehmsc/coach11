@@ -133,7 +133,7 @@ function UpdateSnackbar({
         <button
           type="button"
           aria-label="Fechar aviso de atualização"
-          className="text-slate-400 transition-colors hover:text-slate-700"
+          className="flex size-11 shrink-0 -my-2 -mr-2 items-center justify-center rounded-full text-slate-400 transition-colors hover:text-slate-700"
           onClick={onDismiss}
         >
           <X size={16} />

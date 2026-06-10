@@ -42,7 +42,7 @@ export function IOSInstallModal() {
         <button
           type="button"
           aria-label="Fechar"
-          className="absolute right-4 top-4 text-slate-400 transition-colors hover:text-slate-700"
+          className="absolute right-1.5 top-1.5 flex size-11 items-center justify-center rounded-full text-slate-400 transition-colors hover:text-slate-700"
           onClick={closeIOSInstallModal}
         >
           <X size={18} />

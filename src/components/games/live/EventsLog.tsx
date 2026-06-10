@@ -79,9 +79,11 @@ export function EventsLog({
                 {assist && ev.event_type === "goal" ? ` (🅰️ ${assist.first_name} ${assist.last_name})` : ""}
               </span>
               {!isFinalized && (
+                /* Accao de campo: alvo 44x44 (margem negativa para nao crescer a linha) */
                 <button
                   onClick={() => void deleteEvent(ev.id)}
-                  className="p-1 hover:bg-red-50 rounded-lg transition-colors group"
+                  className="flex h-11 w-11 -my-3 -mr-2 items-center justify-center hover:bg-red-50 rounded-lg transition-colors group flex-shrink-0"
+                  title="Apagar evento"
                 >
                   <X size={14} className="text-slate-300 group-hover:text-red-500" />
                 </button>

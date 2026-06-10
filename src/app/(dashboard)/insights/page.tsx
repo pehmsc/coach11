@@ -220,7 +220,7 @@ export default function InsightsPage() {
                 value={selectedClubId}
                 onChange={(e) => setSelectedClubId(e.target.value)}
                 disabled={clubsLoading || clubs.length === 0}
-                className="w-full appearance-none bg-white border border-slate-300 rounded-lg px-3 py-2 pr-8 text-sm text-slate-900 focus:outline-none focus:border-emerald-500 disabled:bg-slate-50 disabled:text-slate-400 cursor-pointer"
+                className="w-full min-h-11 appearance-none bg-white border border-slate-300 rounded-lg px-3 py-2 pr-8 text-sm text-slate-900 focus:outline-none focus:border-emerald-500 disabled:bg-slate-50 disabled:text-slate-400 cursor-pointer"
               >
                 {clubsLoading ? (
                   <option value="">A carregar clubes…</option>
@@ -255,7 +255,7 @@ export default function InsightsPage() {
                 value={selectedAgeGroupId}
                 onChange={(e) => setSelectedAgeGroupId(e.target.value)}
                 disabled={!selectedClubId || ageGroupsLoading}
-                className="w-full appearance-none bg-white border border-slate-300 rounded-lg px-3 py-2 pr-8 text-sm text-slate-900 focus:outline-none focus:border-emerald-500 disabled:bg-slate-50 disabled:text-slate-400 cursor-pointer"
+                className="w-full min-h-11 appearance-none bg-white border border-slate-300 rounded-lg px-3 py-2 pr-8 text-sm text-slate-900 focus:outline-none focus:border-emerald-500 disabled:bg-slate-50 disabled:text-slate-400 cursor-pointer"
               >
                 <option value={ALL_AGE_GROUPS}>Todas as equipas</option>
                 {ageGroups.map((a) => (
@@ -277,13 +277,19 @@ export default function InsightsPage() {
         </CardContent>
       </Card>
 
-      <div className="flex gap-1 p-1 bg-slate-100 rounded-xl">
+      <div
+        role="tablist"
+        aria-label="Tipo de insights"
+        className="flex gap-1 p-1 bg-slate-100 rounded-xl"
+      >
         <button
           type="button"
           role="tab"
+          id="insights-tab-trainings"
+          aria-controls="insights-panel-trainings"
           aria-selected={activeTab === "trainings"}
           onClick={() => setActiveTab("trainings")}
-          className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
+          className={`flex-1 flex min-h-11 items-center justify-center gap-2 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
             activeTab === "trainings"
               ? "bg-white text-slate-900 shadow-sm"
               : "text-slate-500 hover:text-slate-700"
@@ -294,9 +300,11 @@ export default function InsightsPage() {
         <button
           type="button"
           role="tab"
+          id="insights-tab-games"
+          aria-controls="insights-panel-games"
           aria-selected={activeTab === "games"}
           onClick={() => setActiveTab("games")}
-          className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
+          className={`flex-1 flex min-h-11 items-center justify-center gap-2 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
             activeTab === "games"
               ? "bg-white text-slate-900 shadow-sm"
               : "text-slate-500 hover:text-slate-700"
@@ -326,7 +334,12 @@ export default function InsightsPage() {
           </CardContent>
         </Card>
       ) : activeTab === "trainings" ? (
-        <>
+        <div
+          role="tabpanel"
+          id="insights-panel-trainings"
+          aria-labelledby="insights-tab-trainings"
+          className="space-y-5"
+        >
           <div className="grid grid-cols-2 gap-3">
             <KpiCard
               icon={Dumbbell}
@@ -406,9 +419,14 @@ export default function InsightsPage() {
               "trainings_late",
             ]}
           />
-        </>
+        </div>
       ) : (
-        <>
+        <div
+          role="tabpanel"
+          id="insights-panel-games"
+          aria-labelledby="insights-tab-games"
+          className="space-y-5"
+        >
           <div className="grid grid-cols-2 gap-3">
             <KpiCard
               icon={Trophy}
@@ -517,7 +535,7 @@ export default function InsightsPage() {
             showAgeGroupName={scopeIsAll}
             metrics={["goals", "assists", "minutes", "matches"]}
           />
-        </>
+        </div>
       )}
     </div>
   );

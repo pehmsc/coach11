@@ -294,7 +294,7 @@ export default function AttendancePage() {
     <div className="flex items-center justify-between mb-5">
       <button
         onClick={goToPrevDay}
-        className="p-2 rounded-lg hover:bg-slate-100 transition-colors"
+        className="flex h-11 w-11 items-center justify-center rounded-lg hover:bg-slate-100 transition-colors"
         aria-label="Dia anterior"
       >
         <ChevronLeft size={20} className="text-slate-600" />
@@ -313,7 +313,7 @@ export default function AttendancePage() {
       <button
         onClick={goToNextDay}
         disabled={selectedDate >= todayStr}
-        className="p-2 rounded-lg hover:bg-slate-100 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+        className="flex h-11 w-11 items-center justify-center rounded-lg hover:bg-slate-100 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
         aria-label="Próximo dia"
       >
         <ChevronRight size={20} className="text-slate-600" />

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import Link from "next/link";
 import { Plus, Search, Trophy, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -169,14 +170,8 @@ export function OpponentsTab({ ageGroupId }: OpponentsTabProps) {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filtered.map((o) => (
-                <tr
-                  key={o.id}
-                  onClick={() => {
-                    saveReturnTo();
-                    router.push(`/teams/${ageGroupId}/opponents/${o.id}`);
-                  }}
-                  className="cursor-pointer hover:bg-slate-50"
-                >
+                // Linha navegavel: tr relative + Link com after:inset-0 a cobrir a linha
+                <tr key={o.id} className="relative hover:bg-slate-50">
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-2">
                       {o.logo_url ? (
@@ -200,7 +195,13 @@ export function OpponentsTab({ ageGroupId }: OpponentsTabProps) {
                             o.name.slice(0, 2).toUpperCase()}
                         </div>
                       )}
-                      <span className="font-medium text-slate-900">{o.name}</span>
+                      <Link
+                        href={`/teams/${ageGroupId}/opponents/${o.id}`}
+                        onClick={saveReturnTo}
+                        className="font-medium text-slate-900 after:absolute after:inset-0 focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-emerald-500"
+                      >
+                        {o.name}
+                      </Link>
                     </div>
                   </td>
                   <td className="px-3 py-2 text-slate-600">{o.short_name || "—"}</td>

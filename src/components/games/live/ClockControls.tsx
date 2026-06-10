@@ -67,7 +67,8 @@ export function ClockControls({
         <span className="text-sm font-medium text-slate-600 flex-1">Minuto de jogo</span>
         <button
           onClick={() => adjustClockBySeconds(-60)}
-          className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center"
+          aria-label="Recuar um minuto"
+          className="h-11 w-11 rounded-full bg-slate-200 flex items-center justify-center"
         >
           <Minus size={14} />
         </button>
@@ -109,7 +110,8 @@ export function ClockControls({
         />
         <button
           onClick={() => adjustClockBySeconds(60)}
-          className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center"
+          aria-label="Avancar um minuto"
+          className="h-11 w-11 rounded-full bg-slate-200 flex items-center justify-center"
         >
           <Plus size={14} />
         </button>

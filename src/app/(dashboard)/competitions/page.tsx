@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { formatGameDateTimeParts, parseGameDateTime } from "@/lib/events/time";
 import {
@@ -91,7 +91,6 @@ type EditingComp = {
 
 export default function CompetitionsPage() {
   const supabase = useMemo(() => createClient(), []);
-  const router = useRouter();
   const { selectedAgeGroupId: contextAgeGroupId } = useAgeGroup();
 
   const [loading, setLoading] = useState(true);
@@ -426,7 +425,7 @@ export default function CompetitionsPage() {
                           onClick={() => shiftCompetitionWindow(comp.id, "up")}
                           disabled={!canMoveUp}
                           aria-label="Ver jogos acima"
-                          className={`flex h-7 w-7 items-center justify-center rounded-full border transition-colors ${
+                          className={`flex h-11 w-11 items-center justify-center rounded-full border transition-colors ${
                             canMoveUp
                               ? "border-slate-200 text-slate-500 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700"
                               : "border-slate-100 text-slate-300 opacity-50"
@@ -443,9 +442,9 @@ export default function CompetitionsPage() {
                           game.formatted_address,
                         );
                         return (
-                          <button
+                          <Link
                             key={game.id}
-                            onClick={() => router.push(`/games/${game.id}`)}
+                            href={`/games/${game.id}`}
                             className={`w-full flex items-center gap-3 p-3 rounded-xl transition-colors text-left ${
                               isClosed
                                 ? "bg-white border border-slate-100 hover:bg-slate-50"
@@ -509,7 +508,7 @@ export default function CompetitionsPage() {
                               </span>
                             )}
                             <ChevronRight size={14} className="text-slate-300" />
-                          </button>
+                          </Link>
                         );
                       })}
 
@@ -519,7 +518,7 @@ export default function CompetitionsPage() {
                           onClick={() => shiftCompetitionWindow(comp.id, "down")}
                           disabled={!canMoveDown}
                           aria-label="Ver jogos abaixo"
-                          className={`flex h-7 w-7 items-center justify-center rounded-full border transition-colors ${
+                          className={`flex h-11 w-11 items-center justify-center rounded-full border transition-colors ${
                             canMoveDown
                               ? "border-slate-200 text-slate-500 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700"
                               : "border-slate-100 text-slate-300 opacity-50"
