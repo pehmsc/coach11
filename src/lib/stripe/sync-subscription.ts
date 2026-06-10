@@ -3,6 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type Stripe from "stripe";
 import { getStripeClient } from "@/lib/stripe/client";
+import { PURGE_CLEAR_FIELDS } from "@/lib/stripe/purge-schedule";
 
 export interface SyncResult {
   ok: boolean;
@@ -70,6 +71,13 @@ export async function syncSubscriptionFromSession(
     ? new Date(subscription.trial_end * 1000).toISOString()
     : null;
 
+  // Purga RGPD: novo checkout com subscricao activa e uma reactivacao —
+  // limpa agendamento e flags de aviso. Este caminho nunca agenda purga
+  // (so o webhook o faz, para o email d0 disparar exactamente uma vez).
+  const isReactivation =
+    !subscription.cancel_at_period_end &&
+    (subscription.status === "active" || subscription.status === "trialing");
+
   const { error: updErr } = await admin
     .from("clubs")
     .update({
@@ -79,6 +87,7 @@ export async function syncSubscriptionFromSession(
       subscription_current_period_end: periodEnd,
       trial_ends_at: trialEnd,
       subscription_cancel_at_period_end: subscription.cancel_at_period_end,
+      ...(isReactivation ? PURGE_CLEAR_FIELDS : {}),
     })
     .eq("id", clubId);
 
