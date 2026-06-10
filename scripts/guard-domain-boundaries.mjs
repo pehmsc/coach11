@@ -123,6 +123,12 @@ const SRC_ALLOWED_EXCEPTIONS = new Map([
   ["src/app/billing/success/page.tsx", new Set(["src-admin-client"])],
   // TRIAL_REMINDER_CRON: envia email no dia 5 antes do fim do trial — admin client por cron sem sessao de utilizador
   ["src/app/api/notifications/cron/trial-reminder/route.ts", new Set(["src-admin-client"])],
+  // GDPR_PURGE_CRON: purga RGPD diaria (avisos d30/d53 + purgas vencidas) — cron sem sessao de utilizador (padrao CRON/SERVICE)
+  ["src/app/api/maintenance/purge/route.ts", new Set(["src-admin-client"])],
+  // CLUB_DATA_DELETE: extraccao 1:1 do DELETE /api/club (que ja detinha src-club-id-filter) —
+  // apagar/purgar TODOS os dados de um clube e a unica operacao legitimamente club-scoped
+  ["src/lib/club/delete-club-data.ts", new Set(["src-club-id-filter"])],
+  ["src/lib/club/purge-club-data.ts", new Set(["src-club-id-filter"])],
 ]);
 
 const MIGRATION_ALLOWED_EXCEPTIONS = new Map([
