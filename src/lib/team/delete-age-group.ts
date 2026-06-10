@@ -435,6 +435,9 @@ export async function deleteAgeGroupCascade(
 
   await removeStoragePrefix(admin, "event-images", ageGroupId);
   await removeStoragePrefix(admin, "club-logos", ageGroupId);
+  // Fotos de atletas (PII de menores): path canonico {ageGroupId}/{playerId}.webp.
+  // Sem esta limpeza, as fotos ficavam orfas no bucket privado apos apagar o escalao.
+  await removeStoragePrefix(admin, "players-photos", ageGroupId);
   await cleanupClubMembershipsAfterAgeGroupDelete(
     admin,
     typeof ageGroup.club_id === "string" ? ageGroup.club_id : null,
