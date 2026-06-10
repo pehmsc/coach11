@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { AuthRecoveryGate } from "@/components/auth/AuthRecoveryGate";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { hasSupabaseAuthCookies } from "@/lib/supabase/auth-cookie";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { Sidebar } from "@/components/layout/Sidebar";
@@ -45,9 +44,11 @@ export default async function DashboardLayout({
   // Subscription guard: bloqueia acesso ao dashboard se Individual sem subscricao
   // activa. Clubes sales-led (plan_type='club') ignoram. Super-coordinator
   // bypass (admin platforma).
+  // Session client: RLS cobre ambas as leituras (club_memberships_own_select
+  // e club_members_can_read, TO authenticated). Sem linha (onboarding,
+  // sem clube) o maybeSingle devolve null e o guard nao bloqueia o layout.
   if (!profile?.is_super_coordinator) {
-    const subAdmin = createAdminClient();
-    const { data: subMembership } = await subAdmin
+    const { data: subMembership } = await supabase
       .from("club_memberships")
       .select("club_id")
       .eq("profile_id", user.id)
@@ -55,7 +56,7 @@ export default async function DashboardLayout({
       .maybeSingle();
 
     if (subMembership?.club_id) {
-      const { data: subClub } = await subAdmin
+      const { data: subClub } = await supabase
         .from("clubs")
         .select(
           "plan_type, subscription_status, trial_ends_at, subscription_current_period_end, subscription_cancel_at_period_end",
