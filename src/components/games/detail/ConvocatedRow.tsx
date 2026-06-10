@@ -77,11 +77,11 @@ export function ConvocatedRow({
           <p className="text-xs text-amber-600">{player.sameDayInfoLabel}</p>
         ) : null}
       </div>
-      {/* Toggle lineup badge */}
+      {/* Toggle lineup badge — hit area 44px de altura via before:-inset-y (pill 26px + 9px por lado) */}
       <button
         onClick={onToggleLineup}
         disabled={savingLineup || disabled}
-        className={`text-xs font-semibold px-2.5 py-1 rounded-full flex-shrink-0 transition-colors ${
+        className={`relative text-xs font-semibold px-2.5 py-1 min-w-11 rounded-full flex-shrink-0 transition-colors before:absolute before:-inset-y-[9px] before:inset-x-0 before:content-[''] ${
           isGk
             ? "bg-yellow-100 text-yellow-700 hover:bg-yellow-200"
             : isStarter
@@ -91,11 +91,11 @@ export function ConvocatedRow({
       >
         {savingLineup ? "..." : badgeLabel}
       </button>
-      {/* Remove from convocatória */}
+      {/* Remove from convocatória — accao de campo, alvo 44x44 (margem negativa para nao crescer a linha) */}
       <button
         onClick={onRemove}
         disabled={savingToggle || disabled}
-        className="p-1 hover:bg-red-50 rounded-lg group flex-shrink-0"
+        className="flex h-11 w-11 -my-2 items-center justify-center hover:bg-red-50 rounded-lg group flex-shrink-0"
         title="Remover da convocatória"
       >
         {savingToggle ? (

@@ -68,7 +68,7 @@ export function DashboardEventsWindow({ events, anchorTs }: Props) {
           type="button"
           onClick={() => setStartIndex((current) => clamp(current - 1, 0, maxStart))}
           disabled={startIndex <= 0}
-          className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:border-slate-300 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40"
+          className="inline-flex min-h-11 items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:border-slate-300 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40"
         >
           <ChevronUp size={14} />
           Eventos anteriores
@@ -168,7 +168,7 @@ export function DashboardEventsWindow({ events, anchorTs }: Props) {
           type="button"
           onClick={() => setStartIndex((current) => clamp(current + 1, 0, maxStart))}
           disabled={startIndex >= maxStart}
-          className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:border-slate-300 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40"
+          className="inline-flex min-h-11 items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:border-slate-300 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40"
         >
           Eventos seguintes
           <ChevronDown size={14} />

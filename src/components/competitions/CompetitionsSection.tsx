@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatGameDateTimeParts, parseGameDateTime } from "@/lib/events/time";
 import {
@@ -99,7 +98,6 @@ function gameResultLabel(game: GameRow) {
 
 export function CompetitionsSection({ ageGroupId }: Props) {
   const supabase = useMemo(() => createClient(), []);
-  const router = useRouter();
   const { football_format: footballFormat } = useAgeGroupMeta(ageGroupId);
   const [state, setState] = useState<FetchState>({ status: "loading" });
   const [teamId, setTeamId] = useState<string | null>(null);
@@ -336,7 +334,7 @@ export function CompetitionsSection({ ageGroupId }: Props) {
                           onClick={() => shiftCompetitionWindow(comp.id, "up")}
                           disabled={!canMoveUp}
                           aria-label="Ver jogos acima"
-                          className={`flex h-7 w-7 items-center justify-center rounded-full border transition-colors ${
+                          className={`flex h-11 w-11 items-center justify-center rounded-full border transition-colors ${
                             canMoveUp
                               ? "border-slate-200 text-slate-500 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700"
                               : "border-slate-100 text-slate-300 opacity-50"
@@ -353,12 +351,9 @@ export function CompetitionsSection({ ageGroupId }: Props) {
                           game.formatted_address ?? undefined,
                         );
                         return (
-                          <button
+                          <Link
                             key={game.id}
-                            type="button"
-                            onClick={() =>
-                              router.push(`/teams/${ageGroupId}/games/${game.id}`)
-                            }
+                            href={`/teams/${ageGroupId}/games/${game.id}`}
                             className={`w-full flex items-center gap-3 p-3 rounded-xl transition-colors text-left ${
                               isClosed
                                 ? "bg-white border border-slate-100 hover:bg-slate-50"
@@ -425,7 +420,7 @@ export function CompetitionsSection({ ageGroupId }: Props) {
                               </span>
                             )}
                             <ChevronRight size={14} className="text-slate-300" />
-                          </button>
+                          </Link>
                         );
                       })}
 
@@ -435,7 +430,7 @@ export function CompetitionsSection({ ageGroupId }: Props) {
                           onClick={() => shiftCompetitionWindow(comp.id, "down")}
                           disabled={!canMoveDown}
                           aria-label="Ver jogos abaixo"
-                          className={`flex h-7 w-7 items-center justify-center rounded-full border transition-colors ${
+                          className={`flex h-11 w-11 items-center justify-center rounded-full border transition-colors ${
                             canMoveDown
                               ? "border-slate-200 text-slate-500 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700"
                               : "border-slate-100 text-slate-300 opacity-50"

@@ -7,7 +7,8 @@ import { TrainingSessionCard } from "./TrainingSessionCard";
 interface TrainingSessionListProps {
   sessions: TrainingRow[];
   getSummary: (sessionId: string) => AttendanceSummary | null;
-  onSessionClick: (session: TrainingRow) => void;
+  getSessionHref: (session: TrainingRow) => string;
+  onNavigate?: () => void;
   onDuplicate?: (session: TrainingRow) => void;
   variant?: "open" | "closed";
 }
@@ -15,7 +16,8 @@ interface TrainingSessionListProps {
 export function TrainingSessionList({
   sessions,
   getSummary,
-  onSessionClick,
+  getSessionHref,
+  onNavigate,
   onDuplicate,
   variant = "open",
 }: TrainingSessionListProps) {
@@ -45,7 +47,8 @@ export function TrainingSessionList({
                 session={session}
                 summary={getSummary(session.id)}
                 variant={variant}
-                onSessionClick={onSessionClick}
+                href={getSessionHref(session)}
+                onNavigate={onNavigate}
                 onDuplicate={onDuplicate}
               />
             ))}

@@ -815,7 +815,8 @@ export function PlayersSection({
 
                     <button
                       onClick={() => openEdit(player)}
-                      className="text-slate-400 hover:text-emerald-600 transition-colors p-1 flex-shrink-0"
+                      title="Editar jogador"
+                      className="flex h-11 w-11 -my-2 items-center justify-center text-slate-400 hover:text-emerald-600 transition-colors flex-shrink-0"
                     >
                       <Pencil size={16} />
                     </button>

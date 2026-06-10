@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   extractTimeFromDateTime,
   formatGameDateTime,
@@ -117,7 +117,6 @@ export function GamesSection({
   overrideAgeGroupId,
   returnToKey = "games",
 }: Props) {
-  const router = useRouter();
   const { saveReturnTo } = useReturnTo(returnToKey);
   useScrollRestoration(returnToKey);
   // overrideAgeGroupId forca um escalao (sub-rota /teams/[id]).
@@ -427,14 +426,12 @@ export function GamesSection({
                   key={game.id}
                   game={game}
                   onDuplicate={() => openDuplicateGame(game)}
-                  onClick={() => {
-                    saveReturnTo();
-                    router.push(
-                      overrideAgeGroupId
-                        ? `/teams/${overrideAgeGroupId}/games/${game.id}`
-                        : `/games/${game.id}`,
-                    );
-                  }}
+                  href={
+                    overrideAgeGroupId
+                      ? `/teams/${overrideAgeGroupId}/games/${game.id}`
+                      : `/games/${game.id}`
+                  }
+                  onNavigate={saveReturnTo}
                 />
               ))}
             </div>
@@ -444,6 +441,8 @@ export function GamesSection({
         <section className="rounded-2xl border border-slate-200 bg-white">
           <button
             type="button"
+            aria-expanded={closedGamesExpanded}
+            aria-controls="closed-games-panel"
             onClick={() => setClosedGamesExpanded(!closedGamesExpanded)}
             className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left"
           >
@@ -462,7 +461,10 @@ export function GamesSection({
           </button>
 
           {closedGamesExpanded && (
-            <div className="space-y-6 border-t border-slate-100 px-4 py-4">
+            <div
+              id="closed-games-panel"
+              className="space-y-6 border-t border-slate-100 px-4 py-4"
+            >
               {groupedPastGames.length === 0 ? (
                 <p className="text-sm text-slate-500">
                   Ainda não existem jogos terminados.
@@ -480,14 +482,12 @@ export function GamesSection({
                           game={game}
                           className="border-slate-100 bg-slate-50 hover:border-slate-200"
                           onDuplicate={() => openDuplicateGame(game)}
-                          onClick={() => {
-                            saveReturnTo();
-                            router.push(
-                              overrideAgeGroupId
-                                ? `/teams/${overrideAgeGroupId}/games/${game.id}`
-                                : `/games/${game.id}`,
-                            );
-                          }}
+                          href={
+                            overrideAgeGroupId
+                              ? `/teams/${overrideAgeGroupId}/games/${game.id}`
+                              : `/games/${game.id}`
+                          }
+                          onNavigate={saveReturnTo}
                         />
                       ))}
                     </div>
@@ -516,12 +516,14 @@ export function GamesSection({
 function GameCard({
   game,
   className,
-  onClick,
+  href,
+  onNavigate,
   onDuplicate,
 }: {
   game: GameRow;
   className?: string;
-  onClick: () => void;
+  href: string;
+  onNavigate: () => void;
   onDuplicate: () => void;
 }) {
   const parts = formatGameDateTimeParts(game.game_datetime);
@@ -530,10 +532,11 @@ function GameCard({
     game.score_home != null &&
     game.score_away != null;
 
+  // Linha navegavel: o <Link> cobre o cartao via pseudo-elemento (after:inset-0);
+  // as accoes internas ficam como irmaos com z-10 para nao aninhar button em anchor.
   return (
-    <button
-      onClick={onClick}
-      className={`w-full flex items-center gap-3 rounded-2xl border p-4 text-left transition-all hover:shadow-sm ${className ?? "bg-white border-slate-100 hover:border-slate-200"}`}
+    <div
+      className={`relative w-full flex items-center gap-3 rounded-2xl border p-4 text-left transition-all hover:shadow-sm ${className ?? "bg-white border-slate-100 hover:border-slate-200"}`}
     >
       <div className="flex-shrink-0 w-12 text-center">
         <p className="text-lg font-bold text-slate-900 leading-none">
@@ -556,7 +559,11 @@ function GameCard({
         </span>
       </div>
 
-      <div className="flex-1 min-w-0">
+      <Link
+        href={href}
+        onClick={onNavigate}
+        className="flex-1 min-w-0 after:absolute after:inset-0 after:rounded-2xl focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-emerald-500"
+      >
         <div className="flex items-center gap-1.5 flex-wrap">
           {game.title && (
             <span className="text-[10px] font-bold bg-blue-100 text-blue-700 rounded px-1.5 py-0.5">
@@ -582,17 +589,15 @@ function GameCard({
             {resolveLocationLabel(game.location, game.formatted_address)}
           </p>
         )}
-      </div>
+      </Link>
 
       {hasResult ? (
         <div className="flex flex-shrink-0 items-center gap-2">
+          {/* Hit area 44px via before:-inset (26px visuais + 9px por lado) */}
           <button
             type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              onDuplicate();
-            }}
-            className="rounded-full bg-slate-100 p-1.5 text-slate-600 transition-colors hover:bg-slate-200"
+            onClick={onDuplicate}
+            className="relative z-10 rounded-full bg-slate-100 p-1.5 text-slate-600 transition-colors hover:bg-slate-200 before:absolute before:-inset-[9px] before:content-['']"
             title="Duplicar jogo"
           >
             <Copy size={14} />
@@ -605,13 +610,11 @@ function GameCard({
         </div>
       ) : (
         <div className="flex flex-shrink-0 items-center gap-2">
+          {/* Hit area 44px via before:-inset (26px visuais + 9px por lado) */}
           <button
             type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              onDuplicate();
-            }}
-            className="rounded-full bg-slate-100 p-1.5 text-slate-600 transition-colors hover:bg-slate-200"
+            onClick={onDuplicate}
+            className="relative z-10 rounded-full bg-slate-100 p-1.5 text-slate-600 transition-colors hover:bg-slate-200 before:absolute before:-inset-[9px] before:content-['']"
             title="Duplicar jogo"
           >
             <Copy size={14} />
@@ -619,6 +622,6 @@ function GameCard({
           <ChevronRight size={16} className="text-slate-300" />
         </div>
       )}
-    </button>
+    </div>
   );
 }

@@ -390,7 +390,7 @@ export function TrainingDetailView({ trainingId, scope }: Props) {
             {canEditSession && !editing && (
               <button
                 onClick={() => { editForm.populateFromSource(session, "edit"); setEditing(true); }}
-                className="p-1.5 rounded-full bg-white/20 hover:bg-white/30 transition-colors"
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-white/20 hover:bg-white/30 transition-colors"
                 title="Editar treino"
               >
                 <Pencil size={14} />
@@ -398,7 +398,7 @@ export function TrainingDetailView({ trainingId, scope }: Props) {
             )}
             <button
               onClick={() => { editForm.populateFromSource(session, "duplicate"); setDuplicateModalOpen(true); }}
-              className="p-1.5 rounded-full bg-white/20 hover:bg-white/30 transition-colors"
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-white/20 hover:bg-white/30 transition-colors"
               title="Duplicar treino"
             >
               <Copy size={14} />
@@ -406,7 +406,7 @@ export function TrainingDetailView({ trainingId, scope }: Props) {
             {canDelete && (
               <button
                 onClick={() => setShowDeleteConfirm(true)}
-                className="p-1.5 rounded-full bg-red-500/80 hover:bg-red-500 transition-colors"
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-red-500/80 hover:bg-red-500 transition-colors"
                 title="Apagar treino"
               >
                 <Trash2 size={14} />
@@ -587,7 +587,7 @@ function TabBtn({ active, label, count, onClick }: { active: boolean; label: str
     <button
       type="button"
       onClick={onClick}
-      className={`relative px-4 py-2.5 text-sm font-medium transition-colors ${active ? "text-emerald-700" : "text-slate-500 hover:text-slate-700"}`}
+      className={`relative min-h-11 px-4 py-2.5 text-sm font-medium transition-colors ${active ? "text-emerald-700" : "text-slate-500 hover:text-slate-700"}`}
     >
       {label}
       {count != null && (

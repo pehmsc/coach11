@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, use } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { formatGameDateTimeParts } from "@/lib/events/time";
 import {
   AlertTriangle,
@@ -878,8 +879,6 @@ function HistoricoTab({
   stats: GamesPayload["stats"] | null;
   loading: boolean;
 }) {
-  const router = useRouter();
-
   if (loading) {
     return (
       <div className="flex items-center justify-center py-10 text-slate-500">
@@ -937,35 +936,36 @@ function HistoricoTab({
                     : null;
             const competitionName = g.competitions?.name ?? null;
             return (
-              <li
-                key={g.id}
-                onClick={() => router.push(`/games/${g.id}`)}
-                className="cursor-pointer rounded-xl border border-slate-100 bg-white p-3 hover:border-slate-200 hover:shadow-sm"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-xs text-slate-400">
-                      {dateLabel}
-                      {competitionName ? ` · ${competitionName}` : ""}
-                      {g.title ? ` · ${g.title}` : ""}
-                    </p>
-                    <p className="text-sm font-semibold text-slate-900">
-                      {g.is_home ? "Casa" : "Fora"}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <span className="text-base font-bold text-slate-900">
-                      {score}
-                    </span>
-                    {resultBadge && (
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-xs font-semibold ${resultBadge.color}`}
-                      >
-                        {resultBadge.label}
+              <li key={g.id}>
+                <Link
+                  href={`/games/${g.id}`}
+                  className="block rounded-xl border border-slate-100 bg-white p-3 hover:border-slate-200 hover:shadow-sm"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-xs text-slate-400">
+                        {dateLabel}
+                        {competitionName ? ` · ${competitionName}` : ""}
+                        {g.title ? ` · ${g.title}` : ""}
+                      </p>
+                      <p className="text-sm font-semibold text-slate-900">
+                        {g.is_home ? "Casa" : "Fora"}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className="text-base font-bold text-slate-900">
+                        {score}
                       </span>
-                    )}
+                      {resultBadge && (
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-xs font-semibold ${resultBadge.color}`}
+                        >
+                          {resultBadge.label}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                </div>
+                </Link>
               </li>
             );
           })}

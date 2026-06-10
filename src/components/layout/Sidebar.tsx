@@ -56,10 +56,10 @@ export function Sidebar({
     >
       {/* Logo */}
       <div className="p-6 border-b border-slate-800">
-        <h1 className="text-2xl font-bold">
+        <p className="text-2xl font-bold">
           <span className="text-white">COACH</span>
           <span className="text-emerald-400">11</span>
-        </h1>
+        </p>
         {profile && (
           <div className="mt-3 flex items-center gap-2.5 min-w-0">
             <UserAvatar
