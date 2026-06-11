@@ -69,6 +69,12 @@ describe("SEC-05 — Password mínima de 10 caracteres", () => {
     const content = readSrc("app/(auth)/register/page.tsx");
     expect(content).toContain("password.length < 10");
   });
+
+  it("update-password/page.tsx usa o schema partilhado para password", () => {
+    const content = readSrc("app/(auth)/auth/update-password/page.tsx");
+    expect(content).toContain('from "@/lib/auth/password-schema"');
+    expect(content).toMatch(/passwordSchema\.safeParse\(/);
+  });
 });
 
 // ─── SEC-07: Chave de cifra sem fallback para SERVICE_ROLE_KEY ────────────────
