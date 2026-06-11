@@ -54,8 +54,6 @@ export default function SettingsPage() {
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
 
-  // Password
-  const [sendingReset, setSendingReset] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [deletingAccount, setDeletingAccount] = useState(false);
@@ -205,30 +203,6 @@ export default function SettingsPage() {
     setProfile((prev) => prev ? { ...prev, avatar_url: avatarUrl } : prev);
     toast.success("Foto atualizada");
     setUploadingAvatar(false);
-  }
-
-  async function handlePasswordReset() {
-    if (!profile) return;
-    setSendingReset(true);
-
-    const { data: userData } = await supabase.auth.getUser();
-    const email = userData.user?.email;
-    if (!email) {
-      toast.error("Email não encontrado");
-      setSendingReset(false);
-      return;
-    }
-
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth/callback/client`,
-    });
-
-    if (error) {
-      toast.error("Erro ao enviar email: " + error.message);
-    } else {
-      toast.success("Email de redefinição enviado para " + email);
-    }
-    setSendingReset(false);
   }
 
   function isValidEmail(value: string) {
@@ -505,18 +479,10 @@ export default function SettingsPage() {
                 </CardHeader>
                 <CardContent>
                   <p className="text-sm text-slate-500 mb-3">
-                    Recebe um email para redefinir a tua palavra-passe.
+                    Define uma nova palavra-passe para a tua conta.
                   </p>
-                  <Button
-                    variant="outline"
-                    onClick={handlePasswordReset}
-                    disabled={sendingReset}
-                    className="w-full"
-                  >
-                    {sendingReset ? (
-                      <Loader2 size={16} className="animate-spin mr-2" />
-                    ) : null}
-                    Alterar palavra-passe
+                  <Button asChild variant="outline" className="w-full">
+                    <Link href="/auth/update-password">Alterar palavra-passe</Link>
                   </Button>
                   <div className="mt-4 pt-4 border-t border-slate-100">
                     {hasManagedAgeGroups ? (

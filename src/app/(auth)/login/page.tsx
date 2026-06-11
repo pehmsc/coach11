@@ -66,6 +66,13 @@ function LoginForm() {
     };
   }
 
+  function buildForgotPasswordHref() {
+    const currentEmail = email.trim();
+    return currentEmail
+      ? `/auth/forgot-password?email=${encodeURIComponent(currentEmail)}`
+      : "/auth/forgot-password";
+  }
+
   function buildAuthHref(pathname: "/login" | "/register") {
     const params = new URLSearchParams();
     if (inviteCode) params.set("code", inviteCode);
@@ -276,6 +283,14 @@ function LoginForm() {
               onChange={(e) => setPassword(e.target.value)}
               required
             />
+            <p className="text-right text-sm">
+              <Link
+                href={buildForgotPasswordHref()}
+                className="text-emerald-600 hover:underline"
+              >
+                Esqueci-me da palavra-passe
+              </Link>
+            </p>
           </div>
         </CardContent>
 
