@@ -15,7 +15,9 @@ import {
  * linha de clubs fosse apagada — e nunca e: invoices.club_id e RESTRICT,
  * retencao legal de faturacao):
  * - linhas com club_id sem escalao (exercises de clube, opponents,
- *   age_group_categories, notification_inbox)
+ *   age_group_categories, notifications — notification_inbox e uma VIEW
+ *   sobre notification_recipients JOIN notifications, nao aceita DELETE;
+ *   apagar notifications limpa recipients via FK ON DELETE CASCADE)
  * - storage por prefixo {ageGroupId}: exercise-images e opponent-logos
  *   (players-photos/event-images/club-logos ja saem na cascata partilhada)
  *
@@ -48,7 +50,6 @@ const CLUB_SCOPED_TABLES = [
   "kit_pieces",
   "lineup_corrections_log",
   "microciclos",
-  "notification_inbox",
   "notifications",
   "opponents",
   "player_age_group_eligibility",
@@ -78,12 +79,17 @@ const CLUB_SCOPED_TABLES = [
 // - grounds:             delete por age_group_id, coluna que NAO existe no
 //   schema actual (grounds so tem created_by) — no-op tolerado nos dois lados
 
-/** Residuos club-level que a cascata por escalao nao cobre. */
+/**
+ * Residuos club-level que a cascata por escalao nao cobre. Apenas TABELAS
+ * base — notification_inbox e uma view (DELETE impossivel); o sweep de
+ * notifications por club_id limpa-a indirectamente (recipients caem por
+ * FK ON DELETE CASCADE).
+ */
 const CLUB_LEVEL_SWEEP_TABLES = [
   "exercises",
   "opponents",
   "age_group_categories",
-  "notification_inbox",
+  "notifications",
 ] as const;
 
 const PURGE_STORAGE_BUCKETS_BY_AGE_GROUP = [
@@ -135,8 +141,15 @@ async function resolveCount(
   return count ?? 0;
 }
 
-function countQuery(admin: SupabaseClient, table: string) {
-  return admin.from(table).select("id", { count: "exact" }).limit(1);
+/**
+ * O select usa a PROPRIA coluna de filtro, nunca "id": club_memberships
+ * (PK composta) e game_live_checkpoints nao tem coluna id — com select=id
+ * o 42703 era tolerado como erro de schema e essas tabelas saiam
+ * silenciosamente do audit. A coluna de filtro existe por construcao
+ * (e a mesma do eq/in aplicado a seguir).
+ */
+function countQuery(admin: SupabaseClient, table: string, filterColumn: string) {
+  return admin.from(table).select(filterColumn, { count: "exact" }).limit(1);
 }
 
 /**
@@ -154,7 +167,7 @@ export async function snapshotClubDataCounts(
 
   for (const table of CLUB_SCOPED_TABLES) {
     const count = await resolveCount(
-      countQuery(admin, table).eq("club_id", clubId),
+      countQuery(admin, table, "club_id").eq("club_id", clubId),
       table,
     );
     if (count !== null) counts[table] = count;
@@ -167,13 +180,19 @@ export async function snapshotClubDataCounts(
     counts.grounds = 0;
   } else {
     const pstCount = await resolveCount(
-      countQuery(admin, "public_share_tokens").in("age_group_id", ageGroupIds),
+      countQuery(admin, "public_share_tokens", "age_group_id").in(
+        "age_group_id",
+        ageGroupIds,
+      ),
       "public_share_tokens",
     );
     if (pstCount !== null) counts.public_share_tokens = pstCount;
 
     const betaCount = await resolveCount(
-      countQuery(admin, "beta_invites").in("target_age_group_id", ageGroupIds),
+      countQuery(admin, "beta_invites", "target_age_group_id").in(
+        "target_age_group_id",
+        ageGroupIds,
+      ),
       "beta_invites",
     );
     if (betaCount !== null) counts.beta_invites = betaCount;
@@ -181,7 +200,10 @@ export async function snapshotClubDataCounts(
     // No schema actual, grounds nao tem age_group_id — resolve a null
     // (omitido do audit), tal como o delete e um no-op tolerado.
     const groundsCount = await resolveCount(
-      countQuery(admin, "grounds").in("age_group_id", ageGroupIds),
+      countQuery(admin, "grounds", "age_group_id").in(
+        "age_group_id",
+        ageGroupIds,
+      ),
       "grounds",
     );
     if (groundsCount !== null) counts.grounds = groundsCount;
@@ -207,7 +229,10 @@ export async function snapshotClubDataCounts(
     counts.matchdays = 0;
   } else {
     const matchdaysCount = await resolveCount(
-      countQuery(admin, "matchdays").in("competition_id", competitionIds),
+      countQuery(admin, "matchdays", "competition_id").in(
+        "competition_id",
+        competitionIds,
+      ),
       "matchdays",
     );
     if (matchdaysCount !== null) counts.matchdays = matchdaysCount;

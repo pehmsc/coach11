@@ -545,7 +545,13 @@ export interface GdprPurgeAudit {
   scheduled_at: string | null;
   executed_at: string;
   dry_run: boolean;
-  deleted_counts: Record<string, number>;
+  /**
+   * Counts por tabela + chaves reservadas de estado (sem migration):
+   * _status: "simulated" | "completed" | "failed" (failed = possivelmente
+   * parcial); _error: mensagem quando _status="failed". Linhas anteriores
+   * a Jun2026 nao tem _status (eram sempre execucoes completas).
+   */
+  deleted_counts: Record<string, number | string>;
   created_at: string;
 }
 

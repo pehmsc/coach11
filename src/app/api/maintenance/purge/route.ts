@@ -130,10 +130,24 @@ export async function GET(request: NextRequest) {
       const ageGroupIds = await listClubAgeGroupIds(admin, fresh.id);
       const counts = await snapshotClubDataCounts(admin, fresh.id, ageGroupIds);
 
+      // Rasto garantido: o audit e escrito MESMO quando a purga falha a
+      // meio (eliminacao possivelmente parcial) — nunca pode haver
+      // eliminacao sem registo. _status/_error vivem dentro do jsonb
+      // deleted_counts para nao exigir migration.
+      let purgeError: string | null = null;
       if (!dryRun) {
-        await purgeClubData(admin, fresh.id, ageGroupIds);
+        try {
+          await purgeClubData(admin, fresh.id, ageGroupIds);
+        } catch (err) {
+          purgeError =
+            err instanceof Error ? err.message : "falha desconhecida";
+          console.error(
+            `[purge-cron] purga do clube ${fresh.id} falhou: ${purgeError}`,
+          );
+        }
       }
 
+      const status = dryRun ? "simulated" : purgeError ? "failed" : "completed";
       const { error: auditErr } = await admin.from("gdpr_purge_audit").insert({
         club_id: fresh.id,
         club_name: fresh.name,
@@ -142,14 +156,26 @@ export async function GET(request: NextRequest) {
         scheduled_at: fresh.data_purge_scheduled_at,
         executed_at: new Date().toISOString(),
         dry_run: dryRun,
-        deleted_counts: counts,
+        deleted_counts: {
+          ...counts,
+          _status: status,
+          ...(purgeError ? { _error: purgeError } : {}),
+        },
       });
       if (auditErr) {
         // Audit e prova de conformidade — falha tem de ficar visivel
         console.error(
           `[purge-cron] ERRO ao escrever audit do clube ${fresh.id}: ${auditErr.message}`,
         );
+      }
+
+      if (purgeError || auditErr) {
+        // Agendamento fica activo: o proximo cron volta a tentar (os deletes
+        // sao idempotentes) e a purga so fecha com audit escrito. Purga bem
+        // sucedida sem audit tambem NAO limpa — o retry de amanha conta
+        // zeros e escreve o rasto em falta.
         failed += 1;
+        continue;
       }
 
       if (dryRun) {
