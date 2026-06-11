@@ -7,6 +7,7 @@ import {
   normalizeEmail,
 } from "@/lib/auth/beta-access";
 import { upsertInviteAuthCredentials } from "@/lib/auth/invite-auth-user";
+import { passwordSchema } from "@/lib/auth/password-schema";
 import { sendWelcomeEmail } from "@/lib/email/send-welcome-email";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 
@@ -15,7 +16,7 @@ export const runtime = "nodejs";
 const RegisterSchema = z.object({
   fullName: z.string().min(1).max(120),
   email: z.string().email().max(254),
-  password: z.string().min(10, "A password deve ter pelo menos 10 caracteres.").max(200),
+  password: passwordSchema,
 });
 
 function mapRegisterError(message: string) {

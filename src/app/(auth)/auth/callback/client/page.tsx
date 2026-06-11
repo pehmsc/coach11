@@ -220,6 +220,12 @@ function OAuthCallbackClientContent() {
         finalRedirect = "/dashboard";
       }
 
+      // Sessão nascida de link de recuperação: definir nova password
+      // antes de continuar (sessões normais nunca trazem type=recovery).
+      if (otpType === "recovery") {
+        finalRedirect = "/auth/update-password";
+      }
+
       if (!cancelled) {
         markIOSInstallPromptAfterLogin();
         window.location.replace(finalRedirect);

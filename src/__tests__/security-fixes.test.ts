@@ -9,6 +9,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { join } from "path";
 import { z } from "zod";
+import { passwordSchema } from "../lib/auth/password-schema";
 
 const ROOT = join(import.meta.dirname, "..", "..");
 
@@ -47,17 +48,21 @@ describe("SEC-02 — CSP sem unsafe-eval", () => {
 // ─── SEC-05: Password mínima de 10 caracteres ─────────────────────────────────
 
 describe("SEC-05 — Password mínima de 10 caracteres", () => {
-  it("schema do servidor rejeita passwords com menos de 10 caracteres", () => {
-    const schema = z.object({
-      password: z.string().min(10).max(200),
-    });
+  it("schema partilhado rejeita passwords com menos de 10 caracteres", () => {
+    const schema = z.object({ password: passwordSchema });
     expect(schema.safeParse({ password: "123456789" }).success).toBe(false);
     expect(schema.safeParse({ password: "1234567890" }).success).toBe(true);
   });
 
-  it("register/route.ts usa min(10) para password", () => {
+  it("password-schema.ts define min(10)", () => {
+    const content = readSrc("lib/auth/password-schema.ts");
+    expect(content).toMatch(/z\s*\.string\(\)[\s\S]*\.min\(10/);
+  });
+
+  it("register/route.ts usa o schema partilhado para password", () => {
     const content = readSrc("app/api/auth/register/route.ts");
-    expect(content).toMatch(/password.*z\.string\(\).*min\(10/);
+    expect(content).toContain('from "@/lib/auth/password-schema"');
+    expect(content).toMatch(/password:\s*passwordSchema/);
   });
 
   it("register/page.tsx valida password com length < 10 no cliente", () => {
