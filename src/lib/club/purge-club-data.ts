@@ -68,13 +68,15 @@ const CLUB_SCOPED_TABLES = [
   "training_sessions",
 ] as const;
 
-/** Tabelas sem club_id mas apagadas pela cascata via escalao. */
-const AGE_GROUP_SCOPED_TABLES = [
-  "matchdays",
-  "grounds",
-  "public_share_tokens",
-  "beta_invites",
-] as const;
+// Tabelas sem club_id apagadas pela cascata via escalao tem counts
+// explicitos no snapshot: cada count replica EXACTAMENTE o filtro do delete
+// correspondente em deleteAgeGroupCascade — counts e eliminacao tem de
+// contar a mesma coisa (schema verificado em producao 2026-06-11):
+// - public_share_tokens: delete por age_group_id
+// - beta_invites:        delete por target_age_group_id
+// - matchdays:           delete por competition_id (competicoes do clube)
+// - grounds:             delete por age_group_id, coluna que NAO existe no
+//   schema actual (grounds so tem created_by) — no-op tolerado nos dois lados
 
 /** Residuos club-level que a cascata por escalao nao cobre. */
 const CLUB_LEVEL_SWEEP_TABLES = [
@@ -108,6 +110,36 @@ export async function listClubAgeGroupIds(
 }
 
 /**
+ * Conta com GET + limit(1) em vez de HEAD: respostas HEAD nao tem corpo,
+ * pelo que um erro de coluna/tabela inexistente chegava ao cliente sem
+ * code/message e nao era reconhecido por isSchemaCompatibilityError — o
+ * fail-closed disparava onde o delete correspondente faz skip tolerado.
+ * Devolve null quando o filtro nao existe no schema (mesmo no-op do delete);
+ * qualquer outro erro lanca (fail-closed: clube nao e purgado sem snapshot).
+ */
+async function resolveCount(
+  pending: PromiseLike<{ count: number | null; error: unknown }>,
+  table: string,
+): Promise<number | null> {
+  const { count, error } = await pending;
+  if (error) {
+    if (isSchemaCompatibilityError(error)) return null;
+    const message =
+      typeof error === "object" && error !== null && "message" in error
+        ? String((error as { message?: string }).message || "")
+        : "";
+    throw new Error(
+      `Erro ao contar ${table} para audit: ${message || "falha desconhecida"}`,
+    );
+  }
+  return count ?? 0;
+}
+
+function countQuery(admin: SupabaseClient, table: string) {
+  return admin.from(table).select("id", { count: "exact" }).limit(1);
+}
+
+/**
  * Snapshot de counts por tabela ANTES da purga — e isto que vai para o
  * audit log (counts-only, zero PII). Counts por club_id; linhas legacy com
  * club_id NULL podem ficar fora do count mas sao apagadas na mesma pela
@@ -121,35 +153,64 @@ export async function snapshotClubDataCounts(
   const counts: Record<string, number> = {};
 
   for (const table of CLUB_SCOPED_TABLES) {
-    const { count, error } = await admin
-      .from(table)
-      .select("*", { count: "exact", head: true })
-      .eq("club_id", clubId);
-    if (error) {
-      if (isSchemaCompatibilityError(error)) continue;
-      throw new Error(
-        `Erro ao contar ${table} para audit: ${error.message || "falha desconhecida"}`,
-      );
-    }
-    counts[table] = count ?? 0;
+    const count = await resolveCount(
+      countQuery(admin, table).eq("club_id", clubId),
+      table,
+    );
+    if (count !== null) counts[table] = count;
   }
 
-  for (const table of AGE_GROUP_SCOPED_TABLES) {
-    if (ageGroupIds.length === 0) {
-      counts[table] = 0;
-      continue;
-    }
-    const { count, error } = await admin
-      .from(table)
-      .select("*", { count: "exact", head: true })
-      .in("age_group_id", ageGroupIds);
-    if (error) {
-      if (isSchemaCompatibilityError(error)) continue;
-      throw new Error(
-        `Erro ao contar ${table} para audit: ${error.message || "falha desconhecida"}`,
-      );
-    }
-    counts[table] = count ?? 0;
+  // Sem club_id: replicar o filtro exacto do delete correspondente.
+  if (ageGroupIds.length === 0) {
+    counts.public_share_tokens = 0;
+    counts.beta_invites = 0;
+    counts.grounds = 0;
+  } else {
+    const pstCount = await resolveCount(
+      countQuery(admin, "public_share_tokens").in("age_group_id", ageGroupIds),
+      "public_share_tokens",
+    );
+    if (pstCount !== null) counts.public_share_tokens = pstCount;
+
+    const betaCount = await resolveCount(
+      countQuery(admin, "beta_invites").in("target_age_group_id", ageGroupIds),
+      "beta_invites",
+    );
+    if (betaCount !== null) counts.beta_invites = betaCount;
+
+    // No schema actual, grounds nao tem age_group_id — resolve a null
+    // (omitido do audit), tal como o delete e um no-op tolerado.
+    const groundsCount = await resolveCount(
+      countQuery(admin, "grounds").in("age_group_id", ageGroupIds),
+      "grounds",
+    );
+    if (groundsCount !== null) counts.grounds = groundsCount;
+  }
+
+  // matchdays: o delete vai por competition_id; usar as competicoes do clube.
+  const { data: comps, error: compsError } = await admin
+    .from("competitions")
+    .select("id")
+    .eq("club_id", clubId);
+  if (compsError && !isSchemaCompatibilityError(compsError)) {
+    throw new Error(
+      `Erro ao listar competicoes para audit: ${compsError.message || "falha desconhecida"}`,
+    );
+  }
+  const competitionIds = (comps || [])
+    .map((row) => (typeof row.id === "string" ? row.id : null))
+    .filter((id): id is string => !!id);
+
+  if (compsError) {
+    // competitions inexistente: o delete de matchdays tambem seria no-op — omitir.
+  } else if (competitionIds.length === 0) {
+    counts.matchdays = 0;
+  } else {
+    const matchdaysCount = await resolveCount(
+      countQuery(admin, "matchdays").in("competition_id", competitionIds),
+      "matchdays",
+    );
+    if (matchdaysCount !== null) counts.matchdays = matchdaysCount;
   }
 
   return counts;
