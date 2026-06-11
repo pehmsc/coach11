@@ -39,3 +39,20 @@ jobs:
 
       - name: Tests
         run: pnpm exec vitest run
+
+  db-regression:
+    name: DB Regression (pgTAP)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: 2.75.0
+
+      - name: Run regression pack
+        run: ./scripts/db/test-db.sh
