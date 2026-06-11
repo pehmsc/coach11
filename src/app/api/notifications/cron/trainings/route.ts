@@ -79,14 +79,17 @@ export async function GET(request: NextRequest) {
 
   const { data: endedSessions } = await admin
     .from("training_sessions")
-    .select("id, team_id, age_group_id, session_date, start_time, duration_minutes, title")
+    .select("id, team_id, age_group_id, session_date, start_time, title")
     .eq("status", "scheduled")
     .eq("session_date", toPortugalDateKey(now));
 
   if (endedSessions) {
     for (const session of endedSessions) {
       if (!session.team_id || !session.start_time) continue;
-      const duration = session.duration_minutes ?? 90;
+      // training_sessions nao tem duration_minutes — o select antigo com essa
+      // coluna fazia a query inteira falhar (42703) e o T2 nunca corria.
+      // Duracao assumida de 90 min; a janela de envio ja tolera +/-15 min.
+      const duration = 90;
       const startInstant = portugalDateTimeToUtc(
         session.session_date,
         session.start_time,
