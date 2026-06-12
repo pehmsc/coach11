@@ -116,10 +116,23 @@ export async function POST(request: Request) {
       .limit(1)
       .maybeSingle();
 
+    // O pre-lookup só vê o convite quando o email da sessão coincide
+    // (staff_invites_select_v1). Fallback à RPC por código para escolher o
+    // redeem certo e preservar a distinção código inválido vs email errado.
+    let inviteRole: string | null = inviteRow?.role ?? null;
+    if (!inviteRow) {
+      const { data: codeInfo } = await supabase.rpc(
+        "get_staff_invite_by_code",
+        { p_code: code },
+      );
+      inviteRole =
+        ((codeInfo ?? null) as { role?: string | null } | null)?.role ?? null;
+    }
+
     const rpcName =
-      inviteRow?.role === "club_coordinator"
+      inviteRole === "club_coordinator"
         ? "rpc_redeem_club_coordinator_invite"
-        : inviteRow?.role === "age_group_coordinator"
+        : inviteRole === "age_group_coordinator"
           ? "rpc_redeem_age_coordinator_invite"
           : "rpc_redeem_staff_invite_auth";
     const rpcResult = await supabase.rpc(rpcName, {
