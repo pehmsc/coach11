@@ -1,7 +1,15 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import { NextResponse, type NextRequest } from "next/server";
 
 export const runtime = "nodejs";
+
+type InviteByCode = {
+  club_name: string | null;
+  age_group_name: string | null;
+  role: string;
+  status: string | null;
+  invited_by_name: string | null;
+};
 
 export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get("code")?.trim().toUpperCase();
@@ -13,50 +21,33 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  let admin;
-  try {
-    admin = createAdminClient();
-  } catch (error) {
-    console.error("[invite/info] Admin client falhou:", error);
+  // RPC SECURITY DEFINER estreita: devolve apenas os campos do ecrã de
+  // aceitação (sem dados pessoais do convidado), em qualquer status.
+  const supabase = await createClient();
+  const { data, error: dbError } = await supabase.rpc(
+    "get_staff_invite_by_code",
+    { p_code: code },
+  );
+
+  if (dbError) {
+    console.error("[invite/info] Lookup por código falhou:", dbError.message);
     return NextResponse.json({ error: "Erro interno" }, { status: 500 });
   }
 
-  const { data: invite, error: dbError } = await admin
-    .from("staff_invites")
-    .select("role, age_group_id, invited_by, status")
-    .eq("invite_code", code)
-    .maybeSingle();
+  const invite = (data ?? null) as InviteByCode | null;
 
-  if (dbError || !invite) {
+  if (!invite) {
     return NextResponse.json(
       { error: "Convite não encontrado" },
       { status: 404 },
     );
   }
 
-  // Buscar info do escalão e de quem convidou em paralelo
-  const [ageGroupRes, inviterRes] = await Promise.all([
-    invite.age_group_id
-      ? admin
-          .from("age_groups")
-          .select("name, club_name")
-          .eq("id", invite.age_group_id)
-          .maybeSingle()
-      : Promise.resolve({ data: null, error: null }),
-    invite.invited_by
-      ? admin
-          .from("profiles")
-          .select("full_name")
-          .eq("id", invite.invited_by)
-          .maybeSingle()
-      : Promise.resolve({ data: null, error: null }),
-  ]);
-
   return NextResponse.json({
-    clubName: ageGroupRes.data?.club_name ?? null,
-    ageGroupName: ageGroupRes.data?.name ?? null,
+    clubName: invite.club_name ?? null,
+    ageGroupName: invite.age_group_name ?? null,
     role: invite.role,
-    invitedBy: inviterRes.data?.full_name ?? null,
+    invitedBy: invite.invited_by_name ?? null,
     status: invite.status,
   });
 }
