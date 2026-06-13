@@ -14,8 +14,8 @@
     document.head.appendChild(s);
   }
   window._scriptsReady = false;
-  loadScript('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js', function() {
-    loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js', function() {
+  loadScript('/vendor/supabase-js-2.97.0.min.js', function() {
+    loadScript('/vendor/jspdf-2.5.1.umd.min.js', function() {
       window._scriptsReady = true;
       if (typeof init === 'function') init();
     });
