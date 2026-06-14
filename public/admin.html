@@ -147,6 +147,52 @@
     }
     .btn-pdf-detail:hover { background: #111125; }
 
+    .btn-delete-detail {
+      padding: 8px 16px; background: #fff; color: #b91c1c; border: 1.5px solid #fecaca;
+      border-radius: 10px; cursor: pointer; font-family: 'Inter', sans-serif;
+      font-size: 13px; font-weight: 600; transition: all .15s;
+    }
+    .btn-delete-detail:hover { background: #fef2f2; border-color: #f87171; }
+
+    /* ── DELETE MODAL ── */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0; background: rgba(17,17,46,.55);
+      z-index: 100; align-items: center; justify-content: center; padding: 16px;
+    }
+    .modal-overlay.show { display: flex; }
+    .modal-card {
+      background: #fff; border-radius: 16px; padding: 28px; width: 100%; max-width: 420px;
+      box-shadow: 0 20px 50px rgba(0,0,0,.25);
+    }
+    .modal-title { font-size: 18px; font-weight: 800; color: #b91c1c; margin-bottom: 10px; }
+    .modal-text { font-size: 14px; color: #374151; line-height: 1.5; margin-bottom: 8px; }
+    .modal-text strong { color: #111827; }
+    .modal-warn {
+      font-size: 13px; color: #92400e; background: #fffbeb; border: 1px solid #fde68a;
+      border-radius: 10px; padding: 10px 12px; margin: 14px 0;
+    }
+    .modal-label { display: block; font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px; }
+    .modal-input {
+      width: 100%; padding: 10px 14px; border: 1.5px solid #D1D5DB; border-radius: 10px;
+      font-family: 'Inter', sans-serif; font-size: 14px; outline: none; transition: border-color .15s;
+    }
+    .modal-input:focus { border-color: #b91c1c; }
+    .modal-err { color: #dc2626; font-size: 13px; margin-top: 10px; display: none; }
+    .modal-err.show { display: block; }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+    .btn-modal-cancel {
+      padding: 10px 18px; background: #F3F4F6; color: #374151; border: none; border-radius: 10px;
+      cursor: pointer; font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 600;
+    }
+    .btn-modal-cancel:hover { background: #E5E7EB; }
+    .btn-modal-delete {
+      padding: 10px 18px; background: #dc2626; color: #fff; border: none; border-radius: 10px;
+      cursor: pointer; font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 700;
+      transition: background .15s;
+    }
+    .btn-modal-delete:hover { background: #b91c1c; }
+    .btn-modal-delete:disabled { background: #fca5a5; cursor: not-allowed; }
+
     .detail-section { background: #fff; border: 1px solid #E5E7EB; border-radius: 14px; padding: 22px; margin-bottom: 16px; }
     .dsect-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: #6B7280; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
     .dsect-title::before { content: ''; display: inline-block; width: 3px; height: 12px; background: #1A7F4B; border-radius: 2px; }
@@ -289,6 +335,7 @@
       <div class="detail-actions">
         <button class="btn-toggle" id="btnToggleReviewed" onclick="toggleReviewed()"></button>
         <button class="btn-pdf-detail" onclick="exportDetailPDF()">⬇ Exportar PDF</button>
+        <button class="btn-delete-detail" onclick="openDeleteModal()">🗑 Apagar ficha</button>
       </div>
     </div>
     <div id="detailContent"></div>
@@ -299,6 +346,28 @@
         <button class="btn-save-notes" id="btnSaveNotes" onclick="saveNotes()">Guardar notas</button>
         <span class="notes-saved" id="notesSaved">✓ Guardado</span>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── DELETE CONFIRMATION MODAL ── -->
+<div id="deleteModal" class="modal-overlay">
+  <div class="modal-card">
+    <div class="modal-title">Apagar ficha definitivamente</div>
+    <p class="modal-text">Vais apagar a ficha de <strong id="deleteModalName"></strong>.</p>
+    <div class="modal-warn">
+      Esta acao e <strong>irreversivel</strong>. Os dados do atleta sao apagados
+      definitivamente da base de dados e nao podem ser recuperados.
+    </div>
+    <label class="modal-label" for="deleteConfirmInput">Escreve <strong>APAGAR</strong> para confirmar</label>
+    <input type="text" id="deleteConfirmInput" class="modal-input" autocomplete="off"
+      oninput="onDeleteInput()" placeholder="APAGAR" />
+    <div class="modal-err" id="deleteModalErr"></div>
+    <div class="modal-actions">
+      <button class="btn-modal-cancel" onclick="closeDeleteModal()">Cancelar</button>
+      <button class="btn-modal-delete" id="btnConfirmDelete" onclick="confirmDelete()" disabled>
+        Apagar definitivamente
+      </button>
     </div>
   </div>
 </div>
@@ -636,6 +705,63 @@
     btn.disabled = false;
     msg.classList.add('show');
     setTimeout(() => msg.classList.remove('show'), 2500);
+  }
+
+  // ── DELETE FICHA (hard delete, RGPD) ─────────────────────────────────────────
+  function openDeleteModal() {
+    if (!_currentDetail) return;
+    const name = [_currentDetail.first_name, _currentDetail.last_name].filter(Boolean).join(' ') || 'este atleta';
+    document.getElementById('deleteModalName').textContent = name;
+    const input = document.getElementById('deleteConfirmInput');
+    input.value = '';
+    document.getElementById('btnConfirmDelete').disabled = true;
+    document.getElementById('deleteModalErr').classList.remove('show');
+    document.getElementById('deleteModal').classList.add('show');
+    input.focus();
+  }
+
+  function closeDeleteModal() {
+    document.getElementById('deleteModal').classList.remove('show');
+  }
+
+  function onDeleteInput() {
+    const val = document.getElementById('deleteConfirmInput').value;
+    document.getElementById('btnConfirmDelete').disabled = val !== 'APAGAR';
+  }
+
+  async function confirmDelete() {
+    if (!_currentDetail) return;
+    if (document.getElementById('deleteConfirmInput').value !== 'APAGAR') return;
+
+    const btn = document.getElementById('btnConfirmDelete');
+    const err = document.getElementById('deleteModalErr');
+    err.classList.remove('show');
+    btn.disabled = true;
+
+    const id = _currentDetail.id;
+    const { error, count } = await sb
+      .from('athlete_intake_submissions')
+      .delete({ count: 'exact' })
+      .eq('id', id);
+
+    // count === 0 / null = a policy bloqueou silenciosamente (nenhuma linha
+    // apagada). Tratar como falha: nao remover da lista, manter o modal aberto.
+    if (error || !count) {
+      if (error) console.error('Erro ao apagar ficha:', error);
+      err.textContent = error
+        ? 'Erro ao apagar a ficha. Tenta novamente.'
+        : 'Nao foi possivel apagar a ficha (sem permissao).';
+      err.classList.add('show');
+      btn.disabled = false;
+      return;
+    }
+
+    // Sucesso confirmado: 1 linha apagada.
+    _submissions = _submissions.filter(s => s.id !== id);
+    _currentDetail = null;
+    closeDeleteModal();
+    showList();
+    updateUnreviewedBadge();
   }
 
   // ── SHOW LIST ────────────────────────────────────────────────────────────────
