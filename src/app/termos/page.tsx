@@ -13,14 +13,15 @@ export default function TermsPage() {
     <LegalPageLayout
       title="Termos de Serviço"
       intro="Estes Termos regulam o acesso e a utilização do Coach11. Ao criar conta ou usar a Plataforma, aceitas estes Termos. Lê-os com atenção."
-      lastUpdated="14 de Junho de 2026"
+      lastUpdated="15 de Junho de 2026"
     >
       <section>
         <h2>1. Objecto do serviço</h2>
         <p>
           O <strong>Coach11</strong> (a &quot;Plataforma&quot;) é uma aplicação
-          web de gestão de futebol de formação, operada por Pedro Campos /{" "}
-          <strong>Be First RS</strong>, com sede em Lisboa, Portugal (o
+          web de gestão de futebol de formação, operada por Pedro Campos, que
+          opera sob a denominação comercial <strong>Be First RS</strong> (NIF:
+          226 069 869), com sede em Lisboa, Portugal (o
           &quot;Coach11&quot;, &quot;nós&quot;). A Plataforma permite a
           treinadores, coordenadores, staff e clubes gerir plantéis, treinos,
           jogos, convocatórias, presenças, competições e estatísticas.
@@ -248,9 +249,9 @@ export default function TermsPage() {
         <h2>13. Contacto</h2>
         <p>
           Para questões sobre estes Termos:{" "}
-          <a href="mailto:ola@coach11.app">ola@coach11.app</a>. Para assuntos de
+          <a href="mailto:hello@coach11.app">hello@coach11.app</a>. Para assuntos de
           dados pessoais:{" "}
-          <a href="mailto:privacidade@coach11.app">privacidade@coach11.app</a>.
+          <a href="mailto:privacy@coach11.app">privacy@coach11.app</a>.
         </p>
       </section>
 

@@ -12,18 +12,19 @@ export default function PrivacyPage() {
     <LegalPageLayout
       title="Política de Privacidade"
       intro="Esta página descreve como o Coach11 recolhe, usa, partilha e protege dados pessoais. Aplica-se a treinadores individuais, clubes, coordenadores, staff e atletas registados na plataforma."
-      lastUpdated="14 de Junho de 2026"
+      lastUpdated="15 de Junho de 2026"
     >
       <section>
         <h2>1. Responsável pelo tratamento</h2>
         <p>
           O <strong>Coach11</strong> (a &quot;Plataforma&quot;) é operado por
-          Pedro Campos / <strong>Be First RS</strong>, com sede em Lisboa,
+          Pedro Campos, que opera sob a denominação comercial{" "}
+          <strong>Be First RS</strong> (NIF: 226 069 869), com sede em Lisboa,
           Portugal. Para questões sobre dados pessoais, contacta o nosso ponto
           de contacto RGPD em{" "}
-          <a href="mailto:privacidade@coach11.app">privacidade@coach11.app</a>.
+          <a href="mailto:privacy@coach11.app">privacy@coach11.app</a>.
           Para assuntos gerais:{" "}
-          <a href="mailto:ola@coach11.app">ola@coach11.app</a>.
+          <a href="mailto:hello@coach11.app">hello@coach11.app</a>.
         </p>
       </section>
 
@@ -174,7 +175,7 @@ export default function PrivacyPage() {
           </li>
         </ul>
         <p>
-          Para exercer qualquer destes direitos: <a href="mailto:privacidade@coach11.app">privacidade@coach11.app</a>.
+          Para exercer qualquer destes direitos: <a href="mailto:privacy@coach11.app">privacy@coach11.app</a>.
           Respondemos em até 30 dias.
         </p>
       </section>
@@ -205,7 +206,7 @@ export default function PrivacyPage() {
           direitos do menor &mdash; incluindo o{" "}
           <strong>direito de eliminação</strong> dos seus dados &mdash; junto do
           clube ou treinador responsável, ou através de{" "}
-          <a href="mailto:privacidade@coach11.app">privacidade@coach11.app</a>.
+          <a href="mailto:privacy@coach11.app">privacy@coach11.app</a>.
           Tratamos estes pedidos com prioridade.
         </p>
       </section>

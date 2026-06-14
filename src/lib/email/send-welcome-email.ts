@@ -46,7 +46,7 @@ export async function sendWelcomeEmail(
             </a>
             <p style="color:#64748b;font-size:12px;margin-top:24px;">
               Precisas de ajuda? Responde a este email ou escreve para
-              <a href="mailto:ola@coach11.app" style="color:#059669;">ola@coach11.app</a>.
+              <a href="mailto:hello@coach11.app" style="color:#059669;">hello@coach11.app</a>.
             </p>
           </div>
         </div>
