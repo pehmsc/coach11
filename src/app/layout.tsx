@@ -20,6 +20,7 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://coach11.app"),
   applicationName: "Coach11",
   title: {
     default: "Coach11",
@@ -27,6 +28,21 @@ export const metadata: Metadata = {
   },
   description:
     "Plataforma de gestão desportiva para treinadores, equipas técnicas e coordenação.",
+  openGraph: {
+    type: "website",
+    locale: "pt_PT",
+    url: "https://coach11.app",
+    siteName: "Coach11",
+    title: "Coach11 — O treinador regista. O sistema faz o resto.",
+    description:
+      "Plataforma de gestão desportiva para futebol de formação. Regista no campo com o telemóvel; o backoffice preenche-se sozinho.",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Coach11 — O treinador regista. O sistema faz o resto.",
+    description:
+      "Regista no campo com o telemóvel. Consulta tudo no dashboard, sem inserir dados duas vezes.",
+  },
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
