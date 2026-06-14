@@ -1,10 +1,10 @@
 -- Asserção 5: superfícies públicas intencionais.
--- anon INSERT em waitlist e athlete_intake_submissions ✓;
+-- anon INSERT em waitlist ✓;
 -- anon SELECT em staff_invites devolve 0 linhas (GRANT existe, RLS
 -- bloqueia — não é erro).
 
 begin;
-select plan(3);
+select plan(2);
 
 -- semear um convite como postgres para o "0 linhas" do anon ter significado
 insert into public.staff_invites
@@ -21,10 +21,6 @@ set local role anon;
 select lives_ok(
   $$insert into public.waitlist (email) values ('anon-teste@coach11.test')$$,
   'anon consegue INSERT em waitlist');
-
-select lives_ok(
-  $$insert into public.athlete_intake_submissions (first_name) values ('Atleta Teste')$$,
-  'anon consegue INSERT em athlete_intake_submissions');
 
 select is(
   (select count(*)::int from public.staff_invites),

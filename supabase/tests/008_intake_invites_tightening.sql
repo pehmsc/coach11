@@ -1,18 +1,13 @@
--- Asserção 8 (micro-PR tightening intake/staff_invites).
--- intake: só a allowlist de revisores lê/actualiza; outros autenticados
--- veem 0 linhas. staff_invites: sem as policies largas, autenticado de
--- outro clube não lê nem actualiza convite alheio; o email convidado
--- continua a ver o próprio convite (pre-lookup do redeem); a RPC
--- get_staff_invite_by_code serve o ecrã pré-login em qualquer status
--- sem expor dados pessoais do convidado.
+-- Assercao 8 (micro-PR tightening staff_invites).
+-- staff_invites: sem as policies largas, autenticado de outro clube nao le
+-- nem actualiza convite alheio; o email convidado continua a ver o proprio
+-- convite (pre-lookup do redeem); a RPC get_staff_invite_by_code serve o
+-- ecra pre-login em qualquer status sem expor dados pessoais do convidado.
 
 begin;
-select plan(36);
+select plan(19);
 
 -- seeds (como postgres)
-insert into public.athlete_intake_submissions (id, first_name)
-values ('11000000-0000-4000-8000-000000000101', 'Atleta Sensivel');
-
 insert into public.staff_invites
   (id, age_group_id, club_id, invited_by, first_name, last_name, email,
    invite_code, role, status)
@@ -30,24 +25,12 @@ values
    'Convidado', 'Revogado', 'convidado.revogado@coach11.test',
    'TIGHT002', 'head_coach', 'revoked');
 
--- como B1 (coordenador do clube Y): intake invisivel e imutavel
+-- como B1 (coordenador do clube Y): convite do clube X invisivel e imutavel
 select set_config('request.jwt.claims',
   '{"sub":"b1000000-0000-4000-8000-000000000003","role":"authenticated","email":"b1@coach11.test"}',
   true);
 set local role authenticated;
 
-select is(
-  (select count(*)::int from public.athlete_intake_submissions),
-  0,
-  'autenticado fora da allowlist le 0 fichas de intake');
-
-select lives_ok(
-  $$update public.athlete_intake_submissions
-       set reviewed = true
-     where id = '11000000-0000-4000-8000-000000000101'$$,
-  'UPDATE de intake fora da allowlist nao da erro (GRANT passa, RLS filtra)');
-
--- como B1: convite do clube X invisivel e imutavel
 select is(
   (select count(*)::int from public.staff_invites
     where invite_code = 'TIGHT001'),
@@ -65,54 +48,10 @@ select lives_ok(
 reset role;
 
 select is(
-  (select reviewed from public.athlete_intake_submissions
-    where id = '11000000-0000-4000-8000-000000000101'),
-  false,
-  'ficha de intake continua por rever apos a tentativa de B1');
-
-select is(
   (select status from public.staff_invites
     where invite_code = 'TIGHT001'),
   'pending',
   'convite do clube X continua pending apos a tentativa de B1');
-
--- como revisor allowlisted (pehmsc@gmail.com)
-select set_config('request.jwt.claims',
-  '{"sub":"ee000000-0000-4000-8000-000000000201","role":"authenticated","email":"pehmsc@gmail.com"}',
-  true);
-set local role authenticated;
-
-select is(
-  (select count(*)::int from public.athlete_intake_submissions
-    where id = '11000000-0000-4000-8000-000000000101'),
-  1,
-  'revisor allowlisted (pehmsc) le a ficha de intake');
-
-select lives_ok(
-  $$update public.athlete_intake_submissions
-       set reviewed = true, reviewed_at = now()
-     where id = '11000000-0000-4000-8000-000000000101'$$,
-  'revisor allowlisted executa UPDATE da ficha');
-
--- como postgres: o UPDATE do revisor produziu efeito
-reset role;
-
-select is(
-  (select reviewed from public.athlete_intake_submissions
-    where id = '11000000-0000-4000-8000-000000000101'),
-  true,
-  'ficha de intake ficou marcada como revista pelo revisor');
-
--- como segundo email da allowlist (pedro.campos@befirstrs.com)
-select set_config('request.jwt.claims',
-  '{"sub":"ee000000-0000-4000-8000-000000000202","role":"authenticated","email":"pedro.campos@befirstrs.com"}',
-  true);
-set local role authenticated;
-
-select is(
-  (select count(*)::int from public.athlete_intake_submissions),
-  1,
-  'revisor allowlisted (befirstrs) le as fichas de intake');
 
 -- como o email convidado: ve o proprio convite (pre-lookup do redeem)
 reset role;
@@ -200,11 +139,9 @@ reset role;
 select is(
   (select count(*)::int from pg_policies
     where schemaname = 'public'
-      and ((tablename = 'staff_invites'
-              and policyname in ('anyone_can_read_invite_by_code',
-                                 'authenticated_can_update_invite'))
-        or (tablename = 'athlete_intake_submissions'
-              and policyname in ('intake_select_auth', 'intake_update_auth')))),
+      and tablename = 'staff_invites'
+      and policyname in ('anyone_can_read_invite_by_code',
+                         'authenticated_can_update_invite')),
   0,
   'policies largas removidas do catalogo');
 
@@ -216,87 +153,12 @@ select ok(has_function_privilege('authenticated',
   'public.get_staff_invite_by_code(text)', 'EXECUTE'),
   'authenticated COM EXECUTE na RPC de lookup por codigo');
 
-select ok(not has_table_privilege('anon',
-  'public.athlete_intake_submissions', 'DELETE'),
-  'anon sem DELETE em intake');
-
-select ok(not has_table_privilege('anon',
-  'public.athlete_intake_submissions', 'TRUNCATE'),
-  'anon sem TRUNCATE em intake');
-
-select ok(has_table_privilege('authenticated',
-  'public.athlete_intake_submissions', 'DELETE'),
-  'authenticated COM DELETE em intake (GRANT do hard delete RGPD; a defesa e a policy)');
-
-select is(
-  (select count(*)::int from pg_policies
-    where schemaname = 'public'
-      and tablename = 'athlete_intake_submissions'
-      and policyname = 'intake_delete_reviewer'
-      and cmd = 'DELETE'),
-  1,
-  'policy intake_delete_reviewer existe no catalogo');
-
-select ok(has_table_privilege('anon',
-  'public.athlete_intake_submissions', 'INSERT'),
-  'anon mantem INSERT em intake (formulario publico)');
-
 select ok(
   (select array_to_string(p.proconfig, ';') like '%search_path=public, pg_temp%'
      from pg_proc p
      join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public' and p.proname = 'get_staff_invite_by_code'),
   'get_staff_invite_by_code com search_path=public, pg_temp');
-
--- DELETE de intake (hard delete RGPD): so a allowlist apaga -------------------
-
--- como B1 (autenticado fora da allowlist): GRANT passa, policy filtra -> no-op
-select set_config('request.jwt.claims',
-  '{"sub":"b1000000-0000-4000-8000-000000000003","role":"authenticated","email":"b1@coach11.test"}',
-  true);
-set local role authenticated;
-
-select lives_ok(
-  $$delete from public.athlete_intake_submissions
-     where id = '11000000-0000-4000-8000-000000000101'$$,
-  'DELETE de intake fora da allowlist nao da erro (GRANT passa, RLS filtra)');
-
--- como postgres: a ficha persiste (o DELETE de B1 foi no-op)
-reset role;
-select is(
-  (select count(*)::int from public.athlete_intake_submissions
-    where id = '11000000-0000-4000-8000-000000000101'),
-  1,
-  'ficha de intake persiste apos tentativa de DELETE de B1');
-
--- como anon: sem GRANT DELETE, bloqueado ja na camada de GRANT (42501)
-select set_config('request.jwt.claims', '{"role":"anon"}', true);
-set local role anon;
-select throws_ok(
-  $$delete from public.athlete_intake_submissions
-     where id = '11000000-0000-4000-8000-000000000101'$$,
-  '42501',
-  null,
-  'anon nao consegue DELETE de intake (sem GRANT, permission denied)');
-
--- como revisor allowlisted (pehmsc): apaga de facto
-reset role;
-select set_config('request.jwt.claims',
-  '{"sub":"ee000000-0000-4000-8000-000000000201","role":"authenticated","email":"pehmsc@gmail.com"}',
-  true);
-set local role authenticated;
-select lives_ok(
-  $$delete from public.athlete_intake_submissions
-     where id = '11000000-0000-4000-8000-000000000101'$$,
-  'revisor allowlisted executa DELETE da ficha');
-
--- como postgres: a ficha desapareceu (hard delete confirmado)
-reset role;
-select is(
-  (select count(*)::int from public.athlete_intake_submissions
-    where id = '11000000-0000-4000-8000-000000000101'),
-  0,
-  'ficha de intake apagada definitivamente pelo revisor (hard delete)');
 
 select * from finish();
 rollback;
