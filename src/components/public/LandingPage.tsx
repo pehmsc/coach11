@@ -1,6 +1,3 @@
-"use client";
-
-import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -18,30 +15,35 @@ import {
   FileText,
   Copy,
   ArrowRight,
-  Menu,
-  X,
 } from "lucide-react";
 import { PlanCard, PLANS } from "@/components/public/PlanCard";
+import { PlanCtaButton } from "@/components/public/PlanCtaButton";
+import { LandingNav } from "@/components/public/landing/LandingNav";
+import { WaitlistForm } from "@/components/public/landing/WaitlistForm";
+import { HeroDevice } from "@/components/public/landing/HeroDevice";
 
-// ── Animated counter hook ──
-function useCounter(target: number, duration = 2000, trigger = true) {
-  const [count, setCount] = useState(0);
-  useEffect(() => {
-    if (!trigger) return;
-    let start = 0;
-    const step = target / (duration / 16);
-    const timer = setInterval(() => {
-      start += step;
-      if (start >= target) {
-        setCount(target);
-        clearInterval(timer);
-      } else {
-        setCount(Math.floor(start));
-      }
-    }, 16);
-    return () => clearInterval(timer);
-  }, [target, duration, trigger]);
-  return count;
+// ── Stat (hero) ──
+function Stat({
+  value,
+  label,
+  accent = false,
+}: {
+  value: string;
+  label: string;
+  accent?: boolean;
+}) {
+  return (
+    <div>
+      <div
+        className={`text-2xl font-bold md:text-3xl ${
+          accent ? "text-emerald-400" : "text-white"
+        }`}
+      >
+        {value}
+      </div>
+      <div className="mt-1 text-xs text-white/50">{label}</div>
+    </div>
+  );
 }
 
 // ── Feature Card ──
@@ -58,7 +60,7 @@ function FeatureCard({
 }) {
   return (
     <div
-      className={`group relative rounded-2xl border p-6 transition-all duration-300 hover:-translate-y-1 ${
+      className={`group relative rounded-2xl border p-6 c11-hover-lift ${
         accent
           ? "border-emerald-500/30 bg-emerald-950/40 hover:border-emerald-400/50 hover:shadow-lg hover:shadow-emerald-500/10"
           : "border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/8"
@@ -90,211 +92,84 @@ function ComparisonRow({
   return (
     <div className="grid grid-cols-3 items-center gap-4 border-b border-white/5 py-4 text-sm">
       <span className="font-medium text-white/80">{feature}</span>
-      <span className="text-center text-white/30 line-through">{old}</span>
+      <span className="text-center text-white/40 line-through">{old}</span>
       <span className="text-center font-semibold text-emerald-400">{better}</span>
     </div>
   );
 }
 
-// ── Main Page ──
+// ── Main Page (server component) ──
 export default function LandingPage() {
-  const [email, setEmail] = useState("");
-  const [submitted, setSubmitted] = useState(false);
-  const [mobileMenu, setMobileMenu] = useState(false);
-
-  const handleSubmit = async (e: { preventDefault(): void }) => {
-    e.preventDefault();
-    if (!email) return;
-
-    try {
-      const res = await fetch("/api/waitlist", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-      });
-
-      if (res.ok) {
-        setSubmitted(true);
-        setEmail("");
-      }
-    } catch {
-      // Falha silenciosa — não bloquear UX por erro de rede
-    }
-  };
-
-  const stats = {
-    seconds: useCounter(20, 1500),
-    touches: useCounter(2, 1000),
-  };
-
   return (
     <div className="min-h-screen bg-slate-950 text-white antialiased">
-      {/* ═══ NAV ═══ */}
-      <nav className="fixed top-0 z-50 w-full border-b border-white/5 bg-slate-950/80 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-          <Link
-            href="/"
-            className="flex items-center gap-2 transition-opacity hover:opacity-80"
-            aria-label="Coach11 — voltar ao topo"
-          >
-            <Image
-              src="/icons/icon-192.png"
-              alt="Coach11"
-              width={36}
-              height={36}
-              className="h-9 w-9 rounded-lg"
-              priority
-            />
-            <span className="text-lg font-bold tracking-tight">
-              Coach<span className="text-emerald-400">11</span>
-            </span>
-          </Link>
-
-          {/* Desktop nav */}
-          <div className="hidden items-center gap-8 md:flex">
-            <a href="#features" className="text-sm text-white/60 transition hover:text-white">
-              Funcionalidades
-            </a>
-            <a href="#how" className="text-sm text-white/60 transition hover:text-white">
-              Como Funciona
-            </a>
-            <a href="#comparison" className="text-sm text-white/60 transition hover:text-white">
-              Comparar
-            </a>
-            <a href="#planos" className="text-sm text-white/60 transition hover:text-white">
-              Planos
-            </a>
-            <a
-              href="/login"
-              className="text-sm text-white/60 transition hover:text-white"
-            >
-              Entrar
-            </a>
-            <Link
-              href="/contacto"
-              className="rounded-lg bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-400"
-            >
-              Começar
-            </Link>
-          </div>
-
-          {/* Mobile toggle */}
-          <button
-            className="md:hidden text-white/60"
-            onClick={() => setMobileMenu(!mobileMenu)}
-          >
-            {mobileMenu ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-          </button>
-        </div>
-
-        {/* Mobile menu */}
-        {mobileMenu && (
-          <div className="border-t border-white/5 bg-slate-950 px-6 py-4 md:hidden">
-            <div className="flex flex-col gap-4">
-              <a href="#features" className="text-sm text-white/60" onClick={() => setMobileMenu(false)}>
-                Funcionalidades
-              </a>
-              <a href="#how" className="text-sm text-white/60" onClick={() => setMobileMenu(false)}>
-                Como Funciona
-              </a>
-              <a href="#comparison" className="text-sm text-white/60" onClick={() => setMobileMenu(false)}>
-                Comparar
-              </a>
-              <a href="#planos" className="text-sm text-white/60" onClick={() => setMobileMenu(false)}>
-                Planos
-              </a>
-              <a
-                href="/login"
-                className="text-sm text-white/60"
-                onClick={() => setMobileMenu(false)}
-              >
-                Entrar
-              </a>
-              <Link
-                href="/contacto"
-                className="rounded-lg bg-emerald-500 px-5 py-2.5 text-center text-sm font-semibold text-white"
-                onClick={() => setMobileMenu(false)}
-              >
-                Começar
-              </Link>
-            </div>
-          </div>
-        )}
-      </nav>
+      <LandingNav />
 
       {/* ═══ HERO ═══ */}
-      <section className="relative overflow-hidden pt-32 pb-20 md:pt-44 md:pb-32">
-        {/* Background gradient */}
+      <section className="relative overflow-hidden pt-32 pb-20 md:pt-40 md:pb-28">
         <div className="pointer-events-none absolute inset-0">
           <div className="absolute top-0 left-1/2 -translate-x-1/2 h-[600px] w-[800px] rounded-full bg-emerald-500/8 blur-3xl" />
           <div className="absolute bottom-0 right-0 h-[300px] w-[400px] rounded-full bg-emerald-600/5 blur-3xl" />
         </div>
 
         <div className="relative mx-auto max-w-6xl px-6">
-          <div className="mx-auto max-w-3xl text-center">
-            {/* Badge */}
-            <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-4 py-1.5 text-sm text-emerald-400">
-              <Zap className="h-3.5 w-3.5" />
-              <span>Beta aberta para clubes de formação</span>
+          <div className="grid items-center gap-14 lg:grid-cols-2 lg:gap-8">
+            {/* Copy */}
+            <div className="text-center lg:text-left">
+              <div className="c11-hero-in c11-hero-in-1 mb-6 inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-4 py-1.5 text-sm text-emerald-300">
+                <Zap className="h-3.5 w-3.5" />
+                <span>Para treinadores e clubes de formação</span>
+              </div>
+
+              <h1 className="c11-hero-in c11-hero-in-2 mb-6 text-4xl font-extrabold leading-[1.05] tracking-tight md:text-5xl lg:text-6xl">
+                O treinador regista.
+                <br />
+                <span className="bg-gradient-to-r from-emerald-400 to-emerald-300 bg-clip-text text-transparent">
+                  O sistema faz o resto.
+                </span>
+              </h1>
+
+              <p className="c11-hero-in c11-hero-in-3 mx-auto mb-8 max-w-xl text-lg leading-relaxed text-white/55 md:text-xl lg:mx-0">
+                Plataforma de gestão desportiva para futebol de formação. Regista
+                no campo com o telemóvel — o backoffice preenche-se sozinho, sem
+                inserir dados duas vezes.
+              </p>
+
+              <div className="c11-hero-in c11-hero-in-4 flex flex-col items-center gap-3 sm:flex-row sm:justify-center lg:justify-start">
+                <PlanCtaButton
+                  href="/billing/start"
+                  label="Começar — 7 dias grátis"
+                  planIntent="individual"
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 px-8 py-4 text-base font-semibold text-white transition hover:bg-emerald-400 active:scale-[0.97] sm:w-auto"
+                />
+                <Link
+                  href="/contacto?persona=club"
+                  className="group flex w-full items-center justify-center gap-2 rounded-xl border border-white/15 px-8 py-4 text-base font-medium text-white/80 transition hover:border-white/30 hover:text-white active:scale-[0.97] sm:w-auto"
+                >
+                  Sou um clube
+                  <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
+                </Link>
+              </div>
+
+              <p className="c11-hero-in c11-hero-in-4 mt-5 text-center text-sm text-white/50 lg:text-left">
+                7 dias grátis, sem compromisso. Já tens conta?{" "}
+                <a
+                  href="/login"
+                  className="text-white/70 underline underline-offset-2 transition hover:text-white"
+                >
+                  Entrar
+                </a>
+              </p>
+
+              <div className="c11-hero-in c11-hero-in-5 mx-auto mt-12 grid max-w-lg grid-cols-3 gap-6 border-t border-white/5 pt-8 lg:mx-0">
+                <Stat value="<20s" label="para marcar presenças" accent />
+                <Stat value="2 toques" label="por evento de jogo" />
+                <Stat value="€7,99" label="/mês · 7 dias grátis" />
+              </div>
             </div>
 
-            {/* Headline */}
-            <h1 className="mb-6 text-4xl font-extrabold leading-tight tracking-tight md:text-6xl md:leading-none">
-              O treinador regista.
-              <br />
-              <span className="bg-gradient-to-r from-emerald-400 to-emerald-300 bg-clip-text text-transparent">
-                O sistema faz o resto.
-              </span>
-            </h1>
-
-            {/* Subhead */}
-            <p className="mx-auto mb-10 max-w-xl text-lg leading-relaxed text-white/50 md:text-xl">
-              Plataforma de gestão desportiva para futebol de formação.
-              Regista no campo com o telemóvel. Consulta tudo no dashboard
-              sem inserir dados duas vezes.
-            </p>
-
-            {/* CTA buttons */}
-            <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
-              <a
-                href="#cta"
-                className="group flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 px-8 py-4 text-base font-semibold text-white transition hover:bg-emerald-400 sm:w-auto"
-              >
-                Quero experimentar
-                <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
-              </a>
-              <a
-                href="#how"
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 px-8 py-4 text-base font-medium text-white/70 transition hover:border-white/20 hover:text-white sm:w-auto"
-              >
-                Como funciona
-              </a>
-            </div>
-
-            {/* Login link */}
-            <p className="mt-6 text-sm text-white/30">
-              Já tens conta?{" "}
-              <a href="/login" className="text-white/60 underline underline-offset-2 hover:text-white transition">
-                Entrar
-              </a>
-            </p>
-
-            {/* Stats bar */}
-            <div className="mx-auto mt-16 grid max-w-lg grid-cols-3 gap-8 border-t border-white/5 pt-8">
-              <div>
-                <div className="text-2xl font-bold text-emerald-400 md:text-3xl">
-                  &lt;{stats.seconds}s
-                </div>
-                <div className="mt-1 text-xs text-white/40">para marcar presenças</div>
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-white md:text-3xl">{stats.touches}</div>
-                <div className="mt-1 text-xs text-white/40">toques por evento</div>
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-white md:text-3xl">0€</div>
-                <div className="mt-1 text-xs text-white/40">para começar</div>
-              </div>
+            {/* Device */}
+            <div className="c11-hero-in c11-hero-in-5 relative mt-4 lg:mt-0">
+              <HeroDevice />
             </div>
           </div>
         </div>
@@ -303,36 +178,36 @@ export default function LandingPage() {
       {/* ═══ PAIN SECTION ═══ */}
       <section className="border-t border-white/5 bg-slate-900/50 py-20">
         <div className="mx-auto max-w-6xl px-6">
-          <div className="mx-auto max-w-2xl text-center">
+          <div className="c11-reveal mx-auto max-w-2xl text-center">
             <h2 className="mb-4 text-2xl font-bold md:text-3xl">
               O problema que todos os treinadores conhecem
             </h2>
-            <p className="text-white/50">
-              131 treinos agendados. Apenas 1 com presenças registadas.
-              Não porque o treinador não quer — porque a ferramenta não deixa.
+            <p className="text-white/55">
+              131 treinos agendados. Apenas 1 com presenças registadas. Não
+              porque o treinador não quer — porque a ferramenta não deixa.
             </p>
           </div>
 
-          <div className="mt-12 grid gap-4 md:grid-cols-3">
+          <div className="c11-reveal mt-12 grid gap-4 md:grid-cols-3">
             <div className="rounded-xl border border-red-500/10 bg-red-500/5 p-6">
               <div className="mb-3 text-2xl font-bold text-red-400/80">Desktop</div>
-              <p className="text-sm text-white/40">
-                Plataformas pensadas para o escritório. No campo, com frio e luvas,
-                ninguém abre um laptop para marcar presenças.
+              <p className="text-sm text-white/55">
+                Plataformas pensadas para o escritório. No campo, com frio e
+                luvas, ninguém abre um laptop para marcar presenças.
               </p>
             </div>
             <div className="rounded-xl border border-red-500/10 bg-red-500/5 p-6">
               <div className="mb-3 text-2xl font-bold text-red-400/80">Manual</div>
-              <p className="text-sm text-white/40">
-                Dados inseridos duas vezes. O treinador regista e depois
-                o admin volta a preencher. Duplicação constante.
+              <p className="text-sm text-white/55">
+                Dados inseridos duas vezes. O treinador regista e depois o admin
+                volta a preencher. Duplicação constante.
               </p>
             </div>
             <div className="rounded-xl border border-red-500/10 bg-red-500/5 p-6">
               <div className="mb-3 text-2xl font-bold text-red-400/80">120×</div>
-              <p className="text-sm text-white/40">
-                120 treinos por época criados um a um. Sem duplicação semanal.
-                Sem auto-incremento. Trabalho repetitivo que ninguém quer fazer.
+              <p className="text-sm text-white/55">
+                120 treinos por época criados um a um. Sem duplicação semanal,
+                sem auto-incremento. Trabalho repetitivo que ninguém quer fazer.
               </p>
             </div>
           </div>
@@ -340,19 +215,19 @@ export default function LandingPage() {
       </section>
 
       {/* ═══ FEATURES ═══ */}
-      <section id="features" className="py-20 md:py-28">
+      <section id="features" className="scroll-mt-24 py-20 md:py-28">
         <div className="mx-auto max-w-6xl px-6">
-          <div className="mx-auto mb-16 max-w-2xl text-center">
+          <div className="c11-reveal mx-auto mb-16 max-w-2xl text-center">
             <h2 className="mb-4 text-2xl font-bold md:text-3xl">
               Tudo o que precisas. Nada do que não precisas.
             </h2>
-            <p className="text-white/50">
+            <p className="text-white/55">
               Desenhado por treinadores, para treinadores. Cada funcionalidade
               foi pensada para o contexto real: campo, banco, viagem.
             </p>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="c11-reveal grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             <FeatureCard
               icon={ClipboardCheck}
               title="Presenças em 20 segundos"
@@ -406,26 +281,31 @@ export default function LandingPage() {
       </section>
 
       {/* ═══ HOW IT WORKS ═══ */}
-      <section id="how" className="border-t border-white/5 bg-slate-900/30 py-20 md:py-28">
+      <section
+        id="how"
+        className="scroll-mt-24 border-t border-white/5 bg-slate-900/30 py-20 md:py-28"
+      >
         <div className="mx-auto max-w-6xl px-6">
-          <div className="mx-auto mb-16 max-w-2xl text-center">
+          <div className="c11-reveal mx-auto mb-16 max-w-2xl text-center">
             <h2 className="mb-4 text-2xl font-bold md:text-3xl">
               Campo → Sistema → Dashboard
             </h2>
-            <p className="text-white/50">
-              Os dados nascem no campo e fluem automaticamente.
-              Ninguém insere nada duas vezes.
+            <p className="text-white/55">
+              Os dados nascem no campo e fluem automaticamente. Ninguém insere
+              nada duas vezes.
             </p>
           </div>
 
-          <div className="grid gap-8 md:grid-cols-3">
+          <div className="c11-reveal grid gap-8 md:grid-cols-3">
             {/* Step 1 */}
             <div className="relative">
               <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/20 text-xl font-bold text-emerald-400">
                 1
               </div>
-              <h3 className="mb-2 text-lg font-semibold">O treinador regista no campo</h3>
-              <p className="text-sm text-white/50">
+              <h3 className="mb-2 text-lg font-semibold">
+                O treinador regista no campo
+              </h3>
+              <p className="text-sm text-white/55">
                 Presenças, eventos de jogo, avaliações pós-jogo, notas de treino.
                 Tudo no telemóvel, rápido, com uma mão.
               </p>
@@ -437,8 +317,7 @@ export default function LandingPage() {
                   Offline-ready
                 </span>
               </div>
-              {/* Connector arrow (hidden on mobile) */}
-              <div className="hidden md:block absolute top-6 right-0 translate-x-1/2">
+              <div className="absolute top-6 right-0 hidden translate-x-1/2 md:block">
                 <ChevronRight className="h-6 w-6 text-white/10" />
               </div>
             </div>
@@ -449,20 +328,19 @@ export default function LandingPage() {
                 2
               </div>
               <h3 className="mb-2 text-lg font-semibold">O sistema processa</h3>
-              <p className="text-sm text-white/50">
-                Agrega estatísticas, calcula minutos, gera rankings,
-                detecta alertas (3 amarelos, faltas consecutivas),
-                prepara relatórios.
+              <p className="text-sm text-white/55">
+                Agrega estatísticas, calcula minutos, gera rankings, detecta
+                alertas (3 amarelos, faltas consecutivas), prepara relatórios.
               </p>
               <div className="mt-4 flex flex-wrap gap-2">
-                <span className="rounded-full bg-white/5 px-3 py-1 text-xs text-white/40">
+                <span className="rounded-full bg-white/5 px-3 py-1 text-xs text-white/50">
                   Automático
                 </span>
-                <span className="rounded-full bg-white/5 px-3 py-1 text-xs text-white/40">
+                <span className="rounded-full bg-white/5 px-3 py-1 text-xs text-white/50">
                   Tempo real
                 </span>
               </div>
-              <div className="hidden md:block absolute top-6 right-0 translate-x-1/2">
+              <div className="absolute top-6 right-0 hidden translate-x-1/2 md:block">
                 <ChevronRight className="h-6 w-6 text-white/10" />
               </div>
             </div>
@@ -472,16 +350,18 @@ export default function LandingPage() {
               <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 text-xl font-bold text-white/70">
                 3
               </div>
-              <h3 className="mb-2 text-lg font-semibold">O coordenador consulta</h3>
-              <p className="text-sm text-white/50">
-                Dashboard com insights, dossier de treino pronto,
-                relatórios exportáveis. Sem inserir um único dado manualmente.
+              <h3 className="mb-2 text-lg font-semibold">
+                O coordenador consulta
+              </h3>
+              <p className="text-sm text-white/55">
+                Dashboard com insights, dossier de treino pronto, relatórios
+                exportáveis. Sem inserir um único dado manualmente.
               </p>
               <div className="mt-4 flex flex-wrap gap-2">
-                <span className="rounded-full bg-white/5 px-3 py-1 text-xs text-white/40">
+                <span className="rounded-full bg-white/5 px-3 py-1 text-xs text-white/50">
                   Dashboard
                 </span>
-                <span className="rounded-full bg-white/5 px-3 py-1 text-xs text-white/40">
+                <span className="rounded-full bg-white/5 px-3 py-1 text-xs text-white/50">
                   Export PDF/Excel
                 </span>
               </div>
@@ -491,23 +371,22 @@ export default function LandingPage() {
       </section>
 
       {/* ═══ COMPARISON ═══ */}
-      <section id="comparison" className="py-20 md:py-28">
+      <section id="comparison" className="scroll-mt-24 py-20 md:py-28">
         <div className="mx-auto max-w-3xl px-6">
-          <div className="mb-12 text-center">
+          <div className="c11-reveal mb-12 text-center">
             <h2 className="mb-4 text-2xl font-bold md:text-3xl">
               A diferença no dia a dia
             </h2>
-            <p className="text-white/50">
+            <p className="text-white/55">
               Não se trata de mais funcionalidades. Trata-se de melhor execução
               nos momentos que importam.
             </p>
           </div>
 
-          <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-6 md:p-8">
-            {/* Header */}
+          <div className="c11-reveal rounded-2xl border border-white/5 bg-white/[0.02] p-6 md:p-8">
             <div className="grid grid-cols-3 gap-4 border-b border-white/10 pb-4 text-sm font-semibold">
-              <span className="text-white/40">Tarefa</span>
-              <span className="text-center text-white/30">Antes</span>
+              <span className="text-white/50">Tarefa</span>
+              <span className="text-center text-white/40">Antes</span>
               <span className="text-center text-emerald-400">Coach11</span>
             </div>
 
@@ -553,31 +432,35 @@ export default function LandingPage() {
       {/* ═══ FOR WHO ═══ */}
       <section className="border-t border-white/5 bg-slate-900/30 py-20">
         <div className="mx-auto max-w-6xl px-6">
-          <div className="mx-auto mb-12 max-w-2xl text-center">
-            <h2 className="mb-4 text-2xl font-bold md:text-3xl">Para quem é o Coach11?</h2>
+          <div className="c11-reveal mx-auto mb-12 max-w-2xl text-center">
+            <h2 className="mb-4 text-2xl font-bold md:text-3xl">
+              Para quem é o Coach11?
+            </h2>
           </div>
 
-          <div className="grid gap-6 md:grid-cols-2">
+          <div className="c11-reveal grid gap-6 md:grid-cols-2">
             <div className="rounded-2xl border border-white/10 bg-white/5 p-8">
               <div className="mb-4 inline-flex rounded-xl bg-emerald-500/20 p-3">
                 <Trophy className="h-6 w-6 text-emerald-400" />
               </div>
-              <h3 className="mb-2 text-xl font-semibold">Clubes certificados FPF</h3>
-              <p className="mb-4 text-sm text-white/50">
-                Dossier de treino completo, UTs estruturadas, biblioteca de exercícios,
-                avaliações — tudo o que a certificação exige, gerado automaticamente
-                a partir do trabalho no campo.
+              <h3 className="mb-2 text-xl font-semibold">
+                Clubes certificados FPF
+              </h3>
+              <p className="mb-4 text-sm text-white/55">
+                Dossier de treino completo, UTs estruturadas, biblioteca de
+                exercícios, avaliações — tudo o que a certificação exige, gerado
+                automaticamente a partir do trabalho no campo.
               </p>
               <ul className="space-y-2">
-                <li className="flex items-center gap-2 text-sm text-white/60">
+                <li className="flex items-center gap-2 text-sm text-white/65">
                   <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
                   Critério 4 da FPF coberto
                 </li>
-                <li className="flex items-center gap-2 text-sm text-white/60">
+                <li className="flex items-center gap-2 text-sm text-white/65">
                   <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
                   Pronto para visita técnica
                 </li>
-                <li className="flex items-center gap-2 text-sm text-white/60">
+                <li className="flex items-center gap-2 text-sm text-white/65">
                   <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
                   Export PDF com logo do clube
                 </li>
@@ -588,21 +471,24 @@ export default function LandingPage() {
               <div className="mb-4 inline-flex rounded-xl bg-white/10 p-3">
                 <Users className="h-6 w-6 text-white/70" />
               </div>
-              <h3 className="mb-2 text-xl font-semibold">Escolas de futebol e clubes pequenos</h3>
-              <p className="mb-4 text-sm text-white/50">
-                Começar a usar em minutos. Sem configuração complexa, sem obrigações
-                administrativas. Foco no que importa: treinar e gerir a equipa.
+              <h3 className="mb-2 text-xl font-semibold">
+                Escolas de futebol e clubes pequenos
+              </h3>
+              <p className="mb-4 text-sm text-white/55">
+                Começar a usar em minutos. Sem configuração complexa, sem
+                obrigações administrativas. Foco no que importa: treinar e gerir
+                a equipa.
               </p>
               <ul className="space-y-2">
-                <li className="flex items-center gap-2 text-sm text-white/60">
+                <li className="flex items-center gap-2 text-sm text-white/65">
                   <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
-                  Grátis para começar
+                  7 dias grátis para experimentar
                 </li>
-                <li className="flex items-center gap-2 text-sm text-white/60">
+                <li className="flex items-center gap-2 text-sm text-white/65">
                   <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
                   Mobile-first, instala como app
                 </li>
-                <li className="flex items-center gap-2 text-sm text-white/60">
+                <li className="flex items-center gap-2 text-sm text-white/65">
                   <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
                   Presenças, jogos e convocatórias
                 </li>
@@ -613,27 +499,30 @@ export default function LandingPage() {
       </section>
 
       {/* ═══ PLANOS ═══ */}
-      <section id="planos" className="border-t border-white/5 py-20 md:py-28">
+      <section id="planos" className="scroll-mt-24 border-t border-white/5 py-20 md:py-28">
         <div className="mx-auto max-w-6xl px-6">
-          <div className="mx-auto mb-12 max-w-2xl text-center">
+          <div className="c11-reveal mx-auto mb-12 max-w-2xl text-center">
             <h2 className="mb-4 text-2xl font-bold md:text-3xl">
               Planos para cada fase do clube
             </h2>
-            <p className="text-white/50">
+            <p className="text-white/55">
               Treinador individual em auto-serviço. Clube com onboarding
               dedicado. Sempre com o mesmo produto por baixo.
             </p>
           </div>
 
-          <div className="grid gap-6 md:grid-cols-3">
+          <div className="c11-reveal grid gap-6 md:grid-cols-3">
             {PLANS.map((plan) => (
               <PlanCard key={plan.name} {...plan} />
             ))}
           </div>
 
-          <p className="mt-10 text-center text-sm text-white/40">
+          <p className="mt-10 text-center text-sm text-white/50">
             Detalhes completos em{" "}
-            <Link href="/precos" className="text-emerald-400 underline-offset-2 hover:underline">
+            <Link
+              href="/precos"
+              className="text-emerald-400 underline-offset-2 hover:underline"
+            >
               /precos
             </Link>
             .
@@ -642,51 +531,47 @@ export default function LandingPage() {
       </section>
 
       {/* ═══ CTA ═══ */}
-      <section id="cta" className="relative py-20 md:py-28">
+      <section id="cta" className="relative scroll-mt-24 py-20 md:py-28">
         <div className="pointer-events-none absolute inset-0">
           <div className="absolute bottom-0 left-1/2 -translate-x-1/2 h-[400px] w-[600px] rounded-full bg-emerald-500/8 blur-3xl" />
         </div>
 
         <div className="relative mx-auto max-w-xl px-6 text-center">
-          <h2 className="mb-4 text-2xl font-bold md:text-3xl">
-            Pronto para deixar o papel no banco?
-          </h2>
-          <p className="mb-8 text-white/50">
-            Deixa o teu email e entramos em contacto.
-            Acesso gratuito durante a fase beta.
-          </p>
+          <div className="c11-reveal">
+            <h2 className="mb-4 text-2xl font-bold md:text-3xl">
+              Pronto para deixar o papel no banco?
+            </h2>
+            <p className="mb-8 text-white/55">
+              Começa hoje com 7 dias grátis. Sem compromisso.
+            </p>
 
-          {submitted ? (
-            <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-6">
-              <CheckCircle2 className="mx-auto mb-3 h-10 w-10 text-emerald-400" />
-              <p className="font-semibold text-emerald-400">Email registado com sucesso!</p>
-              <p className="mt-1 text-sm text-white/50">
-                Entramos em contacto em breve.
-              </p>
-            </div>
-          ) : (
-            <form onSubmit={handleSubmit} className="flex flex-col gap-3 sm:flex-row">
-              <input
-                type="email"
-                placeholder="O teu email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="flex-1 rounded-xl border border-white/10 bg-white/5 px-5 py-4 text-white placeholder-white/30 outline-none transition focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20"
+            <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
+              <PlanCtaButton
+                href="/billing/start"
+                label="Começar — 7 dias grátis"
+                planIntent="individual"
+                className="flex w-full items-center justify-center rounded-xl bg-emerald-500 px-8 py-4 font-semibold text-white transition hover:bg-emerald-400 active:scale-[0.97] sm:w-auto"
               />
-              <button
-                type="submit"
-                className="group flex items-center justify-center gap-2 rounded-xl bg-emerald-500 px-8 py-4 font-semibold text-white transition hover:bg-emerald-400"
+              <Link
+                href="/contacto?persona=club"
+                className="group flex w-full items-center justify-center gap-2 rounded-xl border border-white/15 px-8 py-4 font-medium text-white/80 transition hover:border-white/30 hover:text-white active:scale-[0.97] sm:w-auto"
               >
-                Quero acesso
+                Sou um clube
                 <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
-              </button>
-            </form>
-          )}
+              </Link>
+            </div>
+          </div>
 
-          <p className="mt-4 text-xs text-white/30">
-            Sem spam. Sem compromisso. Cancelar a qualquer momento.
-          </p>
+          {/* Captura secundaria — para quem prefere ser contactado */}
+          <div className="mx-auto mt-10 max-w-md border-t border-white/5 pt-8">
+            <p className="mb-4 text-sm text-white/55">
+              Preferes que te contactemos? Deixa o email.
+            </p>
+            <WaitlistForm />
+            <p className="mt-4 text-xs text-white/40">
+              Sem spam. Cancelas quando quiseres.
+            </p>
+          </div>
         </div>
       </section>
 
@@ -709,24 +594,24 @@ export default function LandingPage() {
               Coach<span className="text-emerald-400">11</span>
             </span>
           </Link>
-          <div className="flex items-center gap-4 text-xs text-white/40">
-            <Link href="/precos" className="transition hover:text-white/70">
+          <div className="flex items-center gap-4 text-xs text-white/50">
+            <Link href="/precos" className="transition hover:text-white/80">
               Preços
             </Link>
-            <Link href="/contacto" className="transition hover:text-white/70">
+            <Link href="/contacto" className="transition hover:text-white/80">
               Contacto
             </Link>
-            <Link href="/faqs" className="transition hover:text-white/70">
+            <Link href="/faqs" className="transition hover:text-white/80">
               FAQs
             </Link>
-            <Link href="/termos" className="transition hover:text-white/70">
+            <Link href="/termos" className="transition hover:text-white/80">
               Termos
             </Link>
-            <Link href="/privacidade" className="transition hover:text-white/70">
+            <Link href="/privacidade" className="transition hover:text-white/80">
               Privacidade
             </Link>
           </div>
-          <p className="text-xs text-white/30">
+          <p className="text-xs text-white/50">
             &copy; 2026 Coach11. Feito em Lisboa para treinadores de formação.
           </p>
         </div>

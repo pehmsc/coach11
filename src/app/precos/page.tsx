@@ -6,7 +6,7 @@ import { PlanCard, PLANS } from "@/components/public/PlanCard";
 export const metadata: Metadata = {
   title: "Preços e Planos — Coach11",
   description:
-    "Treinador individual ou clube? Coach11 tem três planos — Individual, Clube Standard e Clube Pro. Sem cartão para começar a lista de espera.",
+    "Treinador individual ou clube? Coach11 tem três planos — Individual (7 dias grátis), Clube Standard e Clube Pro.",
 };
 
 export default function PrecosPage() {
