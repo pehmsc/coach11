@@ -306,7 +306,10 @@
 <script>
   const SUPABASE_URL      = 'https://hqlqgviiafqfefukodpe.supabase.co';
   const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxbHFndmlpYWZxZmVmdWtvZHBlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE0NDcwNTYsImV4cCI6MjA4NzAyMzA1Nn0.Yk0mC55Okr0qcrKHNHBEO42qERDy6632ULkNGq9di-g';
-  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  // O cliente e criado dentro de init() (chamado pelo loader so depois de
+  // ambos os vendor scripts estarem prontos). Inicializa-lo aqui no topo
+  // executaria no parse do HTML, antes do supabase-js assincrono carregar.
+  let sb;
 
   let _submissions = [];
   let _currentFilter = 'all';
@@ -321,6 +324,8 @@
 
   // ── Init ─────────────────────────────────────────────────────────────────────
   async function init() {
+    sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
     // Wire up button hover effects after DOM is ready
     const gBtn = document.getElementById('btnGoogle');
     const lBtn = document.getElementById('btnLogin');
