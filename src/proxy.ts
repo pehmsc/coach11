@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
+import { buildCsp, generateNonce, NONCE_HEADER } from "@/lib/security/csp";
+
 const STATIC_EXACT_PATHS = new Set([
   "/manifest.webmanifest",
   "/sw.js",
@@ -74,6 +76,32 @@ function matchesPrefix(pathname: string, prefix: string) {
 }
 
 /**
+ * Anexa o nonce por-request a resposta de um documento HTML (Bloco C).
+ *
+ * - Gera o nonce (CPU-only — preserva a propriedade "proxy sem I/O").
+ * - Poe o nonce no header CSP report-only da REQUEST: o renderer do Next le o
+ *   nonce do `content-security-policy` ou, em fallback, do
+ *   `content-security-policy-report-only` (ver app-render do Next), e carimba
+ *   os scripts do framework. Como aqui so se poe no report-only, o enforce
+ *   (next.config, com unsafe-inline) nao bloqueia nada — rede de seguranca.
+ * - Poe o mesmo report-only na RESPONSE para o browser reportar violacoes.
+ *
+ * O enforce continua a vir do next.config ate ao PR de promocao.
+ */
+function withDocumentNonce(request: NextRequest): NextResponse {
+  const nonce = generateNonce();
+  const reportOnlyCsp = buildCsp({ nonce, reportOnly: true });
+
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set(NONCE_HEADER, nonce);
+  requestHeaders.set("content-security-policy-report-only", reportOnlyCsp);
+
+  const response = NextResponse.next({ request: { headers: requestHeaders } });
+  response.headers.set("Content-Security-Policy-Report-Only", reportOnlyCsp);
+  return response;
+}
+
+/**
  * Aplica redirect quando a rota nao bate com a persona do utilizador.
  * Retorna NextResponse de redirect ou null se nao ha redirect a fazer.
  *
@@ -125,8 +153,13 @@ export function proxy(request: NextRequest) {
       return NextResponse.next();
     }
 
+    // /api/* nao renderiza documentos HTML: o CSP nao governa respostas JSON
+    // nem os streams PDF (que tem overrides proprios de frame-ancestors no
+    // next.config). Nao gerar nonce nem tocar no CSP dessas rotas.
+    const isApiRoute = pathname.startsWith("/api");
+
     if (isAlwaysAllowedPath(pathname)) {
-      return NextResponse.next();
+      return isApiRoute ? NextResponse.next() : withDocumentNonce(request);
     }
 
     const planRedirect = maybeApplyPlanTypeRedirect(request);
@@ -135,7 +168,7 @@ export function proxy(request: NextRequest) {
     }
 
     // Hotfix: todo o gating beta/auth fica em route handlers Node.js.
-    return NextResponse.next();
+    return isApiRoute ? NextResponse.next() : withDocumentNonce(request);
   } catch {
     return NextResponse.next();
   }
