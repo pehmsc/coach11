@@ -1,11 +1,9 @@
-const SW_VERSION = "coach11-pwa-v4";
+const SW_VERSION = "coach11-pwa-v3";
 const STATIC_CACHE = `coach11-static-${SW_VERSION}`;
 const OFFLINE_URL = "/offline.html";
-const OFFLINE_SCRIPT_URL = "/offline.js";
 
 const PRECACHE_URLS = [
   OFFLINE_URL,
-  OFFLINE_SCRIPT_URL,
   "/manifest.webmanifest",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
@@ -19,8 +17,7 @@ function isStaticCacheablePath(pathname) {
     pathname.startsWith("/_next/static/") ||
     pathname.startsWith("/icons/") ||
     pathname === "/manifest.webmanifest" ||
-    pathname === OFFLINE_URL ||
-    pathname === OFFLINE_SCRIPT_URL
+    pathname === OFFLINE_URL
   );
 }
 
