@@ -719,6 +719,9 @@ export default function LandingPage() {
             <Link href="/faqs" className="transition hover:text-white/70">
               FAQs
             </Link>
+            <Link href="/termos" className="transition hover:text-white/70">
+              Termos
+            </Link>
             <Link href="/privacidade" className="transition hover:text-white/70">
               Privacidade
             </Link>

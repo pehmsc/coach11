@@ -12,15 +12,18 @@ export default function PrivacyPage() {
     <LegalPageLayout
       title="Política de Privacidade"
       intro="Esta página descreve como o Coach11 recolhe, usa, partilha e protege dados pessoais. Aplica-se a treinadores individuais, clubes, coordenadores, staff e atletas registados na plataforma."
-      lastUpdated="26 de Maio de 2026"
+      lastUpdated="14 de Junho de 2026"
     >
       <section>
         <h2>1. Responsável pelo tratamento</h2>
         <p>
           O <strong>Coach11</strong> (a &quot;Plataforma&quot;) é operado por
-          Pedro Campos, com sede em Lisboa, Portugal. Para questões sobre
-          dados pessoais, contacta{" "}
+          Pedro Campos / <strong>Be First RS</strong>, com sede em Lisboa,
+          Portugal. Para questões sobre dados pessoais, contacta o nosso ponto
+          de contacto RGPD em{" "}
           <a href="mailto:privacidade@coach11.app">privacidade@coach11.app</a>.
+          Para assuntos gerais:{" "}
+          <a href="mailto:ola@coach11.app">ola@coach11.app</a>.
         </p>
       </section>
 
@@ -96,7 +99,9 @@ export default function PrivacyPage() {
             <strong>Vercel</strong> — alojamento da aplicação web
           </li>
           <li>
-            <strong>Resend</strong> — envio de emails transaccionais (convites, recuperação de password)
+            <strong>Resend</strong> — envio de emails transaccionais a partir
+            do domínio coach11.app (convites, recuperação de password, avisos
+            de ciclo de vida da subscrição)
           </li>
           <li>
             <strong>PostHog (EU Cloud)</strong> — analítica de produto agregada
@@ -105,7 +110,8 @@ export default function PrivacyPage() {
             <strong>Sentry</strong> — captura de erros técnicos
           </li>
           <li>
-            <strong>Gateway de pagamento</strong> (apenas para clubes pagantes) — Stripe ou equivalente
+            <strong>Stripe</strong> — processamento de pagamentos e gestão de
+            subscrições (apenas para contas pagantes)
           </li>
         </ul>
         <p>
@@ -117,12 +123,23 @@ export default function PrivacyPage() {
         <h2>5. Retenção</h2>
         <ul>
           <li>
-            <strong>Dados de conta</strong> e operacionais: enquanto a conta
-            estiver activa. Após pedido de eliminação, dados pessoais são
-            apagados em até 30 dias.
+            <strong>Dados de conta e operacionais</strong>: mantidos enquanto a
+            subscrição estiver activa. Após o cancelamento (ou pedido de
+            eliminação), inicia-se uma <strong>janela de 60 dias</strong> antes
+            da eliminação definitiva — período durante o qual a conta pode ser
+            reactivada sem perda de dados. Durante essa janela enviamos avisos
+            por email: no momento do cancelamento (dia 0), a meio do período
+            (cerca do dia 30) e um aviso final antes da purga (cerca do dia
+            53). Decorridos os 60 dias sem reactivação, os dados operacionais
+            do clube são eliminados de forma definitiva e irreversível.
           </li>
           <li>
-            <strong>Dados de faturação</strong>: 10 anos (obrigação legal AT).
+            <strong>Dados de faturação</strong>: retidos por obrigação legal
+            (legislação fiscal, Autoridade Tributária) durante o prazo legal
+            aplicável (cerca de 10 anos). Estes dados são geridos pela Stripe e{" "}
+            <strong>nunca são apagados pelo processo de purga acima</strong> —
+            sobrevivem à eliminação da conta para cumprimento das obrigações
+            fiscais.
           </li>
           <li>
             <strong>Logs técnicos</strong>: 90 dias.
@@ -165,11 +182,31 @@ export default function PrivacyPage() {
       <section>
         <h2>7. Atletas menores de idade</h2>
         <p>
-          Quando o clube regista atletas menores de 16 anos, é responsabilidade
-          do clube garantir o consentimento dos encarregados de educação. O
-          Coach11 fornece ferramentas para os encarregados consultarem dados
-          do seu educando (calendário, convocatórias), mas não trata
-          directamente com menores como utilizadores.
+          A natureza do Coach11 implica o tratamento de dados pessoais de
+          atletas menores de idade. Esses dados &mdash; nome, data de
+          nascimento, posição, número e contactos dos encarregados de educação
+          &mdash; são registados pelos clubes e treinadores, e não pelos
+          próprios menores.
+        </p>
+        <p>
+          <strong>Os menores não são utilizadores directos da Plataforma</strong>:
+          não criam conta, não fazem sessão e não interagem com o Coach11.
+          Quem regista e gere estes dados é o clube ou o treinador responsável.
+        </p>
+        <p>
+          A <strong>recolha do consentimento dos encarregados de educação</strong>{" "}
+          para o tratamento dos dados do menor é da responsabilidade do clube ou
+          do treinador que regista o atleta, na qualidade de responsável por
+          esses dados perante as famílias. O Coach11 actua como ferramenta ao
+          serviço dessa relação.
+        </p>
+        <p>
+          O encarregado de educação pode, a qualquer momento, exercer os
+          direitos do menor &mdash; incluindo o{" "}
+          <strong>direito de eliminação</strong> dos seus dados &mdash; junto do
+          clube ou treinador responsável, ou através de{" "}
+          <a href="mailto:privacidade@coach11.app">privacidade@coach11.app</a>.
+          Tratamos estes pedidos com prioridade.
         </p>
       </section>
 
@@ -212,6 +249,16 @@ export default function PrivacyPage() {
           significativas são comunicadas por email com 30 dias de
           antecedência. A data de &quot;última actualização&quot; no topo
           indica a versão actual.
+        </p>
+      </section>
+
+      <section>
+        <p className="text-sm text-white/40">
+          <em>
+            Este documento é um modelo informativo e não constitui
+            aconselhamento jurídico; deve ser revisto por advogado antes do
+            lançamento comercial.
+          </em>
         </p>
       </section>
     </LegalPageLayout>
