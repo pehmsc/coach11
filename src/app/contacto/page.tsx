@@ -32,10 +32,10 @@ export default function ContactoPage() {
         <section>
           <h2>Preferes email?</h2>
           <p>
-            Geral: <a href="mailto:ola@coach11.app">ola@coach11.app</a>
+            Geral: <a href="mailto:hello@coach11.app">hello@coach11.app</a>
             <br />
             Privacidade / RGPD:{" "}
-            <a href="mailto:privacidade@coach11.app">privacidade@coach11.app</a>
+            <a href="mailto:privacy@coach11.app">privacy@coach11.app</a>
           </p>
         </section>
       </LegalProse>

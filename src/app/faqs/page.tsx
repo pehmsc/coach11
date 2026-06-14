@@ -187,7 +187,7 @@ const SECTIONS: FaqSection[] = [
         answer: (
           <p>
             Sim. Tens direito de portabilidade ao abrigo do RGPD — pedido em{" "}
-            <a href="mailto:privacidade@coach11.app">privacidade@coach11.app</a>{" "}
+            <a href="mailto:privacy@coach11.app">privacy@coach11.app</a>{" "}
             e enviamos exportação em JSON/CSV no prazo legal.
           </p>
         ),
@@ -310,9 +310,9 @@ const SECTIONS: FaqSection[] = [
         answer: (
           <p>
             Pelo formulário em <Link href="/contacto">/contacto</Link>, ou por
-            email: <a href="mailto:ola@coach11.app">ola@coach11.app</a>. Para
+            email: <a href="mailto:hello@coach11.app">hello@coach11.app</a>. Para
             assuntos de privacidade:{" "}
-            <a href="mailto:privacidade@coach11.app">privacidade@coach11.app</a>.
+            <a href="mailto:privacy@coach11.app">privacy@coach11.app</a>.
           </p>
         ),
       },
