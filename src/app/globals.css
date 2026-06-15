@@ -152,10 +152,11 @@
 }
 
 /* ─────────────────────────────────────────────────────────────
-   Landing — motion & craft
-   Scroll-driven reveals via CSS puro (animation-timeline: view()):
-   zero JS, off-main-thread, degrada para conteudo sempre visivel
-   em browsers sem suporte. Desligado sob reduced-motion.
+   Landing — sistema de motion (scroll-telling + craft)
+   Reveals scroll-driven via CSS puro (animation-timeline: view()):
+   zero JS, off-main-thread, degradam para conteudo sempre visivel
+   em browsers sem suporte. Animamos so transform/opacity (60fps).
+   Tudo desligado sob reduced-motion.
    ───────────────────────────────────────────────────────────── */
 @media (prefers-reduced-motion: no-preference) {
   html {
@@ -164,68 +165,102 @@
 
   /* Entrada do hero ao carregar (ease-out, vista uma vez por visita). */
   .c11-hero-in {
-    animation: c11-hero-in 0.7s var(--ease-out-strong) both;
+    animation: c11-hero-in 0.8s var(--ease-out-strong) both;
   }
-  .c11-hero-in-1 {
-    animation-delay: 0.04s;
+  .c11-hero-in-1 { animation-delay: 0.05s; }
+  .c11-hero-in-2 { animation-delay: 0.12s; }
+  .c11-hero-in-3 { animation-delay: 0.19s; }
+  .c11-hero-in-4 { animation-delay: 0.27s; }
+  .c11-hero-in-5 { animation-delay: 0.36s; }
+  .c11-hero-in-6 { animation-delay: 0.46s; }
+
+  /* Drift ambiente dos orbs de fundo (lento, subtil, infinito). */
+  .c11-orb-drift {
+    animation: c11-orb-drift 22s var(--ease-in-out-strong) infinite alternate;
   }
-  .c11-hero-in-2 {
-    animation-delay: 0.1s;
+  .c11-orb-drift-slow {
+    animation: c11-orb-drift-2 30s var(--ease-in-out-strong) infinite alternate;
   }
-  .c11-hero-in-3 {
-    animation-delay: 0.16s;
+
+  /* Float gentil para chips de destaque (pequeno, Apple-like). */
+  .c11-float {
+    animation: c11-float 6.5s ease-in-out infinite;
   }
-  .c11-hero-in-4 {
-    animation-delay: 0.22s;
-  }
-  .c11-hero-in-5 {
-    animation-delay: 0.32s;
+  .c11-float-delayed {
+    animation: c11-float 7.5s ease-in-out 1.2s infinite;
   }
 
   @supports (animation-timeline: view()) {
+    /* Reveal base — sobe e aparece ao entrar na viewport. */
     .c11-reveal {
       animation: c11-reveal-in linear both;
       animation-timeline: view();
-      animation-range: entry 0% entry 55%;
+      animation-range: entry 0% entry 50%;
     }
+    /* Variante com mais deslocamento, para destaques (ex.: telemovel). */
+    .c11-reveal-strong {
+      animation: c11-reveal-strong linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 50%;
+    }
+    /* Stagger por deslocamento do range -> cascata ao fazer scroll. */
+    .c11-d1 { animation-range: entry 5% entry 55%; }
+    .c11-d2 { animation-range: entry 10% entry 60%; }
+    .c11-d3 { animation-range: entry 15% entry 65%; }
+    .c11-d4 { animation-range: entry 20% entry 70%; }
+    .c11-d5 { animation-range: entry 25% entry 75%; }
+    .c11-d6 { animation-range: entry 30% entry 80%; }
+    .c11-d7 { animation-range: entry 35% entry 85%; }
   }
 }
 
 @keyframes c11-hero-in {
-  from {
-    opacity: 0;
-    transform: translateY(16px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: none; }
 }
 
 @keyframes c11-reveal-in {
-  from {
-    opacity: 0;
-    transform: translateY(14px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes c11-reveal-strong {
+  from { opacity: 0; transform: translateY(36px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Orb centrado por margem (translateX livre para o drift). */
+@keyframes c11-orb-drift {
+  from { transform: translateY(0) scale(1); opacity: 0.55; }
+  to { transform: translateY(28px) scale(1.12); opacity: 0.95; }
+}
+@keyframes c11-orb-drift-2 {
+  from { transform: translate(0, 0) scale(1); opacity: 0.4; }
+  to { transform: translate(-26px, -18px) scale(1.15); opacity: 0.75; }
+}
+
+@keyframes c11-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-7px); }
 }
 
 /* Lift no hover apenas em ponteiros finos com hover real (evita o card
    ficar "preso" levantado depois de um tap em ecra tactil). A transicao
    vive aqui para nao colidir com utilitarios Tailwind nos cards. */
-.c11-hover-lift {
+.c11-hover-lift,
+.c11-hover-lift-lg {
   transition:
-    transform 0.2s var(--ease-out-strong),
-    border-color 0.2s var(--ease-out-strong),
-    background-color 0.2s var(--ease-out-strong),
-    box-shadow 0.2s var(--ease-out-strong);
+    transform 0.22s var(--ease-out-strong),
+    border-color 0.22s var(--ease-out-strong),
+    background-color 0.22s var(--ease-out-strong),
+    box-shadow 0.22s var(--ease-out-strong);
 }
 @media (hover: hover) and (pointer: fine) {
   .c11-hover-lift:hover {
     transform: translateY(-4px);
+  }
+  .c11-hover-lift-lg:hover {
+    transform: translateY(-6px);
   }
 }
 
