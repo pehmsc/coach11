@@ -91,8 +91,8 @@ const SECTIONS: FaqSection[] = [
               </li>
             </ul>
             <p>
-              Detalhes em <Link href="/precos">/precos</Link> ou via pedido em{" "}
-              <Link href="/contacto">/contacto</Link>.
+              Detalhes na <Link href="/precos">página de preços</Link> ou através do{" "}
+              <Link href="/contacto">contacto</Link>.
             </p>
           </>
         ),
@@ -243,7 +243,7 @@ const SECTIONS: FaqSection[] = [
         question: "É compatível com o RGPD?",
         answer: (
           <p>
-            Sim. Política completa em <Link href="/privacidade">/privacidade</Link>.
+            Sim. Política completa na <Link href="/privacidade">Política de Privacidade</Link>.
           </p>
         ),
       },
@@ -309,7 +309,7 @@ const SECTIONS: FaqSection[] = [
         question: "Como vos contacto?",
         answer: (
           <p>
-            Pelo formulário em <Link href="/contacto">/contacto</Link>, ou por
+            Pelo <Link href="/contacto">formulário de contacto</Link>, ou por
             email: <a href="mailto:hello@coach11.app">hello@coach11.app</a>. Para
             assuntos de privacidade:{" "}
             <a href="mailto:privacy@coach11.app">privacy@coach11.app</a>.
