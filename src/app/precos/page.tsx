@@ -41,8 +41,8 @@ export default function PrecosPage() {
               Encriptação em trânsito, isolamento por RLS, servidores na UE
             </li>
             <li>
-              Cumprimento RGPD — política em{" "}
-              <Link href="/privacidade">/privacidade</Link>
+              Cumprimento RGPD — ver{" "}
+              <Link href="/privacidade">Política de Privacidade</Link>
             </li>
           </ul>
         </section>
@@ -84,8 +84,8 @@ export default function PrecosPage() {
 
           <p>
             Mais perguntas? Vê o nosso{" "}
-            <Link href="/faqs">FAQ completo</Link> ou contacta-nos por{" "}
-            <Link href="/contacto">/contacto</Link>.
+            <Link href="/faqs">FAQ completo</Link> ou contacta-nos pelo{" "}
+            <Link href="/contacto">formulário de contacto</Link>.
           </p>
         </section>
       </LegalProse>

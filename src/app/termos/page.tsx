@@ -68,8 +68,8 @@ export default function TermsPage() {
           </li>
           <li>
             Os <strong>planos de clube</strong> têm condições acordadas caso a
-            caso em onboarding dedicado. Consulta{" "}
-            <Link href="/precos">/precos</Link> para o detalhe dos planos.
+            caso em onboarding dedicado. Consulta a{" "}
+            <Link href="/precos">página de preços</Link> para o detalhe dos planos.
           </li>
           <li>
             O pagamento é processado pela <strong>Stripe</strong>. O Coach11 não

@@ -518,12 +518,12 @@ export default function LandingPage() {
           </div>
 
           <p className="mt-10 text-center text-sm text-white/50">
-            Detalhes completos em{" "}
+            Detalhes completos na{" "}
             <Link
               href="/precos"
               className="text-emerald-400 underline-offset-2 hover:underline"
             >
-              /precos
+              página de preços
             </Link>
             .
           </p>
