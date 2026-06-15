@@ -21,6 +21,30 @@ import { PlanCtaButton } from "@/components/public/PlanCtaButton";
 import { LandingNav } from "@/components/public/landing/LandingNav";
 import { WaitlistForm } from "@/components/public/landing/WaitlistForm";
 import { HeroDevice } from "@/components/public/landing/HeroDevice";
+import { CountUp } from "@/components/public/landing/CountUp";
+
+// Classes de stagger (cascata ao scroll) — ver globals.css.
+const D = ["", "c11-d1", "c11-d2", "c11-d3", "c11-d4", "c11-d5", "c11-d6", "c11-d7"];
+
+// ── Reveal (server, zero JS): wrapper que anima via animation-timeline ──
+// Mantido separado dos cards com hover-lift para nao colidir no `transform`.
+function Reveal({
+  children,
+  d = 0,
+  strong = false,
+  className = "",
+}: {
+  children: React.ReactNode;
+  d?: number;
+  strong?: boolean;
+  className?: string;
+}) {
+  return (
+    <div className={`${strong ? "c11-reveal-strong" : "c11-reveal"} ${D[d] ?? ""} ${className}`}>
+      {children}
+    </div>
+  );
+}
 
 // ── Stat (hero) ──
 function Stat({
@@ -47,6 +71,66 @@ function Stat({
 }
 
 // ── Feature Card ──
+const FEATURES = [
+  {
+    icon: ClipboardCheck,
+    title: "Presenças em 20 segundos",
+    description:
+      "Lista de jogadores com foto e toggle grande. Guardar fixo no fundo. Feito antes do apito.",
+    accent: true,
+  },
+  {
+    icon: Timer,
+    title: "Eventos live em jogo",
+    description:
+      "Golos, cartões, substituições — 2 toques com minuto auto-preenchido. Regista durante o jogo, não depois.",
+    accent: true,
+  },
+  {
+    icon: Copy,
+    title: "Duplicar semana de treinos",
+    description:
+      "Cria a semana 1 (UT01-UT03). Duplica para o resto da época. 120 sessões em segundos, não em horas.",
+    accent: true,
+  },
+  {
+    icon: BarChart3,
+    title: "Insights no telemóvel",
+    description:
+      "Minutos jogados, golos, presenças, alertas de suspensão. Consulta rápida no banco antes de decidir uma substituição.",
+  },
+  {
+    icon: Bell,
+    title: "Notificações push",
+    description:
+      "Convocatórias, treinos, alterações — tudo chega ao atleta e ao pai sem depender do WhatsApp.",
+  },
+  {
+    icon: FileText,
+    title: "PDF automático",
+    description:
+      "Relatório de jogo e planeamento de treino gerados automaticamente com logo do clube. Partilha com 1 toque.",
+  },
+  {
+    icon: Shield,
+    title: "Dossier de treino FPF",
+    description:
+      "UTs estruturadas, biblioteca de exercícios, avaliações, objectivos — tudo o que a certificação pede, pronto para a visita técnica.",
+  },
+  {
+    icon: Users,
+    title: "Multi-equipa, multi-escalão",
+    description:
+      "Coordenador vê tudo. Treinador vê a sua equipa. Adjunto marca presenças. Cada um vê o que precisa.",
+  },
+  {
+    icon: Smartphone,
+    title: "PWA instalável",
+    description:
+      "Instala no telemóvel como uma app nativa. Sem App Store, sem Play Store. Abre e usa.",
+  },
+];
+
 function FeatureCard({
   icon: Icon,
   title,
@@ -60,7 +144,7 @@ function FeatureCard({
 }) {
   return (
     <div
-      className={`group relative rounded-2xl border p-6 c11-hover-lift ${
+      className={`group relative flex h-full flex-col rounded-2xl border p-6 c11-hover-lift ${
         accent
           ? "border-emerald-500/30 bg-emerald-950/40 hover:border-emerald-400/50 hover:shadow-lg hover:shadow-emerald-500/10"
           : "border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/8"
@@ -80,6 +164,16 @@ function FeatureCard({
 }
 
 // ── Comparison Row ──
+const COMPARISONS = [
+  { feature: "Marcar presenças", old: "5+ minutos, laptop", better: "< 20 segundos, telemóvel" },
+  { feature: "Evento em jogo", old: "Anotar em papel, passar depois", better: "2 toques, tempo real" },
+  { feature: "Criar 120 treinos", old: "120 operações manuais", better: "4 cliques (duplicar semana)" },
+  { feature: "Ver minutos de jogador", old: "Procurar em tabelas desktop", better: "2 toques no banco" },
+  { feature: "Enviar convocatória", old: "WhatsApp manual", better: "Push notification automática" },
+  { feature: "Relatório de jogo", old: "Preencher formulário", better: "PDF gerado automaticamente" },
+  { feature: "Dossier para FPF", old: "Compilar no final da época", better: "Sempre actualizado, exportável" },
+];
+
 function ComparisonRow({
   feature,
   old,
@@ -105,14 +199,16 @@ export default function LandingPage() {
       <LandingNav />
 
       {/* ═══ HERO ═══ */}
-      <section className="relative overflow-hidden pt-32 pb-20 md:pt-40 md:pb-28">
+      <section className="relative overflow-hidden pt-36 pb-24 md:pt-44 md:pb-32">
         <div className="pointer-events-none absolute inset-0">
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 h-[600px] w-[800px] rounded-full bg-emerald-500/8 blur-3xl" />
-          <div className="absolute bottom-0 right-0 h-[300px] w-[400px] rounded-full bg-emerald-600/5 blur-3xl" />
+          <div className="c11-orb-drift absolute top-0 left-1/2 -ml-[400px] h-[600px] w-[800px] rounded-full bg-emerald-500/10 blur-3xl" />
+          <div className="c11-orb-drift-slow absolute bottom-0 right-0 h-[320px] w-[440px] rounded-full bg-emerald-600/8 blur-3xl" />
+          {/* Vinheta radial subtil para profundidade */}
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(16,185,129,0.06),transparent_55%)]" />
         </div>
 
         <div className="relative mx-auto max-w-6xl px-6">
-          <div className="grid items-center gap-14 lg:grid-cols-2 lg:gap-8">
+          <div className="grid items-center gap-16 lg:grid-cols-[1.05fr_0.95fr] lg:gap-10">
             {/* Copy */}
             <div className="text-center lg:text-left">
               <div className="c11-hero-in c11-hero-in-1 mb-6 inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-4 py-1.5 text-sm text-emerald-300">
@@ -120,7 +216,7 @@ export default function LandingPage() {
                 <span>Para treinadores e clubes de formação</span>
               </div>
 
-              <h1 className="c11-hero-in c11-hero-in-2 mb-6 text-4xl font-extrabold leading-[1.05] tracking-tight md:text-5xl lg:text-6xl">
+              <h1 className="c11-hero-in c11-hero-in-2 mb-6 text-5xl font-extrabold leading-[1.02] tracking-[-0.02em] md:text-6xl lg:text-7xl">
                 O treinador regista.
                 <br />
                 <span className="bg-gradient-to-r from-emerald-400 to-emerald-300 bg-clip-text text-transparent">
@@ -168,7 +264,7 @@ export default function LandingPage() {
             </div>
 
             {/* Device */}
-            <div className="c11-hero-in c11-hero-in-5 relative mt-4 lg:mt-0">
+            <div className="c11-hero-in c11-hero-in-6 relative mt-6 lg:mt-0">
               <HeroDevice />
             </div>
           </div>
@@ -176,106 +272,71 @@ export default function LandingPage() {
       </section>
 
       {/* ═══ PAIN SECTION ═══ */}
-      <section className="border-t border-white/5 bg-slate-900/50 py-20">
+      <section className="border-t border-white/[0.06] bg-slate-900/50 py-24 md:py-32">
         <div className="mx-auto max-w-6xl px-6">
-          <div className="c11-reveal mx-auto max-w-2xl text-center">
-            <h2 className="mb-4 text-2xl font-bold md:text-3xl">
+          <Reveal className="mx-auto max-w-2xl text-center">
+            <h2 className="mb-4 text-3xl font-bold tracking-tight md:text-4xl">
               O problema que todos os treinadores conhecem
             </h2>
-            <p className="text-white/55">
+            <p className="text-lg text-white/55">
               131 treinos agendados. Apenas 1 com presenças registadas. Não
               porque o treinador não quer — porque a ferramenta não deixa.
             </p>
-          </div>
+          </Reveal>
 
-          <div className="c11-reveal mt-12 grid gap-4 md:grid-cols-3">
-            <div className="rounded-xl border border-red-500/10 bg-red-500/5 p-6">
-              <div className="mb-3 text-2xl font-bold text-red-400/80">Desktop</div>
-              <p className="text-sm text-white/55">
-                Plataformas pensadas para o escritório. No campo, com frio e
-                luvas, ninguém abre um laptop para marcar presenças.
-              </p>
-            </div>
-            <div className="rounded-xl border border-red-500/10 bg-red-500/5 p-6">
-              <div className="mb-3 text-2xl font-bold text-red-400/80">Manual</div>
-              <p className="text-sm text-white/55">
-                Dados inseridos duas vezes. O treinador regista e depois o admin
-                volta a preencher. Duplicação constante.
-              </p>
-            </div>
-            <div className="rounded-xl border border-red-500/10 bg-red-500/5 p-6">
-              <div className="mb-3 text-2xl font-bold text-red-400/80">120×</div>
-              <p className="text-sm text-white/55">
-                120 treinos por época criados um a um. Sem duplicação semanal,
-                sem auto-incremento. Trabalho repetitivo que ninguém quer fazer.
-              </p>
-            </div>
+          <div className="mt-14 grid gap-4 md:grid-cols-3">
+            <Reveal d={1}>
+              <div className="h-full rounded-xl border border-red-500/10 bg-red-500/5 p-6">
+                <div className="mb-3 text-2xl font-bold text-red-400/80">Desktop</div>
+                <p className="text-sm text-white/55">
+                  Plataformas pensadas para o escritório. No campo, com frio e
+                  luvas, ninguém abre um laptop para marcar presenças.
+                </p>
+              </div>
+            </Reveal>
+            <Reveal d={2}>
+              <div className="h-full rounded-xl border border-red-500/10 bg-red-500/5 p-6">
+                <div className="mb-3 text-2xl font-bold text-red-400/80">Manual</div>
+                <p className="text-sm text-white/55">
+                  Dados inseridos duas vezes. O treinador regista e depois o
+                  admin volta a preencher. Duplicação constante.
+                </p>
+              </div>
+            </Reveal>
+            <Reveal d={3}>
+              <div className="h-full rounded-xl border border-red-500/10 bg-red-500/5 p-6">
+                <div className="mb-3 text-2xl font-bold text-red-400/80">
+                  <CountUp to={120} suffix="×" />
+                </div>
+                <p className="text-sm text-white/55">
+                  120 treinos por época criados um a um. Sem duplicação semanal,
+                  sem auto-incremento. Trabalho repetitivo que ninguém quer fazer.
+                </p>
+              </div>
+            </Reveal>
           </div>
         </div>
       </section>
 
       {/* ═══ FEATURES ═══ */}
-      <section id="features" className="scroll-mt-24 py-20 md:py-28">
+      <section id="features" className="scroll-mt-24 py-24 md:py-32">
         <div className="mx-auto max-w-6xl px-6">
-          <div className="c11-reveal mx-auto mb-16 max-w-2xl text-center">
-            <h2 className="mb-4 text-2xl font-bold md:text-3xl">
+          <Reveal className="mx-auto mb-16 max-w-2xl text-center">
+            <h2 className="mb-4 text-3xl font-bold tracking-tight md:text-4xl">
               Tudo o que precisas. Nada do que não precisas.
             </h2>
-            <p className="text-white/55">
+            <p className="text-lg text-white/55">
               Desenhado por treinadores, para treinadores. Cada funcionalidade
               foi pensada para o contexto real: campo, banco, viagem.
             </p>
-          </div>
+          </Reveal>
 
-          <div className="c11-reveal grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            <FeatureCard
-              icon={ClipboardCheck}
-              title="Presenças em 20 segundos"
-              description="Lista de jogadores com foto e toggle grande. Guardar fixo no fundo. Feito antes do apito."
-              accent
-            />
-            <FeatureCard
-              icon={Timer}
-              title="Eventos live em jogo"
-              description="Golos, cartões, substituições — 2 toques com minuto auto-preenchido. Regista durante o jogo, não depois."
-              accent
-            />
-            <FeatureCard
-              icon={Copy}
-              title="Duplicar semana de treinos"
-              description="Cria a semana 1 (UT01-UT03). Duplica para o resto da época. 120 sessões em segundos, não em horas."
-              accent
-            />
-            <FeatureCard
-              icon={BarChart3}
-              title="Insights no telemóvel"
-              description="Minutos jogados, golos, presenças, alertas de suspensão. Consulta rápida no banco antes de decidir uma substituição."
-            />
-            <FeatureCard
-              icon={Bell}
-              title="Notificações push"
-              description="Convocatórias, treinos, alterações — tudo chega ao atleta e ao pai sem depender do WhatsApp."
-            />
-            <FeatureCard
-              icon={FileText}
-              title="PDF automático"
-              description="Relatório de jogo e planeamento de treino gerados automaticamente com logo do clube. Partilha com 1 toque."
-            />
-            <FeatureCard
-              icon={Shield}
-              title="Dossier de treino FPF"
-              description="UTs estruturadas, biblioteca de exercícios, avaliações, objectivos — tudo o que a certificação pede, pronto para a visita técnica."
-            />
-            <FeatureCard
-              icon={Users}
-              title="Multi-equipa, multi-escalão"
-              description="Coordenador vê tudo. Treinador vê a sua equipa. Adjunto marca presenças. Cada um vê o que precisa."
-            />
-            <FeatureCard
-              icon={Smartphone}
-              title="PWA instalável"
-              description="Instala no telemóvel como uma app nativa. Sem App Store, sem Play Store. Abre e usa."
-            />
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {FEATURES.map((f, i) => (
+              <Reveal key={f.title} d={(i % 3) + 1} className="h-full">
+                <FeatureCard {...f} />
+              </Reveal>
+            ))}
           </div>
         </div>
       </section>
@@ -283,237 +344,221 @@ export default function LandingPage() {
       {/* ═══ HOW IT WORKS ═══ */}
       <section
         id="how"
-        className="scroll-mt-24 border-t border-white/5 bg-slate-900/30 py-20 md:py-28"
+        className="scroll-mt-24 border-t border-white/[0.06] bg-slate-900/30 py-24 md:py-32"
       >
         <div className="mx-auto max-w-6xl px-6">
-          <div className="c11-reveal mx-auto mb-16 max-w-2xl text-center">
-            <h2 className="mb-4 text-2xl font-bold md:text-3xl">
+          <Reveal className="mx-auto mb-16 max-w-2xl text-center">
+            <h2 className="mb-4 text-3xl font-bold tracking-tight md:text-4xl">
               Campo → Sistema → Dashboard
             </h2>
-            <p className="text-white/55">
+            <p className="text-lg text-white/55">
               Os dados nascem no campo e fluem automaticamente. Ninguém insere
               nada duas vezes.
             </p>
-          </div>
+          </Reveal>
 
-          <div className="c11-reveal grid gap-8 md:grid-cols-3">
+          <div className="grid gap-8 md:grid-cols-3">
             {/* Step 1 */}
-            <div className="relative">
-              <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/20 text-xl font-bold text-emerald-400">
-                1
+            <Reveal d={1}>
+              <div className="relative">
+                <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/20 text-xl font-bold text-emerald-400">
+                  1
+                </div>
+                <h3 className="mb-2 text-lg font-semibold">
+                  O treinador regista no campo
+                </h3>
+                <p className="text-sm text-white/55">
+                  Presenças, eventos de jogo, avaliações pós-jogo, notas de
+                  treino. Tudo no telemóvel, rápido, com uma mão.
+                </p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-xs text-emerald-400">
+                    Mobile-first
+                  </span>
+                  <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-xs text-emerald-400">
+                    Offline-ready
+                  </span>
+                </div>
+                <div className="c11-reveal c11-d5 absolute top-6 right-0 hidden translate-x-1/2 md:block">
+                  <ChevronRight className="h-6 w-6 text-white/20" />
+                </div>
               </div>
-              <h3 className="mb-2 text-lg font-semibold">
-                O treinador regista no campo
-              </h3>
-              <p className="text-sm text-white/55">
-                Presenças, eventos de jogo, avaliações pós-jogo, notas de treino.
-                Tudo no telemóvel, rápido, com uma mão.
-              </p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-xs text-emerald-400">
-                  Mobile-first
-                </span>
-                <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-xs text-emerald-400">
-                  Offline-ready
-                </span>
-              </div>
-              <div className="absolute top-6 right-0 hidden translate-x-1/2 md:block">
-                <ChevronRight className="h-6 w-6 text-white/10" />
-              </div>
-            </div>
+            </Reveal>
 
             {/* Step 2 */}
-            <div className="relative">
-              <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 text-xl font-bold text-white/70">
-                2
+            <Reveal d={2}>
+              <div className="relative">
+                <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 text-xl font-bold text-white/70">
+                  2
+                </div>
+                <h3 className="mb-2 text-lg font-semibold">O sistema processa</h3>
+                <p className="text-sm text-white/55">
+                  Agrega estatísticas, calcula minutos, gera rankings, detecta
+                  alertas (3 amarelos, faltas consecutivas), prepara relatórios.
+                </p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <span className="rounded-full bg-white/5 px-3 py-1 text-xs text-white/50">
+                    Automático
+                  </span>
+                  <span className="rounded-full bg-white/5 px-3 py-1 text-xs text-white/50">
+                    Tempo real
+                  </span>
+                </div>
+                <div className="c11-reveal c11-d6 absolute top-6 right-0 hidden translate-x-1/2 md:block">
+                  <ChevronRight className="h-6 w-6 text-white/20" />
+                </div>
               </div>
-              <h3 className="mb-2 text-lg font-semibold">O sistema processa</h3>
-              <p className="text-sm text-white/55">
-                Agrega estatísticas, calcula minutos, gera rankings, detecta
-                alertas (3 amarelos, faltas consecutivas), prepara relatórios.
-              </p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <span className="rounded-full bg-white/5 px-3 py-1 text-xs text-white/50">
-                  Automático
-                </span>
-                <span className="rounded-full bg-white/5 px-3 py-1 text-xs text-white/50">
-                  Tempo real
-                </span>
-              </div>
-              <div className="absolute top-6 right-0 hidden translate-x-1/2 md:block">
-                <ChevronRight className="h-6 w-6 text-white/10" />
-              </div>
-            </div>
+            </Reveal>
 
             {/* Step 3 */}
-            <div>
-              <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 text-xl font-bold text-white/70">
-                3
+            <Reveal d={3}>
+              <div>
+                <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 text-xl font-bold text-white/70">
+                  3
+                </div>
+                <h3 className="mb-2 text-lg font-semibold">
+                  O coordenador consulta
+                </h3>
+                <p className="text-sm text-white/55">
+                  Dashboard com insights, dossier de treino pronto, relatórios
+                  exportáveis. Sem inserir um único dado manualmente.
+                </p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <span className="rounded-full bg-white/5 px-3 py-1 text-xs text-white/50">
+                    Dashboard
+                  </span>
+                  <span className="rounded-full bg-white/5 px-3 py-1 text-xs text-white/50">
+                    Export PDF/Excel
+                  </span>
+                </div>
               </div>
-              <h3 className="mb-2 text-lg font-semibold">
-                O coordenador consulta
-              </h3>
-              <p className="text-sm text-white/55">
-                Dashboard com insights, dossier de treino pronto, relatórios
-                exportáveis. Sem inserir um único dado manualmente.
-              </p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <span className="rounded-full bg-white/5 px-3 py-1 text-xs text-white/50">
-                  Dashboard
-                </span>
-                <span className="rounded-full bg-white/5 px-3 py-1 text-xs text-white/50">
-                  Export PDF/Excel
-                </span>
-              </div>
-            </div>
+            </Reveal>
           </div>
         </div>
       </section>
 
       {/* ═══ COMPARISON ═══ */}
-      <section id="comparison" className="scroll-mt-24 py-20 md:py-28">
+      <section id="comparison" className="scroll-mt-24 py-24 md:py-32">
         <div className="mx-auto max-w-3xl px-6">
-          <div className="c11-reveal mb-12 text-center">
-            <h2 className="mb-4 text-2xl font-bold md:text-3xl">
+          <Reveal className="mb-12 text-center">
+            <h2 className="mb-4 text-3xl font-bold tracking-tight md:text-4xl">
               A diferença no dia a dia
             </h2>
-            <p className="text-white/55">
+            <p className="text-lg text-white/55">
               Não se trata de mais funcionalidades. Trata-se de melhor execução
               nos momentos que importam.
             </p>
-          </div>
+          </Reveal>
 
-          <div className="c11-reveal rounded-2xl border border-white/5 bg-white/[0.02] p-6 md:p-8">
+          <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-6 md:p-8">
             <div className="grid grid-cols-3 gap-4 border-b border-white/10 pb-4 text-sm font-semibold">
               <span className="text-white/50">Tarefa</span>
               <span className="text-center text-white/40">Antes</span>
               <span className="text-center text-emerald-400">Coach11</span>
             </div>
 
-            <ComparisonRow
-              feature="Marcar presenças"
-              old="5+ minutos, laptop"
-              better="< 20 segundos, telemóvel"
-            />
-            <ComparisonRow
-              feature="Evento em jogo"
-              old="Anotar em papel, passar depois"
-              better="2 toques, tempo real"
-            />
-            <ComparisonRow
-              feature="Criar 120 treinos"
-              old="120 operações manuais"
-              better="4 cliques (duplicar semana)"
-            />
-            <ComparisonRow
-              feature="Ver minutos de jogador"
-              old="Procurar em tabelas desktop"
-              better="2 toques no banco"
-            />
-            <ComparisonRow
-              feature="Enviar convocatória"
-              old="WhatsApp manual"
-              better="Push notification automática"
-            />
-            <ComparisonRow
-              feature="Relatório de jogo"
-              old="Preencher formulário"
-              better="PDF gerado automaticamente"
-            />
-            <ComparisonRow
-              feature="Dossier para FPF"
-              old="Compilar no final da época"
-              better="Sempre actualizado, exportável"
-            />
+            {COMPARISONS.map((row, i) => (
+              <Reveal key={row.feature} d={Math.min(i + 1, 7)}>
+                <ComparisonRow {...row} />
+              </Reveal>
+            ))}
           </div>
         </div>
       </section>
 
       {/* ═══ FOR WHO ═══ */}
-      <section className="border-t border-white/5 bg-slate-900/30 py-20">
+      <section className="border-t border-white/[0.06] bg-slate-900/30 py-24 md:py-32">
         <div className="mx-auto max-w-6xl px-6">
-          <div className="c11-reveal mx-auto mb-12 max-w-2xl text-center">
-            <h2 className="mb-4 text-2xl font-bold md:text-3xl">
+          <Reveal className="mx-auto mb-12 max-w-2xl text-center">
+            <h2 className="text-3xl font-bold tracking-tight md:text-4xl">
               Para quem é o Coach11?
             </h2>
-          </div>
+          </Reveal>
 
-          <div className="c11-reveal grid gap-6 md:grid-cols-2">
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-8">
-              <div className="mb-4 inline-flex rounded-xl bg-emerald-500/20 p-3">
-                <Trophy className="h-6 w-6 text-emerald-400" />
+          <div className="grid gap-6 md:grid-cols-2">
+            <Reveal d={1} className="h-full">
+              <div className="h-full rounded-2xl border border-white/10 bg-white/5 p-8">
+                <div className="mb-4 inline-flex rounded-xl bg-emerald-500/20 p-3">
+                  <Trophy className="h-6 w-6 text-emerald-400" />
+                </div>
+                <h3 className="mb-2 text-xl font-semibold">
+                  Clubes certificados FPF
+                </h3>
+                <p className="mb-4 text-sm text-white/55">
+                  Dossier de treino completo, UTs estruturadas, biblioteca de
+                  exercícios, avaliações — tudo o que a certificação exige,
+                  gerado automaticamente a partir do trabalho no campo.
+                </p>
+                <ul className="space-y-2">
+                  <li className="flex items-center gap-2 text-sm text-white/65">
+                    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+                    Critério 4 da FPF coberto
+                  </li>
+                  <li className="flex items-center gap-2 text-sm text-white/65">
+                    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+                    Pronto para visita técnica
+                  </li>
+                  <li className="flex items-center gap-2 text-sm text-white/65">
+                    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+                    Export PDF com logo do clube
+                  </li>
+                </ul>
               </div>
-              <h3 className="mb-2 text-xl font-semibold">
-                Clubes certificados FPF
-              </h3>
-              <p className="mb-4 text-sm text-white/55">
-                Dossier de treino completo, UTs estruturadas, biblioteca de
-                exercícios, avaliações — tudo o que a certificação exige, gerado
-                automaticamente a partir do trabalho no campo.
-              </p>
-              <ul className="space-y-2">
-                <li className="flex items-center gap-2 text-sm text-white/65">
-                  <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
-                  Critério 4 da FPF coberto
-                </li>
-                <li className="flex items-center gap-2 text-sm text-white/65">
-                  <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
-                  Pronto para visita técnica
-                </li>
-                <li className="flex items-center gap-2 text-sm text-white/65">
-                  <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
-                  Export PDF com logo do clube
-                </li>
-              </ul>
-            </div>
+            </Reveal>
 
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-8">
-              <div className="mb-4 inline-flex rounded-xl bg-white/10 p-3">
-                <Users className="h-6 w-6 text-white/70" />
+            <Reveal d={2} className="h-full">
+              <div className="h-full rounded-2xl border border-white/10 bg-white/5 p-8">
+                <div className="mb-4 inline-flex rounded-xl bg-white/10 p-3">
+                  <Users className="h-6 w-6 text-white/70" />
+                </div>
+                <h3 className="mb-2 text-xl font-semibold">
+                  Escolas de futebol e clubes pequenos
+                </h3>
+                <p className="mb-4 text-sm text-white/55">
+                  Começar a usar em minutos. Sem configuração complexa, sem
+                  obrigações administrativas. Foco no que importa: treinar e
+                  gerir a equipa.
+                </p>
+                <ul className="space-y-2">
+                  <li className="flex items-center gap-2 text-sm text-white/65">
+                    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+                    7 dias grátis para experimentar
+                  </li>
+                  <li className="flex items-center gap-2 text-sm text-white/65">
+                    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+                    Mobile-first, instala como app
+                  </li>
+                  <li className="flex items-center gap-2 text-sm text-white/65">
+                    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+                    Presenças, jogos e convocatórias
+                  </li>
+                </ul>
               </div>
-              <h3 className="mb-2 text-xl font-semibold">
-                Escolas de futebol e clubes pequenos
-              </h3>
-              <p className="mb-4 text-sm text-white/55">
-                Começar a usar em minutos. Sem configuração complexa, sem
-                obrigações administrativas. Foco no que importa: treinar e gerir
-                a equipa.
-              </p>
-              <ul className="space-y-2">
-                <li className="flex items-center gap-2 text-sm text-white/65">
-                  <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
-                  7 dias grátis para experimentar
-                </li>
-                <li className="flex items-center gap-2 text-sm text-white/65">
-                  <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
-                  Mobile-first, instala como app
-                </li>
-                <li className="flex items-center gap-2 text-sm text-white/65">
-                  <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
-                  Presenças, jogos e convocatórias
-                </li>
-              </ul>
-            </div>
+            </Reveal>
           </div>
         </div>
       </section>
 
       {/* ═══ PLANOS ═══ */}
-      <section id="planos" className="scroll-mt-24 border-t border-white/5 py-20 md:py-28">
+      <section id="planos" className="scroll-mt-24 border-t border-white/[0.06] py-24 md:py-32">
         <div className="mx-auto max-w-6xl px-6">
-          <div className="c11-reveal mx-auto mb-12 max-w-2xl text-center">
-            <h2 className="mb-4 text-2xl font-bold md:text-3xl">
+          <Reveal className="mx-auto mb-12 max-w-2xl text-center">
+            <h2 className="mb-4 text-3xl font-bold tracking-tight md:text-4xl">
               Planos para cada fase do clube
             </h2>
-            <p className="text-white/55">
+            <p className="text-lg text-white/55">
               Treinador individual em auto-serviço. Clube com onboarding
               dedicado. Sempre com o mesmo produto por baixo.
             </p>
-          </div>
+          </Reveal>
 
-          <div className="c11-reveal grid gap-6 md:grid-cols-3">
-            {PLANS.map((plan) => (
-              <PlanCard key={plan.name} {...plan} />
+          <div className="grid gap-6 md:grid-cols-3">
+            {PLANS.map((plan, i) => (
+              <Reveal key={plan.name} d={i + 1} className="h-full">
+                <div className="h-full c11-hover-lift-lg">
+                  <PlanCard {...plan} />
+                </div>
+              </Reveal>
             ))}
           </div>
 
@@ -531,17 +576,17 @@ export default function LandingPage() {
       </section>
 
       {/* ═══ CTA ═══ */}
-      <section id="cta" className="relative scroll-mt-24 py-20 md:py-28">
+      <section id="cta" className="relative scroll-mt-24 overflow-hidden py-24 md:py-32">
         <div className="pointer-events-none absolute inset-0">
-          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 h-[400px] w-[600px] rounded-full bg-emerald-500/8 blur-3xl" />
+          <div className="c11-orb-drift absolute bottom-0 left-1/2 -ml-[300px] h-[420px] w-[600px] rounded-full bg-emerald-500/10 blur-3xl" />
         </div>
 
         <div className="relative mx-auto max-w-xl px-6 text-center">
-          <div className="c11-reveal">
-            <h2 className="mb-4 text-2xl font-bold md:text-3xl">
+          <Reveal>
+            <h2 className="mb-4 text-3xl font-bold tracking-tight md:text-4xl">
               Pronto para deixar o papel no banco?
             </h2>
-            <p className="mb-8 text-white/55">
+            <p className="mb-8 text-lg text-white/55">
               Começa hoje com 7 dias grátis. Sem compromisso.
             </p>
 
@@ -560,7 +605,7 @@ export default function LandingPage() {
                 <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
               </Link>
             </div>
-          </div>
+          </Reveal>
 
           {/* Captura secundaria — para quem prefere ser contactado */}
           <div className="mx-auto mt-10 max-w-md border-t border-white/5 pt-8">
