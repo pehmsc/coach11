@@ -1,672 +1,1160 @@
-import Image from "next/image";
+"use client";
+
+import { useEffect } from "react";
 import Link from "next/link";
-import {
-  Timer,
-  Smartphone,
-  BarChart3,
-  ClipboardCheck,
-  Zap,
-  Users,
-  ChevronRight,
-  FileText,
-  Copy,
-  CalendarDays,
-  ArrowRight,
-  ArrowDown,
-  Gift,
-  XCircle,
-  Download,
-  Rocket,
-  Quote,
-} from "lucide-react";
-import { PlanCard, PLANS } from "@/components/public/PlanCard";
 import { PlanCtaButton } from "@/components/public/PlanCtaButton";
-import { LandingNav } from "@/components/public/landing/LandingNav";
-import { HeroDevice } from "@/components/public/landing/HeroDevice";
-import { CountUp } from "@/components/public/landing/CountUp";
+import "./landing/landing-anexo.css";
 
-// Classes de stagger (cascata ao scroll) — ver globals.css.
-const D = ["", "c11-d1", "c11-d2", "c11-d3", "c11-d4", "c11-d5", "c11-d6", "c11-d7"];
-
-// ── Reveal (server, zero JS): wrapper que anima via animation-timeline ──
-// Mantido separado dos cards com hover-lift para nao colidir no `transform`.
-function Reveal({
-  children,
-  d = 0,
-  strong = false,
-  className = "",
-}: {
-  children: React.ReactNode;
-  d?: number;
-  strong?: boolean;
-  className?: string;
-}) {
-  return (
-    <div className={`${strong ? "c11-reveal-strong" : "c11-reveal"} ${D[d] ?? ""} ${className}`}>
-      {children}
-    </div>
-  );
-}
-
-// ── Stat (hero) ──
-function Stat({
-  value,
-  label,
-  accent = false,
-}: {
-  value: string;
-  label: string;
-  accent?: boolean;
-}) {
-  return (
-    <div>
-      <div
-        className={`text-2xl font-bold md:text-3xl ${
-          accent ? "text-emerald-400" : "text-white"
-        }`}
-      >
-        {value}
-      </div>
-      <div className="mt-1 text-xs text-white/50">{label}</div>
-    </div>
-  );
-}
-
-// ── Founder avatar (iniciais — sem foto, RGPD-safe) ──
-function FounderAvatar({ className = "" }: { className?: string }) {
-  return (
-    <div
-      className={`flex shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 font-bold text-white ${className}`}
-    >
-      PC
-    </div>
-  );
-}
-
-// ── Feature Card ──
-const FEATURES = [
-  {
-    icon: ClipboardCheck,
-    title: "Presenças em 20 segundos",
-    description: "Presente, atrasado, ausente ou lesionado num toque.",
-    accent: true,
-  },
-  {
-    icon: Timer,
-    title: "Jogos ao vivo",
-    description: "Eventos em 2 toques, com o minuto preenchido automaticamente.",
-    accent: true,
-  },
-  {
-    icon: Copy,
-    title: "Duplica a semana",
-    description: "Repete o microciclo de treinos sem montar tudo de novo.",
-    accent: true,
-  },
-  {
-    icon: Users,
-    title: "Convocatórias",
-    description: "Define o onze e partilha por link com atletas e famílias.",
-  },
-  {
-    icon: CalendarDays,
-    title: "Calendário público",
-    description: "Os pais sabem onde e quando, sem te andarem a perguntar.",
-  },
-  {
-    icon: BarChart3,
-    title: "Estatísticas & insights",
-    description: "Minutos, golos e evolução de cada atleta, sem esforço.",
-  },
-  {
-    icon: FileText,
-    title: "Relatórios automáticos",
-    description: "Documentos prontos a partilhar com o clube, sem trabalho extra.",
-  },
-  {
-    icon: Smartphone,
-    title: "Instala como app",
-    description: "Funciona como aplicação no telemóvel, sem passar pela App Store.",
-  },
-];
-
-function FeatureCard({
-  icon: Icon,
-  title,
-  description,
-  accent = false,
-}: {
-  icon: React.ElementType;
-  title: string;
-  description: string;
-  accent?: boolean;
-}) {
-  return (
-    <div
-      className={`group relative flex h-full flex-col rounded-2xl border p-6 c11-hover-lift ${
-        accent
-          ? "border-emerald-500/30 bg-emerald-950/40 hover:border-emerald-400/50 hover:shadow-lg hover:shadow-emerald-500/10"
-          : "border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/8"
-      }`}
-    >
-      <div
-        className={`mb-4 inline-flex rounded-xl p-3 ${
-          accent ? "bg-emerald-500/20 text-emerald-400" : "bg-white/10 text-white/70"
-        }`}
-      >
-        <Icon className="h-6 w-6" />
-      </div>
-      <h3 className="mb-2 text-lg font-semibold text-white">{title}</h3>
-      <p className="text-sm leading-relaxed text-white/60">{description}</p>
-    </div>
-  );
-}
-
-// ── Comparison ──
-const COMPARISONS = [
-  { feature: "Marcar presenças", old: "5+ minutos, laptop", better: "< 20 segundos, telemóvel" },
-  { feature: "Evento em jogo", old: "Anotar em papel, passar depois", better: "2 toques, tempo real" },
-  { feature: "Criar 120 treinos", old: "120 operações manuais", better: "4 cliques (duplicar semana)" },
-  { feature: "Ver minutos de jogador", old: "Procurar em tabelas desktop", better: "2 toques no banco" },
-  { feature: "Enviar convocatória", old: "WhatsApp manual", better: "Link partilhado automático" },
-  { feature: "Relatório de jogo", old: "Preencher formulário", better: "PDF gerado automaticamente" },
-];
-
-function ComparisonRow({
-  feature,
-  old,
-  better,
-}: {
-  feature: string;
-  old: string;
-  better: string;
-}) {
-  return (
-    <div className="grid grid-cols-3 items-center gap-4 border-b border-white/5 py-4 text-sm">
-      <span className="font-medium text-white/80">{feature}</span>
-      <span className="text-center text-white/40 line-through">{old}</span>
-      <span className="text-center font-semibold text-emerald-400">{better}</span>
-    </div>
-  );
-}
-
-// ── Garantias (reversao de risco) ──
-const GUARANTEES = [
-  { icon: Gift, title: "7 dias grátis", description: "Testa tudo sem dar o cartão." },
-  { icon: XCircle, title: "Cancela num clique", description: "Sem chamadas, sem fidelização." },
-  { icon: Download, title: "Os dados são teus", description: "Exporta o que é teu quando quiseres." },
-  { icon: Rocket, title: "Pronto em minutos", description: "Cria conta e começa no mesmo dia." },
-];
-
-// Plano em foco: apenas o do treinador individual (clube vai para a linha discreta).
-const individualPlan = PLANS.find((p) => p.name === "Individual");
-
-// ── Main Page (server component) ──
+/**
+ * Landing do treinador — reproduz fielmente o layout canonico aprovado pelo
+ * Pedro (Anexo A). O CSS vive em ./landing/landing-anexo.css com escopo `.c11lp`
+ * para nao vazar. As animacoes (nav solid ao scroll, reveal on-scroll, demos dos
+ * telemoveis) correm aqui no useEffect — equivalente ao <script> do mockup, mas
+ * com cleanup. Os CTA primarios usam o PlanCtaButton real (-> /billing/start).
+ *
+ * A recolha do questionario (/api/survey, survey_responses, questionario.html)
+ * e independente desta pagina e nao e tocada aqui.
+ */
 export default function LandingPage() {
+  useEffect(() => {
+    const reduce = window.matchMedia(
+      "(prefers-reduced-motion:reduce)",
+    ).matches;
+
+    const observers: IntersectionObserver[] = [];
+    const timeouts: number[] = [];
+    const intervals: number[] = [];
+
+    // nav solido ao fazer scroll
+    const nav = document.getElementById("c11lp-nav");
+    const onScroll = () => {
+      if (nav) nav.classList.toggle("solid", window.scrollY > 20);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+
+    // reveal on-scroll
+    if ("IntersectionObserver" in window && !reduce) {
+      const io = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((e) => {
+            if (e.isIntersecting) {
+              e.target.classList.add("in");
+              io.unobserve(e.target);
+            }
+          });
+        },
+        { threshold: 0.18 },
+      );
+      document.querySelectorAll(".c11lp .rev").forEach((el) => io.observe(el));
+      observers.push(io);
+    } else {
+      document
+        .querySelectorAll(".c11lp .rev")
+        .forEach((el) => el.classList.add("in"));
+    }
+
+    const once = (el: Element | null, cb: () => void) => {
+      if (!el) return;
+      const o = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((e) => {
+            if (e.isIntersecting) {
+              cb();
+              o.disconnect();
+            }
+          });
+        },
+        { threshold: 0.4 },
+      );
+      o.observe(el);
+      observers.push(o);
+    };
+
+    // hero — ultima presenca marcada
+    (() => {
+      const p = document.getElementById("ph-hero");
+      if (!p) return;
+      const apply = () => {
+        const last = document.getElementById("h-last");
+        if (last) {
+          last.textContent = "Presente";
+          last.style.color = "#059669";
+          last.style.background = "#DCFCE7";
+        }
+        const count = document.getElementById("h-count");
+        if (count) count.textContent = "18";
+      };
+      if (reduce) {
+        apply();
+        return;
+      }
+      once(p, () => {
+        timeouts.push(window.setTimeout(apply, 1100));
+      });
+    })();
+
+    // demo — criar jogo
+    (() => {
+      const p = document.getElementById("ph-jogo");
+      if (!p) return;
+      const seq: [string, string][] = [
+        ["j-adv", "🔍 Casa Pia AC (CPAC)"],
+        ["j-data", "15/06/2026"],
+        ["j-ini", "18:15"],
+        ["j-comp", "Campeonato Nacional"],
+      ];
+      seq.forEach(([id]) => {
+        const el = document.getElementById(id);
+        if (el) el.style.opacity = "0";
+      });
+      const fill = () => {
+        seq.forEach(([id, text], i) => {
+          timeouts.push(
+            window.setTimeout(
+              () => {
+                const el = document.getElementById(id);
+                if (el) {
+                  el.style.opacity = "1";
+                  el.textContent = text;
+                }
+              },
+              reduce ? 0 : 250 + i * 240,
+            ),
+          );
+        });
+        const map = document.getElementById("j-map");
+        const pin = document.getElementById("j-pin");
+        timeouts.push(
+          window.setTimeout(
+            () => {
+              if (map) {
+                map.style.transition = "opacity .4s";
+                map.style.opacity = "1";
+              }
+              if (pin) {
+                pin.style.transition =
+                  "transform .5s cubic-bezier(.34,1.56,.64,1),opacity .3s";
+                pin.style.opacity = "1";
+                pin.style.transform = "translateY(0)";
+              }
+            },
+            reduce ? 0 : 250 + seq.length * 240 + 150,
+          ),
+        );
+      };
+      once(p, fill);
+    })();
+
+    // demo — convocatoria
+    (() => {
+      const p = document.getElementById("ph-conv");
+      const list = document.getElementById("cv-list");
+      const count = document.getElementById("cv-count");
+      if (!p || !list || !count) return;
+      const T: string[][] = [
+        ["49", "António Sá", "GR"],
+        ["5", "Mamade Mendes", "MO"],
+        ["24", "Santiago Dias", "MC"],
+        ["46", "João Moreira", "DE"],
+        ["50", "Vasco São Vicente", "DD"],
+        ["55", "Lourenço Baião", "DC"],
+        ["74", "Lucas Shaw", "DC"],
+        ["84", "Manuel Prates", "MC"],
+        ["85", "Daniel Martins", "MC"],
+        ["91", "Ricardo Machado", "AV"],
+        ["97", "Adulai Embaló", "ED"],
+      ];
+      const row = (t: string[]) => {
+        const gk = t[2] === "GR";
+        return (
+          '<div class="row" style="opacity:0;transform:translateX(-8px);background:' +
+          (gk ? "#FFFBEB" : "#F0F7FF") +
+          ";border:1px solid " +
+          (gk ? "#FDE68A" : "#DBEAFE") +
+          '"><div class="bdg" style="background:' +
+          (gk ? "#F59E0B" : "#3B82F6") +
+          '">' +
+          t[0] +
+          '</div><div><div class="nm">' +
+          t[1] +
+          '</div><div class="sub">#' +
+          t[0] +
+          " · " +
+          t[2] +
+          '</div></div><div class="pill" style="color:' +
+          (gk ? "#B45309" : "#1D4ED8") +
+          ";background:" +
+          (gk ? "#FEF3C7" : "#DBEAFE") +
+          '">' +
+          (gk ? "GR" : "Titular") +
+          "</div></div>"
+        );
+      };
+      list.innerHTML = T.map(row).join("");
+      const rows = list.querySelectorAll<HTMLElement>(".row");
+      const play = () => {
+        for (let i = 0; i < rows.length; i++) {
+          const idx = i;
+          timeouts.push(
+            window.setTimeout(
+              () => {
+                rows[idx].style.transition = "opacity .3s,transform .3s";
+                rows[idx].style.opacity = "1";
+                rows[idx].style.transform = "none";
+                count.textContent = String(idx + 1);
+              },
+              reduce ? 0 : 120 + idx * 120,
+            ),
+          );
+        }
+      };
+      once(p, play);
+    })();
+
+    // demo — jogo ao vivo
+    (() => {
+      const p = document.getElementById("ph-live");
+      const clock = document.getElementById("lv-clock");
+      const score = document.getElementById("lv-score");
+      const events = document.getElementById("lv-events");
+      const golo = document.getElementById("lv-golo");
+      if (!p || !clock || !score || !events || !golo) return;
+      const fmt = (s: number) => {
+        const m = Math.floor(s / 60);
+        const r = s % 60;
+        return (
+          (m < 10 ? "0" : "") +
+          m +
+          ":" +
+          (r < 10 ? "0" : "") +
+          r +
+          " · " +
+          (m + 1) +
+          "'"
+        );
+      };
+      const play = () => {
+        let sec = 230;
+        clock.textContent = fmt(sec);
+        if (reduce) {
+          score.innerHTML =
+            'CFB <span style="color:#059669">1</span> <span style="color:#94A3B8">—</span> 0 CPAC';
+          return;
+        }
+        intervals.push(
+          window.setInterval(() => {
+            sec++;
+            clock.textContent = fmt(sec);
+          }, 1000),
+        );
+        timeouts.push(
+          window.setTimeout(() => {
+            golo.style.transition = "box-shadow .3s";
+            golo.style.boxShadow = "0 0 0 5px rgba(16,185,129,.3)";
+            timeouts.push(
+              window.setTimeout(() => {
+                golo.style.boxShadow = "";
+              }, 420),
+            );
+            const d = document.createElement("div");
+            d.style.cssText =
+              "display:flex;gap:6px;font-size:10px;color:#0F172A;padding:5px 0;border-top:1px solid #E2E8F0;opacity:0;transform:translateX(-8px);transition:opacity .35s,transform .35s";
+            d.innerHTML =
+              `<span style="color:#94A3B8">5'</span>⚽ Golo — Ricardo Machado`;
+            events.insertBefore(d, events.firstChild);
+            requestAnimationFrame(() => {
+              d.style.opacity = "1";
+              d.style.transform = "none";
+            });
+            score.innerHTML =
+              'CFB <span style="color:#059669">1</span> <span style="color:#94A3B8">—</span> 0 CPAC';
+          }, 1800),
+        );
+      };
+      once(p, play);
+    })();
+
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      observers.forEach((o) => o.disconnect());
+      timeouts.forEach((t) => window.clearTimeout(t));
+      intervals.forEach((t) => window.clearInterval(t));
+    };
+  }, []);
+
   return (
-    <div className="min-h-screen bg-slate-950 text-white antialiased">
-      <LandingNav />
+    <div className="c11lp">
+      <div className="bgfx">
+        <div className="orb a" />
+        <div className="orb b" />
+        <div className="vig" />
+      </div>
 
-      {/* ═══ HERO ═══ */}
-      <section className="relative overflow-hidden pt-36 pb-24 md:pt-44 md:pb-32">
-        <div className="pointer-events-none absolute inset-0">
-          <div className="c11-orb-drift absolute top-0 left-1/2 -ml-[400px] h-[600px] w-[800px] rounded-full bg-emerald-500/10 blur-3xl" />
-          <div className="c11-orb-drift-slow absolute bottom-0 right-0 h-[320px] w-[440px] rounded-full bg-emerald-600/8 blur-3xl" />
-          {/* Vinheta radial subtil para profundidade */}
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(16,185,129,0.06),transparent_55%)]" />
-        </div>
-
-        <div className="relative mx-auto max-w-6xl px-6">
-          <div className="grid items-center gap-16 lg:grid-cols-[1.05fr_0.95fr] lg:gap-10">
-            {/* Copy */}
-            <div className="text-center lg:text-left">
-              <div className="c11-hero-in c11-hero-in-1 mb-6 inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-4 py-1.5 text-sm text-emerald-300">
-                <Zap className="h-3.5 w-3.5" />
-                <span>Para treinadores de formação</span>
-              </div>
-
-              {/* Alternativa aprovada (trocar facilmente):
-                  "O treinador regista." / "O sistema faz o resto." */}
-              <h1 className="c11-hero-in c11-hero-in-2 mb-6 text-5xl font-extrabold leading-[1.02] tracking-[-0.02em] md:text-6xl lg:text-7xl">
-                Do treino ao
-                <br />
-                <span className="bg-gradient-to-r from-emerald-400 to-emerald-300 bg-clip-text text-transparent">
-                  apito final.
-                </span>
-              </h1>
-
-              <p className="c11-hero-in c11-hero-in-3 mx-auto mb-8 max-w-xl text-lg leading-relaxed text-white/55 md:text-xl lg:mx-0">
-                Marca presenças, convoca o onze e regista o jogo ao vivo — tudo
-                no telemóvel, em segundos, no relvado. As estatísticas e os
-                relatórios preenchem-se sozinhos. Sem papel, sem voltar a lançar
-                tudo no computador.
-              </p>
-
-              <div className="c11-hero-in c11-hero-in-4 flex flex-col items-center gap-3 sm:flex-row sm:justify-center lg:justify-start">
-                <PlanCtaButton
-                  href="/billing/start"
-                  label="Começar — 7 dias grátis"
-                  planIntent="individual"
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 px-8 py-4 text-base font-semibold text-white transition hover:bg-emerald-400 active:scale-[0.97] sm:w-auto"
-                />
-                <a
-                  href="#features"
-                  className="group flex w-full items-center justify-center gap-2 rounded-xl border border-white/15 px-8 py-4 text-base font-medium text-white/80 transition hover:border-white/30 hover:text-white active:scale-[0.97] sm:w-auto"
-                >
-                  Ver a app a funcionar
-                  <ArrowDown className="h-4 w-4 transition group-hover:translate-y-0.5" />
-                </a>
-              </div>
-
-              <p className="c11-hero-in c11-hero-in-4 mt-5 text-center text-sm text-white/50 lg:text-left">
-                Sem cartão para experimentar · cancela quando quiseres. Já tens
-                conta?{" "}
-                <a
-                  href="/login"
-                  className="text-white/70 underline underline-offset-2 transition hover:text-white"
-                >
-                  Entrar
-                </a>
-              </p>
-
-              <div className="c11-hero-in c11-hero-in-5 mx-auto mt-12 grid max-w-lg grid-cols-3 gap-6 border-t border-white/5 pt-8 lg:mx-0">
-                <Stat value="<20s" label="para marcar presenças" accent />
-                <Stat value="2 toques" label="por evento de jogo" />
-                <Stat value="€7,99" label="/mês · 7 dias grátis" />
-              </div>
-
-              {/* Tira de confianca do fundador */}
-              <div className="c11-hero-in c11-hero-in-6 mx-auto mt-8 flex max-w-lg items-center gap-3 border-t border-white/5 pt-6 lg:mx-0">
-                <FounderAvatar className="h-10 w-10 text-xs" />
-                <p className="text-left text-sm leading-relaxed text-white/55">
-                  Feito por um treinador de formação no{" "}
-                  <span className="font-semibold text-white/75">
-                    CF Os Belenenses
-                  </span>{" "}
-                  — para resolver a própria dor.
-                </p>
-              </div>
-            </div>
-
-            {/* Device */}
-            <div className="c11-hero-in c11-hero-in-6 relative mt-6 lg:mt-0">
-              <HeroDevice />
-            </div>
+      <nav id="c11lp-nav">
+        <div className="nav-in">
+          <div className="logo">
+            Coach<span className="e">11</span>
+          </div>
+          <div className="nav-r">
+            <a className="lnk" href="#como">
+              Como funciona
+            </a>
+            <a className="lnk" href="#funcionalidades">
+              Funcionalidades
+            </a>
+            <a className="lnk" href="#preco">
+              Preço
+            </a>
+            <PlanCtaButton
+              href="/billing/start"
+              label="Começar grátis"
+              planIntent="individual"
+              className="btn btn-em btn-sm"
+            />
           </div>
         </div>
-      </section>
+      </nav>
 
-      {/* ═══ PAIN SECTION ═══ */}
-      <section className="border-t border-white/[0.06] bg-slate-900/50 py-24 md:py-32">
-        <div className="mx-auto max-w-6xl px-6">
-          <Reveal className="mx-auto max-w-2xl text-center">
-            <h2 className="mb-4 text-3xl font-bold tracking-tight md:text-4xl">
-              O problema que todos os treinadores conhecem
-            </h2>
-            <p className="text-lg text-white/55">
-              <CountUp to={131} /> treinos agendados. Apenas 1 com presenças
-              registadas. Não porque o treinador não quer — porque a ferramenta
-              não deixa.
+      <main>
+        {/* HERO */}
+        <header className="wrap hero">
+          <div>
+            <span className="badge">⚽ Para treinadores de formação</span>
+            <h1>
+              Do treino ao
+              <br />
+              <span className="g">apito final.</span>
+            </h1>
+            <p className="lead">
+              Marca presenças, convoca o onze e regista o jogo ao vivo — tudo no
+              telemóvel, em segundos, no relvado. As estatísticas e os relatórios
+              preenchem-se sozinhos. Sem papel, sem voltar a lançar tudo no
+              computador.
             </p>
-          </Reveal>
-
-          <div className="mt-14 grid gap-4 md:grid-cols-3">
-            <Reveal d={1}>
-              <div className="h-full rounded-xl border border-red-500/10 bg-red-500/5 p-6">
-                <div className="mb-3 text-2xl font-bold text-red-400/80">
-                  Papel no banco
+            <div className="cta">
+              <PlanCtaButton
+                href="/billing/start"
+                label="Começar grátis — 7 dias"
+                planIntent="individual"
+                className="btn btn-em"
+              />
+              <a href="#demo" className="btn btn-gh">
+                Ver a app a funcionar
+              </a>
+            </div>
+            <div className="micro">
+              Sem cartão para experimentar · cancela quando quiseres
+            </div>
+            <div className="stats">
+              <div>
+                <div className="v em">&lt;20s</div>
+                <div className="l">para marcar presenças</div>
+              </div>
+              <div>
+                <div className="v">2 toques</div>
+                <div className="l">por evento de jogo</div>
+              </div>
+              <div>
+                <div className="v">€7,99</div>
+                <div className="l">/mês · tudo incluído</div>
+              </div>
+            </div>
+            <div className="founder-strip">
+              <div className="av">PC</div>
+              <div className="t">
+                Feito por um treinador de formação no{" "}
+                <b>CF Os Belenenses</b> — para resolver a própria dor.
+              </div>
+            </div>
+          </div>
+          <div className="phone-host rev">
+            <div className="phone" id="ph-hero">
+              <div className="speaker" />
+              <div className="screen">
+                <div className="scrin">
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                    }}
+                  >
+                    <div className="hd">Presenças</div>
+                    <div style={{ fontSize: "9px", color: "#94A3B8" }}>
+                      Treino ·{" "}
+                      <b id="h-count" style={{ color: "#059669" }}>
+                        17
+                      </b>
+                      /22
+                    </div>
+                  </div>
+                  <div
+                    className="row"
+                    style={{ background: "#fff", border: "1px solid #E2E8F0" }}
+                  >
+                    <div className="bdg" style={{ background: "#3B82F6" }}>
+                      5
+                    </div>
+                    <div>
+                      <div className="nm">Mamade Mendes</div>
+                      <div className="sub">#5 · Médio ofensivo</div>
+                    </div>
+                    <div
+                      className="pill"
+                      style={{ color: "#059669", background: "#DCFCE7" }}
+                    >
+                      Presente
+                    </div>
+                  </div>
+                  <div
+                    className="row"
+                    style={{ background: "#fff", border: "1px solid #E2E8F0" }}
+                  >
+                    <div className="bdg" style={{ background: "#3B82F6" }}>
+                      24
+                    </div>
+                    <div>
+                      <div className="nm">Santiago Dias</div>
+                      <div className="sub">#24 · Médio centro</div>
+                    </div>
+                    <div
+                      className="pill"
+                      style={{ color: "#B45309", background: "#FEF3C7" }}
+                    >
+                      Atrasado
+                    </div>
+                  </div>
+                  <div
+                    className="row"
+                    style={{ background: "#fff", border: "1px solid #E2E8F0" }}
+                  >
+                    <div className="bdg" style={{ background: "#3B82F6" }}>
+                      74
+                    </div>
+                    <div>
+                      <div className="nm">Lucas Shaw</div>
+                      <div className="sub">#74 · Defesa central</div>
+                    </div>
+                    <div
+                      className="pill"
+                      style={{ color: "#B91C1C", background: "#FEE2E2" }}
+                    >
+                      Ausente
+                    </div>
+                  </div>
+                  <div
+                    className="row"
+                    style={{ background: "#fff", border: "1px solid #E2E8F0" }}
+                  >
+                    <div className="bdg" style={{ background: "#3B82F6" }}>
+                      91
+                    </div>
+                    <div>
+                      <div className="nm">Ricardo Machado</div>
+                      <div className="sub">#91 · Avançado</div>
+                    </div>
+                    <div
+                      className="pill"
+                      style={{ color: "#6D28D9", background: "#EDE9FE" }}
+                    >
+                      Lesionado
+                    </div>
+                  </div>
+                  <div
+                    className="row"
+                    style={{ background: "#fff", border: "1px solid #E2E8F0" }}
+                  >
+                    <div className="bdg" style={{ background: "#3B82F6" }}>
+                      97
+                    </div>
+                    <div>
+                      <div className="nm">Adulai Embaló</div>
+                      <div className="sub">#97 · Extremo</div>
+                    </div>
+                    <div
+                      className="pill"
+                      style={{ color: "#059669", background: "#DCFCE7" }}
+                    >
+                      Presente
+                    </div>
+                  </div>
+                  <div
+                    className="row"
+                    style={{ background: "#fff", border: "1px solid #E2E8F0" }}
+                  >
+                    <div className="bdg" style={{ background: "#3B82F6" }}>
+                      85
+                    </div>
+                    <div>
+                      <div className="nm">Daniel Martins</div>
+                      <div className="sub">#85 · Médio centro</div>
+                    </div>
+                    <div
+                      className="pill"
+                      id="h-last"
+                      style={{ color: "#94A3B8", background: "#F1F5F9" }}
+                    >
+                      Por marcar
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      marginTop: "auto",
+                      background: "#10B981",
+                      color: "#fff",
+                      fontWeight: 700,
+                      fontSize: "11px",
+                      textAlign: "center",
+                      padding: "10px",
+                      borderRadius: "10px",
+                    }}
+                  >
+                    Guardar presenças
+                  </div>
                 </div>
-                <p className="text-sm text-white/55">
+              </div>
+            </div>
+          </div>
+        </header>
+
+        {/* PAIN */}
+        <section id="pain">
+          <div className="wrap">
+            <div className="rev">
+              <span className="eyebrow">Conheces este filme?</span>
+              <h2 className="sec">
+                O jogo acaba. O trabalho de secretária começa.
+              </h2>
+              <p className="sec-sub">
+                Treinas porque gostas de futebol — não para passares as noites a
+                copiar dados para o computador do clube.
+              </p>
+            </div>
+            <div className="grid3">
+              <div className="pcard rev">
+                <div className="ic">📋</div>
+                <h3>Papel no banco</h3>
+                <p>
                   Fichas e cadernos que se perdem, molham e nunca chegam ao sítio
                   certo. No fim do jogo, metade da informação evapora-se.
                 </p>
               </div>
-            </Reveal>
-            <Reveal d={2}>
-              <div className="h-full rounded-xl border border-red-500/10 bg-red-500/5 p-6">
-                <div className="mb-3 text-2xl font-bold text-red-400/80">
-                  Tudo duas vezes
-                </div>
-                <p className="text-sm text-white/55">
+              <div className="pcard rev">
+                <div className="ic">⌨️</div>
+                <h3>Tudo duas vezes</h3>
+                <p>
                   Registas no campo e depois voltas a lançar tudo num backoffice
                   pesado, à secretária. O mesmo trabalho, feito a dobrar.
                 </p>
               </div>
-            </Reveal>
-            <Reveal d={3}>
-              <div className="h-full rounded-xl border border-red-500/10 bg-red-500/5 p-6">
-                <div className="mb-3 text-2xl font-bold text-red-400/80">
-                  Sem histórico
-                </div>
-                <p className="text-sm text-white/55">
+              <div className="pcard rev">
+                <div className="ic">🤷</div>
+                <h3>Sem histórico</h3>
+                <p>
                   Quem faltou? Quantos minutos jogou? Como evoluiu? Sem registo
                   consistente, não há respostas — nem para ti, nem para os pais.
                 </p>
               </div>
-            </Reveal>
-          </div>
-        </div>
-      </section>
-
-      {/* ═══ FEATURES ═══ */}
-      <section id="features" className="scroll-mt-24 py-24 md:py-32">
-        <div className="mx-auto max-w-6xl px-6">
-          <Reveal className="mx-auto mb-16 max-w-2xl text-center">
-            <h2 className="mb-4 text-3xl font-bold tracking-tight md:text-4xl">
-              O teu escalão, organizado.
-            </h2>
-            <p className="text-lg text-white/55">
-              As ferramentas que usas todas as semanas — pensadas para o
-              telemóvel, prontas para o relvado.
-            </p>
-          </Reveal>
-
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {FEATURES.map((f, i) => (
-              <Reveal key={f.title} d={(i % 3) + 1} className="h-full">
-                <FeatureCard {...f} />
-              </Reveal>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ═══ HOW IT WORKS ═══ */}
-      <section
-        id="how"
-        className="scroll-mt-24 border-t border-white/[0.06] bg-slate-900/30 py-24 md:py-32"
-      >
-        <div className="mx-auto max-w-6xl px-6">
-          <Reveal className="mx-auto mb-16 max-w-2xl text-center">
-            <h2 className="mb-4 text-3xl font-bold tracking-tight md:text-4xl">
-              Campo → Sistema → Dashboard
-            </h2>
-            <p className="text-lg text-white/55">
-              Os dados nascem no campo e fluem automaticamente. Ninguém insere
-              nada duas vezes.
-            </p>
-          </Reveal>
-
-          <div className="grid gap-8 md:grid-cols-3">
-            {/* Step 1 */}
-            <Reveal d={1}>
-              <div className="relative">
-                <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/20 text-xl font-bold text-emerald-400">
-                  1
-                </div>
-                <h3 className="mb-2 text-lg font-semibold">
-                  O treinador regista no campo
-                </h3>
-                <p className="text-sm text-white/55">
-                  Presenças, eventos de jogo, avaliações pós-jogo, notas de
-                  treino. Tudo no telemóvel, rápido, com uma mão.
-                </p>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-xs text-emerald-400">
-                    Mobile-first
-                  </span>
-                  <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-xs text-emerald-400">
-                    Offline-ready
-                  </span>
-                </div>
-                <div className="c11-reveal c11-d5 absolute top-6 right-0 hidden translate-x-1/2 md:block">
-                  <ChevronRight className="h-6 w-6 text-white/20" />
-                </div>
-              </div>
-            </Reveal>
-
-            {/* Step 2 */}
-            <Reveal d={2}>
-              <div className="relative">
-                <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 text-xl font-bold text-white/70">
-                  2
-                </div>
-                <h3 className="mb-2 text-lg font-semibold">O sistema processa</h3>
-                <p className="text-sm text-white/55">
-                  Agrega estatísticas, calcula minutos, gera rankings, detecta
-                  alertas (3 amarelos, faltas consecutivas), prepara relatórios.
-                </p>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <span className="rounded-full bg-white/5 px-3 py-1 text-xs text-white/50">
-                    Automático
-                  </span>
-                  <span className="rounded-full bg-white/5 px-3 py-1 text-xs text-white/50">
-                    Tempo real
-                  </span>
-                </div>
-                <div className="c11-reveal c11-d6 absolute top-6 right-0 hidden translate-x-1/2 md:block">
-                  <ChevronRight className="h-6 w-6 text-white/20" />
-                </div>
-              </div>
-            </Reveal>
-
-            {/* Step 3 */}
-            <Reveal d={3}>
-              <div>
-                <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 text-xl font-bold text-white/70">
-                  3
-                </div>
-                <h3 className="mb-2 text-lg font-semibold">
-                  Em casa, vês tudo pronto
-                </h3>
-                <p className="text-sm text-white/55">
-                  Dashboard, evolução dos atletas e relatórios prontos a
-                  partilhar com o clube e com os pais. Sem inserir um único dado
-                  manualmente.
-                </p>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <span className="rounded-full bg-white/5 px-3 py-1 text-xs text-white/50">
-                    Dashboard
-                  </span>
-                  <span className="rounded-full bg-white/5 px-3 py-1 text-xs text-white/50">
-                    Relatórios
-                  </span>
-                </div>
-              </div>
-            </Reveal>
-          </div>
-        </div>
-      </section>
-
-      {/* ═══ COMPARISON ═══ */}
-      <section id="comparison" className="scroll-mt-24 py-24 md:py-32">
-        <div className="mx-auto max-w-3xl px-6">
-          <Reveal className="mb-12 text-center">
-            <h2 className="mb-4 text-3xl font-bold tracking-tight md:text-4xl">
-              A diferença no dia a dia
-            </h2>
-            <p className="text-lg text-white/55">
-              Não se trata de mais funcionalidades. Trata-se de melhor execução
-              nos momentos que importam.
-            </p>
-          </Reveal>
-
-          <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-6 md:p-8">
-            <div className="grid grid-cols-3 gap-4 border-b border-white/10 pb-4 text-sm font-semibold">
-              <span className="text-white/50">Tarefa</span>
-              <span className="text-center text-white/40">Antes</span>
-              <span className="text-center text-emerald-400">Coach11</span>
             </div>
-
-            {COMPARISONS.map((row, i) => (
-              <Reveal key={row.feature} d={Math.min(i + 1, 7)}>
-                <ComparisonRow {...row} />
-              </Reveal>
-            ))}
+            <div className="quote-big rev">
+              <span className="em">131</span> treinos agendados. Apenas{" "}
+              <span className="em">1</span> com presenças registadas.
+              <br />
+              <span
+                style={{
+                  fontSize: ".6em",
+                  color: "var(--mut)",
+                  fontWeight: 500,
+                }}
+              >
+                É isto que acontece quando a ferramenta não está onde estás tu —
+                no relvado.
+              </span>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* ═══ FOUNDER ═══ */}
-      <section className="border-t border-white/[0.06] bg-slate-900/30 py-24 md:py-32">
-        <div className="mx-auto max-w-3xl px-6">
-          <Reveal>
-            <div className="relative rounded-3xl border border-white/10 bg-white/[0.03] p-8 md:p-12">
-              <Quote
-                className="absolute right-8 top-8 h-12 w-12 text-emerald-500/15"
-                aria-hidden
-              />
-              <FounderAvatar className="mb-6 h-16 w-16 text-lg" />
-              <blockquote className="text-lg leading-relaxed text-white/80 md:text-xl">
-                &ldquo;Construí o Coach11 porque vivo o problema. Sou treinador de
-                formação e estava farto de registar tudo em papel e voltar a
-                escrever no computador. Quis uma ferramenta que estivesse onde eu
-                estou — no campo, no telemóvel. Uso-a todas as semanas com o meu
-                escalão.&rdquo;
-              </blockquote>
-              <p className="mt-6 text-sm font-medium text-white/55">
-                — Pedro Campos, treinador de formação · CF Os Belenenses ·
-                fundador do Coach11
+        {/* HOW */}
+        <section id="como">
+          <div className="wrap">
+            <div className="rev center">
+              <span className="eyebrow">A diferença</span>
+              <h2 className="sec">Regista uma vez. No campo.</h2>
+              <p className="sec-sub">
+                O Coach11 inverte a lógica: registas no telemóvel enquanto está a
+                acontecer, e o backoffice preenche-se sozinho. Zero dupla
+                introdução de dados.
               </p>
             </div>
-          </Reveal>
-        </div>
-      </section>
+            <div className="steps">
+              <div className="step rev">
+                <div className="n">01 · NO RELVADO</div>
+                <h3>Regista no telemóvel</h3>
+                <p>
+                  Presenças, convocatórias e eventos do jogo — em toques, sem
+                  tirar os olhos do treino ou da partida.
+                </p>
+                <div className="arr">→</div>
+              </div>
+              <div className="step rev">
+                <div className="n">02 · AUTOMÁTICO</div>
+                <h3>O sistema organiza</h3>
+                <p>
+                  Cada toque alimenta a ficha, o calendário, as estatísticas e o
+                  relatório. Não voltas a lançar nada.
+                </p>
+                <div className="arr">→</div>
+              </div>
+              <div className="step rev">
+                <div className="n">03 · EM CASA</div>
+                <h3>Vês tudo pronto</h3>
+                <p>
+                  Dashboard, evolução dos atletas e relatórios prontos a
+                  partilhar com o clube e com os pais.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
 
-      {/* ═══ GARANTIAS ═══ */}
-      <section className="border-t border-white/[0.06] py-24 md:py-32">
-        <div className="mx-auto max-w-6xl px-6">
-          <Reveal className="mx-auto mb-14 max-w-2xl text-center">
-            <h2 className="text-3xl font-bold tracking-tight md:text-4xl">
-              Experimentar não tem risco.
-            </h2>
-          </Reveal>
-
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {GUARANTEES.map((g, i) => (
-              <Reveal key={g.title} d={i + 1} className="h-full">
-                <div className="h-full rounded-2xl border border-emerald-500/15 bg-emerald-950/20 p-6">
-                  <div className="mb-4 inline-flex rounded-xl bg-emerald-500/15 p-3 text-emerald-400">
-                    <g.icon className="h-6 w-6" />
+        {/* DEMO */}
+        <section id="demo">
+          <div className="wrap">
+            <div className="rev center">
+              <span className="eyebrow">Vê com os teus olhos</span>
+              <h2 className="sec">A app a trabalhar, a sério.</h2>
+              <p className="sec-sub">
+                Não é uma promessa bonita. É o que vais fazer todas as semanas,
+                do telemóvel.
+              </p>
+            </div>
+            <div className="demo-row">
+              <div className="demo-col rev">
+                <div className="phone-host">
+                  <div className="phone flat" id="ph-jogo">
+                    <div className="speaker" />
+                    <div className="screen">
+                      <div className="scrin" style={{ gap: "8px" }}>
+                        <div className="hd">Novo jogo</div>
+                        <div>
+                          <div className="fl">Adversário</div>
+                          <div
+                            className="fld f2"
+                            id="j-adv"
+                            style={{
+                              display: "flex",
+                              gap: "5px",
+                              alignItems: "center",
+                            }}
+                          />
+                        </div>
+                        <div style={{ display: "flex", gap: "6px" }}>
+                          <div style={{ flex: 1 }}>
+                            <div className="fl">Data</div>
+                            <div className="fld f2" id="j-data" />
+                          </div>
+                          <div style={{ flex: 1 }}>
+                            <div className="fl">Início</div>
+                            <div className="fld f2" id="j-ini" />
+                          </div>
+                        </div>
+                        <div>
+                          <div className="fl">Competição</div>
+                          <div className="fld f2" id="j-comp" />
+                        </div>
+                        <div
+                          className="f2"
+                          id="j-map"
+                          style={{
+                            border: "1px solid #E2E8F0",
+                            borderRadius: "9px",
+                            overflow: "hidden",
+                            background: "#fff",
+                            opacity: 0,
+                          }}
+                        >
+                          <svg
+                            viewBox="0 0 220 70"
+                            style={{
+                              width: "100%",
+                              height: "54px",
+                              display: "block",
+                            }}
+                          >
+                            <rect width="220" height="70" fill="#E2E8F0" />
+                            <path
+                              d="M0 24H220M0 50H220M52 0V70M150 0V70"
+                              stroke="#CBD5E1"
+                              strokeWidth={3}
+                            />
+                            <path
+                              d="M0 37H220"
+                              stroke="#C0CBD8"
+                              strokeWidth={6}
+                            />
+                            <rect
+                              x="84"
+                              y="27"
+                              width="52"
+                              height="20"
+                              rx="3"
+                              fill="#BBF7D0"
+                            />
+                            <g
+                              id="j-pin"
+                              style={{
+                                transform: "translateY(-16px)",
+                                opacity: 0,
+                              }}
+                            >
+                              <circle cx="110" cy="37" r="9" fill="#059669" />
+                              <circle cx="110" cy="37" r="3.5" fill="#fff" />
+                            </g>
+                          </svg>
+                          <div style={{ padding: "6px 8px" }}>
+                            <div
+                              style={{
+                                fontSize: "10px",
+                                fontWeight: 600,
+                                color: "#0F172A",
+                              }}
+                            >
+                              Campo Major Baptista da Silva
+                            </div>
+                          </div>
+                        </div>
+                        <div
+                          id="j-add"
+                          style={{
+                            marginTop: "auto",
+                            background: "#10B981",
+                            color: "#fff",
+                            fontWeight: 700,
+                            fontSize: "11px",
+                            textAlign: "center",
+                            padding: "10px",
+                            borderRadius: "10px",
+                          }}
+                        >
+                          Criar jogo
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <h3 className="mb-1.5 text-base font-semibold text-white">
-                    {g.title}
-                  </h3>
-                  <p className="text-sm leading-relaxed text-white/55">
-                    {g.description}
+                </div>
+                <div className="cap">
+                  <h3>Cria o jogo em segundos</h3>
+                  <p>
+                    Adversário, data e campo — com a morada por pesquisa no mapa.
                   </p>
                 </div>
-              </Reveal>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ═══ PLANOS ═══ */}
-      <section id="planos" className="scroll-mt-24 border-t border-white/[0.06] py-24 md:py-32">
-        <div className="mx-auto max-w-6xl px-6">
-          <Reveal className="mx-auto mb-12 max-w-2xl text-center">
-            <h2 className="mb-4 text-3xl font-bold tracking-tight md:text-4xl">
-              Preço simples, sem surpresas.
-            </h2>
-            <p className="text-lg text-white/55">
-              Experimenta 7 dias grátis. Depois, um preço fixo — sem
-              fidelização, cancelas quando quiseres.
-            </p>
-          </Reveal>
-
-          {individualPlan ? (
-            <Reveal className="mx-auto max-w-sm">
-              <div className="c11-hover-lift-lg">
-                <PlanCard {...individualPlan} highlighted />
               </div>
-            </Reveal>
-          ) : null}
 
-          <p className="mt-8 text-center text-sm text-white/55">
-            Tens um clube com vários escalões?{" "}
-            <Link
-              href="/contacto?persona=club"
-              className="inline-flex items-center gap-1 text-emerald-400 underline-offset-2 hover:underline"
-            >
-              Fala connosco
-              <ArrowRight className="h-3.5 w-3.5" />
-            </Link>
-          </p>
+              <div className="demo-col rev">
+                <div className="phone-host">
+                  <div className="phone flat" id="ph-conv">
+                    <div className="speaker" />
+                    <div className="screen">
+                      <div className="scrin" style={{ gap: "4px" }}>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "flex-start",
+                            justifyContent: "space-between",
+                          }}
+                        >
+                          <div className="hd">Convocatória</div>
+                          <div style={{ textAlign: "right" }}>
+                            <div style={{ fontSize: "9px", color: "#94A3B8" }}>
+                              <b id="cv-count">0</b>/11 titulares
+                            </div>
+                            <div
+                              style={{
+                                fontSize: "9px",
+                                color: "#059669",
+                                fontWeight: 600,
+                              }}
+                            >
+                              A guardar…
+                            </div>
+                          </div>
+                        </div>
+                        <div
+                          style={{
+                            fontSize: "9px",
+                            fontWeight: 700,
+                            letterSpacing: ".08em",
+                            color: "#2563EB",
+                          }}
+                        >
+                          TITULARES
+                        </div>
+                        <div
+                          id="cv-list"
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "4px",
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="cap">
+                  <h3>Convoca o teu onze</h3>
+                  <p>
+                    Titulares e suplentes definidos e guardados — partilháveis num
+                    link.
+                  </p>
+                </div>
+              </div>
 
-          <p className="mt-3 text-center text-sm text-white/40">
-            Detalhes completos na{" "}
-            <Link
-              href="/precos"
-              className="text-white/60 underline-offset-2 hover:underline"
-            >
-              página de preços
-            </Link>
-            .
-          </p>
-        </div>
-      </section>
+              <div className="demo-col rev">
+                <div className="phone-host">
+                  <div className="phone flat" id="ph-live">
+                    <div className="speaker" />
+                    <div className="screen">
+                      <div className="scrin" style={{ gap: "9px" }}>
+                        <div
+                          style={{
+                            background: "#0F172A",
+                            borderRadius: "13px",
+                            padding: "11px 8px",
+                            textAlign: "center",
+                            color: "#fff",
+                          }}
+                        >
+                          <div style={{ fontSize: "8.5px", color: "#94A3B8" }}>
+                            15/06 · Campo Major Baptista da Silva
+                          </div>
+                          <div
+                            style={{
+                              fontWeight: 800,
+                              fontSize: "23px",
+                              marginTop: "4px",
+                            }}
+                            id="lv-score"
+                          >
+                            CFB 0 <span style={{ color: "#94A3B8" }}>—</span> 0
+                            CPAC
+                          </div>
+                          <div
+                            style={{
+                              fontSize: "10px",
+                              color: "#34D399",
+                              marginTop: "3px",
+                            }}
+                            id="lv-clock"
+                          >
+                            03:50 · 4&apos;
+                          </div>
+                        </div>
+                        <div
+                          id="lv-golo"
+                          style={{
+                            background: "#DCFCE7",
+                            color: "#059669",
+                            border: "1px solid #A7F3D0",
+                            fontWeight: 700,
+                            fontSize: "11px",
+                            textAlign: "center",
+                            padding: "10px",
+                            borderRadius: "10px",
+                          }}
+                        >
+                          ⚽ Golo
+                        </div>
+                        <div
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns: "1fr 1fr",
+                            gap: "6px",
+                          }}
+                        >
+                          <div
+                            style={{
+                              background: "#FEF3C7",
+                              color: "#B45309",
+                              border: "1px solid #FDE68A",
+                              fontWeight: 600,
+                              fontSize: "11px",
+                              textAlign: "center",
+                              padding: "9px",
+                              borderRadius: "9px",
+                            }}
+                          >
+                            🟨 Amarelo
+                          </div>
+                          <div
+                            style={{
+                              background: "#EFF6FF",
+                              color: "#1D4ED8",
+                              border: "1px solid #DBEAFE",
+                              fontWeight: 600,
+                              fontSize: "11px",
+                              textAlign: "center",
+                              padding: "9px",
+                              borderRadius: "9px",
+                            }}
+                          >
+                            🔄 Subst.
+                          </div>
+                        </div>
+                        <div>
+                          <div
+                            style={{
+                              fontSize: "8.5px",
+                              letterSpacing: ".1em",
+                              textTransform: "uppercase",
+                              color: "#94A3B8",
+                              marginBottom: "3px",
+                            }}
+                          >
+                            Eventos
+                          </div>
+                          <div id="lv-events">
+                            <div
+                              style={{
+                                display: "flex",
+                                gap: "6px",
+                                fontSize: "10px",
+                                color: "#0F172A",
+                                padding: "5px 0",
+                                borderTop: "1px solid #E2E8F0",
+                              }}
+                            >
+                              <span style={{ color: "#94A3B8" }}>1&apos;</span>🟨
+                              Amarelo — Lucas Shaw
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="cap">
+                  <h3>Regista o jogo ao vivo</h3>
+                  <p>
+                    Golos, cartões e substituições. A ficha e o resultado
+                    atualizam-se sozinhos — e os adeptos acompanham.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
 
-      {/* ═══ CTA ═══ */}
-      <section id="cta" className="relative scroll-mt-24 overflow-hidden py-24 md:py-32">
-        <div className="pointer-events-none absolute inset-0">
-          <div className="c11-orb-drift absolute bottom-0 left-1/2 -ml-[300px] h-[420px] w-[600px] rounded-full bg-emerald-500/10 blur-3xl" />
-        </div>
+        {/* FEATURES */}
+        <section id="funcionalidades">
+          <div className="wrap">
+            <div className="rev center">
+              <span className="eyebrow">Tudo num só sítio</span>
+              <h2 className="sec">O teu escalão, organizado.</h2>
+              <p className="sec-sub">
+                As ferramentas que usas todas as semanas — pensadas para o
+                telemóvel, prontas para o relvado.
+              </p>
+            </div>
+            <div className="fgrid">
+              <div className="fcard hot rev">
+                <div className="ic">✅</div>
+                <h3>Presenças em 20s</h3>
+                <p>Presente, atrasado, ausente ou lesionado num toque.</p>
+              </div>
+              <div className="fcard hot rev">
+                <div className="ic">🔴</div>
+                <h3>Jogos ao vivo</h3>
+                <p>Eventos em 2 toques, minuto preenchido automaticamente.</p>
+              </div>
+              <div className="fcard hot rev">
+                <div className="ic">🔁</div>
+                <h3>Duplica a semana</h3>
+                <p>Repete o microciclo de treinos sem montar tudo de novo.</p>
+              </div>
+              <div className="fcard rev">
+                <div className="ic">📋</div>
+                <h3>Convocatórias</h3>
+                <p>Define o onze e partilha por link com atletas e famílias.</p>
+              </div>
+              <div className="fcard rev">
+                <div className="ic">📅</div>
+                <h3>Calendário público</h3>
+                <p>Os pais sabem onde e quando, sem te andarem a perguntar.</p>
+              </div>
+              <div className="fcard rev">
+                <div className="ic">📈</div>
+                <h3>Estatísticas &amp; insights</h3>
+                <p>Minutos, golos e evolução de cada atleta, sem esforço.</p>
+              </div>
+              <div className="fcard rev">
+                <div className="ic">📄</div>
+                <h3>Relatórios automáticos</h3>
+                <p>
+                  Documentos prontos a partilhar com o clube — sem trabalho
+                  extra.
+                </p>
+              </div>
+              <div className="fcard rev">
+                <div className="ic">📲</div>
+                <h3>Instala como app</h3>
+                <p>
+                  Funciona como aplicação no telemóvel, sem passar pela App Store.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
 
-        <div className="relative mx-auto max-w-xl px-6 text-center">
-          <Reveal>
-            <h2 className="mb-4 text-3xl font-bold tracking-tight md:text-4xl">
-              Pronto para deixar o papel no banco?
-            </h2>
-            <p className="mb-8 text-lg text-white/55">
-              Começa hoje com 7 dias grátis. Sem compromisso.
-            </p>
+        {/* FOUNDER */}
+        <section>
+          <div className="wrap">
+            <div className="founder rev">
+              <div className="big-av">PC</div>
+              <div>
+                <blockquote>
+                  &ldquo;Construí o Coach11 porque vivo o problema. Sou treinador
+                  de formação e estava farto de registar tudo em papel e voltar a
+                  escrever no computador. Quis uma ferramenta que estivesse onde
+                  eu estou — no campo, no telemóvel. Uso-a todas as semanas com o
+                  meu escalão.&rdquo;
+                </blockquote>
+                <div className="by">
+                  — <b>Pedro Campos</b>, treinador de formação · CF Os Belenenses
+                  · fundador do Coach11
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
 
-            <div className="flex justify-center">
+        {/* RISK */}
+        <section>
+          <div className="wrap">
+            <div className="rev center">
+              <span className="eyebrow">Sem letras pequenas</span>
+              <h2 className="sec">Experimentar não tem risco.</h2>
+            </div>
+            <div className="risk">
+              <div className="ritem rev">
+                <div className="ic">🎁</div>
+                <h3>7 dias grátis</h3>
+                <p>Testa tudo sem dar o cartão.</p>
+              </div>
+              <div className="ritem rev">
+                <div className="ic">🚪</div>
+                <h3>Cancela num clique</h3>
+                <p>Sem chamadas, sem fidelização.</p>
+              </div>
+              <div className="ritem rev">
+                <div className="ic">📤</div>
+                <h3>Os dados são teus</h3>
+                <p>Exporta o que é teu quando quiseres.</p>
+              </div>
+              <div className="ritem rev">
+                <div className="ic">⚡</div>
+                <h3>Pronto em minutos</h3>
+                <p>Cria conta e começa no mesmo dia.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* PRICING */}
+        <section id="preco">
+          <div className="wrap">
+            <div className="rev center">
+              <span className="eyebrow">Preço simples</span>
+              <h2 className="sec">Um plano. Tudo incluído.</h2>
+              <p className="sec-sub">
+                Menos do que um café por semana para deixares o papel no banco de
+                vez.
+              </p>
+            </div>
+            <div className="price-card rev">
+              <div className="tier">Treinador</div>
+              <div className="amt">
+                €7,99<span> /mês</span>
+              </div>
+              <div className="trial">7 dias grátis · sem cartão</div>
+              <div className="plist">
+                <div className="li">
+                  <span className="c">✓</span> Presenças, treinos e microciclo
+                </div>
+                <div className="li">
+                  <span className="c">✓</span> Jogos ao vivo e ficha automática
+                </div>
+                <div className="li">
+                  <span className="c">✓</span> Convocatórias e calendário públicos
+                </div>
+                <div className="li">
+                  <span className="c">✓</span> Estatísticas, insights e relatórios
+                </div>
+                <div className="li">
+                  <span className="c">✓</span> App instalável no telemóvel
+                </div>
+              </div>
               <PlanCtaButton
                 href="/billing/start"
-                label="Começar — 7 dias grátis"
+                label="Começar grátis"
                 planIntent="individual"
-                className="flex w-full items-center justify-center rounded-xl bg-emerald-500 px-8 py-4 font-semibold text-white transition hover:bg-emerald-400 active:scale-[0.97] sm:w-auto"
+                className="btn btn-em"
               />
+              <div className="price-foot">
+                Cancela quando quiseres · IVA incluído
+              </div>
             </div>
-
-            <p className="mt-5 text-sm text-white/50">
-              Sem cartão · cancela quando quiseres.
-            </p>
-          </Reveal>
-        </div>
-      </section>
-
-      {/* ═══ FOOTER ═══ */}
-      <footer className="border-t border-white/5 py-8">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 md:flex-row">
-          <Link
-            href="/"
-            className="flex items-center gap-2 transition-opacity hover:opacity-80"
-            aria-label="Coach11 — voltar ao topo"
-          >
-            <Image
-              src="/icons/icon-192.png"
-              alt="Coach11"
-              width={28}
-              height={28}
-              className="h-7 w-7 rounded-md"
-            />
-            <span className="text-sm font-semibold">
-              Coach<span className="text-emerald-400">11</span>
-            </span>
-          </Link>
-          <div className="flex items-center gap-4 text-xs text-white/50">
-            <Link href="/precos" className="transition hover:text-white/80">
-              Preços
-            </Link>
-            <Link href="/contacto" className="transition hover:text-white/80">
-              Contacto
-            </Link>
-            <Link href="/faqs" className="transition hover:text-white/80">
-              FAQs
-            </Link>
-            <Link href="/termos" className="transition hover:text-white/80">
-              Termos
-            </Link>
-            <Link href="/privacidade" className="transition hover:text-white/80">
-              Privacidade
-            </Link>
+            <div className="club-line rev">
+              Tens um clube com vários escalões?{" "}
+              <Link href="/contacto?persona=club">Fala connosco →</Link>
+            </div>
           </div>
-          <p className="text-xs text-white/50">
-            &copy; 2026 Coach11. Feito em Lisboa para treinadores de formação.
-          </p>
+        </section>
+
+        {/* FINAL CTA */}
+        <section className="final">
+          <div className="wrap rev">
+            <h2>
+              Pronto para deixar
+              <br />o papel no banco?
+            </h2>
+            <p className="lead">
+              Começa hoje. Em segundos estás a registar o primeiro treino do
+              telemóvel.
+            </p>
+            <div className="cta">
+              <PlanCtaButton
+                href="/billing/start"
+                label="Começar grátis — 7 dias"
+                planIntent="individual"
+                className="btn btn-em"
+              />
+              <a href="#demo" className="btn btn-gh">
+                Ver a app a funcionar
+              </a>
+            </div>
+            <div className="micro">Sem cartão · cancela quando quiseres</div>
+          </div>
+        </section>
+      </main>
+
+      <footer>
+        <div className="wrap foot-in">
+          <div className="logo" style={{ fontSize: "18px" }}>
+            Coach<span className="e">11</span> ·{" "}
+            <span style={{ color: "var(--mut2)", fontWeight: 500 }}>
+              feito em Lisboa para treinadores de formação
+            </span>
+          </div>
+          <div style={{ display: "flex", gap: "20px", flexWrap: "wrap" }}>
+            <a href="#funcionalidades">Funcionalidades</a>
+            <Link href="/precos">Preço</Link>
+            <Link href="/contacto">Contacto</Link>
+            <Link href="/faqs">FAQs</Link>
+            <Link href="/termos">Termos</Link>
+            <Link href="/privacidade">Privacidade</Link>
+          </div>
         </div>
       </footer>
     </div>
