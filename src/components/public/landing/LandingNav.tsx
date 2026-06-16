@@ -53,7 +53,7 @@ export function LandingNav() {
           </a>
           <PlanCtaButton
             href="/billing/start"
-            label="Começar"
+            label="Começar grátis"
             planIntent="individual"
             className="rounded-lg bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-400 active:scale-[0.97]"
           />
