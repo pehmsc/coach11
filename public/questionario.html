@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Coach11 · Como geres o dia-a-dia da tua equipa?</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#020617;--em4:#34D399;--em5:#10B981;--em6:#059669;--em-soft:#ECFDF5;
+    --ink:#0F172A;--mut:#64748B;--line:#E2E8F0;--card:#fff;--ease:cubic-bezier(.23,1,.32,1);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Geist',system-ui,sans-serif;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;line-height:1.5;
+    background-image:radial-gradient(ellipse at top,rgba(16,185,129,.12),transparent 55%),radial-gradient(circle at 80% 90%,rgba(5,150,105,.1),transparent 45%)}
+  .shell{max-width:660px;margin:0 auto;padding:40px 18px 80px}
+
+  .brandbar{display:flex;align-items:center;justify-content:center;gap:9px;margin-bottom:22px}
+  .brandbar .logo{font-weight:800;font-size:22px;color:#F8FAFC;letter-spacing:-.02em}.brandbar .logo .e{color:var(--em4)}
+
+  .head{text-align:center;color:#F8FAFC;margin-bottom:22px}
+  .head h1{font-weight:800;font-size:clamp(24px,5vw,34px);letter-spacing:-.025em;line-height:1.1}
+  .head p{color:rgba(248,250,252,.62);font-size:15px;margin-top:12px;max-width:460px;margin-left:auto;margin-right:auto}
+  .head .pills{display:flex;gap:8px;justify-content:center;margin-top:16px;flex-wrap:wrap}
+  .head .pill{font-size:12.5px;color:var(--em4);background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.25);padding:5px 12px;border-radius:999px}
+
+  .progress-wrap{position:sticky;top:0;z-index:10;padding:12px 0 14px;background:linear-gradient(180deg,var(--bg) 70%,transparent)}
+  .pbar{height:7px;background:rgba(255,255,255,.1);border-radius:99px;overflow:hidden}
+  .pfill{height:100%;width:0;background:linear-gradient(90deg,var(--em5),var(--em4));border-radius:99px;transition:width .35s var(--ease)}
+  .pcount{font-size:12px;color:rgba(248,250,252,.55);margin-top:7px;text-align:right}
+
+  .sheet{background:var(--card);border-radius:22px;padding:10px 0;box-shadow:0 40px 90px -40px rgba(0,0,0,.6)}
+  .section{padding:22px 22px 6px}
+  .section + .section{border-top:1px solid var(--line)}
+  .sec-h{display:flex;align-items:center;gap:11px;margin-bottom:6px}
+  .sec-h .num{width:26px;height:26px;border-radius:8px;background:var(--em-soft);color:var(--em6);font-weight:700;font-size:13px;display:grid;place-items:center;flex:none}
+  .sec-h h2{font-size:17px;font-weight:700;letter-spacing:-.01em}
+  .sec-h .opt{font-size:12px;color:var(--mut);font-weight:500}
+
+  .q{padding:18px 0;border-top:1px solid #F1F5F9}
+  .q:first-of-type{border-top:0}
+  .q.hidden{display:none}
+  .q .lab{font-size:15px;font-weight:600;color:var(--ink);margin-bottom:11px}
+  .q .lab .req{color:var(--em6)}
+  .q .lab .small{display:block;font-weight:400;font-size:12.5px;color:var(--mut);margin-top:3px}
+  .chips{display:flex;flex-wrap:wrap;gap:9px}
+  .chip{position:relative;cursor:pointer}
+  .chip input{position:absolute;opacity:0;pointer-events:none}
+  .chip span{display:inline-flex;align-items:center;gap:7px;border:1.5px solid var(--line);background:#fff;color:#334155;font-size:14px;font-weight:500;padding:9px 14px;border-radius:11px;transition:all .15s}
+  .chip span::before{content:"";width:15px;height:15px;border-radius:50%;border:1.5px solid #CBD5E1;flex:none;transition:all .15s}
+  .chip.multi span::before{border-radius:5px}
+  .chip:hover span{border-color:#94A3B8}
+  .chip input:checked + span{border-color:var(--em5);background:var(--em-soft);color:var(--em6)}
+  .chip input:checked + span::before{border-color:var(--em5);background:var(--em5);box-shadow:inset 0 0 0 3px #fff}
+  .chip input:focus-visible + span{outline:2px solid var(--em4);outline-offset:2px}
+
+  .scale{display:flex;gap:8px;align-items:stretch}
+  .scale .sc{flex:1;cursor:pointer}
+  .scale .sc input{position:absolute;opacity:0}
+  .scale .sc span{display:grid;place-items:center;height:46px;border:1.5px solid var(--line);border-radius:11px;font-weight:700;font-size:16px;color:#334155;transition:all .15s}
+  .scale .sc input:checked + span{border-color:var(--em5);background:var(--em5);color:#fff}
+  .scale-ends{display:flex;justify-content:space-between;font-size:11.5px;color:var(--mut);margin-top:7px}
+
+  textarea,input[type=email]{width:100%;border:1.5px solid var(--line);border-radius:12px;padding:12px 14px;font-family:inherit;font-size:14.5px;color:var(--ink);resize:vertical;transition:border-color .15s;background:#fff}
+  textarea{min-height:84px}
+  textarea:focus,input[type=email]:focus{outline:0;border-color:var(--em5)}
+
+  .q.err .lab{color:#DC2626}
+  .q.err .chips .chip span,.q.err .scale .sc span,.q.err textarea,.q.err input[type=email]{border-color:#FCA5A5}
+  .errmsg{color:#DC2626;font-size:12.5px;margin-top:8px;display:none}
+  .q.err .errmsg{display:block}
+
+  .footer-sheet{padding:22px;border-top:1px solid var(--line)}
+  .submit{width:100%;border:0;cursor:pointer;background:var(--em5);color:#fff;font-family:inherit;font-weight:700;font-size:16px;padding:15px;border-radius:13px;transition:background .2s,transform .15s;box-shadow:0 12px 30px -10px rgba(16,185,129,.5)}
+  .submit:hover{background:var(--em4);transform:translateY(-1px)}
+  .submit:disabled{opacity:.6;cursor:default;transform:none}
+  .privacy{text-align:center;font-size:12.5px;color:var(--mut);margin-top:14px}
+  .foot{text-align:center;color:rgba(248,250,252,.4);font-size:12.5px;margin-top:26px}
+
+  .thanks{display:none;text-align:center;padding:60px 24px}
+  .thanks .ic{width:72px;height:72px;border-radius:20px;background:var(--em-soft);color:var(--em6);display:grid;place-items:center;font-size:34px;margin:0 auto 22px}
+  .thanks h2{font-size:26px;font-weight:800;letter-spacing:-.02em}
+  .thanks p{color:var(--mut);font-size:15.5px;margin-top:12px;max-width:380px;margin-left:auto;margin-right:auto}
+  .thanks .demo{margin-top:22px}
+  .ghost{background:#fff;border:1.5px solid var(--line);color:#334155;font-family:inherit;font-weight:600;font-size:14px;padding:11px 18px;border-radius:11px;cursor:pointer}
+
+  @media (max-width:480px){.shell{padding:26px 12px 60px}.section{padding:20px 16px 6px}.footer-sheet{padding:18px 16px}.chip span{font-size:13.5px;padding:9px 12px}}
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="brandbar"><span class="logo">Coach<span class="e">11</span></span></div>
+  <div class="head">
+    <h1>Como geres o dia-a-dia da tua equipa?</h1>
+    <p>Um estudo rápido sobre a gestão no futebol de formação. As respostas são anónimas e partilho os resultados agregados.</p>
+    <div class="pills"><span class="pill">⏱️ 3–5 minutos</span><span class="pill">🔒 Anónimo</span></div>
+  </div>
+
+  <div class="progress-wrap"><div class="pbar"><div class="pfill" id="pfill"></div></div><div class="pcount" id="pcount">0 de 0 respondidas</div></div>
+
+  <form id="form" novalidate>
+    <div class="sheet" id="sheet"></div>
+    <div class="sheet footer-sheet">
+      <button type="submit" class="submit" id="submit">Enviar respostas</button>
+      <div class="privacy">Sem dados pessoais obrigatórios. O email é opcional e só serve para te dar acesso antecipado.</div>
+    </div>
+  </form>
+
+  <div class="sheet thanks" id="thanks">
+    <div class="ic">✓</div>
+    <h2>Obrigado!</h2>
+    <p>A tua resposta foi registada. Se deixaste o email, falo contigo em breve sobre o acesso antecipado.</p>
+    <div class="demo" id="demoBox" style="display:none"><button class="ghost" id="copyBtn">Copiar respostas (modo demo)</button></div>
+  </div>
+
+  <div class="foot">Coach11 · feito em Lisboa para treinadores de formação</div>
+</div>
+
+<script>
+// ====== Recolha na infraestrutura Coach11 ======
+// A rota Next /api/survey (mesma origem que coach11.app) valida e insere no Supabase.
+// Não precisa de chave no cliente. Vazio = modo demo (agradecimento + copiar respostas).
+var ENDPOINT = "/api/survey";
+// ===============================================
+
+var SECTIONS=[
+  {n:1,t:"Quem és"},
+  {n:2,t:"Como trabalhas hoje"},
+  {n:3,t:"Pais, equipa técnica e jogo",opt:"+2 min"},
+  {n:4,t:"Ferramentas e o que se segue"}
+];
+var Q=[
+  {id:"q1",s:1,type:"single",req:1,label:"Que escalão treinas principalmente?",opts:["Sub-7 a Sub-13","Sub-14 a Sub-19","Seniores","Vários"]},
+  {id:"q2",s:1,type:"single",req:1,label:"Que tipo de clube ou contexto?",opts:["Formação certificado FPF","Clube amador","Escola de futebol","Academia","Outro"]},
+  {id:"q3",s:1,type:"single",req:1,label:"Qual é a tua função?",opts:["Treinador principal","Adjunto","Treinador de GR","Coordenador","Outra"]},
+  {id:"q4",s:1,type:"single",req:1,label:"Há quanto tempo treinas?",opts:["Menos de 2 anos","2–5 anos","5–10 anos","Mais de 10 anos"]},
+
+  {id:"q5",s:2,type:"multi",req:1,label:"Como registas as presenças nos treinos?",hint:"Podes escolher mais do que uma.",opts:["Não registo","Papel ou caderno","Notas/Excel no telemóvel","App do clube","WhatsApp","Outra"]},
+  {id:"q6",s:2,type:"single",req:1,label:"Quando lanças a informação do treino/jogo num sistema?",opts:["No momento, no campo","Depois, em casa","Não lanço em lado nenhum"]},
+  {id:"q7",s:2,type:"single",req:1,label:"Registas os eventos do jogo (golos, cartões, minutos, substituições)?",opts:["Sim, sempre","Às vezes","Nunca"]},
+  {id:"q8",s:2,type:"single",req:1,label:"Quanto tempo por semana gastas em tarefas administrativas da equipa?",hint:"Registos, convocatórias, relatórios.",opts:["Menos de 30 min","30 min – 1h","1 – 3h","Mais de 3h"]},
+  {id:"q9",s:2,type:"scale",req:1,label:"Quão penoso é para ti esse trabalho administrativo?",ends:["Nada penoso","Muito penoso"]},
+  {id:"q10",s:2,type:"single",req:1,label:"Valorizas ter dados dos atletas (presenças, minutos, evolução)?",opts:["Muito","Alguma coisa","Nada"]},
+  {id:"q11",s:2,type:"text",req:0,label:"Qual é a parte mais frustrante da gestão do dia-a-dia da tua equipa?",hint:"Opcional, mas é o que mais me ajuda."},
+
+  {id:"q12",s:3,type:"single",req:1,label:"Com que frequência os pais te questionam sobre tempo de jogo, convocatórias ou evolução?",opts:["Nunca","Raramente","Algumas vezes por época","Muitas vezes"]},
+  {id:"q13",s:3,type:"single",req:1,label:"Quando isso acontece, em que te baseias para responder?",opts:["Tenho dados registados para mostrar","Memória e perceção","Anotações dispersas","Evito o tema"]},
+  {id:"q14",s:3,type:"single",req:1,label:"Trabalhas com mais elementos na equipa técnica?",opts:["Sim","Não, sozinho"],branch:{val:"Não, sozinho",hide:["q15","q16","q17"]}},
+  {id:"q15",s:3,type:"single",req:1,label:"Como partilham os planos de treino e quem faz o quê em cada exercício?",opts:["WhatsApp","Papel impresso","Só falamos no momento","Ferramenta partilhada","Não partilhamos formalmente"]},
+  {id:"q16",s:3,type:"single",req:1,label:"Os adjuntos sabem o plano e os exercícios da sessão antes de chegar ao campo?",opts:["Sempre","Às vezes","Raramente"]},
+  {id:"q17",s:3,type:"single",req:1,label:"Como acompanham a lógica do microciclo/mesociclo?",opts:["Documento partilhado","Está na minha cabeça","Não planeamos a esse nível"]},
+  {id:"q18",s:3,type:"single",req:1,label:"Onde organizas os teus exercícios de treino?",opts:["Memória","Caderno","Word ou PDF","Apps e vídeos dispersos","Biblioteca organizada","Não guardo"]},
+  {id:"q19",s:3,type:"single",req:1,label:"Antes de comunicar o onze, costumas preparar uma versão de rascunho?",opts:["Sim, rascunho primeiro","Decido e comunico de uma vez","Não faço convocatória formal"]},
+  {id:"q20",s:3,type:"single",req:1,label:"Durante o jogo, tomas notas sobre o adversário ou a tua equipa para analisar depois?",opts:["Sim, sempre","Às vezes","Nunca"]},
+  {id:"q21",s:3,type:"single",req:1,label:"Onde ficam essas observações?",opts:["Cabeça","Papel","Notas no telemóvel","Não guardo"]},
+
+  {id:"q22",s:4,type:"text",req:0,label:"Usas alguma app/software para gerir a equipa? Se sim, qual e o que mais te irrita nela?",hint:"Opcional."},
+  {id:"q23",s:4,type:"single",req:1,label:"Tu ou o clube já pagaram por alguma destas ferramentas?",opts:["Sim","Não","Não sei"]},
+  {id:"q24",s:4,type:"single",req:1,label:"Se existisse uma app onde registas tudo no telemóvel, no campo, e os relatórios se preenchem sozinhos — querias experimentar?",opts:["Sim, quero saber mais","Talvez","Não"]},
+  {id:"q25",s:4,type:"email",req:0,label:"Deixa o teu email se quiseres acesso antecipado ou trocar 10 min comigo.",hint:"Opcional. Sem spam."}
+];
+
+var FIELD_LABELS={q1:"Escalão",q2:"Tipo de clube",q3:"Função",q4:"Anos a treinar",q5:"Regista presenças",q6:"Quando lança a info",q7:"Regista eventos do jogo",q8:"Tempo admin/semana",q9:"Penosidade admin (1-5)",q10:"Valoriza dados",q11:"Maior frustração",q12:"Pais questionam (freq)",q13:"Base para responder aos pais",q14:"Tem equipa técnica",q15:"Partilha de planos",q16:"Adjuntos sabem o plano",q17:"Microciclo/mesociclo",q18:"Organiza exercícios",q19:"Convocatória rascunho",q20:"Notas durante o jogo",q21:"Onde ficam as notas",q22:"Ferramenta atual + queixa",q23:"Já pagaram ferramenta",q24:"Interesse na app",q25:"Email"};
+
+var answers={};
+var sheet=document.getElementById('sheet');
+
+function el(tag,cls,html){var e=document.createElement(tag);if(cls)e.className=cls;if(html!=null)e.innerHTML=html;return e;}
+
+SECTIONS.forEach(function(sec){
+  var sc=el('div','section');sc.dataset.sec=sec.n;
+  var h=el('div','sec-h','<div class="num">'+sec.n+'</div><h2>'+sec.t+'</h2>'+(sec.opt?'<span class="opt">· '+sec.opt+'</span>':''));
+  sc.appendChild(h);
+  Q.filter(function(q){return q.s===sec.n;}).forEach(function(q){sc.appendChild(buildQ(q));});
+  sheet.appendChild(sc);
+});
+
+function buildQ(q){
+  var wrap=el('div','q');wrap.dataset.id=q.id;
+  var lab=el('div','lab','<span>'+q.label+(q.req?' <span class="req">*</span>':'')+'</span>'+(q.hint?'<span class="small">'+q.hint+'</span>':''));
+  wrap.appendChild(lab);
+  if(q.type==='single'||q.type==='multi'){
+    var box=el('div','chips');
+    q.opts.forEach(function(o){
+      var lblc=el('label','chip'+(q.type==='multi'?' multi':''));
+      lblc.innerHTML='<input type="'+(q.type==='multi'?'checkbox':'radio')+'" name="'+q.id+'" value="'+o+'"><span>'+o+'</span>';
+      lblc.querySelector('input').addEventListener('change',function(){onChange(q);});
+      box.appendChild(lblc);
+    });
+    wrap.appendChild(box);
+  } else if(q.type==='scale'){
+    var sb=el('div','scale');
+    for(var i=1;i<=5;i++){(function(i){
+      var lblc=el('label','sc');
+      lblc.innerHTML='<input type="radio" name="'+q.id+'" value="'+i+'"><span>'+i+'</span>';
+      lblc.querySelector('input').addEventListener('change',function(){onChange(q);});
+      sb.appendChild(lblc);
+    })(i);}
+    wrap.appendChild(sb);
+    wrap.appendChild(el('div','scale-ends','<span>'+q.ends[0]+'</span><span>'+q.ends[1]+'</span>'));
+  } else if(q.type==='text'){
+    var ta=el('textarea');ta.name=q.id;ta.placeholder='Escreve aqui…';
+    ta.addEventListener('input',function(){answers[q.id]=ta.value.trim();updateProgress();});
+    wrap.appendChild(ta);
+  } else if(q.type==='email'){
+    var inp=el('input');inp.type='email';inp.name=q.id;inp.placeholder='o-teu-email@exemplo.pt';
+    inp.addEventListener('input',function(){answers[q.id]=inp.value.trim();updateProgress();});
+    wrap.appendChild(inp);
+  }
+  wrap.appendChild(el('div','errmsg','Por favor responde a esta pergunta.'));
+  return wrap;
+}
+
+function onChange(q){
+  if(q.type==='multi'){
+    var checked=[].slice.call(document.querySelectorAll('input[name="'+q.id+'"]:checked')).map(function(i){return i.value;});
+    answers[q.id]=checked;
+  } else {
+    var c=document.querySelector('input[name="'+q.id+'"]:checked');
+    answers[q.id]=c?c.value:null;
+  }
+  document.querySelector('.q[data-id="'+q.id+'"]').classList.remove('err');
+  if(q.branch) applyBranch(q);
+  updateProgress();
+}
+
+function applyBranch(q){
+  var hide = answers[q.id]===q.branch.val;
+  q.branch.hide.forEach(function(id){
+    var el=document.querySelector('.q[data-id="'+id+'"]');
+    if(!el)return;
+    el.classList.toggle('hidden',hide);
+    if(hide){ // clear hidden answers
+      delete answers[id];
+      el.querySelectorAll('input').forEach(function(i){i.checked=false;});
+      el.classList.remove('err');
+    }
+  });
+}
+
+function visibleRequired(){
+  return Q.filter(function(q){
+    if(!q.req)return false;
+    var el=document.querySelector('.q[data-id="'+q.id+'"]');
+    return el && !el.classList.contains('hidden');
+  });
+}
+function isAnswered(q){
+  var a=answers[q.id];
+  if(q.type==='multi')return a&&a.length>0;
+  return a!=null&&a!=='';
+}
+function updateProgress(){
+  var req=visibleRequired();var done=req.filter(isAnswered).length;
+  document.getElementById('pfill').style.width=(req.length?Math.round(done/req.length*100):0)+'%';
+  document.getElementById('pcount').textContent=done+' de '+req.length+' respondidas';
+}
+
+document.getElementById('form').addEventListener('submit',function(e){
+  e.preventDefault();
+  var missing=visibleRequired().filter(function(q){return !isAnswered(q);});
+  document.querySelectorAll('.q').forEach(function(el){el.classList.remove('err');});
+  if(missing.length){
+    missing.forEach(function(q){document.querySelector('.q[data-id="'+q.id+'"]').classList.add('err');});
+    var first=document.querySelector('.q[data-id="'+missing[0].id+'"]');
+    first.scrollIntoView({behavior:'smooth',block:'center'});
+    return;
+  }
+  var email=answers.q25||'';
+  if(email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){
+    var eq=document.querySelector('.q[data-id="q25"]');eq.classList.add('err');eq.querySelector('.errmsg').textContent='Email inválido.';eq.scrollIntoView({behavior:'smooth',block:'center'});return;
+  }
+  var data={};
+  Q.forEach(function(q){var a=answers[q.id];data[FIELD_LABELS[q.id]]=Array.isArray(a)?a.join(', '):(a==null?'':a);});
+  data["Submetido"]=new Date().toLocaleString('pt-PT');
+  var payload={payload:data,email:answers.q25||null,ua:navigator.userAgent};
+  var btn=document.getElementById('submit');btn.disabled=true;btn.textContent='A enviar…';
+
+  function done(ok){
+    document.getElementById('form').style.display='none';
+    var t=document.getElementById('thanks');t.style.display='block';
+    if(!ENDPOINT){document.getElementById('demoBox').style.display='block';
+      document.getElementById('copyBtn').addEventListener('click',function(){navigator.clipboard.writeText(JSON.stringify(payload,null,2));this.textContent='Copiado ✓';});}
+    t.scrollIntoView({behavior:'smooth',block:'start'});
+  }
+
+  if(!ENDPOINT){console.log('[Coach11 questionário — modo demo] respostas:',payload);done(true);return;}
+  fetch(ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify(payload)})
+    .then(function(){done(true);})
+    .catch(function(){btn.disabled=false;btn.textContent='Enviar respostas';alert('Não consegui enviar. Verifica a ligação e tenta de novo.');});
+});
+
+updateProgress();
+</script>
+</body>
+</html>

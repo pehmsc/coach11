@@ -574,3 +574,17 @@ export interface ClubInsights {
   yellow_cards: number;
   red_cards: number;
 }
+
+/**
+ * Resposta ao questionario de validacao (treinadores de formacao). INSERT
+ * anonimo a partir de /questionario.html via /api/survey. O conteudo das
+ * respostas vive em `payload` (chave=label legivel, valor=resposta);
+ * `email` e um lead opcional. Ver migration 20260616120000.
+ */
+export interface SurveyResponse {
+  id: string;
+  created_at: string;
+  payload: Record<string, unknown>;
+  email: string | null;
+  user_agent: string | null;
+}

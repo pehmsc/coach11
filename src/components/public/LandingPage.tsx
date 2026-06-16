@@ -6,20 +6,22 @@ import {
   BarChart3,
   ClipboardCheck,
   Zap,
-  Shield,
   Users,
-  Trophy,
   ChevronRight,
-  CheckCircle2,
-  Bell,
   FileText,
   Copy,
+  CalendarDays,
   ArrowRight,
+  ArrowDown,
+  Gift,
+  XCircle,
+  Download,
+  Rocket,
+  Quote,
 } from "lucide-react";
 import { PlanCard, PLANS } from "@/components/public/PlanCard";
 import { PlanCtaButton } from "@/components/public/PlanCtaButton";
 import { LandingNav } from "@/components/public/landing/LandingNav";
-import { WaitlistForm } from "@/components/public/landing/WaitlistForm";
 import { HeroDevice } from "@/components/public/landing/HeroDevice";
 import { CountUp } from "@/components/public/landing/CountUp";
 
@@ -70,64 +72,61 @@ function Stat({
   );
 }
 
+// ── Founder avatar (iniciais — sem foto, RGPD-safe) ──
+function FounderAvatar({ className = "" }: { className?: string }) {
+  return (
+    <div
+      className={`flex shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 font-bold text-white ${className}`}
+    >
+      PC
+    </div>
+  );
+}
+
 // ── Feature Card ──
 const FEATURES = [
   {
     icon: ClipboardCheck,
     title: "Presenças em 20 segundos",
-    description:
-      "Lista de jogadores com foto e toggle grande. Guardar fixo no fundo. Feito antes do apito.",
+    description: "Presente, atrasado, ausente ou lesionado num toque.",
     accent: true,
   },
   {
     icon: Timer,
-    title: "Eventos live em jogo",
-    description:
-      "Golos, cartões, substituições — 2 toques com minuto auto-preenchido. Regista durante o jogo, não depois.",
+    title: "Jogos ao vivo",
+    description: "Eventos em 2 toques, com o minuto preenchido automaticamente.",
     accent: true,
   },
   {
     icon: Copy,
-    title: "Duplicar semana de treinos",
-    description:
-      "Cria a semana 1 (UT01-UT03). Duplica para o resto da época. 120 sessões em segundos, não em horas.",
+    title: "Duplica a semana",
+    description: "Repete o microciclo de treinos sem montar tudo de novo.",
     accent: true,
   },
   {
-    icon: BarChart3,
-    title: "Insights no telemóvel",
-    description:
-      "Minutos jogados, golos, presenças, alertas de suspensão. Consulta rápida no banco antes de decidir uma substituição.",
+    icon: Users,
+    title: "Convocatórias",
+    description: "Define o onze e partilha por link com atletas e famílias.",
   },
   {
-    icon: Bell,
-    title: "Notificações push",
-    description:
-      "Convocatórias, treinos, alterações — tudo chega ao atleta e ao pai sem depender do WhatsApp.",
+    icon: CalendarDays,
+    title: "Calendário público",
+    description: "Os pais sabem onde e quando, sem te andarem a perguntar.",
+  },
+  {
+    icon: BarChart3,
+    title: "Estatísticas & insights",
+    description: "Minutos, golos e evolução de cada atleta, sem esforço.",
   },
   {
     icon: FileText,
-    title: "PDF automático",
-    description:
-      "Relatório de jogo e planeamento de treino gerados automaticamente com logo do clube. Partilha com 1 toque.",
-  },
-  {
-    icon: Shield,
-    title: "Dossier de treino FPF",
-    description:
-      "UTs estruturadas, biblioteca de exercícios, avaliações, objectivos — tudo o que a certificação pede, pronto para a visita técnica.",
-  },
-  {
-    icon: Users,
-    title: "Multi-equipa, multi-escalão",
-    description:
-      "Coordenador vê tudo. Treinador vê a sua equipa. Adjunto marca presenças. Cada um vê o que precisa.",
+    title: "Relatórios automáticos",
+    description: "Documentos prontos a partilhar com o clube, sem trabalho extra.",
   },
   {
     icon: Smartphone,
-    title: "PWA instalável",
-    description:
-      "Instala no telemóvel como uma app nativa. Sem App Store, sem Play Store. Abre e usa.",
+    title: "Instala como app",
+    description: "Funciona como aplicação no telemóvel, sem passar pela App Store.",
   },
 ];
 
@@ -163,15 +162,14 @@ function FeatureCard({
   );
 }
 
-// ── Comparison Row ──
+// ── Comparison ──
 const COMPARISONS = [
   { feature: "Marcar presenças", old: "5+ minutos, laptop", better: "< 20 segundos, telemóvel" },
   { feature: "Evento em jogo", old: "Anotar em papel, passar depois", better: "2 toques, tempo real" },
   { feature: "Criar 120 treinos", old: "120 operações manuais", better: "4 cliques (duplicar semana)" },
   { feature: "Ver minutos de jogador", old: "Procurar em tabelas desktop", better: "2 toques no banco" },
-  { feature: "Enviar convocatória", old: "WhatsApp manual", better: "Push notification automática" },
+  { feature: "Enviar convocatória", old: "WhatsApp manual", better: "Link partilhado automático" },
   { feature: "Relatório de jogo", old: "Preencher formulário", better: "PDF gerado automaticamente" },
-  { feature: "Dossier para FPF", old: "Compilar no final da época", better: "Sempre actualizado, exportável" },
 ];
 
 function ComparisonRow({
@@ -191,6 +189,17 @@ function ComparisonRow({
     </div>
   );
 }
+
+// ── Garantias (reversao de risco) ──
+const GUARANTEES = [
+  { icon: Gift, title: "7 dias grátis", description: "Testa tudo sem dar o cartão." },
+  { icon: XCircle, title: "Cancela num clique", description: "Sem chamadas, sem fidelização." },
+  { icon: Download, title: "Os dados são teus", description: "Exporta o que é teu quando quiseres." },
+  { icon: Rocket, title: "Pronto em minutos", description: "Cria conta e começa no mesmo dia." },
+];
+
+// Plano em foco: apenas o do treinador individual (clube vai para a linha discreta).
+const individualPlan = PLANS.find((p) => p.name === "Individual");
 
 // ── Main Page (server component) ──
 export default function LandingPage() {
@@ -213,21 +222,24 @@ export default function LandingPage() {
             <div className="text-center lg:text-left">
               <div className="c11-hero-in c11-hero-in-1 mb-6 inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-4 py-1.5 text-sm text-emerald-300">
                 <Zap className="h-3.5 w-3.5" />
-                <span>Para treinadores e clubes de formação</span>
+                <span>Para treinadores de formação</span>
               </div>
 
+              {/* Alternativa aprovada (trocar facilmente):
+                  "O treinador regista." / "O sistema faz o resto." */}
               <h1 className="c11-hero-in c11-hero-in-2 mb-6 text-5xl font-extrabold leading-[1.02] tracking-[-0.02em] md:text-6xl lg:text-7xl">
-                O treinador regista.
+                Do treino ao
                 <br />
                 <span className="bg-gradient-to-r from-emerald-400 to-emerald-300 bg-clip-text text-transparent">
-                  O sistema faz o resto.
+                  apito final.
                 </span>
               </h1>
 
               <p className="c11-hero-in c11-hero-in-3 mx-auto mb-8 max-w-xl text-lg leading-relaxed text-white/55 md:text-xl lg:mx-0">
-                Plataforma de gestão desportiva para futebol de formação. Regista
-                no campo com o telemóvel — o backoffice preenche-se sozinho, sem
-                inserir dados duas vezes.
+                Marca presenças, convoca o onze e regista o jogo ao vivo — tudo
+                no telemóvel, em segundos, no relvado. As estatísticas e os
+                relatórios preenchem-se sozinhos. Sem papel, sem voltar a lançar
+                tudo no computador.
               </p>
 
               <div className="c11-hero-in c11-hero-in-4 flex flex-col items-center gap-3 sm:flex-row sm:justify-center lg:justify-start">
@@ -237,17 +249,18 @@ export default function LandingPage() {
                   planIntent="individual"
                   className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 px-8 py-4 text-base font-semibold text-white transition hover:bg-emerald-400 active:scale-[0.97] sm:w-auto"
                 />
-                <Link
-                  href="/contacto?persona=club"
+                <a
+                  href="#features"
                   className="group flex w-full items-center justify-center gap-2 rounded-xl border border-white/15 px-8 py-4 text-base font-medium text-white/80 transition hover:border-white/30 hover:text-white active:scale-[0.97] sm:w-auto"
                 >
-                  Sou um clube
-                  <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
-                </Link>
+                  Ver a app a funcionar
+                  <ArrowDown className="h-4 w-4 transition group-hover:translate-y-0.5" />
+                </a>
               </div>
 
               <p className="c11-hero-in c11-hero-in-4 mt-5 text-center text-sm text-white/50 lg:text-left">
-                7 dias grátis, sem compromisso. Já tens conta?{" "}
+                Sem cartão para experimentar · cancela quando quiseres. Já tens
+                conta?{" "}
                 <a
                   href="/login"
                   className="text-white/70 underline underline-offset-2 transition hover:text-white"
@@ -260,6 +273,18 @@ export default function LandingPage() {
                 <Stat value="<20s" label="para marcar presenças" accent />
                 <Stat value="2 toques" label="por evento de jogo" />
                 <Stat value="€7,99" label="/mês · 7 dias grátis" />
+              </div>
+
+              {/* Tira de confianca do fundador */}
+              <div className="c11-hero-in c11-hero-in-6 mx-auto mt-8 flex max-w-lg items-center gap-3 border-t border-white/5 pt-6 lg:mx-0">
+                <FounderAvatar className="h-10 w-10 text-xs" />
+                <p className="text-left text-sm leading-relaxed text-white/55">
+                  Feito por um treinador de formação no{" "}
+                  <span className="font-semibold text-white/75">
+                    CF Os Belenenses
+                  </span>{" "}
+                  — para resolver a própria dor.
+                </p>
               </div>
             </div>
 
@@ -279,38 +304,43 @@ export default function LandingPage() {
               O problema que todos os treinadores conhecem
             </h2>
             <p className="text-lg text-white/55">
-              131 treinos agendados. Apenas 1 com presenças registadas. Não
-              porque o treinador não quer — porque a ferramenta não deixa.
+              <CountUp to={131} /> treinos agendados. Apenas 1 com presenças
+              registadas. Não porque o treinador não quer — porque a ferramenta
+              não deixa.
             </p>
           </Reveal>
 
           <div className="mt-14 grid gap-4 md:grid-cols-3">
             <Reveal d={1}>
               <div className="h-full rounded-xl border border-red-500/10 bg-red-500/5 p-6">
-                <div className="mb-3 text-2xl font-bold text-red-400/80">Desktop</div>
+                <div className="mb-3 text-2xl font-bold text-red-400/80">
+                  Papel no banco
+                </div>
                 <p className="text-sm text-white/55">
-                  Plataformas pensadas para o escritório. No campo, com frio e
-                  luvas, ninguém abre um laptop para marcar presenças.
+                  Fichas e cadernos que se perdem, molham e nunca chegam ao sítio
+                  certo. No fim do jogo, metade da informação evapora-se.
                 </p>
               </div>
             </Reveal>
             <Reveal d={2}>
               <div className="h-full rounded-xl border border-red-500/10 bg-red-500/5 p-6">
-                <div className="mb-3 text-2xl font-bold text-red-400/80">Manual</div>
+                <div className="mb-3 text-2xl font-bold text-red-400/80">
+                  Tudo duas vezes
+                </div>
                 <p className="text-sm text-white/55">
-                  Dados inseridos duas vezes. O treinador regista e depois o
-                  admin volta a preencher. Duplicação constante.
+                  Registas no campo e depois voltas a lançar tudo num backoffice
+                  pesado, à secretária. O mesmo trabalho, feito a dobrar.
                 </p>
               </div>
             </Reveal>
             <Reveal d={3}>
               <div className="h-full rounded-xl border border-red-500/10 bg-red-500/5 p-6">
                 <div className="mb-3 text-2xl font-bold text-red-400/80">
-                  <CountUp to={120} suffix="×" />
+                  Sem histórico
                 </div>
                 <p className="text-sm text-white/55">
-                  120 treinos por época criados um a um. Sem duplicação semanal,
-                  sem auto-incremento. Trabalho repetitivo que ninguém quer fazer.
+                  Quem faltou? Quantos minutos jogou? Como evoluiu? Sem registo
+                  consistente, não há respostas — nem para ti, nem para os pais.
                 </p>
               </div>
             </Reveal>
@@ -323,11 +353,11 @@ export default function LandingPage() {
         <div className="mx-auto max-w-6xl px-6">
           <Reveal className="mx-auto mb-16 max-w-2xl text-center">
             <h2 className="mb-4 text-3xl font-bold tracking-tight md:text-4xl">
-              Tudo o que precisas. Nada do que não precisas.
+              O teu escalão, organizado.
             </h2>
             <p className="text-lg text-white/55">
-              Desenhado por treinadores, para treinadores. Cada funcionalidade
-              foi pensada para o contexto real: campo, banco, viagem.
+              As ferramentas que usas todas as semanas — pensadas para o
+              telemóvel, prontas para o relvado.
             </p>
           </Reveal>
 
@@ -417,18 +447,19 @@ export default function LandingPage() {
                   3
                 </div>
                 <h3 className="mb-2 text-lg font-semibold">
-                  O coordenador consulta
+                  Em casa, vês tudo pronto
                 </h3>
                 <p className="text-sm text-white/55">
-                  Dashboard com insights, dossier de treino pronto, relatórios
-                  exportáveis. Sem inserir um único dado manualmente.
+                  Dashboard, evolução dos atletas e relatórios prontos a
+                  partilhar com o clube e com os pais. Sem inserir um único dado
+                  manualmente.
                 </p>
                 <div className="mt-4 flex flex-wrap gap-2">
                   <span className="rounded-full bg-white/5 px-3 py-1 text-xs text-white/50">
                     Dashboard
                   </span>
                   <span className="rounded-full bg-white/5 px-3 py-1 text-xs text-white/50">
-                    Export PDF/Excel
+                    Relatórios
                   </span>
                 </div>
               </div>
@@ -466,75 +497,57 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ═══ FOR WHO ═══ */}
+      {/* ═══ FOUNDER ═══ */}
       <section className="border-t border-white/[0.06] bg-slate-900/30 py-24 md:py-32">
+        <div className="mx-auto max-w-3xl px-6">
+          <Reveal>
+            <div className="relative rounded-3xl border border-white/10 bg-white/[0.03] p-8 md:p-12">
+              <Quote
+                className="absolute right-8 top-8 h-12 w-12 text-emerald-500/15"
+                aria-hidden
+              />
+              <FounderAvatar className="mb-6 h-16 w-16 text-lg" />
+              <blockquote className="text-lg leading-relaxed text-white/80 md:text-xl">
+                &ldquo;Construí o Coach11 porque vivo o problema. Sou treinador de
+                formação e estava farto de registar tudo em papel e voltar a
+                escrever no computador. Quis uma ferramenta que estivesse onde eu
+                estou — no campo, no telemóvel. Uso-a todas as semanas com o meu
+                escalão.&rdquo;
+              </blockquote>
+              <p className="mt-6 text-sm font-medium text-white/55">
+                — Pedro Campos, treinador de formação · CF Os Belenenses ·
+                fundador do Coach11
+              </p>
+            </div>
+          </Reveal>
+        </div>
+      </section>
+
+      {/* ═══ GARANTIAS ═══ */}
+      <section className="border-t border-white/[0.06] py-24 md:py-32">
         <div className="mx-auto max-w-6xl px-6">
-          <Reveal className="mx-auto mb-12 max-w-2xl text-center">
+          <Reveal className="mx-auto mb-14 max-w-2xl text-center">
             <h2 className="text-3xl font-bold tracking-tight md:text-4xl">
-              Para quem é o Coach11?
+              Experimentar não tem risco.
             </h2>
           </Reveal>
 
-          <div className="grid gap-6 md:grid-cols-2">
-            <Reveal d={1} className="h-full">
-              <div className="h-full rounded-2xl border border-white/10 bg-white/5 p-8">
-                <div className="mb-4 inline-flex rounded-xl bg-emerald-500/20 p-3">
-                  <Trophy className="h-6 w-6 text-emerald-400" />
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {GUARANTEES.map((g, i) => (
+              <Reveal key={g.title} d={i + 1} className="h-full">
+                <div className="h-full rounded-2xl border border-emerald-500/15 bg-emerald-950/20 p-6">
+                  <div className="mb-4 inline-flex rounded-xl bg-emerald-500/15 p-3 text-emerald-400">
+                    <g.icon className="h-6 w-6" />
+                  </div>
+                  <h3 className="mb-1.5 text-base font-semibold text-white">
+                    {g.title}
+                  </h3>
+                  <p className="text-sm leading-relaxed text-white/55">
+                    {g.description}
+                  </p>
                 </div>
-                <h3 className="mb-2 text-xl font-semibold">
-                  Clubes certificados FPF
-                </h3>
-                <p className="mb-4 text-sm text-white/55">
-                  Dossier de treino completo, UTs estruturadas, biblioteca de
-                  exercícios, avaliações — tudo o que a certificação exige,
-                  gerado automaticamente a partir do trabalho no campo.
-                </p>
-                <ul className="space-y-2">
-                  <li className="flex items-center gap-2 text-sm text-white/65">
-                    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
-                    Critério 4 da FPF coberto
-                  </li>
-                  <li className="flex items-center gap-2 text-sm text-white/65">
-                    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
-                    Pronto para visita técnica
-                  </li>
-                  <li className="flex items-center gap-2 text-sm text-white/65">
-                    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
-                    Export PDF com logo do clube
-                  </li>
-                </ul>
-              </div>
-            </Reveal>
-
-            <Reveal d={2} className="h-full">
-              <div className="h-full rounded-2xl border border-white/10 bg-white/5 p-8">
-                <div className="mb-4 inline-flex rounded-xl bg-white/10 p-3">
-                  <Users className="h-6 w-6 text-white/70" />
-                </div>
-                <h3 className="mb-2 text-xl font-semibold">
-                  Escolas de futebol e clubes pequenos
-                </h3>
-                <p className="mb-4 text-sm text-white/55">
-                  Começar a usar em minutos. Sem configuração complexa, sem
-                  obrigações administrativas. Foco no que importa: treinar e
-                  gerir a equipa.
-                </p>
-                <ul className="space-y-2">
-                  <li className="flex items-center gap-2 text-sm text-white/65">
-                    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
-                    7 dias grátis para experimentar
-                  </li>
-                  <li className="flex items-center gap-2 text-sm text-white/65">
-                    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
-                    Mobile-first, instala como app
-                  </li>
-                  <li className="flex items-center gap-2 text-sm text-white/65">
-                    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
-                    Presenças, jogos e convocatórias
-                  </li>
-                </ul>
-              </div>
-            </Reveal>
+              </Reveal>
+            ))}
           </div>
         </div>
       </section>
@@ -544,29 +557,38 @@ export default function LandingPage() {
         <div className="mx-auto max-w-6xl px-6">
           <Reveal className="mx-auto mb-12 max-w-2xl text-center">
             <h2 className="mb-4 text-3xl font-bold tracking-tight md:text-4xl">
-              Planos para cada fase do clube
+              Preço simples, sem surpresas.
             </h2>
             <p className="text-lg text-white/55">
-              Treinador individual em auto-serviço. Clube com onboarding
-              dedicado. Sempre com o mesmo produto por baixo.
+              Experimenta 7 dias grátis. Depois, um preço fixo — sem
+              fidelização, cancelas quando quiseres.
             </p>
           </Reveal>
 
-          <div className="grid gap-6 md:grid-cols-3">
-            {PLANS.map((plan, i) => (
-              <Reveal key={plan.name} d={i + 1} className="h-full">
-                <div className="h-full c11-hover-lift-lg">
-                  <PlanCard {...plan} />
-                </div>
-              </Reveal>
-            ))}
-          </div>
+          {individualPlan ? (
+            <Reveal className="mx-auto max-w-sm">
+              <div className="c11-hover-lift-lg">
+                <PlanCard {...individualPlan} highlighted />
+              </div>
+            </Reveal>
+          ) : null}
 
-          <p className="mt-10 text-center text-sm text-white/50">
+          <p className="mt-8 text-center text-sm text-white/55">
+            Tens um clube com vários escalões?{" "}
+            <Link
+              href="/contacto?persona=club"
+              className="inline-flex items-center gap-1 text-emerald-400 underline-offset-2 hover:underline"
+            >
+              Fala connosco
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </p>
+
+          <p className="mt-3 text-center text-sm text-white/40">
             Detalhes completos na{" "}
             <Link
               href="/precos"
-              className="text-emerald-400 underline-offset-2 hover:underline"
+              className="text-white/60 underline-offset-2 hover:underline"
             >
               página de preços
             </Link>
@@ -590,33 +612,19 @@ export default function LandingPage() {
               Começa hoje com 7 dias grátis. Sem compromisso.
             </p>
 
-            <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
+            <div className="flex justify-center">
               <PlanCtaButton
                 href="/billing/start"
                 label="Começar — 7 dias grátis"
                 planIntent="individual"
                 className="flex w-full items-center justify-center rounded-xl bg-emerald-500 px-8 py-4 font-semibold text-white transition hover:bg-emerald-400 active:scale-[0.97] sm:w-auto"
               />
-              <Link
-                href="/contacto?persona=club"
-                className="group flex w-full items-center justify-center gap-2 rounded-xl border border-white/15 px-8 py-4 font-medium text-white/80 transition hover:border-white/30 hover:text-white active:scale-[0.97] sm:w-auto"
-              >
-                Sou um clube
-                <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
-              </Link>
             </div>
-          </Reveal>
 
-          {/* Captura secundaria — para quem prefere ser contactado */}
-          <div className="mx-auto mt-10 max-w-md border-t border-white/5 pt-8">
-            <p className="mb-4 text-sm text-white/55">
-              Preferes que te contactemos? Deixa o email.
+            <p className="mt-5 text-sm text-white/50">
+              Sem cartão · cancela quando quiseres.
             </p>
-            <WaitlistForm />
-            <p className="mt-4 text-xs text-white/40">
-              Sem spam. Cancelas quando quiseres.
-            </p>
-          </div>
+          </Reveal>
         </div>
       </section>
 
