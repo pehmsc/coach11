@@ -1,0 +1,182 @@
+/*
+ * Chrome publico partilhado das paginas /precos /contacto /faqs /termos
+ * /privacidade. Reproduz o header e o footer da landing (.c11lp): tema escuro
+ * navy, logo SO TEXTO (sem icone), nav fixa solida e footer com tagline +
+ * links. Escopo proprio `.c11site` para nao colidir com o conteudo (prose em
+ * Tailwind) nem com a folha da landing (.c11lp). Tokens espelham landing-anexo.
+ */
+.c11site {
+  --bg: #020617;
+  --card: #0b1220;
+  --em3: #6ee7b7;
+  --em4: #34d399;
+  --em5: #10b981;
+  --ink: #f8fafc;
+  --mut: rgba(248, 250, 252, 0.62);
+  --mut2: rgba(248, 250, 252, 0.42);
+  --line: rgba(255, 255, 255, 0.08);
+  position: relative;
+  min-height: 100vh;
+  font-family: var(--font-geist-sans), "Geist", system-ui, sans-serif;
+  color: var(--ink);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.5;
+}
+
+/* nav — solida desde o topo (sem hero para revelar) */
+.c11site .site-nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  background: rgba(2, 6, 23, 0.8);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--line);
+}
+.c11site .nav-in {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 14px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.c11site .logo {
+  font-weight: 800;
+  font-size: 21px;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  text-decoration: none;
+}
+.c11site .logo .e {
+  color: var(--em4);
+}
+.c11site .nav-r {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+}
+.c11site .nav-r a.lnk {
+  font-size: 14px;
+  color: var(--mut);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+.c11site .nav-r a.lnk:hover {
+  color: #fff;
+}
+.c11site .btn {
+  font-weight: 600;
+  border-radius: 12px;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: background 0.2s, transform 0.15s, box-shadow 0.2s;
+  cursor: pointer;
+  border: 0;
+}
+.c11site .btn-em {
+  color: #022;
+  background: var(--em4);
+  padding: 9px 16px;
+  font-size: 14px;
+  box-shadow: 0 8px 30px -8px rgba(52, 211, 153, 0.5);
+}
+.c11site .btn-em:hover {
+  background: var(--em3);
+  transform: translateY(-2px);
+}
+
+/* conteudo */
+.c11site .site-main {
+  position: relative;
+  z-index: 1;
+  padding-top: 116px;
+  padding-bottom: 80px;
+}
+.c11site .wrap {
+  max-width: 768px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+.c11site .wrap.wide {
+  max-width: 1024px;
+}
+.c11site .page-head {
+  margin-bottom: 48px;
+  padding-bottom: 32px;
+  border-bottom: 1px solid var(--line);
+}
+.c11site .page-head h1 {
+  font-weight: 800;
+  font-size: clamp(28px, 4vw, 40px);
+  letter-spacing: -0.025em;
+  line-height: 1.1;
+}
+.c11site .page-head .intro {
+  color: var(--mut);
+  margin-top: 12px;
+  font-size: 16px;
+  line-height: 1.6;
+}
+.c11site .page-head .updated {
+  color: var(--mut2);
+  margin-top: 14px;
+  font-size: 12px;
+}
+
+/* footer — espelha o da landing */
+.c11site .site-foot {
+  position: relative;
+  z-index: 1;
+  border-top: 1px solid var(--line);
+  padding: 40px 0;
+  color: var(--mut2);
+  font-size: 13.5px;
+}
+.c11site .foot-in {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 0 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.c11site .foot-logo {
+  font-weight: 800;
+  font-size: 18px;
+  color: var(--ink);
+}
+.c11site .foot-logo .e {
+  color: var(--em4);
+}
+.c11site .foot-tag {
+  color: var(--mut2);
+  font-weight: 500;
+}
+.c11site .foot-links {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+.c11site .foot-links a {
+  text-decoration: none;
+  color: var(--mut);
+  transition: color 0.2s;
+}
+.c11site .foot-links a:hover {
+  color: #fff;
+}
+
+@media (max-width: 640px) {
+  .c11site .nav-r a.lnk {
+    display: none;
+  }
+}

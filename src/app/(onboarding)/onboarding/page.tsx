@@ -88,8 +88,6 @@ function generateSlug(name: string): string {
     .slice(0, 60) || "clube";
 }
 
-const TOTAL_STEPS = 3;
-
 function StepIndicator({ current, total }: { current: number; total: number }) {
   return (
     <div className="flex items-center gap-2 justify-center mb-8">
@@ -152,6 +150,17 @@ export default function OnboardingPage() {
   const [createdPlanType, setCreatedPlanType] = useState<"individual" | "club">(
     "club",
   );
+
+  // Persona do fluxo. No individual, o onboarding tem 2 passos (clube +
+  // escalao) e salta o passo de staff — segue direto para o checkout. Derivacao
+  // sincrona e SSR-safe: o query param ?plan cobre o registo por email; o caso
+  // OAuth/refresh (intencao so em cookie) e coberto por createdPlanType, que o
+  // step 1 resolve via resolvePlanType() (le o cookie) antes de chegar ao step 2,
+  // onde a ramificacao acontece.
+  const isIndividual =
+    searchParams.get("plan") === "individual" ||
+    createdPlanType === "individual";
+  const totalSteps = isIndividual ? 2 : 3;
 
   // Step 1: Clube
   const [clubName, setClubName] = useState("");
@@ -323,7 +332,12 @@ export default function OnboardingPage() {
           is_competitive: true,
         });
 
-      setStep(3);
+      // Individual nao tem passo de staff: finaliza e segue para o checkout.
+      if (isIndividual) {
+        void handleFinish(true);
+      } else {
+        setStep(3);
+      }
     } catch (error) {
       console.error("[onboarding] Erro de ligação:", error);
       toast.error("Erro de ligação. Tenta novamente.");
@@ -333,8 +347,12 @@ export default function OnboardingPage() {
   }
 
   function handleSkipAgeGroup() {
-    // Avançar para convites (ou dashboard se não quiser convidar)
-    setStep(3);
+    // Individual salta o passo de staff e finaliza; clube avanca para convites.
+    if (isIndividual) {
+      void handleFinish(true);
+    } else {
+      setStep(3);
+    }
   }
 
   function addInviteToList(e: { preventDefault(): void }) {
@@ -417,7 +435,7 @@ export default function OnboardingPage() {
           <p className="text-sm text-slate-500 mt-1">Bem-vindo! Vamos configurar o teu clube.</p>
         </div>
 
-        <StepIndicator current={step} total={TOTAL_STEPS} />
+        <StepIndicator current={step} total={totalSteps} />
 
         {/* ─────── STEP 1: CLUBE ─────── */}
         {step === 1 && (

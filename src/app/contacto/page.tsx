@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import { LegalPageLayout, LegalProse } from "@/components/public/LegalPageLayout";
+import { PublicSiteLayout, LegalProse } from "@/components/public/PublicSiteLayout";
 import { ContactForm } from "@/components/public/ContactForm";
 
 export const metadata: Metadata = {
@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 
 export default function ContactoPage() {
   return (
-    <LegalPageLayout
+    <PublicSiteLayout
       title="Falar connosco"
       intro="Treinador individual entra na lista de espera. Clube pede proposta — entramos em contacto em poucos dias úteis."
       prose={false}
@@ -39,6 +39,6 @@ export default function ContactoPage() {
           </p>
         </section>
       </LegalProse>
-    </LegalPageLayout>
+    </PublicSiteLayout>
   );
 }

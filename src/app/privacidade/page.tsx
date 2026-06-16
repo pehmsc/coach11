@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { LegalPageLayout } from "@/components/public/LegalPageLayout";
+import { PublicSiteLayout } from "@/components/public/PublicSiteLayout";
 
 export const metadata: Metadata = {
   title: "Política de Privacidade — Coach11",
@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 
 export default function PrivacyPage() {
   return (
-    <LegalPageLayout
+    <PublicSiteLayout
       title="Política de Privacidade"
       intro="Esta página descreve como o Coach11 recolhe, usa, partilha e protege dados pessoais. Aplica-se a treinadores individuais, clubes, coordenadores, staff e atletas registados na plataforma."
       lastUpdated="15 de Junho de 2026"
@@ -262,6 +262,6 @@ export default function PrivacyPage() {
           </em>
         </p>
       </section>
-    </LegalPageLayout>
+    </PublicSiteLayout>
   );
 }
