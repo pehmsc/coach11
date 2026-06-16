@@ -343,9 +343,7 @@ export default function LandingPage() {
                 Ver a app a funcionar
               </a>
             </div>
-            <div className="micro">
-              Sem cartão para experimentar · cancela quando quiseres
-            </div>
+            <div className="micro">Cancela quando quiseres</div>
             <div className="stats">
               <div>
                 <div className="v em">&lt;20s</div>
@@ -1040,11 +1038,11 @@ export default function LandingPage() {
               <div className="ritem rev">
                 <div className="ic">🎁</div>
                 <h3>7 dias grátis</h3>
-                <p>Testa tudo sem dar o cartão.</p>
+                <p>Acesso completo durante os 7 dias.</p>
               </div>
               <div className="ritem rev">
                 <div className="ic">🚪</div>
-                <h3>Cancela num clique</h3>
+                <h3>Cancela quando quiseres</h3>
                 <p>Sem chamadas, sem fidelização.</p>
               </div>
               <div className="ritem rev">
@@ -1068,8 +1066,8 @@ export default function LandingPage() {
               <span className="eyebrow">Preço simples</span>
               <h2 className="sec">Um plano. Tudo incluído.</h2>
               <p className="sec-sub">
-                Menos do que um café por semana para deixares o papel no banco de
-                vez.
+                Trata do treino no treino e do jogo no jogo. Deixa a caneta em
+                casa.
               </p>
             </div>
             <div className="price-card rev">
@@ -1077,7 +1075,7 @@ export default function LandingPage() {
               <div className="amt">
                 €7,99<span> /mês</span>
               </div>
-              <div className="trial">7 dias grátis · sem cartão</div>
+              <div className="trial">7 dias grátis</div>
               <div className="plist">
                 <div className="li">
                   <span className="c">✓</span> Presenças, treinos e microciclo
@@ -1134,7 +1132,7 @@ export default function LandingPage() {
                 Ver a app a funcionar
               </a>
             </div>
-            <div className="micro">Sem cartão · cancela quando quiseres</div>
+            <div className="micro">Cancela quando quiseres</div>
           </div>
         </section>
       </main>

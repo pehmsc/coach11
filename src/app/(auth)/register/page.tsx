@@ -303,7 +303,7 @@ function RegisterForm() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Mínimo 6 caracteres"
+              placeholder="Mínimo 10 caracteres"
               required
             />
           </div>

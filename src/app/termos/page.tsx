@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { LegalPageLayout } from "@/components/public/LegalPageLayout";
+import { PublicSiteLayout } from "@/components/public/PublicSiteLayout";
 
 export const metadata: Metadata = {
   title: "Termos de Serviço — Coach11",
@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 
 export default function TermsPage() {
   return (
-    <LegalPageLayout
+    <PublicSiteLayout
       title="Termos de Serviço"
       intro="Estes Termos regulam o acesso e a utilização do Coach11. Ao criar conta ou usar a Plataforma, aceitas estes Termos. Lê-os com atenção."
       lastUpdated="15 de Junho de 2026"
@@ -264,6 +264,6 @@ export default function TermsPage() {
           </em>
         </p>
       </section>
-    </LegalPageLayout>
+    </PublicSiteLayout>
   );
 }

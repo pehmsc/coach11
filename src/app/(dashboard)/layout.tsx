@@ -150,7 +150,7 @@ export default async function DashboardLayout({
           defaultAgeGroupId={analyticsContext?.ageGroup?.id ?? null}
         >
           <PlanTypeCookieWriter
-            planType={analyticsContext?.club?.plan_type ?? "club"}
+            planType={analyticsContext?.club?.plan_type ?? "individual"}
           />
           <div
             className="min-h-screen bg-slate-50"
@@ -162,7 +162,7 @@ export default async function DashboardLayout({
               avatarUrl={avatarUrl}
               source={analyticsContext?.source ?? null}
               teamRole={analyticsContext?.teamRole ?? null}
-              planType={analyticsContext?.club?.plan_type ?? "club"}
+              planType={analyticsContext?.club?.plan_type ?? "individual"}
             />
 
             {/* Conteúdo principal */}
@@ -182,7 +182,7 @@ export default async function DashboardLayout({
               avatarUrl={avatarUrl}
               source={analyticsContext?.source ?? null}
               teamRole={analyticsContext?.teamRole ?? null}
-              planType={analyticsContext?.club?.plan_type ?? "club"}
+              planType={analyticsContext?.club?.plan_type ?? "individual"}
             />
           </div>
         </AgeGroupProvider>

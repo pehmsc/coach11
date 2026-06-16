@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { LegalPageLayout } from "@/components/public/LegalPageLayout";
+import { PublicSiteLayout } from "@/components/public/PublicSiteLayout";
 import { FaqAccordion, type FaqSection } from "@/components/public/FaqAccordion";
 
 export const metadata: Metadata = {
@@ -322,12 +322,12 @@ const SECTIONS: FaqSection[] = [
 
 export default function FAQsPage() {
   return (
-    <LegalPageLayout
+    <PublicSiteLayout
       title="Perguntas Frequentes"
       intro="Tudo o que precisas de saber antes de começar. Não encontras a resposta? Contacta-nos."
       lastUpdated="26 de Maio de 2026"
     >
       <FaqAccordion sections={SECTIONS} />
-    </LegalPageLayout>
+    </PublicSiteLayout>
   );
 }
