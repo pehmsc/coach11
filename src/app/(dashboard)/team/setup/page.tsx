@@ -84,7 +84,9 @@ export default function TeamSetupPage() {
       )}
 
       {/* -- SECCAO 5: EQUIPA TECNICA -- */}
-      {setup.existingAgeGroup && (setup.accountRole === "coordinator" || setup.isSuperCoordinator) && (
+      {/* Escondida para o individual (plano sem equipa tecnica). Cosmetico — a
+          fronteira real e o guard de /api/invite/staff. */}
+      {setup.existingAgeGroup && !setup.isIndividual && (setup.accountRole === "coordinator" || setup.isSuperCoordinator) && (
         <StaffSection isSuperCoordinator={setup.isSuperCoordinator} />
       )}
 
