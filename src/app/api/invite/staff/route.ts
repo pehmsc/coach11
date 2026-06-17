@@ -8,6 +8,7 @@ import { sendStaffInviteEmail } from "@/lib/email/staff-invite";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 import { captureServerProductEvent } from "@/lib/observability/posthog-server";
 import { resolveUserTeamContext } from "@/lib/auth/team-context";
+import { getPlanEntitlements } from "@/lib/billing/plan-entitlements";
 import {
   isTechnicalStaffLimitError,
   TECHNICAL_STAFF_LIMIT_ERROR_MESSAGE,
@@ -84,6 +85,16 @@ export async function POST(request: Request) {
     if ((context.source !== "coordinator" && context.source !== "club_coordinator") || !context.ageGroup?.id) {
       return NextResponse.json(
         { error: "Apenas o coordenador pode enviar convites." },
+        { status: 403 },
+      );
+    }
+
+    // 🚧 Fronteira de entitlement: o plano individual nao inclui equipa tecnica.
+    // A UI esconde os botoes; esta verificacao server-side e a fronteira REAL.
+    // Fonte canonica do limite: getPlanEntitlements (plan-entitlements.ts).
+    if (!getPlanEntitlements(context.club?.plan_type).canInviteStaff) {
+      return NextResponse.json(
+        { error: "O teu plano não inclui equipa técnica. Add-on em breve." },
         { status: 403 },
       );
     }

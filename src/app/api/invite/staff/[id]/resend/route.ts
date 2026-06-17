@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendStaffInviteEmail } from "@/lib/email/staff-invite";
+import { getPlanEntitlements } from "@/lib/billing/plan-entitlements";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 
 export const runtime = "nodejs";
@@ -72,6 +73,20 @@ export async function POST(_request: Request, { params }: RouteContext) {
     if (!authorized) {
       return NextResponse.json(
         { error: "Apenas o coordenador pode reenviar convites." },
+        { status: 403 },
+      );
+    }
+
+    // 🚧 Fronteira de entitlement: o plano individual nao reenvia convites de
+    // staff (rota equivalente a criar staff). Fonte canonica: getPlanEntitlements.
+    const { data: clubPlan } = await admin
+      .from("clubs")
+      .select("plan_type")
+      .eq("id", invite.club_id)
+      .maybeSingle();
+    if (!getPlanEntitlements(clubPlan?.plan_type ?? null).canInviteStaff) {
+      return NextResponse.json(
+        { error: "O teu plano não inclui equipa técnica. Add-on em breve." },
         { status: 403 },
       );
     }

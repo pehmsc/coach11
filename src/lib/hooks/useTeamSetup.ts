@@ -62,6 +62,9 @@ export function useTeamSetup() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [accountRole, setAccountRole] = useState<string>("coordinator");
   const [isSuperCoordinator, setIsSuperCoordinator] = useState(false);
+  // Treinador individual: o plano nao inclui equipa tecnica (esconde a UI de
+  // convites). Fronteira real e o guard da API; isto e so cosmetico.
+  const [isIndividual, setIsIndividual] = useState(false);
   const [deleteAgeGroupModalOpen, setDeleteAgeGroupModalOpen] = useState(false);
   const [deleteAgeGroupConfirmText, setDeleteAgeGroupConfirmText] = useState("");
   const [deletingAgeGroup, setDeletingAgeGroup] = useState(false);
@@ -108,6 +111,7 @@ export function useTeamSetup() {
         payload?.profile?.is_super_coordinator === true;
       setAccountRole(incomingRole);
       setIsSuperCoordinator(incomingIsSuper);
+      setIsIndividual(payload?.planType === "individual");
 
       if (!ag) {
         setExistingAgeGroup(null);
@@ -498,6 +502,7 @@ export function useTeamSetup() {
     teamId,
     accountRole,
     isSuperCoordinator,
+    isIndividual,
 
     // Age group form
     clubName,
