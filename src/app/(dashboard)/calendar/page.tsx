@@ -7,8 +7,11 @@ import { CalendarHeader } from "@/components/calendar/CalendarHeader";
 import { CalendarDayRow } from "@/components/calendar/CalendarDayRow";
 import { CalendarEventModal } from "@/components/calendar/CalendarEventModal";
 import { ScopeToggle } from "@/components/navigation/ScopeToggle";
+import { useAgeGroup } from "@/contexts/AgeGroupContext";
+import { NoAgeGroupEmptyState } from "@/components/team/NoAgeGroupEmptyState";
 
 export default function CalendarPage() {
+  const { ageGroups } = useAgeGroup();
   const {
     weekStart,
     events,
@@ -80,6 +83,10 @@ export default function CalendarPage() {
   }
 
   if (!ageGroupId) {
+    // Sem nenhum escalao: recuperacao in-place (modal) em vez de beco sem saida.
+    if (ageGroups.length === 0) {
+      return <NoAgeGroupEmptyState />;
+    }
     return (
       <div className="p-4 md:p-8 text-center py-16">
         <p className="text-slate-700 font-semibold mb-2">

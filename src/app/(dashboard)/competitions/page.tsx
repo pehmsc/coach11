@@ -33,6 +33,7 @@ import {
 import type { Competition, Game, TeamLabel } from "@/types/database";
 import { useAgeGroup } from "@/contexts/AgeGroupContext";
 import { ScopeToggle } from "@/components/navigation/ScopeToggle";
+import { NoAgeGroupEmptyState } from "@/components/team/NoAgeGroupEmptyState";
 
 interface CompetitionWithGames extends Competition {
   games?: Game[];
@@ -91,7 +92,7 @@ type EditingComp = {
 
 export default function CompetitionsPage() {
   const supabase = useMemo(() => createClient(), []);
-  const { selectedAgeGroupId: contextAgeGroupId } = useAgeGroup();
+  const { selectedAgeGroupId: contextAgeGroupId, ageGroups } = useAgeGroup();
 
   const [loading, setLoading] = useState(true);
   const [competitions, setCompetitions] = useState<CompetitionWithGames[]>([]);
@@ -270,6 +271,11 @@ export default function CompetitionsPage() {
   }
 
   if (!teamId) {
+    // Sem nenhum escalao: recuperacao in-place (modal). Caso contrario, manter
+    // a mensagem (ex: escalao seleccionado ainda a resolver).
+    if (ageGroups.length === 0) {
+      return <NoAgeGroupEmptyState />;
+    }
     return (
       <div className="p-4 md:p-8 text-center py-16">
         <Trophy size={40} className="text-slate-300 mx-auto mb-3" />

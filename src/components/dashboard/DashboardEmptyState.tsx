@@ -1,9 +1,13 @@
-import Link from "next/link";
+"use client";
+
+import { useState } from "react";
 import { Users, Calendar, Trophy, ClipboardList } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { AgeGroupCreateModal } from "@/components/team/AgeGroupCreateModal";
 
 export function DashboardEmptyState({ clubName }: { clubName?: string | null }) {
+  const [modalOpen, setModalOpen] = useState(false);
   return (
     <div className="p-4 md:p-8 max-w-2xl mx-auto space-y-6">
       <div className="text-center space-y-2">
@@ -26,11 +30,12 @@ export function DashboardEmptyState({ clubName }: { clubName?: string | null }) 
               Define o escalão, formato de jogo, e começa a gerir jogadores, treinos e jogos.
             </p>
           </div>
-          <Link href="/teams">
-            <Button className="bg-emerald-600 hover:bg-emerald-700">
-              Criar equipa →
-            </Button>
-          </Link>
+          <Button
+            className="bg-emerald-600 hover:bg-emerald-700"
+            onClick={() => setModalOpen(true)}
+          >
+            Criar equipa →
+          </Button>
         </CardContent>
       </Card>
 
@@ -60,6 +65,8 @@ export function DashboardEmptyState({ clubName }: { clubName?: string | null }) 
           </CardContent>
         </Card>
       </div>
+
+      <AgeGroupCreateModal open={modalOpen} onOpenChange={setModalOpen} />
     </div>
   );
 }

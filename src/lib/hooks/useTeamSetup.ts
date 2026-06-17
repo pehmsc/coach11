@@ -210,37 +210,30 @@ export function useTeamSetup() {
           : prev,
       );
     } else {
-      const { data, error } = await supabase
-        .from("age_groups")
-        .insert({
-          coordinator_id: user.id,
-          club_name: clubName,
-          club_short_name: normalizedClubShortName || null,
+      // Helper canonico POST /api/age-groups: deriva o club_id do dono (corrige
+      // os escaloes orfaos que este caminho criava) e aplica o entitlement do
+      // plano. Cria tambem a equipa padrao.
+      const res = await fetch("/api/age-groups", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           name: ageGroupName,
-          football_format: footballFormat,
+          ageLevel: ageGroupName,
+          footballFormat,
           season,
-        })
-        .select()
-        .single();
-      if (error) {
-        setError("Erro ao criar escalão.");
+        }),
+      });
+      const payload = (await res.json().catch(() => null)) as
+        | { success?: boolean; error?: string; ageGroup?: AgeGroup; teamId?: string | null }
+        | null;
+      if (!res.ok || !payload?.success || !payload.ageGroup) {
+        setError(payload?.error || "Erro ao criar escalão.");
         setSaving(false);
         return;
       }
-      setExistingAgeGroup(data);
-
-      // Criar equipa padrão associada ao escalão (necessário para convites de staff)
-      const { data: newTeam } = await supabase
-        .from("teams")
-        .insert({
-          age_group_id: data.id,
-          name: `${clubName} ${ageGroupName}`,
-          is_competitive: true,
-        })
-        .select()
-        .single();
-      if (newTeam) {
-        setTeamId(newTeam.id);
+      setExistingAgeGroup(payload.ageGroup);
+      if (payload.teamId) {
+        setTeamId(payload.teamId);
       }
     }
 

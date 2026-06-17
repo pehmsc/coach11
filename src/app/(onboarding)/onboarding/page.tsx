@@ -292,45 +292,26 @@ export default function OnboardingPage() {
 
     setSaving(true);
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!user) {
-        toast.error("Sessão expirada. Faz login novamente.");
-        router.push("/login");
-        return;
-      }
-
-      const { data: ag, error: agError } = await supabase
-        .from("age_groups")
-        .insert({
-          coordinator_id: user.id,
-          club_id: clubId,
-          club_name: clubName.trim(),
-          club_short_name: normalizeManualShortName(clubShortName, 5) || null,
+      // Helper canonico: deriva o club_id do dono e cria escalao + equipa.
+      const res = await fetch("/api/age-groups", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           name: ageGroupName.trim(),
-          age_level: ageLevel,
-          football_format: footballFormat,
+          ageLevel,
+          footballFormat,
           season,
-        })
-        .select()
-        .single();
+        }),
+      });
+      const payload = (await res.json().catch(() => null)) as
+        | { success?: boolean; error?: string }
+        | null;
 
-      if (agError || !ag) {
-        console.error("[onboarding] Erro ao criar escalão:", agError);
-        toast.error("Erro ao criar escalão. Tenta novamente.");
+      if (!res.ok || !payload?.success) {
+        console.error("[onboarding] Erro ao criar escalão:", payload?.error);
+        toast.error(payload?.error || "Erro ao criar escalão. Tenta novamente.");
         return;
       }
-
-      // Criar equipa padrão
-      await supabase
-        .from("teams")
-        .insert({
-          age_group_id: ag.id,
-          name: `${clubName.trim()} ${ageGroupName.trim()}`,
-          is_competitive: true,
-        });
 
       // Individual nao tem passo de staff: finaliza e segue para o checkout.
       if (isIndividual) {
@@ -347,12 +328,9 @@ export default function OnboardingPage() {
   }
 
   function handleSkipAgeGroup() {
-    // Individual salta o passo de staff e finaliza; clube avanca para convites.
-    if (isIndividual) {
-      void handleFinish(true);
-    } else {
-      setStep(3);
-    }
+    // So o tier clube chega aqui — o individual nao tem skip (escalao
+    // obrigatorio). Avanca para o passo de convites.
+    setStep(3);
   }
 
   function addInviteToList(e: { preventDefault(): void }) {
@@ -493,9 +471,11 @@ export default function OnboardingPage() {
                 <p className="text-sm text-slate-500 mt-0.5">
                   Clube: <span className="font-semibold text-slate-700">{clubName}</span>
                 </p>
-                <p className="text-xs text-slate-400 mt-1">
-                  Podes adicionar mais escalões depois em Equipas.
-                </p>
+                {!isIndividual && (
+                  <p className="text-xs text-slate-400 mt-1">
+                    Podes adicionar mais escalões depois em Equipas.
+                  </p>
+                )}
               </div>
               <form onSubmit={handleStep2} className="space-y-4">
                 <div className="space-y-1.5">
@@ -563,13 +543,15 @@ export default function OnboardingPage() {
                     )}
                   </Button>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleSkipAgeGroup}
-                  className="w-full text-center text-sm text-slate-400 hover:text-slate-600 transition-colors py-1"
-                >
-                  Adicionar escalão depois →
-                </button>
+                {!isIndividual && (
+                  <button
+                    type="button"
+                    onClick={handleSkipAgeGroup}
+                    className="w-full text-center text-sm text-slate-400 hover:text-slate-600 transition-colors py-1"
+                  >
+                    Adicionar escalão depois →
+                  </button>
+                )}
               </form>
             </CardContent>
           </Card>
