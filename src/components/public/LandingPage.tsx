@@ -17,9 +17,7 @@ import "./landing/landing-anexo.css";
  */
 export default function LandingPage() {
   useEffect(() => {
-    const reduce = window.matchMedia(
-      "(prefers-reduced-motion:reduce)",
-    ).matches;
+    const reduce = window.matchMedia("(prefers-reduced-motion:reduce)").matches;
 
     const observers: IntersectionObserver[] = [];
     const timeouts: number[] = [];
@@ -260,8 +258,7 @@ export default function LandingPage() {
             const d = document.createElement("div");
             d.style.cssText =
               "display:flex;gap:6px;font-size:10px;color:#0F172A;padding:5px 0;border-top:1px solid #E2E8F0;opacity:0;transform:translateX(-8px);transition:opacity .35s,transform .35s";
-            d.innerHTML =
-              `<span style="color:#94A3B8">5'</span>⚽ Golo — Ricardo Machado`;
+            d.innerHTML = `<span style="color:#94A3B8">5'</span>⚽ Golo — Ricardo Machado`;
             events.insertBefore(d, events.firstChild);
             requestAnimationFrame(() => {
               d.style.opacity = "1";
@@ -328,14 +325,14 @@ export default function LandingPage() {
             </h1>
             <p className="lead">
               Marca presenças, convoca o onze e regista o jogo ao vivo — tudo no
-              telemóvel, em segundos, no relvado. As estatísticas e os relatórios
-              preenchem-se sozinhos. Sem papel, sem voltar a lançar tudo no
-              computador.
+              telemóvel, em segundos, no relvado. As estatísticas e os
+              relatórios preenchem-se sozinhos. Sem papel, sem voltar a lançar
+              tudo no computador.
             </p>
             <div className="cta">
               <PlanCtaButton
                 href="/billing/start"
-                label="Começar grátis — 7 dias"
+                label="Começar agora"
                 planIntent="individual"
                 className="btn btn-em"
               />
@@ -343,7 +340,6 @@ export default function LandingPage() {
                 Ver a app a funcionar
               </a>
             </div>
-            <div className="micro">Cancela quando quiseres</div>
             <div className="stats">
               <div>
                 <div className="v em">&lt;20s</div>
@@ -361,7 +357,7 @@ export default function LandingPage() {
             <div className="founder-strip">
               <div className="av">PC</div>
               <div className="t">
-                Feito por um treinador de formação no{" "}
+                Desenvolvido por um treinador de formação no{" "}
                 <b>CF Os Belenenses</b> — para resolver a própria dor.
               </div>
             </div>
@@ -526,7 +522,7 @@ export default function LandingPage() {
               </h2>
               <p className="sec-sub">
                 Treinas porque gostas de futebol — não para passares as noites a
-                copiar dados para o computador do clube.
+                copiar dados para o computador.
               </p>
             </div>
             <div className="grid3">
@@ -534,8 +530,8 @@ export default function LandingPage() {
                 <div className="ic">📋</div>
                 <h3>Papel no banco</h3>
                 <p>
-                  Fichas e cadernos que se perdem, molham e nunca chegam ao sítio
-                  certo. No fim do jogo, metade da informação evapora-se.
+                  Fichas e cadernos que se perdem, molham e nunca chegam ao
+                  sítio certo. No fim do jogo, metade da informação evapora-se.
                 </p>
               </div>
               <div className="pcard rev">
@@ -566,7 +562,7 @@ export default function LandingPage() {
                   fontWeight: 500,
                 }}
               >
-                É isto que acontece quando a ferramenta não está onde estás tu —
+                É isto que acontece quando a ferramenta não está onde tu estás —
                 no relvado.
               </span>
             </div>
@@ -580,8 +576,8 @@ export default function LandingPage() {
               <span className="eyebrow">A diferença</span>
               <h2 className="sec">Regista uma vez. No campo.</h2>
               <p className="sec-sub">
-                O Coach11 inverte a lógica: registas no telemóvel enquanto está a
-                acontecer, e o backoffice preenche-se sozinho. Zero dupla
+                O Coach11 inverte a lógica: registas no telemóvel enquanto está
+                a acontecer, e o backoffice preenche-se sozinho. Zero dupla
                 introdução de dados.
               </p>
             </div>
@@ -744,7 +740,8 @@ export default function LandingPage() {
                 <div className="cap">
                   <h3>Cria o jogo em segundos</h3>
                   <p>
-                    Adversário, data e campo — com a morada por pesquisa no mapa.
+                    Adversário, data e campo — com a morada para facilitar o
+                    acesso por gps.
                   </p>
                 </div>
               </div>
@@ -801,10 +798,10 @@ export default function LandingPage() {
                   </div>
                 </div>
                 <div className="cap">
-                  <h3>Convoca o teu onze</h3>
+                  <h3>Convoca a tua equipa</h3>
                   <p>
-                    Titulares e suplentes definidos e guardados — partilháveis num
-                    link.
+                    Titulares e suplentes definidos e guardados — partilháveis
+                    num link.
                   </p>
                 </div>
               </div>
@@ -923,8 +920,8 @@ export default function LandingPage() {
                                 borderTop: "1px solid #E2E8F0",
                               }}
                             >
-                              <span style={{ color: "#94A3B8" }}>1&apos;</span>🟨
-                              Amarelo — Lucas Shaw
+                              <span style={{ color: "#94A3B8" }}>1&apos;</span>
+                              🟨 Amarelo — Lucas Shaw
                             </div>
                           </div>
                         </div>
@@ -983,7 +980,7 @@ export default function LandingPage() {
               </div>
               <div className="fcard rev">
                 <div className="ic">📈</div>
-                <h3>Estatísticas &amp; insights</h3>
+                <h3>Estatísticas &amp; Insights</h3>
                 <p>Minutos, golos e evolução de cada atleta, sem esforço.</p>
               </div>
               <div className="fcard rev">
@@ -998,7 +995,8 @@ export default function LandingPage() {
                 <div className="ic">📲</div>
                 <h3>Instala como app</h3>
                 <p>
-                  Funciona como aplicação no telemóvel, sem passar pela App Store.
+                  Funciona como aplicação no telemóvel, sem passar pela App
+                  Store.
                 </p>
               </div>
             </div>
@@ -1012,15 +1010,15 @@ export default function LandingPage() {
               <div className="big-av">PC</div>
               <div>
                 <blockquote>
-                  &ldquo;Construí o Coach11 porque vivo o problema. Sou treinador
-                  de formação e estava farto de registar tudo em papel e voltar a
-                  escrever no computador. Quis uma ferramenta que estivesse onde
-                  eu estou — no campo, no telemóvel. Uso-a todas as semanas com o
-                  meu escalão.&rdquo;
+                  &ldquo;Construí o Coach11 porque vivo o problema. Sou
+                  treinador de formação e estava farto de registar tudo em papel
+                  e voltar a escrever no computador. Quis uma ferramenta que
+                  estivesse onde eu estou — no campo, no telemóvel. Uso-a todas
+                  as semanas com o meu escalão.&rdquo;
                 </blockquote>
                 <div className="by">
-                  — <b>Pedro Campos</b>, treinador de formação · CF Os Belenenses
-                  · fundador do Coach11
+                  — <b>Pedro Campos</b>, Treinador de formação · CF Os
+                  Belenenses · fundador do Coach11
                 </div>
               </div>
             </div>
@@ -1084,10 +1082,12 @@ export default function LandingPage() {
                   <span className="c">✓</span> Jogos ao vivo e ficha automática
                 </div>
                 <div className="li">
-                  <span className="c">✓</span> Convocatórias e calendário públicos
+                  <span className="c">✓</span> Convocatórias e calendário
+                  públicos
                 </div>
                 <div className="li">
-                  <span className="c">✓</span> Estatísticas, insights e relatórios
+                  <span className="c">✓</span> Estatísticas, insights e
+                  relatórios
                 </div>
                 <div className="li">
                   <span className="c">✓</span> App instalável no telemóvel
@@ -1124,7 +1124,7 @@ export default function LandingPage() {
             <div className="cta">
               <PlanCtaButton
                 href="/billing/start"
-                label="Começar grátis — 7 dias"
+                label="Começar grátis"
                 planIntent="individual"
                 className="btn btn-em"
               />
