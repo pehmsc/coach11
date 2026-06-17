@@ -20,6 +20,16 @@ export interface DeleteClubDataResult {
 export async function deleteClubDataCascade(
   admin: SupabaseClient,
   clubId: string,
+  opts?: {
+    /**
+     * Mantem as club_memberships do clube (nao as apaga aqui). Usado na
+     * eliminacao de conta individual: a membership do owner tem de sobreviver
+     * ate a RPC final derivar o clube de auth.uid(); depois cai por cascata ao
+     * apagar a linha de clubs. Default (false) preserva o comportamento do
+     * DELETE /api/club e do cron de purga RGPD (que mantem a linha de clubs).
+     */
+    skipClubMembershipsDelete?: boolean;
+  },
 ): Promise<DeleteClubDataResult> {
   const { data: ageGroups, error } = await admin
     .from("age_groups")
@@ -34,16 +44,20 @@ export async function deleteClubDataCascade(
   }
 
   const groups = ageGroups || [];
+  const skipMemberships = opts?.skipClubMembershipsDelete === true;
 
   for (const group of groups) {
     if (typeof group.id === "string") {
       await deleteAgeGroupCascade(admin, group.id, {
         retainClubMembershipProfileIds: [],
+        skipClubMembershipCleanup: skipMemberships,
       });
     }
   }
 
-  await admin.from("club_memberships").delete().eq("club_id", clubId);
+  if (!skipMemberships) {
+    await admin.from("club_memberships").delete().eq("club_id", clubId);
+  }
 
   return { deletedAgeGroupCount: groups.length };
 }

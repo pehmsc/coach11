@@ -485,43 +485,69 @@ export default function SettingsPage() {
                     <Link href="/auth/update-password">Alterar palavra-passe</Link>
                   </Button>
                   <div className="mt-4 pt-4 border-t border-slate-100">
-                    {hasManagedAgeGroups ? (
-                      <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
-                        <p className="text-sm font-medium text-amber-900">
-                          A conta não pode ser apagada enquanto fores coordenador de um escalão.
-                        </p>
-                        <p className="mt-1 text-sm text-amber-800">
-                          Primeiro apaga o escalão em <strong>Equipa</strong>. Isso remove os dados
-                          do escalão, equipa técnica, jogadores, jogos, treinos, links públicos e
-                          imagens associadas.
-                        </p>
-                        {managedAgeGroupNames.length > 0 ? (
-                          <p className="mt-2 text-xs text-amber-700">
-                            Escalão atual: {managedAgeGroupNames.join(", ")}
+                    {planType === "individual" ? (
+                      <>
+                        {/* Treinador individual: self-service total — sem gate de
+                            escalao. Apaga tudo (escaloes, atletas, jogos, treinos,
+                            ficheiros) e cancela a subscricao. */}
+                        <div className="rounded-xl border border-red-200 bg-red-50 p-3">
+                          <p className="text-sm font-medium text-red-900">
+                            Apagar a conta remove tudo, de forma irreversível.
                           </p>
-                        ) : null}
-                      </div>
+                          <p className="mt-1 text-sm text-red-800">
+                            São apagados os escalões, atletas, jogos, treinos, convocatórias,
+                            links públicos e imagens, e a tua subscrição é cancelada.
+                          </p>
+                        </div>
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setDeleteConfirmText("");
+                            setDeleteModalOpen(true);
+                          }}
+                          className="mt-3 w-full border-red-200 text-red-600 hover:bg-red-50"
+                        >
+                          Apagar conta
+                        </Button>
+                      </>
+                    ) : hasManagedAgeGroups ? (
+                      <>
+                        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+                          <p className="text-sm font-medium text-amber-900">
+                            A conta não pode ser apagada enquanto fores coordenador de um escalão.
+                          </p>
+                          <p className="mt-1 text-sm text-amber-800">
+                            Primeiro apaga o escalão em <strong>Equipa</strong>. Isso remove os dados
+                            do escalão, equipa técnica, jogadores, jogos, treinos, links públicos e
+                            imagens associadas.
+                          </p>
+                          {managedAgeGroupNames.length > 0 ? (
+                            <p className="mt-2 text-xs text-amber-700">
+                              Escalão atual: {managedAgeGroupNames.join(", ")}
+                            </p>
+                          ) : null}
+                        </div>
+                        <Button asChild variant="outline" className="mt-3 w-full">
+                          <Link href="/teams">Ir para Equipas</Link>
+                        </Button>
+                      </>
                     ) : (
-                      <p className="text-sm text-slate-500 mb-3">
-                        Apagar a tua conta remove o acesso, perfil e ligações pessoais ainda
-                        associadas à conta.
-                      </p>
-                    )}
-                    {hasManagedAgeGroups ? (
-                      <Button asChild variant="outline" className="mt-3 w-full">
-                        <Link href="/teams">Ir para Equipas</Link>
-                      </Button>
-                    ) : (
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          setDeleteConfirmText("");
-                          setDeleteModalOpen(true);
-                        }}
-                        className="w-full border-red-200 text-red-600 hover:bg-red-50"
-                      >
-                        Apagar conta
-                      </Button>
+                      <>
+                        <p className="text-sm text-slate-500 mb-3">
+                          Apagar a tua conta remove o acesso, perfil e ligações pessoais ainda
+                          associadas à conta.
+                        </p>
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setDeleteConfirmText("");
+                            setDeleteModalOpen(true);
+                          }}
+                          className="w-full border-red-200 text-red-600 hover:bg-red-50"
+                        >
+                          Apagar conta
+                        </Button>
+                      </>
                     )}
                   </div>
                 </CardContent>
@@ -597,7 +623,10 @@ export default function SettingsPage() {
                 Confirmar apagamento de conta
               </h3>
               <p className="text-sm text-slate-500 mt-2">
-                Esta ação é irreversível. Para confirmar, escreve <strong>APAGAR</strong>.
+                {planType === "individual"
+                  ? "Esta ação apaga definitivamente todos os teus dados (escalões, atletas, jogos, treinos e ficheiros) e cancela a subscrição. "
+                  : "Esta ação é irreversível. "}
+                Para confirmar, escreve <strong>APAGAR</strong>.
               </p>
             </div>
 
