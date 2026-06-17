@@ -319,6 +319,46 @@ export default function TeamsPage() {
       return;
     }
 
+    // Caminho normal (club_coordinator): helper canonico deriva o club_id do
+    // dono e aplica o entitlement do plano. O super-admin mantem o fluxo legacy
+    // (cria clubes arbitrarios) abaixo.
+    if (!isSuperAdmin) {
+      setCreating(true);
+      try {
+        const res = await fetch("/api/age-groups", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: newAgeGroupCustomName.trim(),
+            ageLevel: newAgeLevel,
+            footballFormat: newFootballFormat,
+            season: newSeason,
+          }),
+        });
+        const payload = (await res.json().catch(() => null)) as
+          | { success?: boolean; error?: string }
+          | null;
+        if (!res.ok || !payload?.success) {
+          toast.error(payload?.error || "Erro ao criar equipa.");
+          setCreating(false);
+          return;
+        }
+      } catch {
+        toast.error("Erro de ligação ao criar equipa.");
+        setCreating(false);
+        return;
+      }
+      toast.success("Equipa criada!");
+      setShowAddForm(false);
+      setNewAgeGroupCustomName("");
+      setNewAgeLevel("");
+      setNewFootballFormat("11");
+      setNewSeason("2025/2026");
+      setCreating(false);
+      void loadTeams();
+      return;
+    }
+
     setCreating(true);
 
     const normalizedShort = clubShortNameRaw
