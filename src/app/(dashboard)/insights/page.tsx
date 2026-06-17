@@ -139,7 +139,14 @@ export default function InsightsPage() {
           .order("name");
         if (error) throw error;
         if (cancelled) return;
-        setAgeGroups(((data as AgeGroupOption[] | null) ?? []).map((a) => ({ id: a.id, name: a.name })));
+        const list = ((data as AgeGroupOption[] | null) ?? []).map((a) => ({ id: a.id, name: a.name }));
+        setAgeGroups(list);
+        // Individual / equipa unica: fixa o scope a essa equipa (em vez de
+        // "Todas") — a UI mostra um rotulo em vez de dropdown e os labels e o
+        // ranking ficam ao nivel da equipa.
+        if (list.length === 1) {
+          setSelectedAgeGroupId(list[0].id);
+        }
       } catch {
         if (!cancelled) setAgeGroups([]);
       } finally {
@@ -190,6 +197,12 @@ export default function InsightsPage() {
     };
   }, [insights, gamesTotal]);
 
+  // Individual (ou qualquer contexto com 1 unica opcao): mostrar o nome como
+  // rotulo estatico em vez de dropdown. Independente por campo — o tier clube
+  // multi-team mantem o(s) seletor(es).
+  const singleClub = !clubsLoading && clubs.length === 1;
+  const singleAgeGroup = !ageGroupsLoading && ageGroups.length === 1;
+
   const scopeIsAll = selectedAgeGroupId === ALL_AGE_GROUPS;
   const scopeHelperText = insights
     ? scopeIsAll
@@ -207,68 +220,80 @@ export default function InsightsPage() {
       <Card>
         <CardContent className="pt-4 pb-4 space-y-3">
           <div className="space-y-2">
-            <label
-              htmlFor="insights-club-select"
-              className="text-[11px] uppercase tracking-wide text-slate-500 font-semibold"
-            >
+            <p className="text-[11px] uppercase tracking-wide text-slate-500 font-semibold">
               Clube
-            </label>
-            <div className="relative">
-              <select
-                id="insights-club-select"
-                aria-label="Selecionar clube"
-                value={selectedClubId}
-                onChange={(e) => setSelectedClubId(e.target.value)}
-                disabled={clubsLoading || clubs.length === 0}
-                className="w-full min-h-11 appearance-none bg-white border border-slate-300 rounded-lg px-3 py-2 pr-8 text-sm text-slate-900 focus:outline-none focus:border-emerald-500 disabled:bg-slate-50 disabled:text-slate-400 cursor-pointer"
-              >
-                {clubsLoading ? (
-                  <option value="">A carregar clubes…</option>
-                ) : clubs.length === 0 ? (
-                  <option value="">Sem clubes acessíveis</option>
-                ) : (
-                  clubs.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))
-                )}
-              </select>
-              <ChevronDown
-                size={14}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
-              />
-            </div>
+            </p>
+            {singleClub ? (
+              <div className="w-full min-h-11 flex items-center bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium text-slate-900">
+                {clubs[0]?.name ?? "—"}
+              </div>
+            ) : (
+              <div className="relative">
+                <label htmlFor="insights-club-select" className="sr-only">
+                  Selecionar clube
+                </label>
+                <select
+                  id="insights-club-select"
+                  aria-label="Selecionar clube"
+                  value={selectedClubId}
+                  onChange={(e) => setSelectedClubId(e.target.value)}
+                  disabled={clubsLoading || clubs.length === 0}
+                  className="w-full min-h-11 appearance-none bg-white border border-slate-300 rounded-lg px-3 py-2 pr-8 text-sm text-slate-900 focus:outline-none focus:border-emerald-500 disabled:bg-slate-50 disabled:text-slate-400 cursor-pointer"
+                >
+                  {clubsLoading ? (
+                    <option value="">A carregar clubes…</option>
+                  ) : clubs.length === 0 ? (
+                    <option value="">Sem clubes acessíveis</option>
+                  ) : (
+                    clubs.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))
+                  )}
+                </select>
+                <ChevronDown
+                  size={14}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+                />
+              </div>
+            )}
           </div>
 
           <div className="space-y-2">
-            <label
-              htmlFor="insights-age-group-select"
-              className="text-[11px] uppercase tracking-wide text-slate-500 font-semibold"
-            >
+            <p className="text-[11px] uppercase tracking-wide text-slate-500 font-semibold">
               Equipa
-            </label>
-            <div className="relative">
-              <select
-                id="insights-age-group-select"
-                aria-label="Selecionar equipa"
-                value={selectedAgeGroupId}
-                onChange={(e) => setSelectedAgeGroupId(e.target.value)}
-                disabled={!selectedClubId || ageGroupsLoading}
-                className="w-full min-h-11 appearance-none bg-white border border-slate-300 rounded-lg px-3 py-2 pr-8 text-sm text-slate-900 focus:outline-none focus:border-emerald-500 disabled:bg-slate-50 disabled:text-slate-400 cursor-pointer"
-              >
-                <option value={ALL_AGE_GROUPS}>Todas as equipas</option>
-                {ageGroups.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown
-                size={14}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
-              />
-            </div>
+            </p>
+            {singleAgeGroup ? (
+              <div className="w-full min-h-11 flex items-center bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium text-slate-900">
+                {ageGroups[0]?.name ?? "—"}
+              </div>
+            ) : (
+              <div className="relative">
+                <label htmlFor="insights-age-group-select" className="sr-only">
+                  Selecionar equipa
+                </label>
+                <select
+                  id="insights-age-group-select"
+                  aria-label="Selecionar equipa"
+                  value={selectedAgeGroupId}
+                  onChange={(e) => setSelectedAgeGroupId(e.target.value)}
+                  disabled={!selectedClubId || ageGroupsLoading}
+                  className="w-full min-h-11 appearance-none bg-white border border-slate-300 rounded-lg px-3 py-2 pr-8 text-sm text-slate-900 focus:outline-none focus:border-emerald-500 disabled:bg-slate-50 disabled:text-slate-400 cursor-pointer"
+                >
+                  <option value={ALL_AGE_GROUPS}>Todas as equipas</option>
+                  {ageGroups.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown
+                  size={14}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+                />
+              </div>
+            )}
           </div>
 
           {scopeHelperText ? (

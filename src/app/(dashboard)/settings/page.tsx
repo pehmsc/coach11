@@ -33,6 +33,24 @@ const ROLE_LABELS: Record<string, string> = {
   parent: "Encarregado",
 };
 
+// Normaliza a extensao do avatar a um conjunto seguro (paridade com os MIME
+// types do bucket avatars). Prefere o MIME type; cai na extensao do nome so
+// quando valida; senao usa png. Evita paths como avatars/<uid>.undefined.
+const AVATAR_MIME_TO_EXT: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/jpg": "jpg",
+  "image/webp": "webp",
+};
+const ALLOWED_AVATAR_EXTS = new Set(["png", "jpg", "jpeg", "webp"]);
+
+function resolveAvatarExtension(file: File): string {
+  const fromMime = AVATAR_MIME_TO_EXT[file.type];
+  if (fromMime) return fromMime;
+  const raw = file.name.split(".").pop()?.toLowerCase() ?? "";
+  return ALLOWED_AVATAR_EXTS.has(raw) ? raw : "png";
+}
+
 export default function SettingsPage() {
   const supabase = useMemo(() => createClient(), []);
   const queryClient = useQueryClient();
@@ -183,7 +201,7 @@ export default function SettingsPage() {
     if (!file || !profile) return;
 
     setUploadingAvatar(true);
-    const ext = file.name.split(".").pop();
+    const ext = resolveAvatarExtension(file);
     const path = `avatars/${profile.id}.${ext}`;
 
     const { error: uploadError } = await supabase.storage

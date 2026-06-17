@@ -525,7 +525,7 @@ export default function OnboardingPage() {
                   <Button
                     type="button"
                     variant="outline"
-                    className="flex-1"
+                    className="flex-1 h-12"
                     onClick={() => setStep(1)}
                     disabled={saving}
                   >
