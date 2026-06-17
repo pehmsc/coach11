@@ -282,6 +282,14 @@ export async function purgeClubData(
   admin: SupabaseClient,
   clubId: string,
   ageGroupIds: string[],
+  opts?: {
+    /**
+     * Mantem as club_memberships do clube (ver deleteClubDataCascade). Usado na
+     * eliminacao de conta individual; o cron de purga RGPD nao passa nada e
+     * mantem o comportamento original (apaga memberships, mantem linha clubs).
+     */
+    skipClubMembershipsDelete?: boolean;
+  },
 ): Promise<PurgeClubDataResult> {
   // Storage so atingivel via prefixo de escalao — limpar ANTES da cascata
   // apagar as linhas de age_groups (depois ja nao ha como derivar prefixos).
@@ -291,7 +299,7 @@ export async function purgeClubData(
     }
   }
 
-  const { deletedAgeGroupCount } = await deleteClubDataCascade(admin, clubId);
+  const { deletedAgeGroupCount } = await deleteClubDataCascade(admin, clubId, opts);
 
   for (const table of CLUB_LEVEL_SWEEP_TABLES) {
     await optionalDeleteByEq(admin, table, "club_id", clubId);

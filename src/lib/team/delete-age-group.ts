@@ -262,6 +262,13 @@ export async function deleteAgeGroupCascade(
   ageGroupId: string,
   options?: {
     retainClubMembershipProfileIds?: string[];
+    /**
+     * Salta a limpeza de club_memberships residuais. Usado na eliminacao de
+     * conta individual, onde as memberships sao mantidas vivas ate a RPC final
+     * (que deriva o clube de auth.uid()) e depois caem por cascata ao apagar a
+     * linha de clubs.
+     */
+    skipClubMembershipCleanup?: boolean;
   },
 ) {
   const { data: ageGroup, error: ageGroupError } = await admin
@@ -438,10 +445,12 @@ export async function deleteAgeGroupCascade(
   // Fotos de atletas (PII de menores): path canonico {ageGroupId}/{playerId}.webp.
   // Sem esta limpeza, as fotos ficavam orfas no bucket privado apos apagar o escalao.
   await removeStoragePrefix(admin, "players-photos", ageGroupId);
-  await cleanupClubMembershipsAfterAgeGroupDelete(
-    admin,
-    typeof ageGroup.club_id === "string" ? ageGroup.club_id : null,
-    candidateProfileIds,
-    options?.retainClubMembershipProfileIds || [],
-  );
+  if (!options?.skipClubMembershipCleanup) {
+    await cleanupClubMembershipsAfterAgeGroupDelete(
+      admin,
+      typeof ageGroup.club_id === "string" ? ageGroup.club_id : null,
+      candidateProfileIds,
+      options?.retainClubMembershipProfileIds || [],
+    );
+  }
 }
