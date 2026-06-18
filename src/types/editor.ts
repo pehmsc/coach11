@@ -6,18 +6,24 @@
 
 export type FieldPreset = "full" | "half" | "area" | "free";
 
-export type ArrowVariant = "move" | "pass" | "dribble";
+export type ArrowVariant = "move" | "pass" | "dribble" | "line";
+
+export type PlayerStyle = "circle" | "jersey";
+export type PlayerSize = "s" | "m" | "l";
+export type ObjectShape = "cone-stick" | "mannequin" | "goal" | "ring";
 
 // `color?` é um snapshot da paleta no momento da criação — cada elemento guarda
 // a sua cor para coexistirem várias equipas/cores no mesmo diagrama. O render lê
-// `el.color ?? diagram.color`; bola e cone ignoram `color` (cor de identidade).
+// `el.color ?? diagram.color`; bola e objetos ignoram `color` (cor de identidade).
+// `style`/`size` do jogador são opcionais (default circle/m) — aditivos.
 export type DiagramElement =
-  | { id: string; kind: "player"; team: "home" | "away"; x: number; y: number; label?: string; color?: string }
+  | { id: string; kind: "player"; team: "home" | "away"; x: number; y: number; label?: string; color?: string; style?: PlayerStyle; size?: PlayerSize }
   | { id: string; kind: "ball"; x: number; y: number; color?: string }
   | { id: string; kind: "cone"; x: number; y: number; color?: string }
   | { id: string; kind: "text"; x: number; y: number; text: string; color?: string }
   | { id: string; kind: "zone"; x: number; y: number; w: number; h: number; color?: string }
-  | { id: string; kind: "arrow"; variant: ArrowVariant; x1: number; y1: number; x2: number; y2: number; color?: string };
+  | { id: string; kind: "arrow"; variant: ArrowVariant; x1: number; y1: number; x2: number; y2: number; color?: string }
+  | { id: string; kind: "object"; x: number; y: number; shape: ObjectShape; color?: string };
 
 export type DiagramElementKind = DiagramElement["kind"];
 

@@ -49,6 +49,36 @@ describe("(de)serialização do diagrama", () => {
     expect(parseDiagram(serializeDiagram(d))).toEqual(d);
   });
 
+  it("round-trip de objetos (cada shape), jogador com style+size e seta line", () => {
+    const d: ExerciseDiagram = {
+      v: 1,
+      preset: "full",
+      color: "#000000",
+      elements: [
+        { id: "o1", kind: "object", x: 10, y: 10, shape: "cone-stick" },
+        { id: "o2", kind: "object", x: 20, y: 20, shape: "mannequin" },
+        { id: "o3", kind: "object", x: 30, y: 30, shape: "goal" },
+        { id: "o4", kind: "object", x: 40, y: 40, shape: "ring", color: "#EAB308" },
+        { id: "p1", kind: "player", team: "home", x: 50, y: 50, style: "jersey", size: "l" },
+        { id: "a1", kind: "arrow", variant: "line", x1: 0, y1: 0, x2: 60, y2: 60 },
+      ],
+    };
+    expect(parseDiagram(serializeDiagram(d))).toEqual(d);
+  });
+
+  it("descarta object com shape inválido", () => {
+    const parsed = parseDiagram({
+      v: 1,
+      preset: "full",
+      color: "#000",
+      elements: [
+        { id: "ok", kind: "object", x: 1, y: 2, shape: "goal" },
+        { id: "bad", kind: "object", x: 1, y: 2, shape: "ufo" },
+      ],
+    });
+    expect(parsed?.elements).toEqual([{ id: "ok", kind: "object", x: 1, y: 2, shape: "goal" }]);
+  });
+
   it("descarta elementos inválidos mas mantém os válidos", () => {
     const dirty = {
       v: 1,
