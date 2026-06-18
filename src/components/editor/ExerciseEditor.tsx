@@ -298,20 +298,46 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
   }, []);
 
   // ── Geometria ─────────────────────────────────────────────────────────────
-  // Campo num espaço de autoria FIXO 120×80. O SVG usa cover (slice): o campo
-  // enche o ecrã e o excesso é recortado (escala uniforme → tokens redondos). Em
-  // portrait roda-se o CONTEÚDO em espaço SVG (viewBox 80×120 + transform no grupo),
-  // mantendo getScreenCTM() válido para o mapeamento do ponteiro.
+  // Campo num espaço de autoria FIXO 120×80, CONTIDO (nada cortado): o viewBox
+  // estende-se ao rácio do contentor (sem letterbox) e as marcações enchem a
+  // dimensão limitante. A relva é contínua a cobrir todo o viewBox visível. Em
+  // portrait roda-se o CONTEÚDO em espaço SVG (viewBox 80×120 + transform no
+  // grupo), mantendo getScreenCTM() válido para o mapeamento do ponteiro.
   const portrait = canvasSize.h > canvasSize.w;
-  const baseViewBox = useMemo<ViewBox>(
-    () => (portrait ? { x: 0, y: 0, w: BASE_H, h: BASE_W } : { x: 0, y: 0, w: BASE_W, h: BASE_H }),
-    [portrait],
-  );
+  const baseViewBox = useMemo<ViewBox>(() => {
+    const bw = portrait ? BASE_H : BASE_W; // dims do campo no espaço RAIZ da orientação
+    const bh = portrait ? BASE_W : BASE_H;
+    const { w, h } = canvasSize;
+    if (!w || !h) return { x: 0, y: 0, w: bw, h: bh };
+    const aspect = w / h;
+    const baseAspect = bw / bh;
+    if (aspect >= baseAspect) {
+      const vbW = bh * aspect;
+      return { x: (bw - vbW) / 2, y: 0, w: vbW, h: bh };
+    }
+    const vbH = bw / aspect;
+    return { x: 0, y: (bh - vbH) / 2, w: bw, h: vbH };
+  }, [canvasSize, portrait]);
   const renderViewBox = userViewBox ?? baseViewBox;
   const contentTransform = portrait ? `translate(${BASE_H} 0) rotate(90)` : undefined;
 
-  // Escala real no ecrã (cover = max): px por unidade de campo. Igual à escala do
-  // CTM do grupo; calculada analiticamente para evitar setState em efeito.
+  // Extent da relva em coords de CAMPO (dentro do grupo, rodado em portrait). Em
+  // portrait inverte a rotação (root→field: x=ry, y=80−rx). Une com o campo 0–120/0–80
+  // para a relva cobrir SEMPRE o campo (export 120×80 fica cheio mesmo com zoom).
+  const grassExtent = useMemo<ViewBox>(() => {
+    const rvb = renderViewBox;
+    const ge = portrait
+      ? { x: rvb.y, y: BASE_H - (rvb.x + rvb.w), w: rvb.h, h: rvb.w }
+      : rvb;
+    const x0 = Math.min(ge.x, 0);
+    const y0 = Math.min(ge.y, 0);
+    const x1 = Math.max(ge.x + ge.w, BASE_W);
+    const y1 = Math.max(ge.y + ge.h, BASE_H);
+    return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+  }, [portrait, renderViewBox]);
+
+  // Escala real no ecrã (contido = aspect do viewBox igual ao do contentor):
+  // px por unidade de campo. Analítica para evitar setState em efeito.
   const pxPerUnit = canvasSize.w
     ? Math.max(canvasSize.w / renderViewBox.w, canvasSize.h / renderViewBox.h)
     : 0;
@@ -940,7 +966,7 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
         <svg
           ref={svgRef}
           viewBox={`${renderViewBox.x} ${renderViewBox.y} ${renderViewBox.w} ${renderViewBox.h}`}
-          preserveAspectRatio="xMidYMid slice"
+          preserveAspectRatio="xMidYMid meet"
           className="h-full w-full touch-none select-none"
           style={{ WebkitTouchCallout: "none", WebkitUserSelect: "none" }}
           onPointerDown={onPointerDown}
@@ -952,7 +978,7 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
               campo 0–120/0–80. Em portrait roda 90° em espaço SVG. O export remove
               este transform (data-editor-content) para sair sempre landscape. */}
           <g ref={contentRef} data-editor-content transform={contentTransform}>
-          <FieldPresetLayer preset={diagram.preset} showMarkings={showMarkings} />
+          <FieldPresetLayer preset={diagram.preset} showMarkings={showMarkings} extent={grassExtent} />
 
           {diagram.elements.map((el) => (
             <g key={el.id} data-el-id={el.id} ref={setElementRef(el.id)}>
