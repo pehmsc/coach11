@@ -8,13 +8,25 @@ import {
   type DiagramElementKind,
   type ExerciseDiagram,
   type FieldPreset,
+  type ObjectShape,
 } from "@/types/editor";
 
 const FIELD_PRESETS: readonly FieldPreset[] = ["full", "half", "area", "free"];
 const ARROW_VARIANTS: readonly ArrowVariant[] = ["move", "pass", "dribble", "line"];
 const PLAYER_STYLES: readonly string[] = ["circle", "jersey"];
 const PLAYER_SIZES: readonly string[] = ["s", "m", "l"];
-const OBJECT_SHAPES: readonly string[] = ["cone-stick", "mannequin", "goal", "ring"];
+const OBJECT_SHAPES: readonly string[] = [
+  "chapeu",
+  "cone-stick",
+  "baliza-a",
+  "baliza-b",
+  "mannequin",
+  "vara",
+  "arcos",
+  "stairs",
+  "ring",
+  "mark",
+];
 
 export const HISTORY_LIMIT = 30;
 
@@ -122,7 +134,7 @@ function validateElement(raw: unknown): DiagramElement | null {
         kind: "object",
         x: el.x,
         y: el.y,
-        shape: el.shape as "cone-stick" | "mannequin" | "goal" | "ring",
+        shape: el.shape as ObjectShape,
         ...color,
       };
     default:

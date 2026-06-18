@@ -55,10 +55,11 @@ describe("(de)serialização do diagrama", () => {
       preset: "full",
       color: "#000000",
       elements: [
-        { id: "o1", kind: "object", x: 10, y: 10, shape: "cone-stick" },
-        { id: "o2", kind: "object", x: 20, y: 20, shape: "mannequin" },
-        { id: "o3", kind: "object", x: 30, y: 30, shape: "goal" },
-        { id: "o4", kind: "object", x: 40, y: 40, shape: "ring", color: "#EAB308" },
+        { id: "o1", kind: "object", x: 10, y: 10, shape: "chapeu" },
+        { id: "o2", kind: "object", x: 20, y: 20, shape: "baliza-a" },
+        { id: "o3", kind: "object", x: 30, y: 30, shape: "stairs", color: "#16A34A" },
+        { id: "o4", kind: "object", x: 40, y: 40, shape: "mark" },
+        { id: "o5", kind: "object", x: 45, y: 45, shape: "vara" },
         { id: "p1", kind: "player", team: "home", x: 50, y: 50, style: "jersey", size: "l" },
         { id: "a1", kind: "arrow", variant: "line", x1: 0, y1: 0, x2: 60, y2: 60 },
       ],
@@ -66,17 +67,17 @@ describe("(de)serialização do diagrama", () => {
     expect(parseDiagram(serializeDiagram(d))).toEqual(d);
   });
 
-  it("descarta object com shape inválido", () => {
+  it("descarta object com shape inválido (ex.: goal removido)", () => {
     const parsed = parseDiagram({
       v: 1,
       preset: "full",
       color: "#000",
       elements: [
-        { id: "ok", kind: "object", x: 1, y: 2, shape: "goal" },
-        { id: "bad", kind: "object", x: 1, y: 2, shape: "ufo" },
+        { id: "ok", kind: "object", x: 1, y: 2, shape: "baliza-b" },
+        { id: "bad", kind: "object", x: 1, y: 2, shape: "goal" },
       ],
     });
-    expect(parsed?.elements).toEqual([{ id: "ok", kind: "object", x: 1, y: 2, shape: "goal" }]);
+    expect(parsed?.elements).toEqual([{ id: "ok", kind: "object", x: 1, y: 2, shape: "baliza-b" }]);
   });
 
   it("descarta elementos inválidos mas mantém os válidos", () => {

@@ -52,7 +52,15 @@ import {
   type Point,
   type ViewBox,
 } from "@/lib/editor/geometry";
-import { ARROW_STROKE, ElementShape, PLAYER_R, ZONE_DEFAULT } from "./elements";
+import {
+  ARROW_STROKE,
+  ElementShape,
+  JERSEY_ART,
+  OBJECT_ART,
+  PLAYER_R,
+  TokenIcon,
+  ZONE_DEFAULT,
+} from "./elements";
 import { FIELD_PRESET_OPTIONS, FieldPresetLayer } from "./field-presets";
 
 const BASE_W = FIELD_VIEWBOX.width;
@@ -68,13 +76,19 @@ const ARROW_OPTIONS: { value: ArrowVariant; label: string }[] = [
   { value: "dribble", label: "Condução" },
   { value: "line", label: "Linha" },
 ];
-// Popover "Objetos": cone (kind próprio) + 4 objetos de treino.
+// Popover "Objetos": cone (kind próprio) + 10 objetos de treino, em grelha de ícones.
 const OBJECT_OPTIONS: { value: "cone" | ObjectShape; label: string }[] = [
+  { value: "chapeu", label: "Chapéu" },
   { value: "cone", label: "Cone" },
-  { value: "cone-stick", label: "Vara" },
+  { value: "cone-stick", label: "Cone alto" },
+  { value: "baliza-a", label: "Baliza grande" },
+  { value: "baliza-b", label: "Baliza pequena" },
   { value: "mannequin", label: "Manequim" },
-  { value: "goal", label: "Baliza" },
+  { value: "vara", label: "Vara" },
+  { value: "arcos", label: "Arcos" },
+  { value: "stairs", label: "Escada" },
   { value: "ring", label: "Arco" },
+  { value: "mark", label: "Marca" },
 ];
 const PLAYER_SIZE_OPTIONS: { value: PlayerSize; label: string }[] = [
   { value: "s", label: "P" },
@@ -455,11 +469,11 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
           addElement({ id, kind: "ball", x, y });
           break;
         case "cone":
-          addElement({ id, kind: "cone", x, y });
+          addElement({ id, kind: "cone", x, y, color });
           break;
         case "object":
-          // Objetos = cor de identidade fixa, sem snapshot da paleta.
-          addElement({ id, kind: "object", x, y, shape: t.shape });
+          // Snapshot da cor ativa → tonável e várias cores coexistem.
+          addElement({ id, kind: "object", x, y, shape: t.shape, color });
           break;
         case "text":
           addElement({ id, kind: "text", x, y, text: "Texto", color });
@@ -1166,7 +1180,7 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
               </div>
             )}
             {openPopover.kind === "object" && (
-              <div className="flex flex-col gap-1">
+              <div className="grid grid-cols-4 gap-1">
                 {OBJECT_OPTIONS.map((o) => {
                   const isActive =
                     o.value === "cone" ? tool.kind === "cone" : tool.kind === "object" && tool.shape === o.value;
@@ -1174,15 +1188,17 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
                     <button
                       key={o.value}
                       type="button"
+                      title={o.label}
+                      aria-label={o.label}
                       onClick={() => {
                         setTool(o.value === "cone" ? { kind: "cone" } : { kind: "object", shape: o.value });
                         setOpenPopover(null);
                       }}
-                      className={`rounded-md px-3 py-2 text-left text-sm ${
+                      className={`flex aspect-square items-center justify-center rounded-md p-1.5 ${
                         isActive ? "bg-emerald-600 text-white" : "text-slate-200 hover:bg-slate-700"
                       }`}
                     >
-                      {o.label}
+                      <TokenIcon token={OBJECT_ART[o.value]} className="h-7 w-7" />
                     </button>
                   );
                 })}
@@ -1195,12 +1211,20 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
                     <button
                       key={s}
                       type="button"
+                      title={s === "circle" ? "Círculo" : "Camisola"}
+                      aria-label={s === "circle" ? "Círculo" : "Camisola"}
                       onClick={() => applyPlayerStyle(s)}
-                      className={`flex-1 rounded-md px-2 py-1.5 text-xs ${
+                      className={`flex flex-1 items-center justify-center rounded-md px-2 py-1.5 ${
                         playerStyle === s ? "bg-emerald-600 text-white" : "bg-slate-700 text-slate-200"
                       }`}
                     >
-                      {s === "circle" ? "Círculo" : "Camisola"}
+                      {s === "circle" ? (
+                        <svg viewBox="0 0 24 24" className="h-6 w-6">
+                          <circle cx="12" cy="12" r="9" fill="currentColor" />
+                        </svg>
+                      ) : (
+                        <TokenIcon token={JERSEY_ART} className="h-6 w-6" />
+                      )}
                     </button>
                   ))}
                 </div>
