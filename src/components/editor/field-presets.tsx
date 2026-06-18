@@ -6,13 +6,9 @@ import type { FieldPreset } from "@/types/editor";
 
 const GRASS_DARK = "#2B542E";
 const GRASS_LIGHT = "#315B34";
-// Tom mais escuro para a zona fora das linhas (vinheta de relvado) quando o
-// viewBox do editor é maior que o campo (edge-to-edge em landscape/portrait).
-const GRASS_OUTSIDE = "#234524";
 const LINE = "#fff";
 
-type LayerExtent = { x: number; y: number; w: number; h: number };
-type LayerProps = { preset: FieldPreset; showMarkings?: boolean; extent?: LayerExtent };
+type LayerProps = { preset: FieldPreset; showMarkings?: boolean };
 
 function FullField({ showMarkings }: { showMarkings: boolean }) {
   const stripes = [6, 19.5, 33, 46.5, 60, 73.5, 87, 100.5];
@@ -131,7 +127,7 @@ function FreeField({ showMarkings }: { showMarkings: boolean }) {
   );
 }
 
-function FieldByPreset({ preset, showMarkings }: { preset: FieldPreset; showMarkings: boolean }) {
+export function FieldPresetLayer({ preset, showMarkings = true }: LayerProps) {
   switch (preset) {
     case "half":
       return <HalfField showMarkings={showMarkings} />;
@@ -143,22 +139,6 @@ function FieldByPreset({ preset, showMarkings }: { preset: FieldPreset; showMark
     default:
       return <FullField showMarkings={showMarkings} />;
   }
-}
-
-export function FieldPresetLayer({ preset, showMarkings = true, extent }: LayerProps) {
-  // Vinheta de relvado: só quando o viewBox visível ultrapassa o campo 120×80.
-  // Fica POR TRÁS do preset (cujo rect base cobre 0–120/0–80), pelo que o campo
-  // e a exportação (recortada a 120×80) ficam intactos.
-  const showVignette =
-    extent != null && (extent.x < 0 || extent.y < 0 || extent.w > 120 || extent.h > 80);
-  return (
-    <g>
-      {showVignette && (
-        <rect x={extent.x} y={extent.y} width={extent.w} height={extent.h} fill={GRASS_OUTSIDE} />
-      )}
-      <FieldByPreset preset={preset} showMarkings={showMarkings} />
-    </g>
-  );
 }
 
 export const FIELD_PRESET_OPTIONS: { value: FieldPreset; label: string }[] = [

@@ -16,6 +16,7 @@ import {
   MousePointer2,
   MoveUpRight,
   Palette,
+  RotateCw,
   Shirt,
   Square,
   Trash2,
@@ -53,7 +54,6 @@ import { FIELD_PRESET_OPTIONS, FieldPresetLayer } from "./field-presets";
 
 const BASE_W = FIELD_VIEWBOX.width;
 const BASE_H = FIELD_VIEWBOX.height;
-const FULL_VIEWBOX: ViewBox = { x: 0, y: 0, w: BASE_W, h: BASE_H };
 const DRAG_THRESHOLD_PX = 5;
 const SNAP_DIST = 1.5; // unidades de viewBox
 const POPOVER_W = 224;
@@ -138,9 +138,8 @@ type Gesture =
 
 type SnapResult = { snapX: number | null; snapY: number | null };
 
-// Zoom (pinch) relativo ao frame visível (fitViewBox), preservando o aspect e
-// limitado ao próprio frame. Inline aqui — não toca em geometry.ts (que assume
-// origem 0,0; o fitViewBox em landscape tem origem negativa).
+// Zoom (pinch) relativo ao viewBox base da orientação, preservando o aspect e
+// limitado a esse frame. Inline aqui — não toca em geometry.ts.
 function zoomWithinFit(
   startVB: ViewBox,
   fit: ViewBox,
@@ -209,7 +208,7 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
   const [confirmClear, setConfirmClear] = useState(false);
   const [running, setRunning] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [isImmersive, setIsImmersive] = useState(false);
+  const [hideRotateHint, setHideRotateHint] = useState(false);
   const [openPopover, setOpenPopover] = useState<{ kind: "arrow" | "color"; left: number; top: number } | null>(null);
   const [showHints, setShowHints] = useState(() => {
     try {
@@ -228,9 +227,17 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
   const guideHRef = useRef<SVGLineElement | null>(null);
   const pointers = useRef(new Map<number, Point>());
   const gesture = useRef<Gesture>({ type: "none" });
+  const contentRef = useRef<SVGGElement | null>(null);
   const rafId = useRef<number | null>(null);
   const pendingFn = useRef<(() => void) | null>(null);
   const lastPinchVB = useRef<ViewBox | null>(null);
+
+  // Fullscreen de elemento é suportado em PC/Android, não no iOS Safari.
+  const nativeFullscreenSupported = useMemo(() => {
+    if (typeof document === "undefined") return false;
+    const d = document as FullscreenDocument;
+    return Boolean(document.fullscreenEnabled || d.webkitFullscreenEnabled);
+  }, []);
 
   // ── Histórico ───────────────────────────────────────────────────────────
   const commit = useCallback((next: ExerciseDiagram) => {
@@ -291,32 +298,37 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
   }, []);
 
   // ── Geometria ─────────────────────────────────────────────────────────────
-  // Enquadramento responsivo: o viewBox segue o rácio do contentor (edge-to-edge,
-  // sem barras), com o campo 120×80 centrado. As marcações ficam fixas em
-  // 0–120/0–80; só muda o enquadramento. O pinch guarda userViewBox (senão segue o fit).
-  const fitViewBox = useMemo<ViewBox>(() => {
-    const { w, h } = canvasSize;
-    if (!w || !h) return FULL_VIEWBOX;
-    const aspect = w / h;
-    if (aspect >= BASE_W / BASE_H) {
-      const vbW = BASE_H * aspect;
-      return { x: (BASE_W - vbW) / 2, y: 0, w: vbW, h: BASE_H };
-    }
-    const vbH = BASE_W / aspect;
-    return { x: 0, y: (BASE_H - vbH) / 2, w: BASE_W, h: vbH };
-  }, [canvasSize]);
+  // Campo num espaço de autoria FIXO 120×80. O SVG usa cover (slice): o campo
+  // enche o ecrã e o excesso é recortado (escala uniforme → tokens redondos). Em
+  // portrait roda-se o CONTEÚDO em espaço SVG (viewBox 80×120 + transform no grupo),
+  // mantendo getScreenCTM() válido para o mapeamento do ponteiro.
+  const portrait = canvasSize.h > canvasSize.w;
+  const baseViewBox = useMemo<ViewBox>(
+    () => (portrait ? { x: 0, y: 0, w: BASE_H, h: BASE_W } : { x: 0, y: 0, w: BASE_W, h: BASE_H }),
+    [portrait],
+  );
+  const renderViewBox = userViewBox ?? baseViewBox;
+  const contentTransform = portrait ? `translate(${BASE_H} 0) rotate(90)` : undefined;
 
-  const renderViewBox = userViewBox ?? fitViewBox;
+  // Escala real no ecrã (cover = max): px por unidade de campo. Igual à escala do
+  // CTM do grupo; calculada analiticamente para evitar setState em efeito.
+  const pxPerUnit = canvasSize.w
+    ? Math.max(canvasSize.w / renderViewBox.w, canvasSize.h / renderViewBox.h)
+    : 0;
+  const hitRadius = pxPerUnit ? clamp(44 / pxPerUnit, PLAYER_R + 1, 9) : PLAYER_R + 2;
 
-  const hitRadius = useMemo(() => {
-    if (!canvasSize.w) return PLAYER_R + 2;
-    return clamp((44 * renderViewBox.w) / canvasSize.w, PLAYER_R + 1, 9);
-  }, [canvasSize.w, renderViewBox.w]);
+  // Ponto em coords de CAMPO (0–120/0–80) via CTM do grupo de conteúdo — respeita
+  // viewBox + cover + rotação. Usado para colocar/arrastar/snap.
+  const fieldPoint = useCallback((clientX: number, clientY: number): Point => {
+    const node = contentRef.current ?? svgRef.current;
+    const m = node?.getScreenCTM();
+    if (!m) return { x: 0, y: 0 };
+    return screenToSvgPoint(m, clientX, clientY);
+  }, []);
 
-  const svgPoint = useCallback((clientX: number, clientY: number): Point => {
-    const svg = svgRef.current;
-    if (!svg) return { x: 0, y: 0 };
-    const m = svg.getScreenCTM();
+  // Ponto em coords do viewBox RAIZ via CTM do SVG — só para o foco do pinch.
+  const rootPoint = useCallback((clientX: number, clientY: number): Point => {
+    const m = svgRef.current?.getScreenCTM();
     if (!m) return { x: 0, y: 0 };
     return screenToSvgPoint(m, clientX, clientY);
   }, []);
@@ -440,7 +452,7 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
         const a = pointers.current.get(ids[0])!;
         const b = pointers.current.get(ids[1])!;
         cancelTransientDom();
-        const mid = svgPoint((a.x + b.x) / 2, (a.y + b.y) / 2);
+        const mid = rootPoint((a.x + b.x) / 2, (a.y + b.y) / 2);
         gesture.current = {
           type: "pinch",
           idA: ids[0],
@@ -448,7 +460,7 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
           startDist: distance(a.x, a.y, b.x, b.y),
           focus: mid,
           startViewBox: renderViewBox,
-          fit: fitViewBox,
+          fit: baseViewBox,
         };
         return;
       }
@@ -456,7 +468,7 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
       const target = e.target as Element;
       const handleNode = target.closest("[data-handle]");
       const elNode = target.closest("[data-el-id]") as SVGGElement | null;
-      const p = svgPoint(e.clientX, e.clientY);
+      const p = fieldPoint(e.clientX, e.clientY);
 
       if (handleNode && selectedId) {
         const orig = diagram.elements.find((el) => el.id === selectedId);
@@ -499,7 +511,7 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
         moved: false,
       };
     },
-    [cancelTransientDom, diagram.elements, dismissHints, fitViewBox, renderViewBox, selectedId, showHints, svgPoint, tool],
+    [baseViewBox, cancelTransientDom, diagram.elements, dismissHints, fieldPoint, renderViewBox, rootPoint, selectedId, showHints, tool],
   );
 
   const applyDrag = useCallback((id: string, dx: number, dy: number) => {
@@ -564,7 +576,7 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
         return;
       }
 
-      const p = svgPoint(e.clientX, e.clientY);
+      const p = fieldPoint(e.clientX, e.clientY);
 
       if (g.type === "element-drag") {
         if (!g.moved && distance(e.clientX, e.clientY, g.startClient.x, g.startClient.y) > DRAG_THRESHOLD_PX) {
@@ -607,7 +619,7 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
         if (g.moved) scheduleApply(() => updatePreview(g));
       }
     },
-    [applyDrag, applyGuide, applyResize, diagram.elements, scheduleApply, showGuides, svgPoint, updatePreview],
+    [applyDrag, applyGuide, applyResize, diagram.elements, scheduleApply, showGuides, fieldPoint, updatePreview],
   );
 
   const endPinch = useCallback(() => {
@@ -636,7 +648,7 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
         applyGuide(guideVRef, "v", null);
         applyGuide(guideHRef, "h", null);
         if (g.moved) {
-          const p = svgPoint(e.clientX, e.clientY);
+          const p = fieldPoint(e.clientX, e.clientY);
           let dx = p.x - g.startSvg.x;
           let dy = p.y - g.startSvg.y;
           if (showGuides && g.orig.kind !== "arrow") {
@@ -656,7 +668,7 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
       }
 
       if (g.type === "element-resize") {
-        const p = svgPoint(e.clientX, e.clientY);
+        const p = fieldPoint(e.clientX, e.clientY);
         const w = clamp(g.orig.w + (p.x - g.startSvg.x), 4, BASE_W - g.orig.x);
         const h = clamp(g.orig.h + (p.y - g.startSvg.y), 4, BASE_H - g.orig.y);
         const elements = diagram.elements.map((el) =>
@@ -668,7 +680,7 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
 
       if (g.type === "bg-draw") {
         cancelTransientDom();
-        const p = svgPoint(e.clientX, e.clientY);
+        const p = fieldPoint(e.clientX, e.clientY);
         if (!g.moved) {
           if (g.tool.kind === "select") setSelectedId(null);
           else if (g.tool.kind !== "arrow") placeAt(g.tool, g.startSvg);
@@ -696,7 +708,7 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
         }
       }
     },
-    [addElement, applyGuide, cancelTransientDom, commit, diagram, endPinch, placeAt, showGuides, svgPoint],
+    [addElement, applyGuide, cancelTransientDom, commit, diagram, endPinch, placeAt, showGuides, fieldPoint],
   );
 
   const onPointerCancel = useCallback(
@@ -757,27 +769,16 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
 
   const toggleFullscreen = useCallback(() => {
     const d = document as FullscreenDocument;
-    const nativeSupported = Boolean(document.fullscreenEnabled || d.webkitFullscreenEnabled);
-    if (nativeSupported) {
-      const active = Boolean(document.fullscreenElement || d.webkitFullscreenElement);
-      if (active) {
-        if (document.exitFullscreen) void document.exitFullscreen().catch(() => {});
-        else d.webkitExitFullscreen?.();
-      } else {
-        const el = rootRef.current as FullscreenElement | null;
-        if (!el) return;
-        if (el.requestFullscreen) void el.requestFullscreen().catch(() => {});
-        else el.webkitRequestFullscreen?.();
-      }
-      return;
+    const active = Boolean(document.fullscreenElement || d.webkitFullscreenElement);
+    if (active) {
+      if (document.exitFullscreen) void document.exitFullscreen().catch(() => {});
+      else d.webkitExitFullscreen?.();
+    } else {
+      const el = rootRef.current as FullscreenElement | null;
+      if (!el) return;
+      if (el.requestFullscreen) void el.requestFullscreen().catch(() => {});
+      else el.webkitRequestFullscreen?.();
     }
-    // Sem Fullscreen API (iOS Safari): modo imersivo best-effort — cobre o
-    // viewport (100dvh) e tenta recolher a barra do Safari.
-    setIsImmersive((prev) => {
-      const nextVal = !prev;
-      if (nextVal) setTimeout(() => window.scrollTo(0, 1), 0);
-      return nextVal;
-    });
   }, []);
 
   const selectedElement = useMemo(
@@ -878,12 +879,14 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
 
           <ToolButton active={showGuides} onClick={() => setShowGuides((s) => !s)} icon={Magnet} label="Guias" />
           <ToolButton active={!showMarkings} onClick={() => setShowMarkings((s) => !s)} icon={showMarkings ? Eye : EyeOff} label="Marcações" />
-          <ToolButton
-            active={isFullscreen || isImmersive}
-            onClick={toggleFullscreen}
-            icon={isFullscreen || isImmersive ? Minimize : Maximize}
-            label="Ecrã inteiro"
-          />
+          {nativeFullscreenSupported && (
+            <ToolButton
+              active={isFullscreen}
+              onClick={toggleFullscreen}
+              icon={isFullscreen ? Minimize : Maximize}
+              label="Ecrã inteiro"
+            />
+          )}
 
           <Divider />
 
@@ -937,7 +940,7 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
         <svg
           ref={svgRef}
           viewBox={`${renderViewBox.x} ${renderViewBox.y} ${renderViewBox.w} ${renderViewBox.h}`}
-          preserveAspectRatio="xMidYMid meet"
+          preserveAspectRatio="xMidYMid slice"
           className="h-full w-full touch-none select-none"
           style={{ WebkitTouchCallout: "none", WebkitUserSelect: "none" }}
           onPointerDown={onPointerDown}
@@ -945,7 +948,11 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerCancel}
         >
-          <FieldPresetLayer preset={diagram.preset} showMarkings={showMarkings} extent={renderViewBox} />
+          {/* Grupo de conteúdo (campo + tokens + guias + previews) em coords de
+              campo 0–120/0–80. Em portrait roda 90° em espaço SVG. O export remove
+              este transform (data-editor-content) para sair sempre landscape. */}
+          <g ref={contentRef} data-editor-content transform={contentTransform}>
+          <FieldPresetLayer preset={diagram.preset} showMarkings={showMarkings} />
 
           {diagram.elements.map((el) => (
             <g key={el.id} data-el-id={el.id} ref={setElementRef(el.id)}>
@@ -975,6 +982,7 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
           {/* Previews de desenho */}
           <path ref={previewLineRef} data-export-ignore fill="none" stroke={diagram.color} strokeWidth={ARROW_STROKE} strokeLinecap="round" style={{ display: "none" }} />
           <rect ref={previewRectRef} data-export-ignore fill={diagram.color} fillOpacity={0.18} stroke={diagram.color} strokeWidth={0.5} strokeDasharray="2 1.4" style={{ display: "none" }} />
+          </g>
         </svg>
 
         {showHints && (
@@ -982,6 +990,17 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
             <span className="rounded-full bg-black/60 px-2.5 py-1">1 dedo · mover</span>
             <span className="rounded-full bg-black/60 px-2.5 py-1">2 dedos · zoom</span>
           </div>
+        )}
+
+        {/* iPhone (sem Fullscreen API) em portrait: dica subtil e dispensável. */}
+        {!nativeFullscreenSupported && portrait && !hideRotateHint && (
+          <button
+            type="button"
+            onClick={() => setHideRotateHint(true)}
+            className="absolute bottom-3 right-3 flex items-center gap-1.5 rounded-full bg-black/65 px-3 py-1.5 text-[11px] text-white shadow-lg"
+          >
+            <RotateCw size={13} /> Roda para vista maior
+          </button>
         )}
 
         {confirmClear && (

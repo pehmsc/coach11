@@ -20,9 +20,13 @@ export function prepareExportSvg(
 ): string {
   const clone = svg.cloneNode(true) as SVGSVGElement;
   clone.querySelectorAll(`[${EXPORT_IGNORE_ATTR}]`).forEach((node) => node.remove());
+  // Repõe o estado canónico: campo landscape 120×80, sem cover/recorte (meet) e
+  // sem a rotação de portrait do grupo de conteúdo. O PNG sai sempre 120×80.
   clone.setAttribute("viewBox", `0 0 ${baseW} ${baseH}`);
   clone.setAttribute("width", String(baseW));
   clone.setAttribute("height", String(baseH));
+  clone.setAttribute("preserveAspectRatio", "xMidYMid meet");
+  clone.querySelectorAll("[data-editor-content]").forEach((node) => node.removeAttribute("transform"));
   clone.removeAttribute("style");
   if (!clone.getAttribute("xmlns")) {
     clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
