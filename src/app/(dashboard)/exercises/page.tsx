@@ -216,15 +216,19 @@ export default function ExercisesPage() {
   return (
     <>
       <div className="p-4 md:p-8 max-w-4xl mx-auto">
-        <div className="mb-6 flex items-center justify-between gap-3">
+        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h1 className="text-2xl font-bold text-slate-900">Exercícios</h1>
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => setStandaloneEditorOpen(true)}>
+            <Button
+              variant="outline"
+              className="flex-1 sm:flex-none"
+              onClick={() => setStandaloneEditorOpen(true)}
+            >
               <PencilRuler size={16} className="mr-2" />
               Editor
             </Button>
             <Button
-              className="bg-emerald-600 hover:bg-emerald-700"
+              className="flex-1 bg-emerald-600 hover:bg-emerald-700 sm:flex-none"
               onClick={openCreate}
             >
               <Plus size={16} className="mr-2" />

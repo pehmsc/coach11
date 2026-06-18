@@ -35,6 +35,20 @@ describe("(de)serialização do diagrama", () => {
     expect(restored).toEqual(sample);
   });
 
+  it("preserva a cor por elemento no round-trip", () => {
+    const d: ExerciseDiagram = {
+      v: 1,
+      preset: "full",
+      color: "#000000",
+      elements: [
+        { id: "p1", kind: "player", team: "home", x: 10, y: 10, color: "#DC2626" },
+        { id: "a1", kind: "arrow", variant: "pass", x1: 0, y1: 0, x2: 10, y2: 10, color: "#16A34A" },
+        { id: "z1", kind: "zone", x: 2, y: 2, w: 20, h: 10, color: "#7C3AED" },
+      ],
+    };
+    expect(parseDiagram(serializeDiagram(d))).toEqual(d);
+  });
+
   it("descarta elementos inválidos mas mantém os válidos", () => {
     const dirty = {
       v: 1,

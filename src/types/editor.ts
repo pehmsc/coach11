@@ -8,13 +8,16 @@ export type FieldPreset = "full" | "half" | "area" | "free";
 
 export type ArrowVariant = "move" | "pass" | "dribble";
 
+// `color?` é um snapshot da paleta no momento da criação — cada elemento guarda
+// a sua cor para coexistirem várias equipas/cores no mesmo diagrama. O render lê
+// `el.color ?? diagram.color`; bola e cone ignoram `color` (cor de identidade).
 export type DiagramElement =
-  | { id: string; kind: "player"; team: "home" | "away"; x: number; y: number; label?: string }
-  | { id: string; kind: "ball"; x: number; y: number }
-  | { id: string; kind: "cone"; x: number; y: number }
-  | { id: string; kind: "text"; x: number; y: number; text: string }
-  | { id: string; kind: "zone"; x: number; y: number; w: number; h: number }
-  | { id: string; kind: "arrow"; variant: ArrowVariant; x1: number; y1: number; x2: number; y2: number };
+  | { id: string; kind: "player"; team: "home" | "away"; x: number; y: number; label?: string; color?: string }
+  | { id: string; kind: "ball"; x: number; y: number; color?: string }
+  | { id: string; kind: "cone"; x: number; y: number; color?: string }
+  | { id: string; kind: "text"; x: number; y: number; text: string; color?: string }
+  | { id: string; kind: "zone"; x: number; y: number; w: number; h: number; color?: string }
+  | { id: string; kind: "arrow"; variant: ArrowVariant; x1: number; y1: number; x2: number; y2: number; color?: string };
 
 export type DiagramElementKind = DiagramElement["kind"];
 

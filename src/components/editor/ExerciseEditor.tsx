@@ -10,10 +10,12 @@ import {
   EyeOff,
   LandPlot,
   Loader2,
+  Magnet,
+  Maximize,
+  Minimize,
   MousePointer2,
   MoveUpRight,
   Palette,
-  RotateCcw,
   Shirt,
   Square,
   Trash2,
@@ -21,7 +23,6 @@ import {
   Undo2,
   X,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import {
   FIELD_VIEWBOX,
   type ArrowVariant,
@@ -48,20 +49,30 @@ import {
   type Point,
   type ViewBox,
 } from "@/lib/editor/geometry";
-import {
-  ARROW_STROKE,
-  ElementShape,
-  PLAYER_R,
-  ZONE_DEFAULT,
-} from "./elements";
+import { ARROW_STROKE, ElementShape, PLAYER_R, ZONE_DEFAULT } from "./elements";
 import { FIELD_PRESET_OPTIONS, FieldPresetLayer } from "./field-presets";
 
 const BASE_W = FIELD_VIEWBOX.width;
 const BASE_H = FIELD_VIEWBOX.height;
 const FULL_VIEWBOX: ViewBox = { x: 0, y: 0, w: BASE_W, h: BASE_H };
 const DRAG_THRESHOLD_PX = 5;
+const SNAP_DIST = 1.5; // unidades de viewBox
+const POPOVER_W = 224;
 const HINTS_KEY = "coach11_editor_hints_seen";
 const COLOR_SWATCHES = ["#4E7BFF", "#16A34A", "#DC2626", "#F59E0B", "#7C3AED", "#0F172A", "#FFFFFF"];
+const ARROW_OPTIONS: { value: ArrowVariant; label: string }[] = [
+  { value: "move", label: "Movimento" },
+  { value: "pass", label: "Passe" },
+  { value: "dribble", label: "Condução" },
+];
+
+// Vendor-prefixos de Fullscreen (Safari) — tipados, sem `any`.
+type FullscreenDocument = Document & {
+  webkitFullscreenEnabled?: boolean;
+  webkitFullscreenElement?: Element | null;
+  webkitExitFullscreen?: () => void;
+};
+type FullscreenElement = HTMLElement & { webkitRequestFullscreen?: () => void };
 
 export type EditorExitAction = {
   key: string;
@@ -82,7 +93,7 @@ type ExerciseEditorProps = {
 
 type Tool =
   | { kind: "select" }
-  | { kind: "player"; team: "home" | "away" }
+  | { kind: "player" }
   | { kind: "ball" }
   | { kind: "cone" }
   | { kind: "zone" }
@@ -125,30 +136,58 @@ type Gesture =
       startViewBox: ViewBox;
     };
 
+type SnapResult = { snapX: number | null; snapY: number | null };
+
+function elementCenter(el: DiagramElement): Point {
+  if (el.kind === "zone") return { x: el.x + el.w / 2, y: el.y + el.h / 2 };
+  if (el.kind === "arrow") return { x: (el.x1 + el.x2) / 2, y: (el.y1 + el.y2) / 2 };
+  return { x: el.x, y: el.y };
+}
+
+// Snap do centro às linhas médias do campo (x=60, y=40) e aos centros dos outros
+// elementos, dentro de SNAP_DIST.
+function computeSnap(
+  elements: DiagramElement[],
+  cx: number,
+  cy: number,
+  excludeId: string,
+): SnapResult {
+  const xs = [BASE_W / 2];
+  const ys = [BASE_H / 2];
+  for (const e of elements) {
+    if (e.id === excludeId) continue;
+    const c = elementCenter(e);
+    xs.push(c.x);
+    ys.push(c.y);
+  }
+  let snapX: number | null = null;
+  let snapY: number | null = null;
+  for (const tx of xs) if (Math.abs(cx - tx) <= SNAP_DIST) { snapX = tx; break; }
+  for (const ty of ys) if (Math.abs(cy - ty) <= SNAP_DIST) { snapY = ty; break; }
+  return { snapX, snapY };
+}
+
 export function ExerciseEditor(props: ExerciseEditorProps) {
   if (!props.open) return null;
   return <EditorOverlay {...props} />;
 }
 
-function EditorOverlay({ initialDiagram, title, onClose, exitActions, busy }: ExerciseEditorProps) {
+function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseEditorProps) {
   const [history, setHistory] = useState<DiagramHistory>(() =>
     initHistory(parseDiagram(initialDiagram) ?? emptyDiagram()),
   );
   const diagram = history.present;
 
   const [tool, setTool] = useState<Tool>({ kind: "select" });
-  const [openGroup, setOpenGroup] = useState<"player" | "arrow" | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [viewBox, setViewBox] = useState<ViewBox>(FULL_VIEWBOX);
   const [showMarkings, setShowMarkings] = useState(true);
-  const [showColors, setShowColors] = useState(false);
+  const [showGuides, setShowGuides] = useState(true);
   const [confirmClear, setConfirmClear] = useState(false);
   const [running, setRunning] = useState(false);
   const [svgWidthPx, setSvgWidthPx] = useState(0);
-  const [portrait, setPortrait] = useState(() => {
-    if (typeof window === "undefined" || !window.matchMedia) return false;
-    return window.matchMedia("(orientation: portrait)").matches;
-  });
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [openPopover, setOpenPopover] = useState<{ kind: "arrow" | "color"; left: number; top: number } | null>(null);
   const [showHints, setShowHints] = useState(() => {
     try {
       return localStorage.getItem(HINTS_KEY) !== "1";
@@ -157,14 +196,23 @@ function EditorOverlay({ initialDiagram, title, onClose, exitActions, busy }: Ex
     }
   });
 
+  const rootRef = useRef<HTMLDivElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const elementRefs = useRef(new Map<string, SVGGElement | null>());
   const previewLineRef = useRef<SVGPathElement | null>(null);
   const previewRectRef = useRef<SVGRectElement | null>(null);
+  const guideVRef = useRef<SVGLineElement | null>(null);
+  const guideHRef = useRef<SVGLineElement | null>(null);
   const pointers = useRef(new Map<number, Point>());
   const gesture = useRef<Gesture>({ type: "none" });
   const rafId = useRef<number | null>(null);
   const pendingFn = useRef<(() => void) | null>(null);
+
+  const fullscreenSupported = useMemo(() => {
+    if (typeof document === "undefined") return false;
+    const d = document as FullscreenDocument;
+    return Boolean(document.fullscreenEnabled || d.webkitFullscreenEnabled);
+  }, []);
 
   // ── Histórico ───────────────────────────────────────────────────────────
   const commit = useCallback((next: ExerciseDiagram) => {
@@ -204,11 +252,15 @@ function EditorOverlay({ initialDiagram, title, onClose, exitActions, busy }: Ex
   }, []);
 
   useEffect(() => {
-    if (typeof window === "undefined" || !window.matchMedia) return;
-    const mq = window.matchMedia("(orientation: portrait)");
-    const onChange = () => setPortrait(mq.matches);
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
+    const d = document as FullscreenDocument;
+    const onChange = () =>
+      setIsFullscreen(Boolean(document.fullscreenElement || d.webkitFullscreenElement));
+    document.addEventListener("fullscreenchange", onChange);
+    document.addEventListener("webkitfullscreenchange", onChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", onChange);
+      document.removeEventListener("webkitfullscreenchange", onChange);
+    };
   }, []);
 
   useEffect(() => {
@@ -251,6 +303,30 @@ function EditorOverlay({ initialDiagram, title, onClose, exitActions, busy }: Ex
     [],
   );
 
+  const applyGuide = useCallback(
+    (ref: React.RefObject<SVGLineElement | null>, axis: "v" | "h", value: number | null) => {
+      const node = ref.current;
+      if (!node) return;
+      if (value == null) {
+        node.style.display = "none";
+        return;
+      }
+      if (axis === "v") {
+        node.setAttribute("x1", String(value));
+        node.setAttribute("x2", String(value));
+        node.setAttribute("y1", "0");
+        node.setAttribute("y2", String(BASE_H));
+      } else {
+        node.setAttribute("y1", String(value));
+        node.setAttribute("y2", String(value));
+        node.setAttribute("x1", "0");
+        node.setAttribute("x2", String(BASE_W));
+      }
+      node.style.display = "";
+    },
+    [],
+  );
+
   // ── Criação de elementos ──────────────────────────────────────────────────
   const addElement = useCallback(
     (el: DiagramElement, select = true) => {
@@ -262,17 +338,19 @@ function EditorOverlay({ initialDiagram, title, onClose, exitActions, busy }: Ex
 
   const placeAt = useCallback(
     (t: Tool, p: Point) => {
-      const x = clamp(p.x, 0, BASE_W);
-      const y = clamp(p.y, 0, BASE_H);
+      let x = clamp(p.x, 0, BASE_W);
+      let y = clamp(p.y, 0, BASE_H);
+      if (showGuides) {
+        const s = computeSnap(diagram.elements, x, y, "");
+        if (s.snapX != null) x = s.snapX;
+        if (s.snapY != null) y = s.snapY;
+      }
       const id = newElementId();
+      const color = diagram.color;
       switch (t.kind) {
-        case "player": {
-          const count = diagram.elements.filter(
-            (e) => e.kind === "player" && e.team === t.team,
-          ).length;
-          addElement({ id, kind: "player", team: t.team, x, y, label: String(count + 1) });
+        case "player":
+          addElement({ id, kind: "player", team: "home", x, y, color });
           break;
-        }
         case "ball":
           addElement({ id, kind: "ball", x, y });
           break;
@@ -280,7 +358,7 @@ function EditorOverlay({ initialDiagram, title, onClose, exitActions, busy }: Ex
           addElement({ id, kind: "cone", x, y });
           break;
         case "text":
-          addElement({ id, kind: "text", x, y, text: "Texto" });
+          addElement({ id, kind: "text", x, y, text: "Texto", color });
           break;
         case "zone":
           addElement({
@@ -290,25 +368,28 @@ function EditorOverlay({ initialDiagram, title, onClose, exitActions, busy }: Ex
             y: clamp(y - ZONE_DEFAULT.h / 2, 0, BASE_H - ZONE_DEFAULT.h),
             w: ZONE_DEFAULT.w,
             h: ZONE_DEFAULT.h,
+            color,
           });
           break;
         default:
           break;
       }
     },
-    [addElement, diagram.elements],
+    [addElement, diagram.color, diagram.elements, showGuides],
   );
 
   // ── Pointer handlers ──────────────────────────────────────────────────────
   const cancelTransientDom = useCallback(() => {
-    // Reverte qualquer transform/preview aplicado por gestos em curso.
     elementRefs.current.forEach((node) => node?.removeAttribute("transform"));
     if (previewLineRef.current) previewLineRef.current.style.display = "none";
     if (previewRectRef.current) previewRectRef.current.style.display = "none";
+    if (guideVRef.current) guideVRef.current.style.display = "none";
+    if (guideHRef.current) guideHRef.current.style.display = "none";
   }, []);
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent<SVGSVGElement>) => {
+      e.preventDefault();
       if (showHints) dismissHints();
       const svg = svgRef.current;
       if (!svg) return;
@@ -369,7 +450,6 @@ function EditorOverlay({ initialDiagram, title, onClose, exitActions, busy }: Ex
         }
       }
 
-      // Fundo do campo.
       gesture.current = {
         type: "bg-draw",
         pointerId: e.pointerId,
@@ -383,24 +463,21 @@ function EditorOverlay({ initialDiagram, title, onClose, exitActions, busy }: Ex
     [cancelTransientDom, diagram.elements, dismissHints, selectedId, showHints, svgPoint, tool, viewBox],
   );
 
-  const applyDrag = useCallback(
-    (g: Extract<Gesture, { type: "element-drag" }>, dx: number, dy: number) => {
-      const node = elementRefs.current.get(g.id);
-      if (node) node.setAttribute("transform", `translate(${dx} ${dy})`);
-    },
-    [],
-  );
+  const applyDrag = useCallback((id: string, dx: number, dy: number) => {
+    const node = elementRefs.current.get(id);
+    if (node) node.setAttribute("transform", `translate(${dx} ${dy})`);
+  }, []);
 
   const applyResize = useCallback(
     (g: Extract<Gesture, { type: "element-resize" }>, w: number, h: number) => {
       const node = elementRefs.current.get(g.id);
       if (!node) return;
-      const rect = node.querySelector<SVGRectElement>('rect:not([data-handle])');
+      const rect = node.querySelector<SVGRectElement>("rect:not([data-handle])");
       if (rect) {
         rect.setAttribute("width", String(w));
         rect.setAttribute("height", String(h));
       }
-      const handle = node.querySelector<SVGRectElement>('[data-handle]');
+      const handle = node.querySelector<SVGRectElement>("[data-handle]");
       if (handle) {
         handle.setAttribute("x", String(g.orig.x + w - hitRadius / 2));
         handle.setAttribute("y", String(g.orig.y + h - hitRadius / 2));
@@ -409,31 +486,22 @@ function EditorOverlay({ initialDiagram, title, onClose, exitActions, busy }: Ex
     [hitRadius],
   );
 
-  const updatePreview = useCallback(
-    (g: Extract<Gesture, { type: "bg-draw" }>) => {
-      const { tool: t, startSvg, curSvg } = g;
-      if (t.kind === "arrow" && previewLineRef.current) {
-        previewLineRef.current.setAttribute(
-          "d",
-          `M ${startSvg.x} ${startSvg.y} L ${curSvg.x} ${curSvg.y}`,
-        );
-        previewLineRef.current.setAttribute(
-          "stroke-dasharray",
-          t.variant === "move" ? "2.4 1.6" : "",
-        );
-        previewLineRef.current.style.display = "";
-      } else if (t.kind === "zone" && previewRectRef.current) {
-        const x = Math.min(startSvg.x, curSvg.x);
-        const y = Math.min(startSvg.y, curSvg.y);
-        previewRectRef.current.setAttribute("x", String(x));
-        previewRectRef.current.setAttribute("y", String(y));
-        previewRectRef.current.setAttribute("width", String(Math.abs(curSvg.x - startSvg.x)));
-        previewRectRef.current.setAttribute("height", String(Math.abs(curSvg.y - startSvg.y)));
-        previewRectRef.current.style.display = "";
-      }
-    },
-    [],
-  );
+  const updatePreview = useCallback((g: Extract<Gesture, { type: "bg-draw" }>) => {
+    const { tool: t, startSvg, curSvg } = g;
+    if (t.kind === "arrow" && previewLineRef.current) {
+      previewLineRef.current.setAttribute("d", `M ${startSvg.x} ${startSvg.y} L ${curSvg.x} ${curSvg.y}`);
+      previewLineRef.current.setAttribute("stroke-dasharray", t.variant === "move" ? "2.4 1.6" : "");
+      previewLineRef.current.style.display = "";
+    } else if (t.kind === "zone" && previewRectRef.current) {
+      const x = Math.min(startSvg.x, curSvg.x);
+      const y = Math.min(startSvg.y, curSvg.y);
+      previewRectRef.current.setAttribute("x", String(x));
+      previewRectRef.current.setAttribute("y", String(y));
+      previewRectRef.current.setAttribute("width", String(Math.abs(curSvg.x - startSvg.x)));
+      previewRectRef.current.setAttribute("height", String(Math.abs(curSvg.y - startSvg.y)));
+      previewRectRef.current.style.display = "";
+    }
+  }, []);
 
   const onPointerMove = useCallback(
     (e: React.PointerEvent<SVGSVGElement>) => {
@@ -462,13 +530,28 @@ function EditorOverlay({ initialDiagram, title, onClose, exitActions, busy }: Ex
       const p = svgPoint(e.clientX, e.clientY);
 
       if (g.type === "element-drag") {
-        const moved =
-          g.moved ||
-          distance(e.clientX, e.clientY, g.startClient.x, g.startClient.y) > DRAG_THRESHOLD_PX;
-        if (moved) g.moved = true;
-        const dx = p.x - g.startSvg.x;
-        const dy = p.y - g.startSvg.y;
-        scheduleApply(() => applyDrag(g, dx, dy));
+        if (!g.moved && distance(e.clientX, e.clientY, g.startClient.x, g.startClient.y) > DRAG_THRESHOLD_PX) {
+          g.moved = true;
+        }
+        let dx = p.x - g.startSvg.x;
+        let dy = p.y - g.startSvg.y;
+        let snapX: number | null = null;
+        let snapY: number | null = null;
+        if (showGuides && g.orig.kind !== "arrow") {
+          const oc = elementCenter(g.orig);
+          const cx = oc.x + dx;
+          const cy = oc.y + dy;
+          const s = computeSnap(diagram.elements, cx, cy, g.id);
+          snapX = s.snapX;
+          snapY = s.snapY;
+          if (snapX != null) dx += snapX - cx;
+          if (snapY != null) dy += snapY - cy;
+        }
+        scheduleApply(() => {
+          applyDrag(g.id, dx, dy);
+          applyGuide(guideVRef, "v", snapX);
+          applyGuide(guideHRef, "h", snapY);
+        });
         return;
       }
 
@@ -481,16 +564,13 @@ function EditorOverlay({ initialDiagram, title, onClose, exitActions, busy }: Ex
 
       if (g.type === "bg-draw") {
         g.curSvg = p;
-        if (
-          !g.moved &&
-          distance(e.clientX, e.clientY, g.startClient.x, g.startClient.y) > DRAG_THRESHOLD_PX
-        ) {
+        if (!g.moved && distance(e.clientX, e.clientY, g.startClient.x, g.startClient.y) > DRAG_THRESHOLD_PX) {
           g.moved = true;
         }
         if (g.moved) scheduleApply(() => updatePreview(g));
       }
     },
-    [applyDrag, applyResize, scheduleApply, svgPoint, updatePreview],
+    [applyDrag, applyGuide, applyResize, diagram.elements, scheduleApply, showGuides, svgPoint, updatePreview],
   );
 
   const endPinch = useCallback(() => {
@@ -505,32 +585,39 @@ function EditorOverlay({ initialDiagram, title, onClose, exitActions, busy }: Ex
 
   const onPointerUp = useCallback(
     (e: React.PointerEvent<SVGSVGElement>) => {
+      e.preventDefault();
       const svg = svgRef.current;
       svg?.releasePointerCapture?.(e.pointerId);
       pointers.current.delete(e.pointerId);
       const g = gesture.current;
+      gesture.current = { type: "none" }; // reset imediato — 1 elemento por toque
 
       if (g.type === "pinch") {
         endPinch();
-        gesture.current = { type: "none" };
         return;
       }
 
       if (g.type === "element-drag") {
-        const node = elementRefs.current.get(g.id);
-        node?.removeAttribute("transform");
+        elementRefs.current.get(g.id)?.removeAttribute("transform");
+        applyGuide(guideVRef, "v", null);
+        applyGuide(guideHRef, "h", null);
         if (g.moved) {
           const p = svgPoint(e.clientX, e.clientY);
-          const dx = p.x - g.startSvg.x;
-          const dy = p.y - g.startSvg.y;
-          const elements = diagram.elements.map((el) =>
-            el.id === g.id ? shiftElement(el, dx, dy) : el,
-          );
+          let dx = p.x - g.startSvg.x;
+          let dy = p.y - g.startSvg.y;
+          if (showGuides && g.orig.kind !== "arrow") {
+            const oc = elementCenter(g.orig);
+            const cx = oc.x + dx;
+            const cy = oc.y + dy;
+            const s = computeSnap(diagram.elements, cx, cy, g.id);
+            if (s.snapX != null) dx += s.snapX - cx;
+            if (s.snapY != null) dy += s.snapY - cy;
+          }
+          const elements = diagram.elements.map((el) => (el.id === g.id ? shiftElement(el, dx, dy) : el));
           commit({ ...diagram, elements });
         } else {
           setSelectedId(g.id);
         }
-        gesture.current = { type: "none" };
         return;
       }
 
@@ -542,7 +629,6 @@ function EditorOverlay({ initialDiagram, title, onClose, exitActions, busy }: Ex
           el.id === g.id && el.kind === "zone" ? { ...el, w, h } : el,
         );
         commit({ ...diagram, elements });
-        gesture.current = { type: "none" };
         return;
       }
 
@@ -550,7 +636,6 @@ function EditorOverlay({ initialDiagram, title, onClose, exitActions, busy }: Ex
         cancelTransientDom();
         const p = svgPoint(e.clientX, e.clientY);
         if (!g.moved) {
-          // Tap: colocar elemento (ferramentas de ponto/zona) ou deselecionar.
           if (g.tool.kind === "select") setSelectedId(null);
           else if (g.tool.kind !== "arrow") placeAt(g.tool, g.startSvg);
         } else if (g.tool.kind === "arrow") {
@@ -563,6 +648,7 @@ function EditorOverlay({ initialDiagram, title, onClose, exitActions, busy }: Ex
               y1: g.startSvg.y,
               x2: p.x,
               y2: p.y,
+              color: diagram.color,
             });
           }
         } else if (g.tool.kind === "zone") {
@@ -571,13 +657,12 @@ function EditorOverlay({ initialDiagram, title, onClose, exitActions, busy }: Ex
           const w = Math.abs(p.x - g.startSvg.x);
           const h = Math.abs(p.y - g.startSvg.y);
           if (w > 3 && h > 3) {
-            addElement({ id: newElementId(), kind: "zone", x, y, w, h });
+            addElement({ id: newElementId(), kind: "zone", x, y, w, h, color: diagram.color });
           }
         }
-        gesture.current = { type: "none" };
       }
     },
-    [addElement, cancelTransientDom, commit, diagram, endPinch, placeAt, svgPoint],
+    [addElement, applyGuide, cancelTransientDom, commit, diagram, endPinch, placeAt, showGuides, svgPoint],
   );
 
   const onPointerCancel = useCallback(
@@ -591,12 +676,6 @@ function EditorOverlay({ initialDiagram, title, onClose, exitActions, busy }: Ex
   );
 
   // ── Ações da toolbar ───────────────────────────────────────────────────────
-  const selectTool = useCallback((t: Tool, group: "player" | "arrow" | null = null) => {
-    setTool(t);
-    setOpenGroup((cur) => (group && cur !== group ? group : null));
-    setShowColors(false);
-  }, []);
-
   const handleUndo = useCallback(() => {
     setHistory((h) => undoHistory(h));
     setSelectedId(null);
@@ -614,12 +693,16 @@ function EditorOverlay({ initialDiagram, title, onClose, exitActions, busy }: Ex
     setSelectedId(null);
   }, [commit, diagram, selectedId]);
 
+  // Define a cor ativa e, se houver seleção, recolore esse elemento (1 commit).
   const setColor = useCallback(
     (color: string) => {
-      commit({ ...diagram, color });
-      setShowColors(false);
+      const elements: DiagramElement[] = selectedId
+        ? diagram.elements.map((el): DiagramElement => (el.id === selectedId ? { ...el, color } : el))
+        : diagram.elements;
+      commit({ ...diagram, color, elements });
+      setOpenPopover(null);
     },
-    [commit, diagram],
+    [commit, diagram, selectedId],
   );
 
   const setPreset = useCallback(
@@ -628,6 +711,29 @@ function EditorOverlay({ initialDiagram, title, onClose, exitActions, busy }: Ex
     },
     [commit, diagram],
   );
+
+  const togglePopover = useCallback((kind: "arrow" | "color", btn: HTMLElement) => {
+    setOpenPopover((cur) => {
+      if (cur?.kind === kind) return null;
+      const rect = btn.getBoundingClientRect();
+      const left = clamp(rect.left, 8, window.innerWidth - POPOVER_W - 8);
+      return { kind, left, top: rect.bottom + 4 };
+    });
+  }, []);
+
+  const toggleFullscreen = useCallback(() => {
+    const d = document as FullscreenDocument;
+    const active = Boolean(document.fullscreenElement || d.webkitFullscreenElement);
+    if (active) {
+      if (document.exitFullscreen) void document.exitFullscreen().catch(() => {});
+      else d.webkitExitFullscreen?.();
+    } else {
+      const el = rootRef.current as FullscreenElement | null;
+      if (!el) return;
+      if (el.requestFullscreen) void el.requestFullscreen().catch(() => {});
+      else el.webkitRequestFullscreen?.();
+    }
+  }, []);
 
   const selectedElement = useMemo(
     () => diagram.elements.find((el) => el.id === selectedId) ?? null,
@@ -672,88 +778,38 @@ function EditorOverlay({ initialDiagram, title, onClose, exitActions, busy }: Ex
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[100] flex flex-col bg-slate-900"
-      style={{ overscrollBehavior: "contain" }}
+      ref={rootRef}
+      className="fixed inset-x-0 top-0 z-[100] flex flex-col bg-slate-900"
+      style={{ height: "100dvh", overscrollBehavior: "contain" }}
     >
-      {/* Header */}
-      <div className="flex items-center gap-2 border-b border-slate-700 bg-slate-900 px-3 py-2 text-white">
-        <button
-          type="button"
-          onClick={onClose}
-          className="rounded-md p-1.5 text-slate-300 hover:bg-slate-800"
-          aria-label="Fechar editor"
-        >
-          <X size={20} />
-        </button>
-        <span className="flex-1 truncate text-sm font-medium">{title ?? "Editor de diagrama"}</span>
-        <button
-          type="button"
-          onClick={handleUndo}
-          disabled={!canUndo(history)}
-          className="rounded-md p-1.5 text-slate-300 hover:bg-slate-800 disabled:opacity-30"
-          aria-label="Desfazer"
-        >
-          <Undo2 size={18} />
-        </button>
-        {confirmClear ? (
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={handleClear}
-              className="rounded-md bg-red-600 px-2 py-1 text-xs font-medium"
-            >
-              Limpar tudo
-            </button>
-            <button
-              type="button"
-              onClick={() => setConfirmClear(false)}
-              className="rounded-md px-2 py-1 text-xs text-slate-300 hover:bg-slate-800"
-            >
-              Não
-            </button>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setConfirmClear(true)}
-            disabled={diagram.elements.length === 0}
-            className="rounded-md p-1.5 text-slate-300 hover:bg-slate-800 disabled:opacity-30"
-            aria-label="Limpar campo"
-          >
-            <Trash2 size={18} />
-          </button>
-        )}
-      </div>
-
-      {/* Toolbar */}
-      <div className="bg-slate-800">
-        <div className="flex items-center gap-1 overflow-x-auto px-2 py-2">
-          <ToolButton active={tool.kind === "select"} onClick={() => selectTool({ kind: "select" })} icon={MousePointer2} label="Selecionar" />
-          <ToolButton
-            active={tool.kind === "player"}
-            onClick={() => selectTool({ kind: "player", team: "home" }, "player")}
-            icon={Shirt}
-            label="Jogador"
-          />
+      {/* Toolbar única: desenho/opções/undo-limpar (scroll) + ações (fixo) */}
+      <div className="flex items-stretch gap-1 border-b border-slate-700 bg-slate-800 px-2 py-2">
+        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+          <ToolButton active={tool.kind === "select"} onClick={() => setTool({ kind: "select" })} icon={MousePointer2} label="Selecionar" />
+          <ToolButton active={tool.kind === "player"} onClick={() => setTool({ kind: "player" })} icon={Shirt} label="Jogador" />
+          <ToolButton active={tool.kind === "ball"} onClick={() => setTool({ kind: "ball" })} icon={CircleDot} label="Bola" />
+          <ToolButton active={tool.kind === "cone"} onClick={() => setTool({ kind: "cone" })} icon={Cone} label="Cone" />
+          <ToolButton active={tool.kind === "zone"} onClick={() => setTool({ kind: "zone" })} icon={Square} label="Zona" />
           <ToolButton
             active={tool.kind === "arrow"}
-            onClick={() => selectTool({ kind: "arrow", variant: "move" }, "arrow")}
+            onClick={(e) => {
+              const variant = tool.kind === "arrow" ? tool.variant : "move";
+              setTool({ kind: "arrow", variant });
+              togglePopover("arrow", e.currentTarget);
+            }}
             icon={MoveUpRight}
             label="Setas"
           />
-          <ToolButton active={tool.kind === "ball"} onClick={() => selectTool({ kind: "ball" })} icon={CircleDot} label="Bola" />
-          <ToolButton active={tool.kind === "cone"} onClick={() => selectTool({ kind: "cone" })} icon={Cone} label="Cone" />
-          <ToolButton active={tool.kind === "zone"} onClick={() => selectTool({ kind: "zone" })} icon={Square} label="Zona" />
-          <ToolButton active={tool.kind === "text"} onClick={() => selectTool({ kind: "text" })} icon={Type} label="Texto" />
+          <ToolButton active={tool.kind === "text"} onClick={() => setTool({ kind: "text" })} icon={Type} label="Texto" />
 
-          <div className="mx-1 h-6 w-px shrink-0 bg-slate-600" />
+          <Divider />
 
           <label className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-slate-200">
             <LandPlot size={16} />
             <select
               value={diagram.preset}
               onChange={(e) => setPreset(e.target.value as FieldPreset)}
-              className="bg-slate-700 text-xs text-white rounded px-1 py-0.5 focus:outline-none"
+              className="rounded bg-slate-700 px-1 py-0.5 text-xs text-white focus:outline-none"
             >
               {FIELD_PRESET_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
@@ -765,58 +821,70 @@ function EditorOverlay({ initialDiagram, title, onClose, exitActions, busy }: Ex
 
           <button
             type="button"
-            onClick={() => { setShowColors((s) => !s); setOpenGroup(null); }}
-            className="flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-slate-200 hover:bg-slate-700"
+            onClick={(e) => togglePopover("color", e.currentTarget)}
+            className="flex shrink-0 items-center gap-1 rounded-md px-2 py-2 text-slate-200 hover:bg-slate-700"
             aria-label="Cor"
+            title="Cor"
           >
-            <Palette size={16} />
+            <Palette size={18} />
             <span className="h-3.5 w-3.5 rounded-full border border-white/40" style={{ background: diagram.color }} />
           </button>
 
+          <ToolButton active={showGuides} onClick={() => setShowGuides((s) => !s)} icon={Magnet} label="Guias" />
+          <ToolButton active={!showMarkings} onClick={() => setShowMarkings((s) => !s)} icon={showMarkings ? Eye : EyeOff} label="Marcações" />
+          {fullscreenSupported && (
+            <ToolButton active={isFullscreen} onClick={toggleFullscreen} icon={isFullscreen ? Minimize : Maximize} label="Ecrã inteiro" />
+          )}
+
+          <Divider />
+
+          <ToolButton active={false} disabled={!canUndo(history)} onClick={handleUndo} icon={Undo2} label="Desfazer" />
           <ToolButton
-            active={!showMarkings}
-            onClick={() => setShowMarkings((s) => !s)}
-            icon={showMarkings ? Eye : EyeOff}
-            label="Marcações"
+            active={false}
+            disabled={diagram.elements.length === 0}
+            onClick={() => diagram.elements.length > 0 && setConfirmClear(true)}
+            icon={Trash2}
+            label="Limpar"
           />
         </div>
 
-        {/* Popovers — fila compacta por baixo da toolbar */}
-        {openGroup === "player" && (
-          <PopoverRow>
-            <ChipButton active={tool.kind === "player" && tool.team === "home"} onClick={() => selectTool({ kind: "player", team: "home" })}>
-              <span className="h-3 w-3 rounded-full" style={{ background: "#2563EB" }} /> Casa
-            </ChipButton>
-            <ChipButton active={tool.kind === "player" && tool.team === "away"} onClick={() => selectTool({ kind: "player", team: "away" })}>
-              <span className="h-3 w-3 rounded-full" style={{ background: "#DC2626" }} /> Fora
-            </ChipButton>
-          </PopoverRow>
-        )}
-        {openGroup === "arrow" && (
-          <PopoverRow>
-            <ChipButton active={tool.kind === "arrow" && tool.variant === "move"} onClick={() => selectTool({ kind: "arrow", variant: "move" })}>Movimento</ChipButton>
-            <ChipButton active={tool.kind === "arrow" && tool.variant === "pass"} onClick={() => selectTool({ kind: "arrow", variant: "pass" })}>Passe</ChipButton>
-            <ChipButton active={tool.kind === "arrow" && tool.variant === "dribble"} onClick={() => selectTool({ kind: "arrow", variant: "dribble" })}>Condução</ChipButton>
-          </PopoverRow>
-        )}
-        {showColors && (
-          <PopoverRow>
-            {COLOR_SWATCHES.map((c) => (
+        <div className="flex shrink-0 items-center gap-1 border-l border-slate-700 pl-1">
+          {exitActions.map((action) => {
+            const Icon = action.icon;
+            return (
               <button
-                key={c}
+                key={action.key}
                 type="button"
-                onClick={() => setColor(c)}
-                className="h-7 w-7 rounded-full border-2"
-                style={{ background: c, borderColor: diagram.color === c ? "#fff" : "transparent" }}
-                aria-label={`Cor ${c}`}
-              />
-            ))}
-          </PopoverRow>
-        )}
+                onClick={() => handleExitAction(action)}
+                disabled={busyState}
+                className={`flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-2 text-xs font-medium disabled:opacity-50 ${
+                  action.primary
+                    ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                    : "border border-slate-600 bg-slate-800 text-white hover:bg-slate-700"
+                }`}
+              >
+                {busyState ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : Icon ? (
+                  <Icon size={14} />
+                ) : null}
+                <span className="hidden min-[400px]:inline">{action.label}</span>
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md p-2 text-slate-300 hover:bg-slate-700"
+            aria-label="Fechar editor"
+          >
+            <X size={18} />
+          </button>
+        </div>
       </div>
 
-      {/* Canvas */}
-      <div className="relative flex-1 overflow-hidden bg-slate-950 p-2">
+      {/* Canvas full-bleed */}
+      <div className="relative min-h-0 flex-1 overflow-hidden bg-slate-950">
         <svg
           ref={svgRef}
           viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`}
@@ -834,7 +902,6 @@ function EditorOverlay({ initialDiagram, title, onClose, exitActions, busy }: Ex
             <g key={el.id} data-el-id={el.id} ref={setElementRef(el.id)}>
               <ElementShape el={el} color={diagram.color} />
               {selectedId === el.id && <SelectionOutline el={el} />}
-              {/* Alvo de hit ≥44px (transparente, ignorado no export) */}
               <HitTarget el={el} radius={hitRadius} />
               {selectedId === el.id && el.kind === "zone" && (
                 <rect
@@ -852,29 +919,15 @@ function EditorOverlay({ initialDiagram, title, onClose, exitActions, busy }: Ex
             </g>
           ))}
 
+          {/* Guias de alinhamento (só visíveis durante o arrasto) */}
+          <line ref={guideVRef} data-export-ignore stroke="#10b981" strokeWidth={0.3} strokeDasharray="1 1" opacity={0.85} style={{ display: "none" }} />
+          <line ref={guideHRef} data-export-ignore stroke="#10b981" strokeWidth={0.3} strokeDasharray="1 1" opacity={0.85} style={{ display: "none" }} />
+
           {/* Previews de desenho */}
-          <path
-            ref={previewLineRef}
-            data-export-ignore
-            fill="none"
-            stroke={diagram.color}
-            strokeWidth={ARROW_STROKE}
-            strokeLinecap="round"
-            style={{ display: "none" }}
-          />
-          <rect
-            ref={previewRectRef}
-            data-export-ignore
-            fill={diagram.color}
-            fillOpacity={0.18}
-            stroke={diagram.color}
-            strokeWidth={0.5}
-            strokeDasharray="2 1.4"
-            style={{ display: "none" }}
-          />
+          <path ref={previewLineRef} data-export-ignore fill="none" stroke={diagram.color} strokeWidth={ARROW_STROKE} strokeLinecap="round" style={{ display: "none" }} />
+          <rect ref={previewRectRef} data-export-ignore fill={diagram.color} fillOpacity={0.18} stroke={diagram.color} strokeWidth={0.5} strokeDasharray="2 1.4" style={{ display: "none" }} />
         </svg>
 
-        {/* Chips pedagógicos (1ª utilização) */}
         {showHints && (
           <div className="pointer-events-none absolute inset-x-0 top-2 flex justify-center gap-2 text-[11px] text-white">
             <span className="rounded-full bg-black/60 px-2.5 py-1">1 dedo · mover</span>
@@ -882,68 +935,86 @@ function EditorOverlay({ initialDiagram, title, onClose, exitActions, busy }: Ex
           </div>
         )}
 
-        {/* Sugestão de landscape */}
-        {portrait && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-950/85 text-center text-white">
-            <RotateCcw size={40} className="animate-pulse text-emerald-400" />
-            <p className="px-8 text-sm">Roda o telemóvel para teres mais espaço para desenhar.</p>
-            <button
-              type="button"
-              onClick={() => setPortrait(false)}
-              className="rounded-md border border-slate-500 px-3 py-1.5 text-xs"
-            >
-              Continuar assim
+        {confirmClear && (
+          <div className="absolute left-1/2 top-2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 shadow-xl">
+            <span className="text-xs text-white">Limpar tudo?</span>
+            <button type="button" onClick={handleClear} className="rounded bg-red-600 px-2 py-1 text-xs font-medium text-white">
+              Limpar
+            </button>
+            <button type="button" onClick={() => setConfirmClear(false)} className="rounded px-2 py-1 text-xs text-slate-300 hover:bg-slate-700">
+              Não
             </button>
           </div>
         )}
-      </div>
 
-      {/* Footer */}
-      <div className="border-t border-slate-700 bg-slate-900 px-3 py-2">
         {selectedElement && (
-          <div className="mb-2 flex items-center gap-2">
+          <div className="pointer-events-auto absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-xl border border-slate-700 bg-slate-800/95 px-2 py-1.5 shadow-xl">
             {selectedElement.kind === "text" ? (
               <input
                 value={selectedElement.text}
                 onChange={(e) => updateTextValue(e.target.value)}
                 placeholder="Texto da etiqueta"
-                className="flex-1 rounded-md bg-slate-800 px-2 py-1.5 text-sm text-white placeholder:text-slate-500 focus:outline-none"
+                className="w-40 rounded-md bg-slate-700 px-2 py-1 text-sm text-white placeholder:text-slate-400 focus:outline-none"
               />
             ) : (
-              <span className="flex-1 text-xs text-slate-400">Elemento selecionado</span>
+              <span className="px-1 text-xs text-slate-300">Selecionado</span>
             )}
             <button
               type="button"
               onClick={deleteSelected}
-              className="rounded-md bg-slate-800 px-2 py-1.5 text-xs text-red-400 hover:bg-slate-700"
+              className="flex items-center gap-1 rounded-md bg-slate-700 px-2 py-1 text-xs text-red-400 hover:bg-slate-600"
             >
-              <Trash2 size={14} className="mr-1 inline" /> Remover
+              <Trash2 size={14} /> Remover
             </button>
           </div>
         )}
-        <div className="flex gap-2">
-          {exitActions.map((action) => {
-            const Icon = action.icon;
-            return (
-              <Button
-                key={action.key}
-                type="button"
-                onClick={() => handleExitAction(action)}
-                disabled={busyState}
-                variant={action.primary ? "default" : "outline"}
-                className={`flex-1 ${action.primary ? "bg-emerald-600 hover:bg-emerald-700" : "border-slate-600 bg-slate-800 text-white hover:bg-slate-700"}`}
-              >
-                {busyState ? (
-                  <Loader2 size={16} className="mr-2 animate-spin" />
-                ) : Icon ? (
-                  <Icon size={16} className="mr-2" />
-                ) : null}
-                {action.label}
-              </Button>
-            );
-          })}
-        </div>
       </div>
+
+      {/* Popovers ancorados (fixed) + backdrop */}
+      {openPopover && (
+        <>
+          <div className="fixed inset-0 z-[105]" onPointerDown={() => setOpenPopover(null)} />
+          <div
+            className="fixed z-[106] rounded-lg border border-slate-700 bg-slate-800 p-2 shadow-xl"
+            style={{ left: openPopover.left, top: openPopover.top, width: POPOVER_W }}
+          >
+            {openPopover.kind === "arrow" ? (
+              <div className="flex flex-col gap-1">
+                {ARROW_OPTIONS.map((o) => (
+                  <button
+                    key={o.value}
+                    type="button"
+                    onClick={() => {
+                      setTool({ kind: "arrow", variant: o.value });
+                      setOpenPopover(null);
+                    }}
+                    className={`rounded-md px-3 py-2 text-left text-sm ${
+                      tool.kind === "arrow" && tool.variant === o.value
+                        ? "bg-emerald-600 text-white"
+                        : "text-slate-200 hover:bg-slate-700"
+                    }`}
+                  >
+                    {o.label}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {COLOR_SWATCHES.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setColor(c)}
+                    className="h-8 w-8 rounded-full border-2"
+                    style={{ background: c, borderColor: diagram.color === c ? "#fff" : "transparent" }}
+                    aria-label={`Cor ${c}`}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </div>,
     document.body,
   );
@@ -951,56 +1022,35 @@ function EditorOverlay({ initialDiagram, title, onClose, exitActions, busy }: Ex
 
 // ── Subcomponentes ────────────────────────────────────────────────────────────
 
+function Divider() {
+  return <div className="mx-0.5 h-6 w-px shrink-0 bg-slate-600" />;
+}
+
 function ToolButton({
   active,
   onClick,
   icon: Icon,
   label,
+  disabled,
 }: {
   active: boolean;
-  onClick: () => void;
+  onClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
   icon: typeof Check;
   label: string;
+  disabled?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
       aria-label={label}
       title={label}
-      className={`flex shrink-0 flex-col items-center justify-center rounded-md px-2 py-1 text-[10px] ${
+      className={`flex shrink-0 items-center justify-center rounded-md p-2 disabled:opacity-30 ${
         active ? "bg-emerald-600 text-white" : "text-slate-300 hover:bg-slate-700"
       }`}
     >
       <Icon size={18} />
-    </button>
-  );
-}
-
-function PopoverRow({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex items-center gap-2 border-t border-slate-700 px-3 py-2">{children}</div>
-  );
-}
-
-function ChipButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs ${
-        active ? "bg-emerald-600 text-white" : "bg-slate-700 text-slate-200"
-      }`}
-    >
-      {children}
     </button>
   );
 }
