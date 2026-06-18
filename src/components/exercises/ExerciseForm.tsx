@@ -2,12 +2,20 @@
 
 import { useState, useCallback, useRef } from "react";
 import NextImage from "next/image";
-import { Loader2, Upload, X, Image as ImageIcon } from "lucide-react";
+import { Check, Loader2, Pencil, PencilRuler, Upload, X, Image as ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CATEGORY_OPTIONS, ORIENTATION_OPTIONS, REGIME_OPTIONS } from "./category-labels";
-import type { Exercise, ExerciseCategory, ExerciseOrientation, ExerciseRegime } from "@/types/database";
+import type {
+  Exercise,
+  ExerciseCategory,
+  ExerciseDiagram,
+  ExerciseOrientation,
+  ExerciseRegime,
+} from "@/types/database";
+import { ExerciseEditor } from "@/components/editor/ExerciseEditor";
+import { pngBlobToFile } from "@/lib/editor/export";
 
 export type ExerciseFormValues = {
   name: string;
@@ -24,6 +32,8 @@ export type ExerciseFormValues = {
   field_dimensions: string;
   material: string;
   diagram_url: string;
+  diagram_json: ExerciseDiagram | null;
+  diagram_type: "image" | "editor" | null;
   orientation: string;
   regime: string;
   notes: string;
@@ -44,6 +54,8 @@ const EMPTY_FORM: ExerciseFormValues = {
   field_dimensions: "",
   material: "",
   diagram_url: "",
+  diagram_json: null,
+  diagram_type: null,
   orientation: "",
   regime: "",
   notes: "",
@@ -65,6 +77,8 @@ function exerciseToForm(ex: Exercise): ExerciseFormValues {
     field_dimensions: ex.field_dimensions ?? "",
     material: ex.material ?? "",
     diagram_url: ex.diagram_url ?? "",
+    diagram_json: ex.diagram_json ?? null,
+    diagram_type: ex.diagram_type ?? null,
     orientation: ex.orientation ?? "",
     regime: ex.regime ?? "",
     notes: ex.notes ?? "",
@@ -73,17 +87,19 @@ function exerciseToForm(ex: Exercise): ExerciseFormValues {
 
 type Props = {
   exercise?: Exercise | null;
+  prefill?: Partial<ExerciseFormValues>;
   onSubmit: (values: ExerciseFormValues) => Promise<void>;
   onCancel: () => void;
   submitting?: boolean;
 };
 
-export function ExerciseForm({ exercise, onSubmit, onCancel, submitting }: Props) {
+export function ExerciseForm({ exercise, prefill, onSubmit, onCancel, submitting }: Props) {
   const [values, setValues] = useState<ExerciseFormValues>(
-    exercise ? exerciseToForm(exercise) : EMPTY_FORM,
+    exercise ? exerciseToForm(exercise) : { ...EMPTY_FORM, ...prefill },
   );
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   function set<K extends keyof ExerciseFormValues>(key: K, value: ExerciseFormValues[K]) {
@@ -103,7 +119,13 @@ export function ExerciseForm({ exercise, onSubmit, onCancel, submitting }: Props
         });
         const json = await res.json();
         if (json.success && json.url) {
-          set("diagram_url", json.url);
+          // Upload manual: imagem estática, sem JSON reeditável.
+          setValues((prev) => ({
+            ...prev,
+            diagram_url: json.url,
+            diagram_json: null,
+            diagram_type: "image",
+          }));
         }
       } finally {
         setUploading(false);
@@ -111,6 +133,34 @@ export function ExerciseForm({ exercise, onSubmit, onCancel, submitting }: Props
     },
     [uploading],
   );
+
+  // Renderiza o PNG do editor, faz upload e guarda o JSON reeditável.
+  const handleEditorComplete = useCallback(async (diagram: ExerciseDiagram, png: Blob) => {
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", pngBlobToFile(png, "diagrama.png"));
+      const res = await fetch("/api/exercises/upload-image", {
+        method: "POST",
+        body: formData,
+      });
+      const json = await res.json();
+      if (json.success && json.url) {
+        setValues((prev) => ({
+          ...prev,
+          diagram_url: json.url,
+          diagram_json: diagram,
+          diagram_type: "editor",
+        }));
+      }
+    } finally {
+      setUploading(false);
+    }
+  }, []);
+
+  function removeDiagram() {
+    setValues((prev) => ({ ...prev, diagram_url: "", diagram_json: null, diagram_type: null }));
+  }
 
   function handleDrop(e: React.DragEvent) {
     e.preventDefault();
@@ -136,6 +186,7 @@ export function ExerciseForm({ exercise, onSubmit, onCancel, submitting }: Props
   const textareaClass = "w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500";
 
   return (
+    <>
     <form onSubmit={handleSubmit} className="space-y-5">
       {/* Informação geral */}
       <fieldset className="space-y-3">
@@ -243,26 +294,53 @@ export function ExerciseForm({ exercise, onSubmit, onCancel, submitting }: Props
             <div className="relative h-48 w-full">
               <NextImage src={values.diagram_url} alt="Diagrama tático" fill className="rounded object-contain" />
             </div>
-            <button type="button" onClick={() => set("diagram_url", "")} className="absolute top-1 right-1 rounded-full bg-white/80 p-1 text-slate-500 hover:text-red-500">
-              <X size={16} />
-            </button>
+            <div className="absolute top-1 right-1 flex gap-1">
+              {values.diagram_type === "editor" && values.diagram_json && (
+                <button
+                  type="button"
+                  onClick={() => setEditorOpen(true)}
+                  className="rounded-full bg-white/90 p-1 text-emerald-600 hover:text-emerald-700"
+                  aria-label="Editar diagrama"
+                >
+                  <Pencil size={16} />
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={removeDiagram}
+                className="rounded-full bg-white/80 p-1 text-slate-500 hover:text-red-500"
+                aria-label="Remover diagrama"
+              >
+                <X size={16} />
+              </button>
+            </div>
           </div>
         ) : (
-          <div
-            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={handleDrop}
-            onClick={() => fileInputRef.current?.click()}
-            className={`flex cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed p-6 transition-colors ${dragOver ? "border-emerald-400 bg-emerald-50" : "border-slate-200 bg-slate-50 hover:border-slate-300"}`}
-          >
-            {uploading ? (
-              <Loader2 size={24} className="animate-spin text-slate-400" />
-            ) : (
-              <>
-                <ImageIcon size={24} className="text-slate-300" />
-                <span className="text-xs text-slate-400">Arrasta ou clica para enviar imagem (max 5MB)</span>
-              </>
-            )}
+          <div className="grid grid-cols-2 gap-2">
+            <div
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+              className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-5 transition-colors ${dragOver ? "border-emerald-400 bg-emerald-50" : "border-slate-200 bg-slate-50 hover:border-slate-300"}`}
+            >
+              {uploading ? (
+                <Loader2 size={22} className="animate-spin text-slate-400" />
+              ) : (
+                <>
+                  <ImageIcon size={22} className="text-slate-300" />
+                  <span className="text-center text-xs text-slate-400">Adicionar imagem<br />(max 5MB)</span>
+                </>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setEditorOpen(true)}
+              className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-emerald-200 bg-emerald-50/50 p-5 text-emerald-700 transition-colors hover:border-emerald-400"
+            >
+              <PencilRuler size={22} />
+              <span className="text-center text-xs font-medium">Abrir editor</span>
+            </button>
           </div>
         )}
         <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp" onChange={handleFileChange} className="hidden" />
@@ -282,5 +360,27 @@ export function ExerciseForm({ exercise, onSubmit, onCancel, submitting }: Props
         </Button>
       </div>
     </form>
+
+      <ExerciseEditor
+        open={editorOpen}
+        title="Diagrama do exercício"
+        initialDiagram={values.diagram_type === "editor" ? values.diagram_json : null}
+        onClose={() => setEditorOpen(false)}
+        busy={uploading}
+        exitActions={[
+          {
+            key: "done",
+            label: "Concluir",
+            primary: true,
+            icon: Check,
+            run: async ({ diagram, renderPng }) => {
+              const png = await renderPng();
+              await handleEditorComplete(diagram, png);
+              setEditorOpen(false);
+            },
+          },
+        ]}
+      />
+    </>
   );
 }

@@ -17,6 +17,46 @@ const ORIENTATION_VALUES = ["recovery", "strength", "endurance", "speed", "flexi
 const REGIME_VALUES = ["aerobic", "anaerobic_lactic", "anaerobic_alactic"] as const;
 const STATUS_VALUES = ["active", "archived"] as const;
 
+// Diagrama do editor (jsonb reeditável). Validado por kind; só o PNG
+// (diagram_url) é consumido pela UT — este JSON serve para reabrir/editar.
+const diagramElementSchema = z.discriminatedUnion("kind", [
+  z.object({
+    id: z.string(),
+    kind: z.literal("player"),
+    team: z.enum(["home", "away"]),
+    x: z.number(),
+    y: z.number(),
+    label: z.string().optional(),
+  }),
+  z.object({ id: z.string(), kind: z.literal("ball"), x: z.number(), y: z.number() }),
+  z.object({ id: z.string(), kind: z.literal("cone"), x: z.number(), y: z.number() }),
+  z.object({ id: z.string(), kind: z.literal("text"), x: z.number(), y: z.number(), text: z.string() }),
+  z.object({
+    id: z.string(),
+    kind: z.literal("zone"),
+    x: z.number(),
+    y: z.number(),
+    w: z.number(),
+    h: z.number(),
+  }),
+  z.object({
+    id: z.string(),
+    kind: z.literal("arrow"),
+    variant: z.enum(["move", "pass", "dribble"]),
+    x1: z.number(),
+    y1: z.number(),
+    x2: z.number(),
+    y2: z.number(),
+  }),
+]);
+
+export const exerciseDiagramSchema = z.object({
+  v: z.literal(1),
+  preset: z.enum(["full", "half", "area", "free"]),
+  color: z.string(),
+  elements: z.array(diagramElementSchema),
+});
+
 export const createExerciseSchema = z.object({
   name: z.string().min(1, "Nome é obrigatório"),
   category: z.enum(EXERCISE_CATEGORIES),
@@ -32,6 +72,8 @@ export const createExerciseSchema = z.object({
   field_dimensions: z.string().nullish(),
   material: z.string().nullish(),
   diagram_url: z.string().url().nullish(),
+  diagram_json: exerciseDiagramSchema.nullish(),
+  diagram_type: z.enum(["image", "editor"]).nullish(),
   orientation: z.enum(ORIENTATION_VALUES).nullish(),
   regime: z.enum(REGIME_VALUES).nullish(),
   notes: z.string().nullish(),

@@ -3,18 +3,20 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { Loader2, Plus, Search, BookOpen, Clock, Users } from "lucide-react";
+import { Loader2, Plus, PencilRuler, Search, BookOpen, Clock, Users, Check, Share2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AppModal } from "@/components/ui/app-modal";
 import { ExerciseForm, type ExerciseFormValues } from "@/components/exercises/ExerciseForm";
+import { ExerciseEditor } from "@/components/editor/ExerciseEditor";
+import { pngBlobToFile } from "@/lib/editor/export";
 import {
   CATEGORY_LABELS,
   CATEGORY_COLORS,
   CATEGORY_OPTIONS,
 } from "@/components/exercises/category-labels";
 import { createClient } from "@/lib/supabase/client";
-import type { Exercise, ExerciseCategory } from "@/types/database";
+import type { Exercise, ExerciseCategory, ExerciseDiagram } from "@/types/database";
 import { toast } from "sonner";
 import { useListStateSync } from "@/hooks/useListStateSync";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
@@ -35,6 +37,55 @@ export default function ExercisesPage() {
   const [submitting, setSubmitting] = useState(false);
 
   const [detailExercise, setDetailExercise] = useState<Exercise | null>(null);
+
+  const [standaloneEditorOpen, setStandaloneEditorOpen] = useState(false);
+  const [createPrefill, setCreatePrefill] = useState<Partial<ExerciseFormValues> | undefined>(
+    undefined,
+  );
+
+  const uploadPng = useCallback(async (blob: Blob): Promise<string | null> => {
+    const formData = new FormData();
+    formData.append("file", pngBlobToFile(blob, "diagrama.png"));
+    const res = await fetch("/api/exercises/upload-image", { method: "POST", body: formData });
+    const json = await res.json();
+    return json.success && json.url ? (json.url as string) : null;
+  }, []);
+
+  const sharePng = useCallback(async (blob: Blob) => {
+    const file = pngBlobToFile(blob, "exercicio.png");
+    if (typeof navigator !== "undefined" && navigator.canShare?.({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file] });
+      } catch {
+        /* partilha cancelada pelo utilizador */
+      }
+      return;
+    }
+    // Fallback desktop: download direto.
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "exercicio.png";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }, []);
+
+  const createFromDiagram = useCallback(
+    async (diagram: ExerciseDiagram, blob: Blob) => {
+      const url = await uploadPng(blob);
+      if (!url) {
+        toast.error("Erro ao guardar diagrama.");
+        return;
+      }
+      setCreatePrefill({ diagram_url: url, diagram_json: diagram, diagram_type: "editor" });
+      setStandaloneEditorOpen(false);
+      setEditingExercise(null);
+      setModalOpen(true);
+    },
+    [uploadPng],
+  );
 
   const fetchExercises = useCallback(async () => {
     try {
@@ -102,6 +153,8 @@ export default function ExercisesPage() {
         field_dimensions: values.field_dimensions || null,
         material: values.material || null,
         diagram_url: values.diagram_url || null,
+        diagram_json: values.diagram_json,
+        diagram_type: values.diagram_type,
         orientation: values.orientation || null,
         regime: values.regime || null,
         notes: values.notes || null,
@@ -128,6 +181,7 @@ export default function ExercisesPage() {
         );
         setModalOpen(false);
         setEditingExercise(null);
+        setCreatePrefill(undefined);
         fetchExercises();
         router.refresh();
       } else {
@@ -164,13 +218,19 @@ export default function ExercisesPage() {
       <div className="p-4 md:p-8 max-w-4xl mx-auto">
         <div className="mb-6 flex items-center justify-between gap-3">
           <h1 className="text-2xl font-bold text-slate-900">Exercícios</h1>
-          <Button
-            className="bg-emerald-600 hover:bg-emerald-700"
-            onClick={openCreate}
-          >
-            <Plus size={16} className="mr-2" />
-            Novo Exercício
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setStandaloneEditorOpen(true)}>
+              <PencilRuler size={16} className="mr-2" />
+              Editor
+            </Button>
+            <Button
+              className="bg-emerald-600 hover:bg-emerald-700"
+              onClick={openCreate}
+            >
+              <Plus size={16} className="mr-2" />
+              Novo Exercício
+            </Button>
+          </div>
         </div>
 
         {/* Filters */}
@@ -278,19 +338,49 @@ export default function ExercisesPage() {
         onClose={() => {
           setModalOpen(false);
           setEditingExercise(null);
+          setCreatePrefill(undefined);
         }}
         panelClassName="max-w-lg"
       >
         <ExerciseForm
           exercise={editingExercise}
+          prefill={editingExercise ? undefined : createPrefill}
           onSubmit={handleSubmit}
           onCancel={() => {
             setModalOpen(false);
             setEditingExercise(null);
+            setCreatePrefill(undefined);
           }}
           submitting={submitting}
         />
       </AppModal>
+
+      {/* Editor standalone */}
+      <ExerciseEditor
+        open={standaloneEditorOpen}
+        title="Editor de diagrama"
+        initialDiagram={null}
+        onClose={() => setStandaloneEditorOpen(false)}
+        exitActions={[
+          {
+            key: "share",
+            label: "Partilhar",
+            icon: Share2,
+            run: async ({ renderPng }) => {
+              await sharePng(await renderPng());
+            },
+          },
+          {
+            key: "create",
+            label: "Criar exercício",
+            primary: true,
+            icon: Check,
+            run: async ({ diagram, renderPng }) => {
+              await createFromDiagram(diagram, await renderPng());
+            },
+          },
+        ]}
+      />
 
       {/* Detail modal */}
       <AppModal

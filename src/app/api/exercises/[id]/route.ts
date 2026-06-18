@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { checkPermission, checkReadAccess } from "@/lib/auth/require-permission";
 import { createClient } from "@/lib/supabase/server";
+import { exerciseDiagramSchema } from "@/lib/exercises/shared";
 import { respondInternalError } from "@/lib/http/respond-internal-error";
 
 const EXERCISE_CATEGORIES = [
@@ -32,6 +33,8 @@ const UpdateExerciseSchema = z.object({
   field_dimensions: z.string().nullish(),
   material: z.string().nullish(),
   diagram_url: z.string().url().nullish(),
+  diagram_json: exerciseDiagramSchema.nullish(),
+  diagram_type: z.enum(["image", "editor"]).nullish(),
   orientation: z.enum(["recovery", "strength", "endurance", "speed", "flexibility", "other"]).nullish(),
   regime: z.enum(["aerobic", "anaerobic_lactic", "anaerobic_alactic"]).nullish(),
   notes: z.string().nullish(),
@@ -39,7 +42,7 @@ const UpdateExerciseSchema = z.object({
 });
 
 const SELECT_FIELDS =
-  "id, club_id, age_group_id, created_by, name, description, objectives, success_criteria, category, subcategory, game_format, duration_minutes, rest_minutes, min_players, max_players, field_dimensions, material, diagram_url, orientation, regime, notes, status, is_shared, created_at, updated_at";
+  "id, club_id, age_group_id, created_by, name, description, objectives, success_criteria, category, subcategory, game_format, duration_minutes, rest_minutes, min_players, max_players, field_dimensions, material, diagram_url, diagram_json, diagram_type, orientation, regime, notes, status, is_shared, created_at, updated_at";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
