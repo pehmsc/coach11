@@ -1,3 +1,7 @@
+import type { ExerciseDiagram } from "./editor";
+
+export type { ExerciseDiagram } from "./editor";
+
 export type UserRole = "coordinator" | "coach" | "player" | "parent";
 export type PlayerStatus = "active" | "injured" | "suspended" | "inactive";
 export type AttendanceStatus = "present" | "late" | "absent" | "injured";
@@ -437,6 +441,8 @@ export interface Exercise {
   field_dimensions?: string | null;
   material?: string | null;
   diagram_url?: string | null;
+  diagram_json: ExerciseDiagram | null;
+  diagram_type: "image" | "editor" | null;
   orientation?: ExerciseOrientation | null;
   regime?: ExerciseRegime | null;
   notes?: string | null;
