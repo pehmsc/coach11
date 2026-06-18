@@ -11,7 +11,10 @@ import {
 } from "@/types/editor";
 
 const FIELD_PRESETS: readonly FieldPreset[] = ["full", "half", "area", "free"];
-const ARROW_VARIANTS: readonly ArrowVariant[] = ["move", "pass", "dribble"];
+const ARROW_VARIANTS: readonly ArrowVariant[] = ["move", "pass", "dribble", "line"];
+const PLAYER_STYLES: readonly string[] = ["circle", "jersey"];
+const PLAYER_SIZES: readonly string[] = ["s", "m", "l"];
+const OBJECT_SHAPES: readonly string[] = ["cone-stick", "mannequin", "goal", "ring"];
 
 export const HISTORY_LIMIT = 30;
 
@@ -68,6 +71,8 @@ function validateElement(raw: unknown): DiagramElement | null {
         y: el.y,
         ...color,
         ...(typeof el.label === "string" ? { label: el.label } : {}),
+        ...(PLAYER_STYLES.includes(el.style as string) ? { style: el.style as "circle" | "jersey" } : {}),
+        ...(PLAYER_SIZES.includes(el.size as string) ? { size: el.size as "s" | "m" | "l" } : {}),
       };
     case "ball":
       if (!isFiniteNumber(el.x) || !isFiniteNumber(el.y)) return null;
@@ -107,6 +112,17 @@ function validateElement(raw: unknown): DiagramElement | null {
         y1: el.y1,
         x2: el.x2,
         y2: el.y2,
+        ...color,
+      };
+    case "object":
+      if (!isFiniteNumber(el.x) || !isFiniteNumber(el.y)) return null;
+      if (!OBJECT_SHAPES.includes(el.shape as string)) return null;
+      return {
+        id,
+        kind: "object",
+        x: el.x,
+        y: el.y,
+        shape: el.shape as "cone-stick" | "mannequin" | "goal" | "ring",
         ...color,
       };
     default:

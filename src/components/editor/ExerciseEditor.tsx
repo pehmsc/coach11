@@ -5,7 +5,6 @@ import { createPortal } from "react-dom";
 import {
   Check,
   CircleDot,
-  Cone,
   Eye,
   EyeOff,
   LandPlot,
@@ -17,6 +16,7 @@ import {
   MoveUpRight,
   Palette,
   RotateCw,
+  Shapes,
   Shirt,
   Square,
   Trash2,
@@ -30,6 +30,9 @@ import {
   type DiagramElement,
   type ExerciseDiagram,
   type FieldPreset,
+  type ObjectShape,
+  type PlayerSize,
+  type PlayerStyle,
 } from "@/types/editor";
 import {
   canUndo,
@@ -63,6 +66,20 @@ const ARROW_OPTIONS: { value: ArrowVariant; label: string }[] = [
   { value: "move", label: "Movimento" },
   { value: "pass", label: "Passe" },
   { value: "dribble", label: "Condução" },
+  { value: "line", label: "Linha" },
+];
+// Popover "Objetos": cone (kind próprio) + 4 objetos de treino.
+const OBJECT_OPTIONS: { value: "cone" | ObjectShape; label: string }[] = [
+  { value: "cone", label: "Cone" },
+  { value: "cone-stick", label: "Vara" },
+  { value: "mannequin", label: "Manequim" },
+  { value: "goal", label: "Baliza" },
+  { value: "ring", label: "Arco" },
+];
+const PLAYER_SIZE_OPTIONS: { value: PlayerSize; label: string }[] = [
+  { value: "s", label: "P" },
+  { value: "m", label: "M" },
+  { value: "l", label: "G" },
 ];
 
 // Vendor-prefixos de Fullscreen (Safari) — tipados, sem `any`.
@@ -97,7 +114,8 @@ type Tool =
   | { kind: "cone" }
   | { kind: "zone" }
   | { kind: "arrow"; variant: ArrowVariant }
-  | { kind: "text" };
+  | { kind: "text" }
+  | { kind: "object"; shape: ObjectShape };
 
 type Gesture =
   | { type: "none" }
@@ -209,7 +227,13 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
   const [running, setRunning] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [hideRotateHint, setHideRotateHint] = useState(false);
-  const [openPopover, setOpenPopover] = useState<{ kind: "arrow" | "color"; left: number; top: number } | null>(null);
+  const [playerStyle, setPlayerStyle] = useState<PlayerStyle>("circle");
+  const [playerSize, setPlayerSize] = useState<PlayerSize>("m");
+  const [openPopover, setOpenPopover] = useState<{
+    kind: "arrow" | "color" | "object" | "player";
+    left: number;
+    top: number;
+  } | null>(null);
   const [showHints, setShowHints] = useState(() => {
     try {
       return localStorage.getItem(HINTS_KEY) !== "1";
@@ -298,20 +322,46 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
   }, []);
 
   // ── Geometria ─────────────────────────────────────────────────────────────
-  // Campo num espaço de autoria FIXO 120×80. O SVG usa cover (slice): o campo
-  // enche o ecrã e o excesso é recortado (escala uniforme → tokens redondos). Em
-  // portrait roda-se o CONTEÚDO em espaço SVG (viewBox 80×120 + transform no grupo),
-  // mantendo getScreenCTM() válido para o mapeamento do ponteiro.
+  // Campo num espaço de autoria FIXO 120×80, CONTIDO (nada cortado): o viewBox
+  // estende-se ao rácio do contentor (sem letterbox) e as marcações enchem a
+  // dimensão limitante. A relva é contínua a cobrir todo o viewBox visível. Em
+  // portrait roda-se o CONTEÚDO em espaço SVG (viewBox 80×120 + transform no
+  // grupo), mantendo getScreenCTM() válido para o mapeamento do ponteiro.
   const portrait = canvasSize.h > canvasSize.w;
-  const baseViewBox = useMemo<ViewBox>(
-    () => (portrait ? { x: 0, y: 0, w: BASE_H, h: BASE_W } : { x: 0, y: 0, w: BASE_W, h: BASE_H }),
-    [portrait],
-  );
+  const baseViewBox = useMemo<ViewBox>(() => {
+    const bw = portrait ? BASE_H : BASE_W; // dims do campo no espaço RAIZ da orientação
+    const bh = portrait ? BASE_W : BASE_H;
+    const { w, h } = canvasSize;
+    if (!w || !h) return { x: 0, y: 0, w: bw, h: bh };
+    const aspect = w / h;
+    const baseAspect = bw / bh;
+    if (aspect >= baseAspect) {
+      const vbW = bh * aspect;
+      return { x: (bw - vbW) / 2, y: 0, w: vbW, h: bh };
+    }
+    const vbH = bw / aspect;
+    return { x: 0, y: (bh - vbH) / 2, w: bw, h: vbH };
+  }, [canvasSize, portrait]);
   const renderViewBox = userViewBox ?? baseViewBox;
   const contentTransform = portrait ? `translate(${BASE_H} 0) rotate(90)` : undefined;
 
-  // Escala real no ecrã (cover = max): px por unidade de campo. Igual à escala do
-  // CTM do grupo; calculada analiticamente para evitar setState em efeito.
+  // Extent da relva em coords de CAMPO (dentro do grupo, rodado em portrait). Em
+  // portrait inverte a rotação (root→field: x=ry, y=80−rx). Une com o campo 0–120/0–80
+  // para a relva cobrir SEMPRE o campo (export 120×80 fica cheio mesmo com zoom).
+  const grassExtent = useMemo<ViewBox>(() => {
+    const rvb = renderViewBox;
+    const ge = portrait
+      ? { x: rvb.y, y: BASE_H - (rvb.x + rvb.w), w: rvb.h, h: rvb.w }
+      : rvb;
+    const x0 = Math.min(ge.x, 0);
+    const y0 = Math.min(ge.y, 0);
+    const x1 = Math.max(ge.x + ge.w, BASE_W);
+    const y1 = Math.max(ge.y + ge.h, BASE_H);
+    return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+  }, [portrait, renderViewBox]);
+
+  // Escala real no ecrã (contido = aspect do viewBox igual ao do contentor):
+  // px por unidade de campo. Analítica para evitar setState em efeito.
   const pxPerUnit = canvasSize.w
     ? Math.max(canvasSize.w / renderViewBox.w, canvasSize.h / renderViewBox.h)
     : 0;
@@ -399,13 +449,17 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
       const color = diagram.color;
       switch (t.kind) {
         case "player":
-          addElement({ id, kind: "player", team: "home", x, y, color });
+          addElement({ id, kind: "player", team: "home", x, y, color, style: playerStyle, size: playerSize });
           break;
         case "ball":
           addElement({ id, kind: "ball", x, y });
           break;
         case "cone":
           addElement({ id, kind: "cone", x, y });
+          break;
+        case "object":
+          // Objetos = cor de identidade fixa, sem snapshot da paleta.
+          addElement({ id, kind: "object", x, y, shape: t.shape });
           break;
         case "text":
           addElement({ id, kind: "text", x, y, text: "Texto", color });
@@ -425,7 +479,7 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
           break;
       }
     },
-    [addElement, diagram.color, diagram.elements, showGuides],
+    [addElement, diagram.color, diagram.elements, playerSize, playerStyle, showGuides],
   );
 
   // ── Pointer handlers ──────────────────────────────────────────────────────
@@ -758,7 +812,38 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
     [commit, diagram],
   );
 
-  const togglePopover = useCallback((kind: "arrow" | "color", btn: HTMLElement) => {
+  // Estilo/tamanho do jogador: define o default ativo e, se o selecionado for um
+  // jogador, atualiza-o (1 commit) — à semelhança do setColor.
+  const applyPlayerStyle = useCallback(
+    (style: PlayerStyle) => {
+      setPlayerStyle(style);
+      if (selectedId) {
+        commit({
+          ...diagram,
+          elements: diagram.elements.map((el): DiagramElement =>
+            el.id === selectedId && el.kind === "player" ? { ...el, style } : el,
+          ),
+        });
+      }
+    },
+    [commit, diagram, selectedId],
+  );
+  const applyPlayerSize = useCallback(
+    (size: PlayerSize) => {
+      setPlayerSize(size);
+      if (selectedId) {
+        commit({
+          ...diagram,
+          elements: diagram.elements.map((el): DiagramElement =>
+            el.id === selectedId && el.kind === "player" ? { ...el, size } : el,
+          ),
+        });
+      }
+    },
+    [commit, diagram, selectedId],
+  );
+
+  const togglePopover = useCallback((kind: "arrow" | "color" | "object" | "player", btn: HTMLElement) => {
     setOpenPopover((cur) => {
       if (cur?.kind === kind) return null;
       const rect = btn.getBoundingClientRect();
@@ -833,9 +918,22 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
       <div className="flex items-start gap-1 border-b border-slate-700 bg-slate-800 px-2 py-2">
         <div className="flex flex-1 flex-wrap items-center gap-1">
           <ToolButton active={tool.kind === "select"} onClick={() => setTool({ kind: "select" })} icon={MousePointer2} label="Selecionar" />
-          <ToolButton active={tool.kind === "player"} onClick={() => setTool({ kind: "player" })} icon={Shirt} label="Jogador" />
+          <ToolButton
+            active={tool.kind === "player"}
+            onClick={(e) => {
+              setTool({ kind: "player" });
+              togglePopover("player", e.currentTarget);
+            }}
+            icon={Shirt}
+            label="Jogador"
+          />
           <ToolButton active={tool.kind === "ball"} onClick={() => setTool({ kind: "ball" })} icon={CircleDot} label="Bola" />
-          <ToolButton active={tool.kind === "cone"} onClick={() => setTool({ kind: "cone" })} icon={Cone} label="Cone" />
+          <ToolButton
+            active={tool.kind === "cone" || tool.kind === "object"}
+            onClick={(e) => togglePopover("object", e.currentTarget)}
+            icon={Shapes}
+            label="Objetos"
+          />
           <ToolButton active={tool.kind === "zone"} onClick={() => setTool({ kind: "zone" })} icon={Square} label="Zona" />
           <ToolButton
             active={tool.kind === "arrow"}
@@ -940,7 +1038,7 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
         <svg
           ref={svgRef}
           viewBox={`${renderViewBox.x} ${renderViewBox.y} ${renderViewBox.w} ${renderViewBox.h}`}
-          preserveAspectRatio="xMidYMid slice"
+          preserveAspectRatio="xMidYMid meet"
           className="h-full w-full touch-none select-none"
           style={{ WebkitTouchCallout: "none", WebkitUserSelect: "none" }}
           onPointerDown={onPointerDown}
@@ -952,7 +1050,7 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
               campo 0–120/0–80. Em portrait roda 90° em espaço SVG. O export remove
               este transform (data-editor-content) para sair sempre landscape. */}
           <g ref={contentRef} data-editor-content transform={contentTransform}>
-          <FieldPresetLayer preset={diagram.preset} showMarkings={showMarkings} />
+          <FieldPresetLayer preset={diagram.preset} showMarkings={showMarkings} extent={grassExtent} />
 
           {diagram.elements.map((el) => (
             <g key={el.id} data-el-id={el.id} ref={setElementRef(el.id)}>
@@ -1046,7 +1144,7 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
             className="fixed z-[106] rounded-lg border border-slate-700 bg-slate-800 p-2 shadow-xl"
             style={{ left: openPopover.left, top: openPopover.top, width: POPOVER_W }}
           >
-            {openPopover.kind === "arrow" ? (
+            {openPopover.kind === "arrow" && (
               <div className="flex flex-col gap-1">
                 {ARROW_OPTIONS.map((o) => (
                   <button
@@ -1066,7 +1164,63 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
                   </button>
                 ))}
               </div>
-            ) : (
+            )}
+            {openPopover.kind === "object" && (
+              <div className="flex flex-col gap-1">
+                {OBJECT_OPTIONS.map((o) => {
+                  const isActive =
+                    o.value === "cone" ? tool.kind === "cone" : tool.kind === "object" && tool.shape === o.value;
+                  return (
+                    <button
+                      key={o.value}
+                      type="button"
+                      onClick={() => {
+                        setTool(o.value === "cone" ? { kind: "cone" } : { kind: "object", shape: o.value });
+                        setOpenPopover(null);
+                      }}
+                      className={`rounded-md px-3 py-2 text-left text-sm ${
+                        isActive ? "bg-emerald-600 text-white" : "text-slate-200 hover:bg-slate-700"
+                      }`}
+                    >
+                      {o.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {openPopover.kind === "player" && (
+              <div className="flex flex-col gap-2">
+                <div className="flex gap-1">
+                  {(["circle", "jersey"] as const).map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => applyPlayerStyle(s)}
+                      className={`flex-1 rounded-md px-2 py-1.5 text-xs ${
+                        playerStyle === s ? "bg-emerald-600 text-white" : "bg-slate-700 text-slate-200"
+                      }`}
+                    >
+                      {s === "circle" ? "Círculo" : "Camisola"}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex gap-1">
+                  {PLAYER_SIZE_OPTIONS.map((o) => (
+                    <button
+                      key={o.value}
+                      type="button"
+                      onClick={() => applyPlayerSize(o.value)}
+                      className={`flex-1 rounded-md px-2 py-1.5 text-xs ${
+                        playerSize === o.value ? "bg-emerald-600 text-white" : "bg-slate-700 text-slate-200"
+                      }`}
+                    >
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {openPopover.kind === "color" && (
               <div className="flex flex-wrap gap-2">
                 {COLOR_SWATCHES.map((c) => (
                   <button
