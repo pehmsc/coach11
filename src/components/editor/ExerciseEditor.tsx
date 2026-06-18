@@ -45,7 +45,6 @@ import {
   clamp,
   distance,
   screenToSvgPoint,
-  zoomViewBoxAround,
   type Point,
   type ViewBox,
 } from "@/lib/editor/geometry";
@@ -134,9 +133,32 @@ type Gesture =
       startDist: number;
       focus: Point;
       startViewBox: ViewBox;
+      fit: ViewBox;
     };
 
 type SnapResult = { snapX: number | null; snapY: number | null };
+
+// Zoom (pinch) relativo ao frame visível (fitViewBox), preservando o aspect e
+// limitado ao próprio frame. Inline aqui — não toca em geometry.ts (que assume
+// origem 0,0; o fitViewBox em landscape tem origem negativa).
+function zoomWithinFit(
+  startVB: ViewBox,
+  fit: ViewBox,
+  focusX: number,
+  focusY: number,
+  factor: number,
+  maxScale = 4,
+): ViewBox {
+  const minW = fit.w / maxScale;
+  const newW = clamp(startVB.w / factor, minW, fit.w);
+  const scale = startVB.w === 0 ? 1 : newW / startVB.w;
+  const newH = startVB.h * scale;
+  const fx = startVB.w === 0 ? 0.5 : (focusX - startVB.x) / startVB.w;
+  const fy = startVB.h === 0 ? 0.5 : (focusY - startVB.y) / startVB.h;
+  const x = clamp(focusX - fx * newW, fit.x, fit.x + fit.w - newW);
+  const y = clamp(focusY - fy * newH, fit.y, fit.y + fit.h - newH);
+  return { x, y, w: newW, h: newH };
+}
 
 function elementCenter(el: DiagramElement): Point {
   if (el.kind === "zone") return { x: el.x + el.w / 2, y: el.y + el.h / 2 };
@@ -180,13 +202,14 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
 
   const [tool, setTool] = useState<Tool>({ kind: "select" });
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [viewBox, setViewBox] = useState<ViewBox>(FULL_VIEWBOX);
+  const [userViewBox, setUserViewBox] = useState<ViewBox | null>(null);
+  const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
   const [showMarkings, setShowMarkings] = useState(true);
   const [showGuides, setShowGuides] = useState(true);
   const [confirmClear, setConfirmClear] = useState(false);
   const [running, setRunning] = useState(false);
-  const [svgWidthPx, setSvgWidthPx] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isImmersive, setIsImmersive] = useState(false);
   const [openPopover, setOpenPopover] = useState<{ kind: "arrow" | "color"; left: number; top: number } | null>(null);
   const [showHints, setShowHints] = useState(() => {
     try {
@@ -207,12 +230,7 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
   const gesture = useRef<Gesture>({ type: "none" });
   const rafId = useRef<number | null>(null);
   const pendingFn = useRef<(() => void) | null>(null);
-
-  const fullscreenSupported = useMemo(() => {
-    if (typeof document === "undefined") return false;
-    const d = document as FullscreenDocument;
-    return Boolean(document.fullscreenEnabled || d.webkitFullscreenEnabled);
-  }, []);
+  const lastPinchVB = useRef<ViewBox | null>(null);
 
   // ── Histórico ───────────────────────────────────────────────────────────
   const commit = useCallback((next: ExerciseDiagram) => {
@@ -244,8 +262,11 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
     const el = svgRef.current;
     if (!el) return;
     const ro = new ResizeObserver((entries) => {
-      const w = entries[0]?.contentRect.width;
-      if (w) setSvgWidthPx(w);
+      const cr = entries[0]?.contentRect;
+      if (cr && cr.width && cr.height) {
+        setCanvasSize({ w: cr.width, h: cr.height });
+        setUserViewBox(null); // rotação/resize → repõe o enquadramento (fit)
+      }
     });
     ro.observe(el);
     return () => ro.disconnect();
@@ -270,10 +291,27 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
   }, []);
 
   // ── Geometria ─────────────────────────────────────────────────────────────
+  // Enquadramento responsivo: o viewBox segue o rácio do contentor (edge-to-edge,
+  // sem barras), com o campo 120×80 centrado. As marcações ficam fixas em
+  // 0–120/0–80; só muda o enquadramento. O pinch guarda userViewBox (senão segue o fit).
+  const fitViewBox = useMemo<ViewBox>(() => {
+    const { w, h } = canvasSize;
+    if (!w || !h) return FULL_VIEWBOX;
+    const aspect = w / h;
+    if (aspect >= BASE_W / BASE_H) {
+      const vbW = BASE_H * aspect;
+      return { x: (BASE_W - vbW) / 2, y: 0, w: vbW, h: BASE_H };
+    }
+    const vbH = BASE_W / aspect;
+    return { x: 0, y: (BASE_H - vbH) / 2, w: BASE_W, h: vbH };
+  }, [canvasSize]);
+
+  const renderViewBox = userViewBox ?? fitViewBox;
+
   const hitRadius = useMemo(() => {
-    if (!svgWidthPx) return PLAYER_R + 2;
-    return clamp((44 * viewBox.w) / svgWidthPx, PLAYER_R + 1, 9);
-  }, [svgWidthPx, viewBox.w]);
+    if (!canvasSize.w) return PLAYER_R + 2;
+    return clamp((44 * renderViewBox.w) / canvasSize.w, PLAYER_R + 1, 9);
+  }, [canvasSize.w, renderViewBox.w]);
 
   const svgPoint = useCallback((clientX: number, clientY: number): Point => {
     const svg = svgRef.current;
@@ -409,7 +447,8 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
           idB: ids[1],
           startDist: distance(a.x, a.y, b.x, b.y),
           focus: mid,
-          startViewBox: viewBox,
+          startViewBox: renderViewBox,
+          fit: fitViewBox,
         };
         return;
       }
@@ -460,7 +499,7 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
         moved: false,
       };
     },
-    [cancelTransientDom, diagram.elements, dismissHints, selectedId, showHints, svgPoint, tool, viewBox],
+    [cancelTransientDom, diagram.elements, dismissHints, fitViewBox, renderViewBox, selectedId, showHints, svgPoint, tool],
   );
 
   const applyDrag = useCallback((id: string, dx: number, dy: number) => {
@@ -517,10 +556,8 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
         if (!a || !b) return;
         const dist = distance(a.x, a.y, b.x, b.y);
         const factor = g.startDist === 0 ? 1 : dist / g.startDist;
-        const next = zoomViewBoxAround(g.startViewBox, g.focus.x, g.focus.y, factor, {
-          baseW: BASE_W,
-          baseH: BASE_H,
-        });
+        const next = zoomWithinFit(g.startViewBox, g.fit, g.focus.x, g.focus.y, factor);
+        lastPinchVB.current = next;
         scheduleApply(() => {
           svgRef.current?.setAttribute("viewBox", `${next.x} ${next.y} ${next.w} ${next.h}`);
         });
@@ -574,12 +611,9 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
   );
 
   const endPinch = useCallback(() => {
-    const svg = svgRef.current;
-    if (!svg) return;
-    const vb = svg.getAttribute("viewBox");
-    if (vb) {
-      const [x, y, w, h] = vb.split(/\s+/).map(Number);
-      setViewBox({ x, y, w, h });
+    if (lastPinchVB.current) {
+      setUserViewBox(lastPinchVB.current);
+      lastPinchVB.current = null;
     }
   }, []);
 
@@ -723,16 +757,27 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
 
   const toggleFullscreen = useCallback(() => {
     const d = document as FullscreenDocument;
-    const active = Boolean(document.fullscreenElement || d.webkitFullscreenElement);
-    if (active) {
-      if (document.exitFullscreen) void document.exitFullscreen().catch(() => {});
-      else d.webkitExitFullscreen?.();
-    } else {
-      const el = rootRef.current as FullscreenElement | null;
-      if (!el) return;
-      if (el.requestFullscreen) void el.requestFullscreen().catch(() => {});
-      else el.webkitRequestFullscreen?.();
+    const nativeSupported = Boolean(document.fullscreenEnabled || d.webkitFullscreenEnabled);
+    if (nativeSupported) {
+      const active = Boolean(document.fullscreenElement || d.webkitFullscreenElement);
+      if (active) {
+        if (document.exitFullscreen) void document.exitFullscreen().catch(() => {});
+        else d.webkitExitFullscreen?.();
+      } else {
+        const el = rootRef.current as FullscreenElement | null;
+        if (!el) return;
+        if (el.requestFullscreen) void el.requestFullscreen().catch(() => {});
+        else el.webkitRequestFullscreen?.();
+      }
+      return;
     }
+    // Sem Fullscreen API (iOS Safari): modo imersivo best-effort — cobre o
+    // viewport (100dvh) e tenta recolher a barra do Safari.
+    setIsImmersive((prev) => {
+      const nextVal = !prev;
+      if (nextVal) setTimeout(() => window.scrollTo(0, 1), 0);
+      return nextVal;
+    });
   }, []);
 
   const selectedElement = useMemo(
@@ -782,9 +827,10 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
       className="fixed inset-x-0 top-0 z-[100] flex flex-col bg-slate-900"
       style={{ height: "100dvh", overscrollBehavior: "contain" }}
     >
-      {/* Toolbar única: desenho/opções/undo-limpar (scroll) + ações (fixo) */}
-      <div className="flex items-stretch gap-1 border-b border-slate-700 bg-slate-800 px-2 py-2">
-        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+      {/* Toolbar única: desenho/opções/undo-limpar (wrap) + ações (fixo).
+          flex-wrap em vez de scroll horizontal → nada fica escondido em portrait. */}
+      <div className="flex items-start gap-1 border-b border-slate-700 bg-slate-800 px-2 py-2">
+        <div className="flex flex-1 flex-wrap items-center gap-1">
           <ToolButton active={tool.kind === "select"} onClick={() => setTool({ kind: "select" })} icon={MousePointer2} label="Selecionar" />
           <ToolButton active={tool.kind === "player"} onClick={() => setTool({ kind: "player" })} icon={Shirt} label="Jogador" />
           <ToolButton active={tool.kind === "ball"} onClick={() => setTool({ kind: "ball" })} icon={CircleDot} label="Bola" />
@@ -832,9 +878,12 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
 
           <ToolButton active={showGuides} onClick={() => setShowGuides((s) => !s)} icon={Magnet} label="Guias" />
           <ToolButton active={!showMarkings} onClick={() => setShowMarkings((s) => !s)} icon={showMarkings ? Eye : EyeOff} label="Marcações" />
-          {fullscreenSupported && (
-            <ToolButton active={isFullscreen} onClick={toggleFullscreen} icon={isFullscreen ? Minimize : Maximize} label="Ecrã inteiro" />
-          )}
+          <ToolButton
+            active={isFullscreen || isImmersive}
+            onClick={toggleFullscreen}
+            icon={isFullscreen || isImmersive ? Minimize : Maximize}
+            label="Ecrã inteiro"
+          />
 
           <Divider />
 
@@ -887,7 +936,7 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
       <div className="relative min-h-0 flex-1 overflow-hidden bg-slate-950">
         <svg
           ref={svgRef}
-          viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`}
+          viewBox={`${renderViewBox.x} ${renderViewBox.y} ${renderViewBox.w} ${renderViewBox.h}`}
           preserveAspectRatio="xMidYMid meet"
           className="h-full w-full touch-none select-none"
           style={{ WebkitTouchCallout: "none", WebkitUserSelect: "none" }}
@@ -896,7 +945,7 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerCancel}
         >
-          <FieldPresetLayer preset={diagram.preset} showMarkings={showMarkings} />
+          <FieldPresetLayer preset={diagram.preset} showMarkings={showMarkings} extent={renderViewBox} />
 
           {diagram.elements.map((el) => (
             <g key={el.id} data-el-id={el.id} ref={setElementRef(el.id)}>
