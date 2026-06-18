@@ -54,6 +54,7 @@ function validateElement(raw: unknown): DiagramElement | null {
   const el = raw as Record<string, unknown>;
   const kind = el.kind as DiagramElementKind;
   const id = typeof el.id === "string" && el.id ? el.id : newElementId();
+  const color = typeof el.color === "string" ? { color: el.color } : {};
 
   switch (kind) {
     case "player":
@@ -65,21 +66,29 @@ function validateElement(raw: unknown): DiagramElement | null {
         team: el.team,
         x: el.x,
         y: el.y,
+        ...color,
         ...(typeof el.label === "string" ? { label: el.label } : {}),
       };
     case "ball":
       if (!isFiniteNumber(el.x) || !isFiniteNumber(el.y)) return null;
-      return { id, kind: "ball", x: el.x, y: el.y };
+      return { id, kind: "ball", x: el.x, y: el.y, ...color };
     case "cone":
       if (!isFiniteNumber(el.x) || !isFiniteNumber(el.y)) return null;
-      return { id, kind: "cone", x: el.x, y: el.y };
+      return { id, kind: "cone", x: el.x, y: el.y, ...color };
     case "text":
       if (!isFiniteNumber(el.x) || !isFiniteNumber(el.y)) return null;
-      return { id, kind: "text", x: el.x, y: el.y, text: typeof el.text === "string" ? el.text : "" };
+      return {
+        id,
+        kind: "text",
+        x: el.x,
+        y: el.y,
+        text: typeof el.text === "string" ? el.text : "",
+        ...color,
+      };
     case "zone":
       if (!isFiniteNumber(el.x) || !isFiniteNumber(el.y)) return null;
       if (!isFiniteNumber(el.w) || !isFiniteNumber(el.h)) return null;
-      return { id, kind: "zone", x: el.x, y: el.y, w: el.w, h: el.h };
+      return { id, kind: "zone", x: el.x, y: el.y, w: el.w, h: el.h, ...color };
     case "arrow":
       if (
         !isFiniteNumber(el.x1) ||
@@ -98,6 +107,7 @@ function validateElement(raw: unknown): DiagramElement | null {
         y1: el.y1,
         x2: el.x2,
         y2: el.y2,
+        ...color,
       };
     default:
       return null;
