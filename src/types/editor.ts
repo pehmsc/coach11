@@ -10,7 +10,17 @@ export type ArrowVariant = "move" | "pass" | "dribble" | "line";
 
 export type PlayerStyle = "circle" | "jersey";
 export type PlayerSize = "s" | "m" | "l";
-export type ObjectShape = "cone-stick" | "mannequin" | "goal" | "ring";
+export type ObjectShape =
+  | "chapeu"
+  | "cone-stick"
+  | "baliza-a"
+  | "baliza-b"
+  | "mannequin"
+  | "vara"
+  | "arcos"
+  | "stairs"
+  | "ring"
+  | "mark";
 
 // `color?` é um snapshot da paleta no momento da criação — cada elemento guarda
 // a sua cor para coexistirem várias equipas/cores no mesmo diagrama. O render lê
