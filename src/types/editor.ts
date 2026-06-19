@@ -29,11 +29,11 @@ export type ObjectShape =
 export type DiagramElement =
   | { id: string; kind: "player"; team: "home" | "away"; x: number; y: number; label?: string; color?: string; style?: PlayerStyle; size?: PlayerSize }
   | { id: string; kind: "ball"; x: number; y: number; color?: string }
-  | { id: string; kind: "cone"; x: number; y: number; color?: string }
+  | { id: string; kind: "cone"; x: number; y: number; color?: string; rotation?: number }
   | { id: string; kind: "text"; x: number; y: number; text: string; color?: string }
-  | { id: string; kind: "zone"; x: number; y: number; w: number; h: number; color?: string }
-  | { id: string; kind: "arrow"; variant: ArrowVariant; x1: number; y1: number; x2: number; y2: number; color?: string }
-  | { id: string; kind: "object"; x: number; y: number; shape: ObjectShape; color?: string };
+  | { id: string; kind: "zone"; x: number; y: number; w: number; h: number; color?: string; rotation?: number }
+  | { id: string; kind: "arrow"; variant: ArrowVariant; x1: number; y1: number; x2: number; y2: number; color?: string; cx?: number; cy?: number }
+  | { id: string; kind: "object"; x: number; y: number; shape: ObjectShape; color?: string; rotation?: number };
 
 export type DiagramElementKind = DiagramElement["kind"];
 

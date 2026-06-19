@@ -32,7 +32,14 @@ const diagramElementSchema = z.discriminatedUnion("kind", [
     size: z.enum(["s", "m", "l"]).optional(),
   }),
   z.object({ id: z.string(), kind: z.literal("ball"), x: z.number(), y: z.number(), color: z.string().optional() }),
-  z.object({ id: z.string(), kind: z.literal("cone"), x: z.number(), y: z.number(), color: z.string().optional() }),
+  z.object({
+    id: z.string(),
+    kind: z.literal("cone"),
+    x: z.number(),
+    y: z.number(),
+    color: z.string().optional(),
+    rotation: z.number().optional(),
+  }),
   z.object({
     id: z.string(),
     kind: z.literal("object"),
@@ -51,6 +58,7 @@ const diagramElementSchema = z.discriminatedUnion("kind", [
       "mark",
     ]),
     color: z.string().optional(),
+    rotation: z.number().optional(),
   }),
   z.object({
     id: z.string(),
@@ -68,6 +76,7 @@ const diagramElementSchema = z.discriminatedUnion("kind", [
     w: z.number(),
     h: z.number(),
     color: z.string().optional(),
+    rotation: z.number().optional(),
   }),
   z.object({
     id: z.string(),
@@ -78,6 +87,8 @@ const diagramElementSchema = z.discriminatedUnion("kind", [
     x2: z.number(),
     y2: z.number(),
     color: z.string().optional(),
+    cx: z.number().optional(),
+    cy: z.number().optional(),
   }),
 ]);
 

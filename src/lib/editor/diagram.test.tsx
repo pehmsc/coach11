@@ -67,6 +67,33 @@ describe("(de)serialização do diagrama", () => {
     expect(parseDiagram(serializeDiagram(d))).toEqual(d);
   });
 
+  it("preserva rotation (object/cone/zone) no round-trip", () => {
+    const d: ExerciseDiagram = {
+      v: 1,
+      preset: "full",
+      color: "#000000",
+      elements: [
+        { id: "o1", kind: "object", x: 10, y: 10, shape: "baliza-a", rotation: 45 },
+        { id: "c1", kind: "cone", x: 20, y: 20, rotation: 90 },
+        { id: "z1", kind: "zone", x: 2, y: 2, w: 20, h: 10, rotation: 30 },
+      ],
+    };
+    expect(parseDiagram(serializeDiagram(d))).toEqual(d);
+  });
+
+  it("preserva seta curva (cx/cy) no round-trip", () => {
+    const d: ExerciseDiagram = {
+      v: 1,
+      preset: "full",
+      color: "#000000",
+      elements: [
+        { id: "a1", kind: "arrow", variant: "pass", x1: 10, y1: 10, x2: 50, y2: 50, cx: 30, cy: 10 },
+        { id: "a2", kind: "arrow", variant: "line", x1: 0, y1: 0, x2: 20, y2: 0 },
+      ],
+    };
+    expect(parseDiagram(serializeDiagram(d))).toEqual(d);
+  });
+
   it("descarta object com shape inválido (ex.: goal removido)", () => {
     const parsed = parseDiagram({
       v: 1,

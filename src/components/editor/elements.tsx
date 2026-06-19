@@ -193,20 +193,38 @@ export const OBJECT_ART: Record<"cone" | ObjectShape, TokenArt> = {
   },
 };
 
-/** Desenha um token (svg aninhado) centrado em (x,y), à escala de campo. */
-export function TokenSvg({ x, y, token, fill }: { x: number; y: number; token: TokenArt; fill: string }) {
+function parseViewBox(vb: string) {
+  const [x, y, w, h] = vb.split(/[ ,]+/).map(Number);
+  return { x, y, w, h };
+}
+
+/**
+ * Desenha um token via <g transform> (não <svg> aninhado) centrado em (x,y), à
+ * escala de campo. Roda com o grupo de conteúdo (rotação de orientação em
+ * portrait) e aceita rotação própria do elemento — o WebKit não rodava o <svg>
+ * aninhado com o grupo, daí esta abordagem.
+ */
+export function TokenG({
+  x,
+  y,
+  token,
+  fill,
+  rotation = 0,
+}: {
+  x: number;
+  y: number;
+  token: TokenArt;
+  fill: string;
+  rotation?: number;
+}) {
+  const vb = parseViewBox(token.viewBox);
+  const s = Math.min(token.w / vb.w, token.h / vb.h); // meet (uniforme)
+  const cx = vb.x + vb.w / 2;
+  const cy = vb.y + vb.h / 2;
   return (
-    <svg
-      x={x - token.w / 2}
-      y={y - token.h / 2}
-      width={token.w}
-      height={token.h}
-      viewBox={token.viewBox}
-      preserveAspectRatio="xMidYMid meet"
-      style={{ overflow: "visible" }}
-    >
+    <g transform={`translate(${x} ${y}) rotate(${rotation}) scale(${s}) translate(${-cx} ${-cy})`}>
       {token.art(fill)}
-    </svg>
+    </g>
   );
 }
 
@@ -233,30 +251,43 @@ function dribbleSteps(len: number): number {
   return dribbleWaves(len) * 8;
 }
 
-/** Posição ao longo da seta em t∈[0,1]. Linear para move/pass, sinusóide na condução. */
-function arrowPointAt(el: ArrowElement, t: number): { x: number; y: number } {
-  const { x1, y1, x2, y2, variant } = el;
-  if (variant !== "dribble") {
-    return { x: x1 + (x2 - x1) * t, y: y1 + (y2 - y1) * t };
+/** Ponto + tangente da base da seta em t∈[0,1]: reta, ou Bézier quadrático se há cx/cy. */
+function baseAt(el: ArrowElement, t: number): { px: number; py: number; tx: number; ty: number } {
+  if (el.cx == null || el.cy == null) {
+    return { px: el.x1 + (el.x2 - el.x1) * t, py: el.y1 + (el.y2 - el.y1) * t, tx: el.x2 - el.x1, ty: el.y2 - el.y1 };
   }
-  const len = Math.hypot(x2 - x1, y2 - y1);
-  if (len < 0.5) return { x: x1 + (x2 - x1) * t, y: y1 + (y2 - y1) * t };
-  const ux = (x2 - x1) / len;
-  const uy = (y2 - y1) / len;
-  const px = -uy; // perpendicular unitário
-  const py = ux;
-  const off = Math.sin(t * dribbleWaves(len) * Math.PI * 2) * DRIBBLE_AMP;
-  return { x: x1 + ux * len * t + px * off, y: y1 + uy * len * t + py * off };
+  const mt = 1 - t;
+  return {
+    px: mt * mt * el.x1 + 2 * mt * t * el.cx + t * t * el.x2,
+    py: mt * mt * el.y1 + 2 * mt * t * el.cy + t * t * el.y2,
+    tx: 2 * mt * (el.cx - el.x1) + 2 * t * (el.x2 - el.cx),
+    ty: 2 * mt * (el.cy - el.y1) + 2 * t * (el.y2 - el.cy),
+  };
+}
+
+/** Posição ao longo da seta em t∈[0,1]. Base (reta/curva) + onda na condução. */
+function arrowPointAt(el: ArrowElement, t: number): { x: number; y: number } {
+  const b = baseAt(el, t);
+  if (el.variant !== "dribble") return { x: b.px, y: b.py };
+  const chord = Math.hypot(el.x2 - el.x1, el.y2 - el.y1);
+  if (chord < 0.5) return { x: b.px, y: b.py };
+  const tl = Math.hypot(b.tx, b.ty) || 1;
+  const px = -b.ty / tl; // perpendicular à tangente local
+  const py = b.tx / tl;
+  const off = Math.sin(t * dribbleWaves(chord) * Math.PI * 2) * DRIBBLE_AMP;
+  return { x: b.px + px * off, y: b.py + py * off };
 }
 
 export function arrowLinePath(el: ArrowElement): string {
   const { x1, y1, x2, y2, variant } = el;
   if (variant !== "dribble") {
-    return `M ${x1} ${y1} L ${x2} ${y2}`;
+    return el.cx != null && el.cy != null
+      ? `M ${x1} ${y1} Q ${el.cx} ${el.cy} ${x2} ${y2}`
+      : `M ${x1} ${y1} L ${x2} ${y2}`;
   }
-  const len = Math.hypot(x2 - x1, y2 - y1);
-  if (len < 0.5) return `M ${x1} ${y1} L ${x2} ${y2}`;
-  const steps = dribbleSteps(len);
+  const chord = Math.hypot(x2 - x1, y2 - y1);
+  if (chord < 0.5) return `M ${x1} ${y1} L ${x2} ${y2}`;
+  const steps = dribbleSteps(chord);
   let d = `M ${x1} ${y1}`;
   for (let i = 1; i <= steps; i += 1) {
     const p = arrowPointAt(el, i / steps);
@@ -265,14 +296,15 @@ export function arrowLinePath(el: ArrowElement): string {
   return d;
 }
 
-/** Direção real do FIM da linha (último segmento desenhado), para alinhar a ponta. */
+/** Direção real do FIM da linha, para alinhar a ponta (segue a curva quando há cx/cy). */
 function arrowEndTangent(el: ArrowElement): { x: number; y: number } {
   if (el.variant !== "dribble") {
-    return { x: el.x2 - el.x1, y: el.y2 - el.y1 };
+    const b = baseAt(el, 1);
+    return { x: b.tx, y: b.ty };
   }
-  const len = Math.hypot(el.x2 - el.x1, el.y2 - el.y1);
-  if (len < 0.5) return { x: el.x2 - el.x1, y: el.y2 - el.y1 };
-  const steps = dribbleSteps(len);
+  const chord = Math.hypot(el.x2 - el.x1, el.y2 - el.y1);
+  if (chord < 0.5) return { x: el.x2 - el.x1, y: el.y2 - el.y1 };
+  const steps = dribbleSteps(chord);
   const pEnd = arrowPointAt(el, 1);
   const pPrev = arrowPointAt(el, 1 - 1 / steps);
   return { x: pEnd.x - pPrev.x, y: pEnd.y - pPrev.y };
@@ -300,16 +332,16 @@ export function ElementShape({ el, color }: { el: DiagramElement; color: string 
       const fill = el.color ?? color;
       const r = PLAYER_SIZE_R[el.size ?? "m"];
       if ((el.style ?? "circle") === "jersey") {
-        return <TokenSvg x={el.x} y={el.y} token={{ ...JERSEY_ART, w: 2.0 * r, h: 2.3 * r }} fill={fill} />;
+        return <TokenG x={el.x} y={el.y} token={{ ...JERSEY_ART, w: 2.0 * r, h: 2.3 * r }} fill={fill} />;
       }
       return <circle cx={el.x} cy={el.y} r={r} fill={fill} stroke="#fff" strokeWidth={0.5} />;
     }
     case "ball":
-      return <TokenSvg x={el.x} y={el.y} token={BALL_ART} fill="#fff" />;
+      return <TokenG x={el.x} y={el.y} token={BALL_ART} fill="#fff" />;
     case "cone":
-      return <TokenSvg x={el.x} y={el.y} token={OBJECT_ART.cone} fill={el.color ?? color} />;
+      return <TokenG x={el.x} y={el.y} token={OBJECT_ART.cone} fill={el.color ?? color} rotation={el.rotation ?? 0} />;
     case "object":
-      return <TokenSvg x={el.x} y={el.y} token={OBJECT_ART[el.shape]} fill={el.color ?? color} />;
+      return <TokenG x={el.x} y={el.y} token={OBJECT_ART[el.shape]} fill={el.color ?? color} rotation={el.rotation ?? 0} />;
     case "text":
       return (
         <text
@@ -329,19 +361,23 @@ export function ElementShape({ el, color }: { el: DiagramElement; color: string 
       );
     case "zone": {
       const c = el.color ?? color;
+      const cx = el.x + el.w / 2;
+      const cy = el.y + el.h / 2;
       return (
-        <rect
-          x={el.x}
-          y={el.y}
-          width={el.w}
-          height={el.h}
-          fill={c}
-          fillOpacity={0.18}
-          stroke={c}
-          strokeWidth={0.5}
-          strokeDasharray="2 1.4"
-          rx={1}
-        />
+        <g transform={`rotate(${el.rotation ?? 0} ${cx} ${cy})`}>
+          <rect
+            x={el.x}
+            y={el.y}
+            width={el.w}
+            height={el.h}
+            fill={c}
+            fillOpacity={0.18}
+            stroke={c}
+            strokeWidth={0.5}
+            strokeDasharray="2 1.4"
+            rx={1}
+          />
+        </g>
       );
     }
     case "arrow": {

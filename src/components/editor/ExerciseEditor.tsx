@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import {
   Check,
   CircleDot,
+  Columns3,
   Eye,
   EyeOff,
   LandPlot,
@@ -16,6 +17,7 @@ import {
   MoveUpRight,
   Palette,
   RotateCw,
+  Rows3,
   Shapes,
   Shirt,
   Square,
@@ -54,6 +56,8 @@ import {
 } from "@/lib/editor/geometry";
 import {
   ARROW_STROKE,
+  arrowHeadPath,
+  arrowLinePath,
   ElementShape,
   JERSEY_ART,
   OBJECT_ART,
@@ -69,6 +73,8 @@ const DRAG_THRESHOLD_PX = 5;
 const SNAP_DIST = 1.5; // unidades de viewBox
 const POPOVER_W = 224;
 const HINTS_KEY = "coach11_editor_hints_seen";
+const GRID_V_KEY = "coach11_editor_grid_v";
+const GRID_H_KEY = "coach11_editor_grid_h";
 const COLOR_SWATCHES = ["#4E7BFF", "#16A34A", "#DC2626", "#F59E0B", "#7C3AED", "#0F172A", "#FFFFFF"];
 const ARROW_OPTIONS: { value: ArrowVariant; label: string }[] = [
   { value: "move", label: "Movimento" },
@@ -148,6 +154,20 @@ type Gesture =
       pointerId: number;
       startSvg: Point;
       orig: Extract<DiagramElement, { kind: "zone" }>;
+    }
+  | {
+      type: "element-rotate";
+      id: string;
+      pointerId: number;
+      cx: number;
+      cy: number;
+      startRotation: number;
+    }
+  | {
+      type: "arrow-handle";
+      id: string;
+      pointerId: number;
+      which: "a" | "b" | "c";
     }
   | {
       type: "bg-draw";
@@ -237,6 +257,20 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
   const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
   const [showMarkings, setShowMarkings] = useState(true);
   const [showGuides, setShowGuides] = useState(true);
+  const [gridV, setGridV] = useState(() => {
+    try {
+      return localStorage.getItem(GRID_V_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const [gridH, setGridH] = useState(() => {
+    try {
+      return localStorage.getItem(GRID_H_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
   const [confirmClear, setConfirmClear] = useState(false);
   const [running, setRunning] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -294,6 +328,29 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
     }
   }, []);
 
+  const toggleGridV = useCallback(() => {
+    setGridV((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem(GRID_V_KEY, next ? "1" : "0");
+      } catch {
+        /* sem persistência — não crítico */
+      }
+      return next;
+    });
+  }, []);
+  const toggleGridH = useCallback(() => {
+    setGridH((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem(GRID_H_KEY, next ? "1" : "0");
+      } catch {
+        /* sem persistência — não crítico */
+      }
+      return next;
+    });
+  }, []);
+
   // ── Efeitos (sem setState no corpo: tudo via callbacks de eventos) ────────
   useEffect(() => {
     const prev = document.body.style.overflow;
@@ -334,6 +391,20 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
       if (rafId.current != null) cancelAnimationFrame(rafId.current);
     };
   }, []);
+
+  // O editor vive dentro do AppModal (portal z-[140]); engole o Escape em CAPTURA
+  // para fechar o EDITOR (não o modal por baixo).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        e.preventDefault();
+        onClose();
+      }
+    };
+    document.addEventListener("keydown", onKey, true);
+    return () => document.removeEventListener("keydown", onKey, true);
+  }, [onClose]);
 
   // ── Geometria ─────────────────────────────────────────────────────────────
   // Campo num espaço de autoria FIXO 120×80, CONTIDO (nada cortado): o viewBox
@@ -539,16 +610,36 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
       const p = fieldPoint(e.clientX, e.clientY);
 
       if (handleNode && selectedId) {
+        const which = handleNode.getAttribute("data-handle");
         const orig = diagram.elements.find((el) => el.id === selectedId);
-        if (orig && orig.kind === "zone") {
-          gesture.current = {
-            type: "element-resize",
-            id: selectedId,
-            pointerId: e.pointerId,
-            startSvg: p,
-            orig,
-          };
-          return;
+        if (orig) {
+          if (which === "resize" && orig.kind === "zone") {
+            gesture.current = { type: "element-resize", id: selectedId, pointerId: e.pointerId, startSvg: p, orig };
+            return;
+          }
+          if (which === "rotate") {
+            const c = elementCenter(orig);
+            const startRotation =
+              orig.kind === "object" || orig.kind === "cone" || orig.kind === "zone" ? orig.rotation ?? 0 : 0;
+            gesture.current = {
+              type: "element-rotate",
+              id: selectedId,
+              pointerId: e.pointerId,
+              cx: c.x,
+              cy: c.y,
+              startRotation,
+            };
+            return;
+          }
+          if (which && which.startsWith("arrow-") && orig.kind === "arrow") {
+            gesture.current = {
+              type: "arrow-handle",
+              id: selectedId,
+              pointerId: e.pointerId,
+              which: which.slice(6) as "a" | "b" | "c",
+            };
+            return;
+          }
         }
       }
 
@@ -679,6 +770,40 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
         return;
       }
 
+      if (g.type === "element-rotate") {
+        const rot = (Math.atan2(p.y - g.cy, p.x - g.cx) * 180) / Math.PI + 90;
+        // Delta sobre a rotação atual (o shape já está rodado por startRotation).
+        const delta = rot - g.startRotation;
+        scheduleApply(() => {
+          elementRefs.current.get(g.id)?.setAttribute("transform", `rotate(${delta} ${g.cx} ${g.cy})`);
+        });
+        return;
+      }
+
+      if (g.type === "arrow-handle") {
+        const orig = diagram.elements.find((el) => el.id === g.id);
+        if (!orig || orig.kind !== "arrow") return;
+        const next = { ...orig };
+        if (g.which === "a") {
+          next.x1 = p.x;
+          next.y1 = p.y;
+        } else if (g.which === "b") {
+          next.x2 = p.x;
+          next.y2 = p.y;
+        } else {
+          next.cx = p.x;
+          next.cy = p.y;
+        }
+        scheduleApply(() => {
+          const node = elementRefs.current.get(g.id);
+          if (!node) return;
+          const paths = node.querySelectorAll<SVGPathElement>("path:not([data-export-ignore])");
+          if (paths[0]) paths[0].setAttribute("d", arrowLinePath(next));
+          if (paths[1]) paths[1].setAttribute("d", arrowHeadPath(next));
+        });
+        return;
+      }
+
       if (g.type === "bg-draw") {
         g.curSvg = p;
         if (!g.moved && distance(e.clientX, e.clientY, g.startClient.x, g.startClient.y) > DRAG_THRESHOLD_PX) {
@@ -742,6 +867,33 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
         const elements = diagram.elements.map((el) =>
           el.id === g.id && el.kind === "zone" ? { ...el, w, h } : el,
         );
+        commit({ ...diagram, elements });
+        return;
+      }
+
+      if (g.type === "element-rotate") {
+        elementRefs.current.get(g.id)?.removeAttribute("transform");
+        const p = fieldPoint(e.clientX, e.clientY);
+        const rot = Math.round((Math.atan2(p.y - g.cy, p.x - g.cx) * 180) / Math.PI + 90);
+        const elements = diagram.elements.map((el) =>
+          el.id === g.id && (el.kind === "object" || el.kind === "cone" || el.kind === "zone")
+            ? { ...el, rotation: rot }
+            : el,
+        );
+        commit({ ...diagram, elements });
+        return;
+      }
+
+      if (g.type === "arrow-handle") {
+        const p = fieldPoint(e.clientX, e.clientY);
+        const x = clamp(p.x, 0, BASE_W);
+        const y = clamp(p.y, 0, BASE_H);
+        const elements = diagram.elements.map((el): DiagramElement => {
+          if (el.id !== g.id || el.kind !== "arrow") return el;
+          if (g.which === "a") return { ...el, x1: x, y1: y };
+          if (g.which === "b") return { ...el, x2: x, y2: y };
+          return { ...el, cx: x, cy: y };
+        });
         commit({ ...diagram, elements });
         return;
       }
@@ -924,7 +1076,7 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
   return createPortal(
     <div
       ref={rootRef}
-      className="fixed inset-x-0 top-0 z-[100] flex flex-col bg-slate-900"
+      className="fixed inset-x-0 top-0 z-[150] flex flex-col bg-slate-900"
       style={{ height: "100dvh", overscrollBehavior: "contain" }}
     >
       {/* Toolbar única: desenho/opções/undo-limpar (wrap) + ações (fixo).
@@ -989,7 +1141,9 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
             <span className="h-3.5 w-3.5 rounded-full border border-white/40" style={{ background: diagram.color }} />
           </button>
 
-          <ToolButton active={showGuides} onClick={() => setShowGuides((s) => !s)} icon={Magnet} label="Guias" />
+          <ToolButton active={showGuides} onClick={() => setShowGuides((s) => !s)} icon={Magnet} label="Guias (snap)" />
+          <ToolButton active={gridV} onClick={toggleGridV} icon={Columns3} label="Grelha vertical" />
+          <ToolButton active={gridH} onClick={toggleGridH} icon={Rows3} label="Grelha horizontal" />
           <ToolButton active={!showMarkings} onClick={() => setShowMarkings((s) => !s)} icon={showMarkings ? Eye : EyeOff} label="Marcações" />
           {nativeFullscreenSupported && (
             <ToolButton
@@ -1066,6 +1220,38 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
           <g ref={contentRef} data-editor-content transform={contentTransform}>
           <FieldPresetLayer preset={diagram.preset} showMarkings={showMarkings} extent={grassExtent} />
 
+          {/* Grelha posicional (auxiliar de edição; não sai no PNG). */}
+          {gridV &&
+            [24, 42, 60, 78, 96].map((gx) => (
+              <line
+                key={`gv${gx}`}
+                data-export-ignore
+                x1={gx}
+                y1={4}
+                x2={gx}
+                y2={76}
+                stroke="#10b981"
+                strokeOpacity={0.35}
+                strokeWidth={0.18}
+                strokeDasharray="1.2 1.2"
+              />
+            ))}
+          {gridH &&
+            [18.4, 32.8, 47.2, 61.6].map((gy) => (
+              <line
+                key={`gh${gy}`}
+                data-export-ignore
+                x1={6}
+                y1={gy}
+                x2={114}
+                y2={gy}
+                stroke="#10b981"
+                strokeOpacity={0.35}
+                strokeWidth={0.18}
+                strokeDasharray="1.2 1.2"
+              />
+            ))}
+
           {diagram.elements.map((el) => (
             <g key={el.id} data-el-id={el.id} ref={setElementRef(el.id)}>
               <ElementShape el={el} color={diagram.color} />
@@ -1084,6 +1270,8 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
                   rx={0.6}
                 />
               )}
+              {selectedId === el.id && <RotateHandle el={el} radius={hitRadius} />}
+              {selectedId === el.id && <ArrowHandles el={el} radius={hitRadius} />}
             </g>
           ))}
 
@@ -1301,6 +1489,38 @@ function ToolButton({
   );
 }
 
+function ArrowHandles({ el, radius }: { el: DiagramElement; radius: number }) {
+  if (el.kind !== "arrow") return null;
+  const cxp = el.cx ?? (el.x1 + el.x2) / 2;
+  const cyp = el.cy ?? (el.y1 + el.y2) / 2;
+  const hit = Math.max(radius * 0.7, 3);
+  return (
+    <g data-export-ignore>
+      <circle cx={el.x1} cy={el.y1} r={1.3} fill="#10b981" />
+      <circle cx={el.x2} cy={el.y2} r={1.3} fill="#10b981" />
+      <circle cx={cxp} cy={cyp} r={1.3} fill="#fff" stroke="#10b981" strokeWidth={0.35} />
+      <circle data-handle="arrow-a" cx={el.x1} cy={el.y1} r={hit} fill="transparent" />
+      <circle data-handle="arrow-b" cx={el.x2} cy={el.y2} r={hit} fill="transparent" />
+      <circle data-handle="arrow-c" cx={cxp} cy={cyp} r={hit} fill="transparent" />
+    </g>
+  );
+}
+
+function RotateHandle({ el, radius }: { el: DiagramElement; radius: number }) {
+  if (el.kind !== "object" && el.kind !== "cone" && el.kind !== "zone") return null;
+  const cx = el.kind === "zone" ? el.x + el.w / 2 : el.x;
+  const cy = el.kind === "zone" ? el.y + el.h / 2 : el.y;
+  const off = el.kind === "zone" ? el.h / 2 + 4 : 7;
+  const hy = cy - off;
+  return (
+    <g data-export-ignore transform={`rotate(${el.rotation ?? 0} ${cx} ${cy})`}>
+      <line x1={cx} y1={cy} x2={cx} y2={hy} stroke="#10b981" strokeWidth={0.3} />
+      <circle cx={cx} cy={hy} r={1.3} fill="#10b981" />
+      <circle data-handle="rotate" cx={cx} cy={hy} r={Math.max(radius * 0.7, 3)} fill="transparent" />
+    </g>
+  );
+}
+
 function HitTarget({ el, radius }: { el: DiagramElement; radius: number }) {
   const common = { "data-export-ignore": true, fill: "transparent" } as const;
   if (el.kind === "zone") {
@@ -1338,12 +1558,8 @@ function SelectionOutline({ el }: { el: DiagramElement }) {
     );
   }
   if (el.kind === "arrow") {
-    return (
-      <g data-export-ignore fill={stroke}>
-        <circle cx={el.x1} cy={el.y1} r={1.1} />
-        <circle cx={el.x2} cy={el.y2} r={1.1} />
-      </g>
-    );
+    // Os handles (ArrowHandles) fornecem o visual de seleção da seta.
+    return null;
   }
   return (
     <circle
