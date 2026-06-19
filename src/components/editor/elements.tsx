@@ -193,20 +193,38 @@ export const OBJECT_ART: Record<"cone" | ObjectShape, TokenArt> = {
   },
 };
 
-/** Desenha um token (svg aninhado) centrado em (x,y), à escala de campo. */
-export function TokenSvg({ x, y, token, fill }: { x: number; y: number; token: TokenArt; fill: string }) {
+function parseViewBox(vb: string) {
+  const [x, y, w, h] = vb.split(/[ ,]+/).map(Number);
+  return { x, y, w, h };
+}
+
+/**
+ * Desenha um token via <g transform> (não <svg> aninhado) centrado em (x,y), à
+ * escala de campo. Roda com o grupo de conteúdo (rotação de orientação em
+ * portrait) e aceita rotação própria do elemento — o WebKit não rodava o <svg>
+ * aninhado com o grupo, daí esta abordagem.
+ */
+export function TokenG({
+  x,
+  y,
+  token,
+  fill,
+  rotation = 0,
+}: {
+  x: number;
+  y: number;
+  token: TokenArt;
+  fill: string;
+  rotation?: number;
+}) {
+  const vb = parseViewBox(token.viewBox);
+  const s = Math.min(token.w / vb.w, token.h / vb.h); // meet (uniforme)
+  const cx = vb.x + vb.w / 2;
+  const cy = vb.y + vb.h / 2;
   return (
-    <svg
-      x={x - token.w / 2}
-      y={y - token.h / 2}
-      width={token.w}
-      height={token.h}
-      viewBox={token.viewBox}
-      preserveAspectRatio="xMidYMid meet"
-      style={{ overflow: "visible" }}
-    >
+    <g transform={`translate(${x} ${y}) rotate(${rotation}) scale(${s}) translate(${-cx} ${-cy})`}>
       {token.art(fill)}
-    </svg>
+    </g>
   );
 }
 
@@ -300,16 +318,16 @@ export function ElementShape({ el, color }: { el: DiagramElement; color: string 
       const fill = el.color ?? color;
       const r = PLAYER_SIZE_R[el.size ?? "m"];
       if ((el.style ?? "circle") === "jersey") {
-        return <TokenSvg x={el.x} y={el.y} token={{ ...JERSEY_ART, w: 2.0 * r, h: 2.3 * r }} fill={fill} />;
+        return <TokenG x={el.x} y={el.y} token={{ ...JERSEY_ART, w: 2.0 * r, h: 2.3 * r }} fill={fill} />;
       }
       return <circle cx={el.x} cy={el.y} r={r} fill={fill} stroke="#fff" strokeWidth={0.5} />;
     }
     case "ball":
-      return <TokenSvg x={el.x} y={el.y} token={BALL_ART} fill="#fff" />;
+      return <TokenG x={el.x} y={el.y} token={BALL_ART} fill="#fff" />;
     case "cone":
-      return <TokenSvg x={el.x} y={el.y} token={OBJECT_ART.cone} fill={el.color ?? color} />;
+      return <TokenG x={el.x} y={el.y} token={OBJECT_ART.cone} fill={el.color ?? color} />;
     case "object":
-      return <TokenSvg x={el.x} y={el.y} token={OBJECT_ART[el.shape]} fill={el.color ?? color} />;
+      return <TokenG x={el.x} y={el.y} token={OBJECT_ART[el.shape]} fill={el.color ?? color} />;
     case "text":
       return (
         <text
