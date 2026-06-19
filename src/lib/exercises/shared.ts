@@ -77,6 +77,7 @@ const diagramElementSchema = z.discriminatedUnion("kind", [
     h: z.number(),
     color: z.string().optional(),
     rotation: z.number().optional(),
+    shape: z.enum(["rect", "ellipse"]).optional(),
   }),
   z.object({
     id: z.string(),

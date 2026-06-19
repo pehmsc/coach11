@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   Check,
-  CircleDot,
+  Circle,
   Columns3,
   Eye,
   EyeOff,
@@ -58,6 +58,7 @@ import {
   ARROW_STROKE,
   arrowHeadPath,
   arrowLinePath,
+  BALL_ART,
   ElementShape,
   JERSEY_ART,
   OBJECT_ART,
@@ -277,8 +278,9 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
   const [hideRotateHint, setHideRotateHint] = useState(false);
   const [playerStyle, setPlayerStyle] = useState<PlayerStyle>("circle");
   const [playerSize, setPlayerSize] = useState<PlayerSize>("m");
+  const [zoneShape, setZoneShape] = useState<"rect" | "ellipse">("rect");
   const [openPopover, setOpenPopover] = useState<{
-    kind: "arrow" | "color" | "object" | "player";
+    kind: "arrow" | "color" | "object" | "player" | "zone";
     left: number;
     top: number;
   } | null>(null);
@@ -558,13 +560,14 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
             w: ZONE_DEFAULT.w,
             h: ZONE_DEFAULT.h,
             color,
+            shape: zoneShape,
           });
           break;
         default:
           break;
       }
     },
-    [addElement, diagram.color, diagram.elements, playerSize, playerStyle, showGuides],
+    [addElement, diagram.color, diagram.elements, playerSize, playerStyle, showGuides, zoneShape],
   );
 
   // ── Pointer handlers ──────────────────────────────────────────────────────
@@ -923,12 +926,12 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
           const w = Math.abs(p.x - g.startSvg.x);
           const h = Math.abs(p.y - g.startSvg.y);
           if (w > 3 && h > 3) {
-            addElement({ id: newElementId(), kind: "zone", x, y, w, h, color: diagram.color });
+            addElement({ id: newElementId(), kind: "zone", x, y, w, h, color: diagram.color, shape: zoneShape });
           }
         }
       }
     },
-    [addElement, applyGuide, cancelTransientDom, commit, diagram, endPinch, placeAt, showGuides, fieldPoint],
+    [addElement, applyGuide, cancelTransientDom, commit, diagram, endPinch, placeAt, showGuides, fieldPoint, zoneShape],
   );
 
   const onPointerCancel = useCallback(
@@ -1009,7 +1012,7 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
     [commit, diagram, selectedId],
   );
 
-  const togglePopover = useCallback((kind: "arrow" | "color" | "object" | "player", btn: HTMLElement) => {
+  const togglePopover = useCallback((kind: "arrow" | "color" | "object" | "player" | "zone", btn: HTMLElement) => {
     setOpenPopover((cur) => {
       if (cur?.kind === kind) return null;
       const rect = btn.getBoundingClientRect();
@@ -1093,14 +1096,27 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
             icon={Shirt}
             label="Jogador"
           />
-          <ToolButton active={tool.kind === "ball"} onClick={() => setTool({ kind: "ball" })} icon={CircleDot} label="Bola" />
+          <ToolButton
+            active={tool.kind === "ball"}
+            onClick={() => setTool({ kind: "ball" })}
+            iconNode={<TokenIcon token={BALL_ART} className="h-5 w-5" />}
+            label="Bola"
+          />
           <ToolButton
             active={tool.kind === "cone" || tool.kind === "object"}
             onClick={(e) => togglePopover("object", e.currentTarget)}
             icon={Shapes}
             label="Objetos"
           />
-          <ToolButton active={tool.kind === "zone"} onClick={() => setTool({ kind: "zone" })} icon={Square} label="Zona" />
+          <ToolButton
+            active={tool.kind === "zone"}
+            onClick={(e) => {
+              setTool({ kind: "zone" });
+              togglePopover("zone", e.currentTarget);
+            }}
+            icon={Square}
+            label="Zona"
+          />
           <ToolButton
             active={tool.kind === "arrow"}
             onClick={(e) => {
@@ -1230,8 +1246,8 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
                 y1={4}
                 x2={gx}
                 y2={76}
-                stroke="#10b981"
-                strokeOpacity={0.35}
+                stroke="#fff"
+                strokeOpacity={0.5}
                 strokeWidth={0.18}
                 strokeDasharray="1.2 1.2"
               />
@@ -1245,8 +1261,8 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
                 y1={gy}
                 x2={114}
                 y2={gy}
-                stroke="#10b981"
-                strokeOpacity={0.35}
+                stroke="#fff"
+                strokeOpacity={0.5}
                 strokeWidth={0.18}
                 strokeDasharray="1.2 1.2"
               />
@@ -1432,6 +1448,31 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
                 </div>
               </div>
             )}
+            {openPopover.kind === "zone" && (
+              <div className="flex gap-1">
+                {([
+                  { value: "rect", label: "Quadrado", Icon: Square },
+                  { value: "ellipse", label: "Círculo", Icon: Circle },
+                ] as const).map((o) => (
+                  <button
+                    key={o.value}
+                    type="button"
+                    title={o.label}
+                    aria-label={o.label}
+                    onClick={() => {
+                      setZoneShape(o.value);
+                      setTool({ kind: "zone" });
+                      setOpenPopover(null);
+                    }}
+                    className={`flex flex-1 items-center justify-center rounded-md px-3 py-2 ${
+                      zoneShape === o.value ? "bg-emerald-600 text-white" : "bg-slate-700 text-slate-200"
+                    }`}
+                  >
+                    <o.Icon size={18} />
+                  </button>
+                ))}
+              </div>
+            )}
             {openPopover.kind === "color" && (
               <div className="flex flex-wrap gap-2">
                 {COLOR_SWATCHES.map((c) => (
@@ -1464,12 +1505,14 @@ function ToolButton({
   active,
   onClick,
   icon: Icon,
+  iconNode,
   label,
   disabled,
 }: {
   active: boolean;
   onClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
-  icon: typeof Check;
+  icon?: typeof Check;
+  iconNode?: React.ReactNode;
   label: string;
   disabled?: boolean;
 }) {
@@ -1484,7 +1527,7 @@ function ToolButton({
         active ? "bg-emerald-600 text-white" : "text-slate-300 hover:bg-slate-700"
       }`}
     >
-      <Icon size={18} />
+      {iconNode ?? (Icon ? <Icon size={18} /> : null)}
     </button>
   );
 }

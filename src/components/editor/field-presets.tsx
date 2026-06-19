@@ -8,7 +8,7 @@
 import type { FieldPreset } from "@/types/editor";
 
 const GRASS_DARK = "#2B542E";
-const GRASS_LIGHT = "#315B34";
+const GRASS_LIGHT = "#386A3D";
 const LINE = "#fff";
 
 type LayerExtent = { x: number; y: number; w: number; h: number };

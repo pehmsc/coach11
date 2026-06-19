@@ -12,9 +12,9 @@ import type { DiagramElement, ObjectShape } from "@/types/editor";
 
 export const PLAYER_R = 2.2; // raio "m" (default) — usado p/ seleção/hit aproximados
 export const PLAYER_SIZE_R: Record<"s" | "m" | "l", number> = { s: 1.7, m: 2.2, l: 2.8 };
-export const TEXT_SIZE = 3.6;
+export const TEXT_SIZE = 3.0;
 export const ZONE_DEFAULT = { w: 26, h: 18 };
-export const ARROW_STROKE = 0.55;
+export const ARROW_STROKE = 0.3;
 
 // ── Arte dos tokens (SVG autêntico, cor injetada) ───────────────────────────
 
@@ -37,8 +37,8 @@ export const JERSEY_ART: TokenArt = { viewBox: JERSEY_VIEWBOX, w: 4.4, h: 5.0, a
 // Bola: cores clássicas fixas (ignora o fill).
 export const BALL_ART: TokenArt = {
   viewBox: "0 0 1000 1000",
-  w: 3,
-  h: 3,
+  w: 2,
+  h: 2,
   art: () => (
     <>
       <circle cx="500" cy="500" r="485" stroke="#111827" strokeLinecap="square" strokeWidth="30" fill="#fff" />
@@ -95,8 +95,8 @@ export const OBJECT_ART: Record<"cone" | ObjectShape, TokenArt> = {
   },
   "baliza-a": {
     viewBox: "0 0 300 300",
-    w: 6.5,
-    h: 6.5,
+    w: 8.5,
+    h: 8.5,
     art: (fill) => (
       <g fill="none" stroke={fill} strokeWidth="5" strokeLinejoin="round">
         <polygon points="20 100,280 100,288 153,12 153" />
@@ -108,8 +108,8 @@ export const OBJECT_ART: Record<"cone" | ObjectShape, TokenArt> = {
   },
   "baliza-b": {
     viewBox: "0 0 146 146",
-    w: 5.5,
-    h: 5.5,
+    w: 7.5,
+    h: 7.5,
     art: (fill) => (
       <g fill="none" stroke={fill} strokeWidth="2.5" strokeLinejoin="round">
         <polygon points="17 38,129 38,131 75,15 75" />
@@ -121,8 +121,8 @@ export const OBJECT_ART: Record<"cone" | ObjectShape, TokenArt> = {
   },
   mannequin: {
     viewBox: "0 0 24 24",
-    w: 3.2,
-    h: 5,
+    w: 4.2,
+    h: 6.6,
     art: (fill) => (
       <g transform="translate(12 12) scale(0.03428571428571429) translate(-200 -350)">
         <circle cx="200" cy="60" r="40" fill={fill} />
@@ -137,8 +137,8 @@ export const OBJECT_ART: Record<"cone" | ObjectShape, TokenArt> = {
   },
   vara: {
     viewBox: "0 0 24 24",
-    w: 3,
-    h: 5,
+    w: 4,
+    h: 6.6,
     art: (fill) => (
       <g transform="translate(12 12) scale(0.04285714285714286) translate(-100 -280)">
         <rect x="80" y="40" width="40" height="450" rx="6" fill={fill} />
@@ -148,8 +148,8 @@ export const OBJECT_ART: Record<"cone" | ObjectShape, TokenArt> = {
   },
   arcos: {
     viewBox: "0 0 24 24",
-    w: 5,
-    h: 3,
+    w: 8,
+    h: 4.8,
     art: (fill) => (
       <g transform="translate(12 12) scale(0.03428571428571429) translate(-350 -180)" fill="none" stroke={fill} strokeWidth="12">
         <circle cx="130" cy="110" r="65" />
@@ -165,8 +165,8 @@ export const OBJECT_ART: Record<"cone" | ObjectShape, TokenArt> = {
   },
   stairs: {
     viewBox: "0 0 200 54",
-    w: 7,
-    h: 1.9,
+    w: 10,
+    h: 2.7,
     art: (fill) => (
       <g stroke={fill} strokeWidth="2" strokeLinejoin="round" fill="none">
         <line x1="10" y1="12" x2="190" y2="12" />
@@ -181,14 +181,14 @@ export const OBJECT_ART: Record<"cone" | ObjectShape, TokenArt> = {
   },
   ring: {
     viewBox: "0 0 100 100",
-    w: 3.4,
-    h: 3.4,
+    w: 2.4,
+    h: 2.4,
     art: (fill) => <circle cx="50" cy="50" r="40" fill="none" stroke={fill} strokeWidth="5" />,
   },
   mark: {
     viewBox: "0 0 100 100",
-    w: 2.6,
-    h: 2.6,
+    w: 1.7,
+    h: 1.7,
     art: (fill) => <circle cx="50" cy="50" r="34" fill="none" stroke={fill} strokeWidth="32" />,
   },
 };
@@ -314,7 +314,7 @@ export function arrowHeadPath(el: ArrowElement): string {
   const { x2, y2 } = el;
   const tan = arrowEndTangent(el);
   const angle = Math.atan2(tan.y, tan.x);
-  const len = 3;
+  const len = 1.8;
   const spread = Math.PI / 7;
   const ax = x2 - len * Math.cos(angle - spread);
   const ay = y2 - len * Math.sin(angle - spread);
@@ -348,11 +348,12 @@ export function ElementShape({ el, color }: { el: DiagramElement; color: string 
           x={el.x}
           y={el.y}
           fill={el.color ?? color}
-          stroke="#fff"
-          strokeWidth={0.7}
+          stroke="#0b2310"
+          strokeOpacity={0.55}
+          strokeWidth={0.3}
           paintOrder="stroke"
           fontSize={TEXT_SIZE}
-          fontWeight={700}
+          fontWeight={400}
           textAnchor="middle"
           dominantBaseline="central"
         >
@@ -363,20 +364,20 @@ export function ElementShape({ el, color }: { el: DiagramElement; color: string 
       const c = el.color ?? color;
       const cx = el.x + el.w / 2;
       const cy = el.y + el.h / 2;
+      const common = {
+        fill: c,
+        fillOpacity: 0.18,
+        stroke: c,
+        strokeWidth: 0.2,
+        strokeDasharray: "1.6 1.1",
+      } as const;
       return (
         <g transform={`rotate(${el.rotation ?? 0} ${cx} ${cy})`}>
-          <rect
-            x={el.x}
-            y={el.y}
-            width={el.w}
-            height={el.h}
-            fill={c}
-            fillOpacity={0.18}
-            stroke={c}
-            strokeWidth={0.5}
-            strokeDasharray="2 1.4"
-            rx={1}
-          />
+          {el.shape === "ellipse" ? (
+            <ellipse cx={cx} cy={cy} rx={el.w / 2} ry={el.h / 2} {...common} />
+          ) : (
+            <rect x={el.x} y={el.y} width={el.w} height={el.h} {...common} />
+          )}
         </g>
       );
     }

@@ -31,7 +31,7 @@ export type DiagramElement =
   | { id: string; kind: "ball"; x: number; y: number; color?: string }
   | { id: string; kind: "cone"; x: number; y: number; color?: string; rotation?: number }
   | { id: string; kind: "text"; x: number; y: number; text: string; color?: string }
-  | { id: string; kind: "zone"; x: number; y: number; w: number; h: number; color?: string; rotation?: number }
+  | { id: string; kind: "zone"; x: number; y: number; w: number; h: number; color?: string; rotation?: number; shape?: "rect" | "ellipse" }
   | { id: string; kind: "arrow"; variant: ArrowVariant; x1: number; y1: number; x2: number; y2: number; color?: string; cx?: number; cy?: number }
   | { id: string; kind: "object"; x: number; y: number; shape: ObjectShape; color?: string; rotation?: number };
 
