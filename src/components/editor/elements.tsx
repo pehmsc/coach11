@@ -12,7 +12,7 @@ import type { DiagramElement, ObjectShape } from "@/types/editor";
 
 export const PLAYER_R = 2.2; // raio "m" (default) — usado p/ seleção/hit aproximados
 export const PLAYER_SIZE_R: Record<"s" | "m" | "l", number> = { s: 1.7, m: 2.2, l: 2.8 };
-export const TEXT_SIZE = 3.6;
+export const TEXT_SIZE = 3.0;
 export const ZONE_DEFAULT = { w: 26, h: 18 };
 export const ARROW_STROKE = 0.55;
 
@@ -348,11 +348,12 @@ export function ElementShape({ el, color }: { el: DiagramElement; color: string 
           x={el.x}
           y={el.y}
           fill={el.color ?? color}
-          stroke="#fff"
-          strokeWidth={0.7}
+          stroke="#0b2310"
+          strokeOpacity={0.55}
+          strokeWidth={0.3}
           paintOrder="stroke"
           fontSize={TEXT_SIZE}
-          fontWeight={700}
+          fontWeight={400}
           textAnchor="middle"
           dominantBaseline="central"
         >
