@@ -81,6 +81,19 @@ describe("(de)serialização do diagrama", () => {
     expect(parseDiagram(serializeDiagram(d))).toEqual(d);
   });
 
+  it("preserva zona círculo (shape) no round-trip", () => {
+    const d: ExerciseDiagram = {
+      v: 1,
+      preset: "full",
+      color: "#000000",
+      elements: [
+        { id: "z1", kind: "zone", x: 2, y: 2, w: 20, h: 10, shape: "ellipse" },
+        { id: "z2", kind: "zone", x: 30, y: 30, w: 12, h: 12, shape: "rect" },
+      ],
+    };
+    expect(parseDiagram(serializeDiagram(d))).toEqual(d);
+  });
+
   it("preserva seta curva (cx/cy) no round-trip", () => {
     const d: ExerciseDiagram = {
       v: 1,

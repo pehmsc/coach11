@@ -364,20 +364,20 @@ export function ElementShape({ el, color }: { el: DiagramElement; color: string 
       const c = el.color ?? color;
       const cx = el.x + el.w / 2;
       const cy = el.y + el.h / 2;
+      const common = {
+        fill: c,
+        fillOpacity: 0.18,
+        stroke: c,
+        strokeWidth: 0.2,
+        strokeDasharray: "1.6 1.1",
+      } as const;
       return (
         <g transform={`rotate(${el.rotation ?? 0} ${cx} ${cy})`}>
-          <rect
-            x={el.x}
-            y={el.y}
-            width={el.w}
-            height={el.h}
-            fill={c}
-            fillOpacity={0.18}
-            stroke={c}
-            strokeWidth={0.5}
-            strokeDasharray="2 1.4"
-            rx={1}
-          />
+          {el.shape === "ellipse" ? (
+            <ellipse cx={cx} cy={cy} rx={el.w / 2} ry={el.h / 2} {...common} />
+          ) : (
+            <rect x={el.x} y={el.y} width={el.w} height={el.h} {...common} />
+          )}
         </g>
       );
     }

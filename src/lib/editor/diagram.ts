@@ -106,7 +106,17 @@ function validateElement(raw: unknown): DiagramElement | null {
     case "zone":
       if (!isFiniteNumber(el.x) || !isFiniteNumber(el.y)) return null;
       if (!isFiniteNumber(el.w) || !isFiniteNumber(el.h)) return null;
-      return { id, kind: "zone", x: el.x, y: el.y, w: el.w, h: el.h, ...color, ...rotation };
+      return {
+        id,
+        kind: "zone",
+        x: el.x,
+        y: el.y,
+        w: el.w,
+        h: el.h,
+        ...color,
+        ...rotation,
+        ...(el.shape === "rect" || el.shape === "ellipse" ? { shape: el.shape } : {}),
+      };
     case "arrow":
       if (
         !isFiniteNumber(el.x1) ||
