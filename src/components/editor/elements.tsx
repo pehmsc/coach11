@@ -325,9 +325,9 @@ export function ElementShape({ el, color }: { el: DiagramElement; color: string 
     case "ball":
       return <TokenG x={el.x} y={el.y} token={BALL_ART} fill="#fff" />;
     case "cone":
-      return <TokenG x={el.x} y={el.y} token={OBJECT_ART.cone} fill={el.color ?? color} />;
+      return <TokenG x={el.x} y={el.y} token={OBJECT_ART.cone} fill={el.color ?? color} rotation={el.rotation ?? 0} />;
     case "object":
-      return <TokenG x={el.x} y={el.y} token={OBJECT_ART[el.shape]} fill={el.color ?? color} />;
+      return <TokenG x={el.x} y={el.y} token={OBJECT_ART[el.shape]} fill={el.color ?? color} rotation={el.rotation ?? 0} />;
     case "text":
       return (
         <text
@@ -347,19 +347,23 @@ export function ElementShape({ el, color }: { el: DiagramElement; color: string 
       );
     case "zone": {
       const c = el.color ?? color;
+      const cx = el.x + el.w / 2;
+      const cy = el.y + el.h / 2;
       return (
-        <rect
-          x={el.x}
-          y={el.y}
-          width={el.w}
-          height={el.h}
-          fill={c}
-          fillOpacity={0.18}
-          stroke={c}
-          strokeWidth={0.5}
-          strokeDasharray="2 1.4"
-          rx={1}
-        />
+        <g transform={`rotate(${el.rotation ?? 0} ${cx} ${cy})`}>
+          <rect
+            x={el.x}
+            y={el.y}
+            width={el.w}
+            height={el.h}
+            fill={c}
+            fillOpacity={0.18}
+            stroke={c}
+            strokeWidth={0.5}
+            strokeDasharray="2 1.4"
+            rx={1}
+          />
+        </g>
       );
     }
     case "arrow": {

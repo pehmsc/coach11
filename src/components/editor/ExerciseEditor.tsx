@@ -150,6 +150,14 @@ type Gesture =
       orig: Extract<DiagramElement, { kind: "zone" }>;
     }
   | {
+      type: "element-rotate";
+      id: string;
+      pointerId: number;
+      cx: number;
+      cy: number;
+      startRotation: number;
+    }
+  | {
       type: "bg-draw";
       pointerId: number;
       tool: Tool;
@@ -553,16 +561,27 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
       const p = fieldPoint(e.clientX, e.clientY);
 
       if (handleNode && selectedId) {
+        const which = handleNode.getAttribute("data-handle");
         const orig = diagram.elements.find((el) => el.id === selectedId);
-        if (orig && orig.kind === "zone") {
-          gesture.current = {
-            type: "element-resize",
-            id: selectedId,
-            pointerId: e.pointerId,
-            startSvg: p,
-            orig,
-          };
-          return;
+        if (orig) {
+          if (which === "resize" && orig.kind === "zone") {
+            gesture.current = { type: "element-resize", id: selectedId, pointerId: e.pointerId, startSvg: p, orig };
+            return;
+          }
+          if (which === "rotate") {
+            const c = elementCenter(orig);
+            const startRotation =
+              orig.kind === "object" || orig.kind === "cone" || orig.kind === "zone" ? orig.rotation ?? 0 : 0;
+            gesture.current = {
+              type: "element-rotate",
+              id: selectedId,
+              pointerId: e.pointerId,
+              cx: c.x,
+              cy: c.y,
+              startRotation,
+            };
+            return;
+          }
         }
       }
 
@@ -693,6 +712,16 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
         return;
       }
 
+      if (g.type === "element-rotate") {
+        const rot = (Math.atan2(p.y - g.cy, p.x - g.cx) * 180) / Math.PI + 90;
+        // Delta sobre a rotação atual (o shape já está rodado por startRotation).
+        const delta = rot - g.startRotation;
+        scheduleApply(() => {
+          elementRefs.current.get(g.id)?.setAttribute("transform", `rotate(${delta} ${g.cx} ${g.cy})`);
+        });
+        return;
+      }
+
       if (g.type === "bg-draw") {
         g.curSvg = p;
         if (!g.moved && distance(e.clientX, e.clientY, g.startClient.x, g.startClient.y) > DRAG_THRESHOLD_PX) {
@@ -755,6 +784,19 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
         const h = clamp(g.orig.h + (p.y - g.startSvg.y), 4, BASE_H - g.orig.y);
         const elements = diagram.elements.map((el) =>
           el.id === g.id && el.kind === "zone" ? { ...el, w, h } : el,
+        );
+        commit({ ...diagram, elements });
+        return;
+      }
+
+      if (g.type === "element-rotate") {
+        elementRefs.current.get(g.id)?.removeAttribute("transform");
+        const p = fieldPoint(e.clientX, e.clientY);
+        const rot = Math.round((Math.atan2(p.y - g.cy, p.x - g.cx) * 180) / Math.PI + 90);
+        const elements = diagram.elements.map((el) =>
+          el.id === g.id && (el.kind === "object" || el.kind === "cone" || el.kind === "zone")
+            ? { ...el, rotation: rot }
+            : el,
         );
         commit({ ...diagram, elements });
         return;
@@ -1098,6 +1140,7 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
                   rx={0.6}
                 />
               )}
+              {selectedId === el.id && <RotateHandle el={el} radius={hitRadius} />}
             </g>
           ))}
 
@@ -1312,6 +1355,21 @@ function ToolButton({
     >
       <Icon size={18} />
     </button>
+  );
+}
+
+function RotateHandle({ el, radius }: { el: DiagramElement; radius: number }) {
+  if (el.kind !== "object" && el.kind !== "cone" && el.kind !== "zone") return null;
+  const cx = el.kind === "zone" ? el.x + el.w / 2 : el.x;
+  const cy = el.kind === "zone" ? el.y + el.h / 2 : el.y;
+  const off = el.kind === "zone" ? el.h / 2 + 4 : 7;
+  const hy = cy - off;
+  return (
+    <g data-export-ignore transform={`rotate(${el.rotation ?? 0} ${cx} ${cy})`}>
+      <line x1={cx} y1={cy} x2={cx} y2={hy} stroke="#10b981" strokeWidth={0.3} />
+      <circle cx={cx} cy={hy} r={1.3} fill="#10b981" />
+      <circle data-handle="rotate" cx={cx} cy={hy} r={Math.max(radius * 0.7, 3)} fill="transparent" />
+    </g>
   );
 }
 
