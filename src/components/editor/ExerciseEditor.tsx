@@ -335,6 +335,20 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
     };
   }, []);
 
+  // O editor vive dentro do AppModal (portal z-[140]); engole o Escape em CAPTURA
+  // para fechar o EDITOR (não o modal por baixo).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        e.preventDefault();
+        onClose();
+      }
+    };
+    document.addEventListener("keydown", onKey, true);
+    return () => document.removeEventListener("keydown", onKey, true);
+  }, [onClose]);
+
   // ── Geometria ─────────────────────────────────────────────────────────────
   // Campo num espaço de autoria FIXO 120×80, CONTIDO (nada cortado): o viewBox
   // estende-se ao rácio do contentor (sem letterbox) e as marcações enchem a
@@ -924,7 +938,7 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
   return createPortal(
     <div
       ref={rootRef}
-      className="fixed inset-x-0 top-0 z-[100] flex flex-col bg-slate-900"
+      className="fixed inset-x-0 top-0 z-[150] flex flex-col bg-slate-900"
       style={{ height: "100dvh", overscrollBehavior: "contain" }}
     >
       {/* Toolbar única: desenho/opções/undo-limpar (wrap) + ações (fixo).
