@@ -14,7 +14,7 @@ export const PLAYER_R = 2.2; // raio "m" (default) — usado p/ seleção/hit ap
 export const PLAYER_SIZE_R: Record<"s" | "m" | "l", number> = { s: 1.7, m: 2.2, l: 2.8 };
 export const TEXT_SIZE = 3.0;
 export const ZONE_DEFAULT = { w: 26, h: 18 };
-export const ARROW_STROKE = 0.55;
+export const ARROW_STROKE = 0.3;
 
 // ── Arte dos tokens (SVG autêntico, cor injetada) ───────────────────────────
 
@@ -314,7 +314,7 @@ export function arrowHeadPath(el: ArrowElement): string {
   const { x2, y2 } = el;
   const tan = arrowEndTangent(el);
   const angle = Math.atan2(tan.y, tan.x);
-  const len = 3;
+  const len = 1.8;
   const spread = Math.PI / 7;
   const ax = x2 - len * Math.cos(angle - spread);
   const ay = y2 - len * Math.sin(angle - spread);
