@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   Check,
-  CircleDot,
   Columns3,
   Eye,
   EyeOff,
@@ -58,6 +57,7 @@ import {
   ARROW_STROKE,
   arrowHeadPath,
   arrowLinePath,
+  BALL_ART,
   ElementShape,
   JERSEY_ART,
   OBJECT_ART,
@@ -1093,7 +1093,12 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
             icon={Shirt}
             label="Jogador"
           />
-          <ToolButton active={tool.kind === "ball"} onClick={() => setTool({ kind: "ball" })} icon={CircleDot} label="Bola" />
+          <ToolButton
+            active={tool.kind === "ball"}
+            onClick={() => setTool({ kind: "ball" })}
+            iconNode={<TokenIcon token={BALL_ART} className="h-5 w-5" />}
+            label="Bola"
+          />
           <ToolButton
             active={tool.kind === "cone" || tool.kind === "object"}
             onClick={(e) => togglePopover("object", e.currentTarget)}
@@ -1464,12 +1469,14 @@ function ToolButton({
   active,
   onClick,
   icon: Icon,
+  iconNode,
   label,
   disabled,
 }: {
   active: boolean;
   onClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
-  icon: typeof Check;
+  icon?: typeof Check;
+  iconNode?: React.ReactNode;
   label: string;
   disabled?: boolean;
 }) {
@@ -1484,7 +1491,7 @@ function ToolButton({
         active ? "bg-emerald-600 text-white" : "text-slate-300 hover:bg-slate-700"
       }`}
     >
-      <Icon size={18} />
+      {iconNode ?? (Icon ? <Icon size={18} /> : null)}
     </button>
   );
 }
