@@ -81,6 +81,19 @@ describe("(de)serialização do diagrama", () => {
     expect(parseDiagram(serializeDiagram(d))).toEqual(d);
   });
 
+  it("preserva seta curva (cx/cy) no round-trip", () => {
+    const d: ExerciseDiagram = {
+      v: 1,
+      preset: "full",
+      color: "#000000",
+      elements: [
+        { id: "a1", kind: "arrow", variant: "pass", x1: 10, y1: 10, x2: 50, y2: 50, cx: 30, cy: 10 },
+        { id: "a2", kind: "arrow", variant: "line", x1: 0, y1: 0, x2: 20, y2: 0 },
+      ],
+    };
+    expect(parseDiagram(serializeDiagram(d))).toEqual(d);
+  });
+
   it("descarta object com shape inválido (ex.: goal removido)", () => {
     const parsed = parseDiagram({
       v: 1,

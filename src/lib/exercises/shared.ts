@@ -87,6 +87,8 @@ const diagramElementSchema = z.discriminatedUnion("kind", [
     x2: z.number(),
     y2: z.number(),
     color: z.string().optional(),
+    cx: z.number().optional(),
+    cy: z.number().optional(),
   }),
 ]);
 

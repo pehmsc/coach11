@@ -126,6 +126,7 @@ function validateElement(raw: unknown): DiagramElement | null {
         x2: el.x2,
         y2: el.y2,
         ...color,
+        ...(isFiniteNumber(el.cx) && isFiniteNumber(el.cy) ? { cx: el.cx, cy: el.cy } : {}),
       };
     case "object":
       if (!isFiniteNumber(el.x) || !isFiniteNumber(el.y)) return null;

@@ -251,30 +251,43 @@ function dribbleSteps(len: number): number {
   return dribbleWaves(len) * 8;
 }
 
-/** Posição ao longo da seta em t∈[0,1]. Linear para move/pass, sinusóide na condução. */
-function arrowPointAt(el: ArrowElement, t: number): { x: number; y: number } {
-  const { x1, y1, x2, y2, variant } = el;
-  if (variant !== "dribble") {
-    return { x: x1 + (x2 - x1) * t, y: y1 + (y2 - y1) * t };
+/** Ponto + tangente da base da seta em t∈[0,1]: reta, ou Bézier quadrático se há cx/cy. */
+function baseAt(el: ArrowElement, t: number): { px: number; py: number; tx: number; ty: number } {
+  if (el.cx == null || el.cy == null) {
+    return { px: el.x1 + (el.x2 - el.x1) * t, py: el.y1 + (el.y2 - el.y1) * t, tx: el.x2 - el.x1, ty: el.y2 - el.y1 };
   }
-  const len = Math.hypot(x2 - x1, y2 - y1);
-  if (len < 0.5) return { x: x1 + (x2 - x1) * t, y: y1 + (y2 - y1) * t };
-  const ux = (x2 - x1) / len;
-  const uy = (y2 - y1) / len;
-  const px = -uy; // perpendicular unitário
-  const py = ux;
-  const off = Math.sin(t * dribbleWaves(len) * Math.PI * 2) * DRIBBLE_AMP;
-  return { x: x1 + ux * len * t + px * off, y: y1 + uy * len * t + py * off };
+  const mt = 1 - t;
+  return {
+    px: mt * mt * el.x1 + 2 * mt * t * el.cx + t * t * el.x2,
+    py: mt * mt * el.y1 + 2 * mt * t * el.cy + t * t * el.y2,
+    tx: 2 * mt * (el.cx - el.x1) + 2 * t * (el.x2 - el.cx),
+    ty: 2 * mt * (el.cy - el.y1) + 2 * t * (el.y2 - el.cy),
+  };
+}
+
+/** Posição ao longo da seta em t∈[0,1]. Base (reta/curva) + onda na condução. */
+function arrowPointAt(el: ArrowElement, t: number): { x: number; y: number } {
+  const b = baseAt(el, t);
+  if (el.variant !== "dribble") return { x: b.px, y: b.py };
+  const chord = Math.hypot(el.x2 - el.x1, el.y2 - el.y1);
+  if (chord < 0.5) return { x: b.px, y: b.py };
+  const tl = Math.hypot(b.tx, b.ty) || 1;
+  const px = -b.ty / tl; // perpendicular à tangente local
+  const py = b.tx / tl;
+  const off = Math.sin(t * dribbleWaves(chord) * Math.PI * 2) * DRIBBLE_AMP;
+  return { x: b.px + px * off, y: b.py + py * off };
 }
 
 export function arrowLinePath(el: ArrowElement): string {
   const { x1, y1, x2, y2, variant } = el;
   if (variant !== "dribble") {
-    return `M ${x1} ${y1} L ${x2} ${y2}`;
+    return el.cx != null && el.cy != null
+      ? `M ${x1} ${y1} Q ${el.cx} ${el.cy} ${x2} ${y2}`
+      : `M ${x1} ${y1} L ${x2} ${y2}`;
   }
-  const len = Math.hypot(x2 - x1, y2 - y1);
-  if (len < 0.5) return `M ${x1} ${y1} L ${x2} ${y2}`;
-  const steps = dribbleSteps(len);
+  const chord = Math.hypot(x2 - x1, y2 - y1);
+  if (chord < 0.5) return `M ${x1} ${y1} L ${x2} ${y2}`;
+  const steps = dribbleSteps(chord);
   let d = `M ${x1} ${y1}`;
   for (let i = 1; i <= steps; i += 1) {
     const p = arrowPointAt(el, i / steps);
@@ -283,14 +296,15 @@ export function arrowLinePath(el: ArrowElement): string {
   return d;
 }
 
-/** Direção real do FIM da linha (último segmento desenhado), para alinhar a ponta. */
+/** Direção real do FIM da linha, para alinhar a ponta (segue a curva quando há cx/cy). */
 function arrowEndTangent(el: ArrowElement): { x: number; y: number } {
   if (el.variant !== "dribble") {
-    return { x: el.x2 - el.x1, y: el.y2 - el.y1 };
+    const b = baseAt(el, 1);
+    return { x: b.tx, y: b.ty };
   }
-  const len = Math.hypot(el.x2 - el.x1, el.y2 - el.y1);
-  if (len < 0.5) return { x: el.x2 - el.x1, y: el.y2 - el.y1 };
-  const steps = dribbleSteps(len);
+  const chord = Math.hypot(el.x2 - el.x1, el.y2 - el.y1);
+  if (chord < 0.5) return { x: el.x2 - el.x1, y: el.y2 - el.y1 };
+  const steps = dribbleSteps(chord);
   const pEnd = arrowPointAt(el, 1);
   const pPrev = arrowPointAt(el, 1 - 1 / steps);
   return { x: pEnd.x - pPrev.x, y: pEnd.y - pPrev.y };

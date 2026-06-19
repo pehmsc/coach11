@@ -56,6 +56,8 @@ import {
 } from "@/lib/editor/geometry";
 import {
   ARROW_STROKE,
+  arrowHeadPath,
+  arrowLinePath,
   ElementShape,
   JERSEY_ART,
   OBJECT_ART,
@@ -160,6 +162,12 @@ type Gesture =
       cx: number;
       cy: number;
       startRotation: number;
+    }
+  | {
+      type: "arrow-handle";
+      id: string;
+      pointerId: number;
+      which: "a" | "b" | "c";
     }
   | {
       type: "bg-draw";
@@ -623,6 +631,15 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
             };
             return;
           }
+          if (which && which.startsWith("arrow-") && orig.kind === "arrow") {
+            gesture.current = {
+              type: "arrow-handle",
+              id: selectedId,
+              pointerId: e.pointerId,
+              which: which.slice(6) as "a" | "b" | "c",
+            };
+            return;
+          }
         }
       }
 
@@ -763,6 +780,30 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
         return;
       }
 
+      if (g.type === "arrow-handle") {
+        const orig = diagram.elements.find((el) => el.id === g.id);
+        if (!orig || orig.kind !== "arrow") return;
+        const next = { ...orig };
+        if (g.which === "a") {
+          next.x1 = p.x;
+          next.y1 = p.y;
+        } else if (g.which === "b") {
+          next.x2 = p.x;
+          next.y2 = p.y;
+        } else {
+          next.cx = p.x;
+          next.cy = p.y;
+        }
+        scheduleApply(() => {
+          const node = elementRefs.current.get(g.id);
+          if (!node) return;
+          const paths = node.querySelectorAll<SVGPathElement>("path:not([data-export-ignore])");
+          if (paths[0]) paths[0].setAttribute("d", arrowLinePath(next));
+          if (paths[1]) paths[1].setAttribute("d", arrowHeadPath(next));
+        });
+        return;
+      }
+
       if (g.type === "bg-draw") {
         g.curSvg = p;
         if (!g.moved && distance(e.clientX, e.clientY, g.startClient.x, g.startClient.y) > DRAG_THRESHOLD_PX) {
@@ -839,6 +880,20 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
             ? { ...el, rotation: rot }
             : el,
         );
+        commit({ ...diagram, elements });
+        return;
+      }
+
+      if (g.type === "arrow-handle") {
+        const p = fieldPoint(e.clientX, e.clientY);
+        const x = clamp(p.x, 0, BASE_W);
+        const y = clamp(p.y, 0, BASE_H);
+        const elements = diagram.elements.map((el): DiagramElement => {
+          if (el.id !== g.id || el.kind !== "arrow") return el;
+          if (g.which === "a") return { ...el, x1: x, y1: y };
+          if (g.which === "b") return { ...el, x2: x, y2: y };
+          return { ...el, cx: x, cy: y };
+        });
         commit({ ...diagram, elements });
         return;
       }
@@ -1216,6 +1271,7 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
                 />
               )}
               {selectedId === el.id && <RotateHandle el={el} radius={hitRadius} />}
+              {selectedId === el.id && <ArrowHandles el={el} radius={hitRadius} />}
             </g>
           ))}
 
@@ -1433,6 +1489,23 @@ function ToolButton({
   );
 }
 
+function ArrowHandles({ el, radius }: { el: DiagramElement; radius: number }) {
+  if (el.kind !== "arrow") return null;
+  const cxp = el.cx ?? (el.x1 + el.x2) / 2;
+  const cyp = el.cy ?? (el.y1 + el.y2) / 2;
+  const hit = Math.max(radius * 0.7, 3);
+  return (
+    <g data-export-ignore>
+      <circle cx={el.x1} cy={el.y1} r={1.3} fill="#10b981" />
+      <circle cx={el.x2} cy={el.y2} r={1.3} fill="#10b981" />
+      <circle cx={cxp} cy={cyp} r={1.3} fill="#fff" stroke="#10b981" strokeWidth={0.35} />
+      <circle data-handle="arrow-a" cx={el.x1} cy={el.y1} r={hit} fill="transparent" />
+      <circle data-handle="arrow-b" cx={el.x2} cy={el.y2} r={hit} fill="transparent" />
+      <circle data-handle="arrow-c" cx={cxp} cy={cyp} r={hit} fill="transparent" />
+    </g>
+  );
+}
+
 function RotateHandle({ el, radius }: { el: DiagramElement; radius: number }) {
   if (el.kind !== "object" && el.kind !== "cone" && el.kind !== "zone") return null;
   const cx = el.kind === "zone" ? el.x + el.w / 2 : el.x;
@@ -1485,12 +1558,8 @@ function SelectionOutline({ el }: { el: DiagramElement }) {
     );
   }
   if (el.kind === "arrow") {
-    return (
-      <g data-export-ignore fill={stroke}>
-        <circle cx={el.x1} cy={el.y1} r={1.1} />
-        <circle cx={el.x2} cy={el.y2} r={1.1} />
-      </g>
-    );
+    // Os handles (ArrowHandles) fornecem o visual de seleção da seta.
+    return null;
   }
   return (
     <circle
