@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import {
   Check,
   CircleDot,
+  Columns3,
   Eye,
   EyeOff,
   LandPlot,
@@ -16,6 +17,7 @@ import {
   MoveUpRight,
   Palette,
   RotateCw,
+  Rows3,
   Shapes,
   Shirt,
   Square,
@@ -69,6 +71,8 @@ const DRAG_THRESHOLD_PX = 5;
 const SNAP_DIST = 1.5; // unidades de viewBox
 const POPOVER_W = 224;
 const HINTS_KEY = "coach11_editor_hints_seen";
+const GRID_V_KEY = "coach11_editor_grid_v";
+const GRID_H_KEY = "coach11_editor_grid_h";
 const COLOR_SWATCHES = ["#4E7BFF", "#16A34A", "#DC2626", "#F59E0B", "#7C3AED", "#0F172A", "#FFFFFF"];
 const ARROW_OPTIONS: { value: ArrowVariant; label: string }[] = [
   { value: "move", label: "Movimento" },
@@ -245,6 +249,20 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
   const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
   const [showMarkings, setShowMarkings] = useState(true);
   const [showGuides, setShowGuides] = useState(true);
+  const [gridV, setGridV] = useState(() => {
+    try {
+      return localStorage.getItem(GRID_V_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const [gridH, setGridH] = useState(() => {
+    try {
+      return localStorage.getItem(GRID_H_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
   const [confirmClear, setConfirmClear] = useState(false);
   const [running, setRunning] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -300,6 +318,29 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
     } catch {
       /* sem persistência — não crítico */
     }
+  }, []);
+
+  const toggleGridV = useCallback(() => {
+    setGridV((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem(GRID_V_KEY, next ? "1" : "0");
+      } catch {
+        /* sem persistência — não crítico */
+      }
+      return next;
+    });
+  }, []);
+  const toggleGridH = useCallback(() => {
+    setGridH((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem(GRID_H_KEY, next ? "1" : "0");
+      } catch {
+        /* sem persistência — não crítico */
+      }
+      return next;
+    });
   }, []);
 
   // ── Efeitos (sem setState no corpo: tudo via callbacks de eventos) ────────
@@ -1045,7 +1086,9 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
             <span className="h-3.5 w-3.5 rounded-full border border-white/40" style={{ background: diagram.color }} />
           </button>
 
-          <ToolButton active={showGuides} onClick={() => setShowGuides((s) => !s)} icon={Magnet} label="Guias" />
+          <ToolButton active={showGuides} onClick={() => setShowGuides((s) => !s)} icon={Magnet} label="Guias (snap)" />
+          <ToolButton active={gridV} onClick={toggleGridV} icon={Columns3} label="Grelha vertical" />
+          <ToolButton active={gridH} onClick={toggleGridH} icon={Rows3} label="Grelha horizontal" />
           <ToolButton active={!showMarkings} onClick={() => setShowMarkings((s) => !s)} icon={showMarkings ? Eye : EyeOff} label="Marcações" />
           {nativeFullscreenSupported && (
             <ToolButton
@@ -1121,6 +1164,38 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
               este transform (data-editor-content) para sair sempre landscape. */}
           <g ref={contentRef} data-editor-content transform={contentTransform}>
           <FieldPresetLayer preset={diagram.preset} showMarkings={showMarkings} extent={grassExtent} />
+
+          {/* Grelha posicional (auxiliar de edição; não sai no PNG). */}
+          {gridV &&
+            [24, 42, 60, 78, 96].map((gx) => (
+              <line
+                key={`gv${gx}`}
+                data-export-ignore
+                x1={gx}
+                y1={4}
+                x2={gx}
+                y2={76}
+                stroke="#10b981"
+                strokeOpacity={0.35}
+                strokeWidth={0.18}
+                strokeDasharray="1.2 1.2"
+              />
+            ))}
+          {gridH &&
+            [18.4, 32.8, 47.2, 61.6].map((gy) => (
+              <line
+                key={`gh${gy}`}
+                data-export-ignore
+                x1={6}
+                y1={gy}
+                x2={114}
+                y2={gy}
+                stroke="#10b981"
+                strokeOpacity={0.35}
+                strokeWidth={0.18}
+                strokeDasharray="1.2 1.2"
+              />
+            ))}
 
           {diagram.elements.map((el) => (
             <g key={el.id} data-el-id={el.id} ref={setElementRef(el.id)}>
