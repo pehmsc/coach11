@@ -1246,8 +1246,8 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
                 y1={4}
                 x2={gx}
                 y2={76}
-                stroke="#10b981"
-                strokeOpacity={0.35}
+                stroke="#fff"
+                strokeOpacity={0.5}
                 strokeWidth={0.18}
                 strokeDasharray="1.2 1.2"
               />
@@ -1261,8 +1261,8 @@ function EditorOverlay({ initialDiagram, onClose, exitActions, busy }: ExerciseE
                 y1={gy}
                 x2={114}
                 y2={gy}
-                stroke="#10b981"
-                strokeOpacity={0.35}
+                stroke="#fff"
+                strokeOpacity={0.5}
                 strokeWidth={0.18}
                 strokeDasharray="1.2 1.2"
               />
