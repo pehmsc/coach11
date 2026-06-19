@@ -37,8 +37,8 @@ export const JERSEY_ART: TokenArt = { viewBox: JERSEY_VIEWBOX, w: 4.4, h: 5.0, a
 // Bola: cores clássicas fixas (ignora o fill).
 export const BALL_ART: TokenArt = {
   viewBox: "0 0 1000 1000",
-  w: 3,
-  h: 3,
+  w: 2,
+  h: 2,
   art: () => (
     <>
       <circle cx="500" cy="500" r="485" stroke="#111827" strokeLinecap="square" strokeWidth="30" fill="#fff" />
@@ -95,8 +95,8 @@ export const OBJECT_ART: Record<"cone" | ObjectShape, TokenArt> = {
   },
   "baliza-a": {
     viewBox: "0 0 300 300",
-    w: 6.5,
-    h: 6.5,
+    w: 8.5,
+    h: 8.5,
     art: (fill) => (
       <g fill="none" stroke={fill} strokeWidth="5" strokeLinejoin="round">
         <polygon points="20 100,280 100,288 153,12 153" />
@@ -108,8 +108,8 @@ export const OBJECT_ART: Record<"cone" | ObjectShape, TokenArt> = {
   },
   "baliza-b": {
     viewBox: "0 0 146 146",
-    w: 5.5,
-    h: 5.5,
+    w: 7.5,
+    h: 7.5,
     art: (fill) => (
       <g fill="none" stroke={fill} strokeWidth="2.5" strokeLinejoin="round">
         <polygon points="17 38,129 38,131 75,15 75" />
@@ -121,8 +121,8 @@ export const OBJECT_ART: Record<"cone" | ObjectShape, TokenArt> = {
   },
   mannequin: {
     viewBox: "0 0 24 24",
-    w: 3.2,
-    h: 5,
+    w: 4.2,
+    h: 6.6,
     art: (fill) => (
       <g transform="translate(12 12) scale(0.03428571428571429) translate(-200 -350)">
         <circle cx="200" cy="60" r="40" fill={fill} />
@@ -137,8 +137,8 @@ export const OBJECT_ART: Record<"cone" | ObjectShape, TokenArt> = {
   },
   vara: {
     viewBox: "0 0 24 24",
-    w: 3,
-    h: 5,
+    w: 4,
+    h: 6.6,
     art: (fill) => (
       <g transform="translate(12 12) scale(0.04285714285714286) translate(-100 -280)">
         <rect x="80" y="40" width="40" height="450" rx="6" fill={fill} />
@@ -148,8 +148,8 @@ export const OBJECT_ART: Record<"cone" | ObjectShape, TokenArt> = {
   },
   arcos: {
     viewBox: "0 0 24 24",
-    w: 5,
-    h: 3,
+    w: 8,
+    h: 4.8,
     art: (fill) => (
       <g transform="translate(12 12) scale(0.03428571428571429) translate(-350 -180)" fill="none" stroke={fill} strokeWidth="12">
         <circle cx="130" cy="110" r="65" />
@@ -165,8 +165,8 @@ export const OBJECT_ART: Record<"cone" | ObjectShape, TokenArt> = {
   },
   stairs: {
     viewBox: "0 0 200 54",
-    w: 7,
-    h: 1.9,
+    w: 10,
+    h: 2.7,
     art: (fill) => (
       <g stroke={fill} strokeWidth="2" strokeLinejoin="round" fill="none">
         <line x1="10" y1="12" x2="190" y2="12" />
@@ -181,14 +181,14 @@ export const OBJECT_ART: Record<"cone" | ObjectShape, TokenArt> = {
   },
   ring: {
     viewBox: "0 0 100 100",
-    w: 3.4,
-    h: 3.4,
+    w: 2.4,
+    h: 2.4,
     art: (fill) => <circle cx="50" cy="50" r="40" fill="none" stroke={fill} strokeWidth="5" />,
   },
   mark: {
     viewBox: "0 0 100 100",
-    w: 2.6,
-    h: 2.6,
+    w: 1.7,
+    h: 1.7,
     art: (fill) => <circle cx="50" cy="50" r="34" fill="none" stroke={fill} strokeWidth="32" />,
   },
 };
