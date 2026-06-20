@@ -188,6 +188,13 @@ const MIGRATION_ALLOWED_EXCEPTIONS = new Map([
     "supabase/migrations/20260620223000_rls_merge_write_policies_and_initplan.sql",
     new Set(["sql-club-wrapper-usage"]),
   ],
+  [
+    // CLUBS-SELECT-CONSOLIDA: a clubs_select consolidada usa user_can_access_club
+    // como um dos ramos do OR (filiacao OR user_can_access_club). user_can_access_club
+    // ja era usado nas policies pre-existentes de clubs; nao introduz boundary novo.
+    "supabase/migrations/20260621100000_clubs_rls_consolidate_select_and_drop_dead.sql",
+    new Set(["sql-club-wrapper-usage"]),
+  ],
 ]);
 
 const SRC_RULES = [
