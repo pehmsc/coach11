@@ -180,6 +180,14 @@ const MIGRATION_ALLOWED_EXCEPTIONS = new Map([
     "supabase/migrations/20260525120100_get_club_player_rankings_split_metrics.sql",
     new Set(["sql-club-wrapper-usage"]),
   ],
+  [
+    // RLS-LOTE-2-INITPLAN: recria club_memberships_self_or_admin_select_v1 apenas
+    // para envolver auth.uid() em (select auth.uid()) (otimizacao initplan do
+    // advisor). user_can_manage_club mantem-se tal e qual — nao introduz boundary
+    // novo, a policy ja existia. Excecao estrita a esta otimizacao.
+    "supabase/migrations/20260620223000_rls_merge_write_policies_and_initplan.sql",
+    new Set(["sql-club-wrapper-usage"]),
+  ],
 ]);
 
 const SRC_RULES = [
